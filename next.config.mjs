@@ -8,14 +8,10 @@ const config = {
 	experimental: {
 		// Reduce memory usage during build
 		webpackBuildWorker: true,
-		// Generate fewer pages concurrently
-		staticWorkerRequestDeduplication: true,
 	},
 	// Optimize static generation
 	staticPageGenerationTimeout: 240,
 	generateBuildId: () => "build",
-	// Use ISR to reduce build time and memory usage
-	output: "standalone",
 };
 
 export default withMDX(config);
