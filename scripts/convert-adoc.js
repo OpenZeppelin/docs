@@ -135,7 +135,7 @@ async function convertAdocFiles(directory, apiRoute = "contracts/5.x/api") {
 				"<Callout type='warn'>\n$2\n</Callout>",
 			);
 
-			// Fix xref patterns with complex anchors like xref:#ISRC6-\\__execute__[...]
+			// Fix xref patterns with complex anchors like xref:#ISRC6-_execute__[...]
 			mdContent = mdContent.replace(
 				/xref:#([^[\]]+)\[([^\]]+)\]/g,
 				"[$2](#$1)",
