@@ -86,8 +86,9 @@ async function checkLinks() {
 async function getHeadings({
 	data,
 }: InferPageType<typeof source>): Promise<string[]> {
-	const pageData = await data.load();
-	const tocHeadings = pageData.toc.map((item) => item.url.slice(1));
+	//const pageData = await data.load();
+	//const tocHeadings = pageData.toc.map((item) => item.url.slice(1));
+	const tocHeadings = data.toc.map((item) => item.url.slice(1));
 
 	// Also extract actual anchor IDs from the content for API reference pages
 	const content = await data.getText("raw");

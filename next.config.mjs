@@ -7,6 +7,7 @@ const config = {
 	reactStrictMode: true,
 	output: "export",
 	images: { unoptimized: true },
+	experimental: { turbopackScopeHoisting: false },
 };
 
 export default withMDX(config);

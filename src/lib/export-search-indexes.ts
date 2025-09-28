@@ -23,7 +23,8 @@ export async function exportSearchIndexes() {
 		);
 
 	for (const page of filteredPages) {
-		const data = await page.data.load();
+		//const data = await page.data.load();
+		const data = page.data;
 		results.push({
 			_id: page.url,
 			structured: data.structuredData,

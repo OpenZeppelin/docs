@@ -20,11 +20,11 @@ export default async function Page(props: {
 	if (!page) notFound();
 
 	// Async mode - load the compiled content at runtime
-	const { body: MDXContent, toc } = await page.data.load();
+	//const { body: MDXContent, toc } = await page.data.load();
 
 	// To switch back to sync mode, comment out the line above and uncomment below:
-	// const MDXContent = page.data.body;
-	// const toc = page.data.toc;
+	const MDXContent = page.data.body;
+	const toc = page.data.toc;
 
 	return (
 		<DocsPage toc={toc} full={page.data.full}>
