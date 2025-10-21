@@ -28,7 +28,8 @@ The vault automatically handles:
 - **Assets**: The underlying token that the vault manages (e.g., USDC, XLM)
 - **Shares**: The vault tokens that represent proportional ownership of the assets
 
-When assets are deposited into a vault, shares are minted to the depositor. The number of shares minted depends on the current exchange rate, which is determined by:
+When assets are deposited into a vault, shares are minted to the depositor.
+The number of shares minted depends on the current exchange rate, which is determined by:
 
 ```
 shares = (assets × totalSupply) / totalAssets
@@ -42,7 +43,9 @@ assets = (shares × totalAssets) / totalSupply
 
 ### Virtual Decimals Offset
 
-The vault uses a "virtual decimals offset" to add extra precision to share calculations. This helps prevent rounding errors and improves the accuracy of share-to-asset conversions, especially when the vault has few assets or shares.
+The vault uses a "virtual decimals offset" to add extra precision to share calculations.
+This helps prevent rounding errors and improves the accuracy of share-to-asset conversions,
+especially when the vault has few assets or shares.
 
 The offset adds virtual shares and assets to the conversion formula:
 
@@ -50,7 +53,8 @@ The offset adds virtual shares and assets to the conversion formula:
 shares = (assets × (totalSupply + 10^offset)) / (totalAssets + 1)
 ```
 
-The offset is bounded to a maximum of 10 for security and UX considerations. Values higher than 10 provide minimal practical benefits and may cause overflow errors.
+The offset is bounded to a maximum of 10 with both security and UX taken into account.
+Values higher than 10 provide minimal practical benefits and may cause overflow errors.
 
 ## Rounding Behavior
 
@@ -80,8 +84,6 @@ The vault **MUST** be properly initialized before use:
 
 These should typically be done in the constructor. Once set, the asset address and decimals offset are **immutable**.
 
-
-
 ### Decimal Offset Limits
 
 The decimals offset is limited to a maximum of 10 to prevent:
@@ -91,7 +93,7 @@ The decimals offset is limited to a maximum of 10 to prevent:
 
 If a higher offset is required, a custom version of `set_decimals_offset()` must be implemented.
 
-### Inflation Attacks
+### Inflation (Precision) Attacks
 
 The virtual decimals offset helps protect against inflation attacks where an attacker:
 1. Deposits 1 wei to get the first share
