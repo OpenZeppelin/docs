@@ -1,0 +1,141 @@
+---
+title: Fungible Vault Token
+---
+
+[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/fungible/extensions/vault)
+
+The Fungible Vault Token implements the ERC-4626 tokenized vault standard, enabling fungible tokens to represent shares in an underlying asset pool. This module allows users to deposit underlying assets in exchange for vault shares, and later redeem those shares for the underlying assets. The vault maintains a dynamic conversion rate between shares and assets based on the total supply of shares and total assets held by the vault contract.
+
+## Overview
+
+The [Vault](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/fungible/extensions/vault) module provides a complete implementation of tokenized vaults following the ERC-4626 standard. Vaults are useful for:
+
+- **Yield-bearing tokens**: Represent shares in a yield-generating strategy
+- **Liquidity pools**: Pool assets together with automatic share calculation
+- **Asset management**: Manage a pool of assets with proportional ownership
+- **Wrapped tokens**: Create wrapped versions of tokens with additional features
+
+The vault automatically handles:
+- Share-to-asset conversion with configurable precision
+- Deposit and withdrawal operations
+- Minting and redemption of shares
+- Preview functions for simulating operations
+
+## Key Concepts
+
+### Shares vs Assets
+
+- **Assets**: The underlying token that the vault manages (e.g., USDC, XLM)
+- **Shares**: The vault tokens that represent proportional ownership of the assets
+
+When assets are deposited into a vault, shares are minted to the depositor. The number of shares minted depends on the current exchange rate, which is determined by:
+
+```
+shares = (assets × totalSupply) / totalAssets
+```
+
+When withdrawing or redeeming, the reverse calculation applies:
+
+```
+assets = (shares × totalAssets) / totalSupply
+```
+
+### Virtual Decimals Offset
+
+The vault uses a "virtual decimals offset" to add extra precision to share calculations. This helps prevent rounding errors and improves the accuracy of share-to-asset conversions, especially when the vault has few assets or shares.
+
+The offset adds virtual shares and assets to the conversion formula:
+
+```
+shares = (assets × (totalSupply + 10^offset)) / (totalAssets + 1)
+```
+
+The offset is bounded to a maximum of 10 for security and UX considerations. Values higher than 10 provide minimal practical benefits and may cause overflow errors.
+
+## Rounding Behavior
+
+The vault implements specific rounding behavior to protect the vault from being drained:
+
+- **Deposit/Redeem**: Rounds **down** (depositor receives slightly fewer shares/assets)
+- **Mint/Withdraw**: Rounds **up** (depositor provides slightly more assets/shares)
+
+This ensures the vault always retains a slight advantage in conversions, preventing precision attacks.
+
+| Operation  | Input  | Output | Rounding Direction           |
+| ---------- | ------ | ------ | ---------------------------- |
+| `deposit`  | assets | shares | Down (fewer shares)          |
+| `mint`     | shares | assets | Up (more assets required)    |
+| `withdraw` | assets | shares | Up (more shares burned)      |
+| `redeem`   | shares | assets | Down (fewer assets received) |
+
+## Security Considerations
+
+### Initialization
+
+The vault **MUST** be properly initialized before use:
+
+1. Call `Vault::set_asset(e, asset)` to set the underlying asset
+2. Call `Vault::set_decimals_offset(e, offset)` to set the decimals offset
+3. Initialize metadata with `Base::set_metadata()`
+
+These should typically be done in the constructor. Once set, the asset address and decimals offset are **immutable**.
+
+
+
+### Decimal Offset Limits
+
+The decimals offset is limited to a maximum of 10 to prevent:
+- Overflow errors in calculations
+- Excessive precision that provides no practical benefit
+- Poor user experience with unnecessarily large numbers
+
+If a higher offset is required, a custom version of `set_decimals_offset()` must be implemented.
+
+### Inflation Attacks
+
+The virtual decimals offset helps protect against inflation attacks where an attacker:
+1. Deposits 1 wei to get the first share
+2. Donates a large amount directly to the vault
+3. Causes subsequent depositors to receive 0 shares due to rounding
+
+The offset adds virtual shares and assets to the conversion formula, making such attacks economically infeasible.
+
+### Custom Authorization
+
+Custom authorization logic can be implemented as needed:
+
+```rust
+fn deposit(
+    e: &Env,
+    assets: i128,
+    receiver: Address,
+    from: Address,
+    operator: Address,
+) -> i128 {
+    // Custom authorization: only allow deposits from whitelisted addresses
+    if !is_whitelisted(e, &from) {
+        panic_with_error!(e, Error::NotWhitelisted);
+    }
+
+    operator.require_auth();
+    Vault::deposit(e, assets, receiver, from, operator)
+}
+```
+
+## Compatibility and Compliance
+
+The vault module implements the ERC-4626 tokenized vault standard with one minor deviation (see Security Considerations).
+
+### ERC-4626 Deviation
+
+⚠️ **DEVIATION FROM ERC-4626**: The `query_asset()` function will panic if the asset address is not set, whereas ERC-4626 requires it to never revert.
+
+**Rationale**: Soroban doesn't have a "zero address" concept like EVM. Returning `Option<Address>` would break ERC-4626 compatibility.
+
+**Mitigation**: Always initialize the vault properly in the constructor. Once initialized, `query_asset()` will never panic during normal operations.
+
+Aside from this deviation, the vault implementation for Soroban provides:
+
+- **Cross-ecosystem familiarity**: Ethereum developers will recognize the interface
+- **Standard compliance**: Compatible with ERC-4626 tooling and integrations
+- **Stellar optimizations**: Leverages Soroban's unique capabilities
