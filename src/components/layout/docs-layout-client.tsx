@@ -27,6 +27,11 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 
 	// Determine if shared paths should be included in Stellar tab based on sessionStorage
 	const tabs = useMemo(() => {
+		// Don't show ecosystem tabs on impact pages
+		if (pathname.startsWith("/impact")) {
+			return [];
+		}
+
 		const isSharedPath =
 			pathname.startsWith("/monitor") || pathname.startsWith("/relayer");
 		const lastEcosystem =

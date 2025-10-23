@@ -260,7 +260,9 @@ function scanNavigationList(tree: PageTree.Node[]) {
 				list.push(node.index);
 			}
 
-			list.push(...scanNavigationList(node.children));
+			if (node.children) {
+				list.push(...scanNavigationList(node.children));
+			}
 			return;
 		}
 

@@ -111,5 +111,10 @@ export const baseOptions: BaseLayoutProps = {
 			url: "https://openzeppelin.com",
 			icon: <GlobeIcon />,
 		},
+		{
+			text: "Impact",
+			url: "/impact",
+			icon: <GlobeIcon />,
+		},
 	],
 };
