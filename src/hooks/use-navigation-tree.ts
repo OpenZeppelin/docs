@@ -22,6 +22,8 @@ export function useNavigationTree() {
 
 		if (pathname.startsWith("/stellar-contracts")) {
 			sessionStorage.setItem("lastEcosystem", "stellar");
+		} else if (pathname.startsWith("/substrate-runtimes")) {
+			sessionStorage.setItem("lastEcosystem", "polkadot");
 		} else if (
 			pathname.startsWith("/contracts") ||
 			pathname.startsWith("/community-contracts") ||
@@ -64,6 +66,8 @@ export function useNavigationTree() {
 			switch (lastEcosystem) {
 				case "stellar":
 					return stellarTree;
+				case "polkadot":
+					return polkadotTree;
 				case "ethereum":
 					return ethereumEvmTree;
 				default:
