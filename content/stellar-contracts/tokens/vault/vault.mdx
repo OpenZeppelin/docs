@@ -4,7 +4,14 @@ title: Fungible Vault Token
 
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/fungible/extensions/vault)
 
-The Fungible Vault Token implements the ERC-4626 tokenized vault standard, enabling fungible tokens to represent shares in an underlying asset pool. This module allows users to deposit underlying assets in exchange for vault shares, and later redeem those shares for the underlying assets. The vault maintains a dynamic conversion rate between shares and assets based on the total supply of shares and total assets held by the vault contract.
+The Fungible Vault Token implements the ERC-4626 tokenized vault standard,
+enabling fungible tokens to represent shares in an underlying asset pool. The tokenized vault standard
+is the formalized interface for yield-bearing vaults that hold underlying assets. Vault shares enable
+hyperfungible collaterals in DeFi.
+
+This module allows users to deposit underlying assets in exchange for vault shares, and later redeem
+those shares for the underlying assets. The vault maintains a dynamic conversion rate between shares and
+assets based on the total supply of shares and total assets held by the vault contract.
 
 ## Overview
 
@@ -96,11 +103,13 @@ If a higher offset is required, a custom version of `set_decimals_offset()` must
 ### Inflation (Precision) Attacks
 
 The virtual decimals offset helps protect against inflation attacks where an attacker:
-1. Deposits 1 wei to get the first share
-2. Donates a large amount directly to the vault
-3. Causes subsequent depositors to receive 0 shares due to rounding
+1. Deposits 1 stroop to get the first share (becoming the sole shareholder)
+2. **Donates** (not deposits) an enormous amount of assets directly to the vault contract via a direct transfer, without receiving any shares in return. This inflates the vault's total assets while keeping total shares at 1, making that single share worth an enormous amount
+3. When a legitimate user tries to deposit a normal amount (e.g., 1000 stroops), the share calculation rounds down to 0 shares because their deposit is negligible compared to the inflated vault balance. The user loses their deposit while receiving nothing
 
-The offset adds virtual shares and assets to the conversion formula, making such attacks economically infeasible.
+For example: If the attacker donates 1,000,000 stroops after their initial 1 stroop deposit, the vault has 1,000,001 total assets and 1 total share. A user depositing 1000 stroops would receive `(1000 × 1) / 1,000,001 = 0.000999` shares, which rounds down to 0.
+
+The offset adds virtual shares and assets to the conversion formula, making such attacks economically infeasible by ensuring the denominator is never so small that legitimate deposits round to zero.
 
 ### Custom Authorization
 
