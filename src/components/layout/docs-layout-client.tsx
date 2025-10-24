@@ -40,6 +40,12 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 				? new Set(["/stellar-contracts", "/monitor", "/relayer"])
 				: new Set(["/stellar-contracts"]);
 
+		// Include shared paths in Polkadot tab only if coming from Polkadot context
+		const polkadotUrls =
+			isSharedPath && lastEcosystem === "polkadot"
+				? new Set(["/substrate-runtimes", "/monitor"])
+				: new Set(["/substrate-runtimes"]);
+
 		return [
 			{
 				title: "Ethereum & EVM",
@@ -83,6 +89,7 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 				title: "Polkadot",
 				url: "/substrate-runtimes",
 				icon: <PolkadotIcon className="w-5 h-5" />,
+				urls: polkadotUrls,
 			},
 			{
 				title: "Uniswap Hooks",
