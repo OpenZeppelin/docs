@@ -21,7 +21,7 @@ The OpenZeppelin Relayer supports two configuration approaches:
 - Changes take effect immediately (no container restart required)
 - See the ***API Reference*** page for detailed endpoints documentation
 
-See [Storage Configuration](/relayer/configuration/storage) for detailed information about how file-based and API-based configurations work together, storage behavior, and best practices.
+See [Storage Configuration](./configuration/storage) for detailed information about how file-based and API-based configurations work together, storage behavior, and best practices.
 
 For quick setup examples with pre-configured files, see the [examples directory](https://github.com/OpenZeppelin/openzeppelin-relayer/tree/main/examples) in our GitHub repository.
 
@@ -42,12 +42,12 @@ This table lists the environment variables and their default values.
 | Environment Variable | Default Value | Accepted Values | Description |
 | --- | --- | --- | --- |
 | `RUST_LOG` | `info` | `info, debug, warn, error, trace` | Log level. |
-| `REPOSITORY_STORAGE_TYPE` | `in-memory` | `in-memory, redis` | Type of storage used for storing repository config and resources. See [Storage Configuration](/relayer/configuration/storage) for detailed information. |
-| `RESET_STORAGE_ON_START` | `false` | `bool` | Clears all resources from storage on startup and reloads entries from the config file. See [Storage Configuration](/relayer/configuration/storage) for usage details. |
-| `TRANSACTION_EXPIRATION_HOURS` | `4` | `number` | Number of hours after which transactions in a final state are removed from storage. See [Storage Configuration](/relayer/configuration/storage) for more information. |
+| `REPOSITORY_STORAGE_TYPE` | `in-memory` | `in-memory, redis` | Type of storage used for storing repository config and resources. See [Storage Configuration](./configuration/storage) for detailed information. |
+| `RESET_STORAGE_ON_START` | `false` | `bool` | Clears all resources from storage on startup and reloads entries from the config file. See [Storage Configuration](./configuration/storage) for usage details. |
+| `TRANSACTION_EXPIRATION_HOURS` | `4` | `number` | Number of hours after which transactions in a final state are removed from storage. See [Storage Configuration](./configuration/storage) for more information. |
 | `CONFIG_DIR` | `./config` | `<any relative file path where config.json is located>` | Relative path of directory where config files reside |
 | `CONFIG_FILE_NAME` | `config.json` | `<any file name>` | File Name of the configuration file. |
-| `RATE_LIMIT_RPS` | `100` | `<any value>` | Rate limit for the API in requests per second. |
+| `RATE_LIMIT_REQUESTS_PER_SECOND` | `100` | `<any value>` | Rate limit for the API in requests per second. |
 | `RATE_LIMIT_BURST_SIZE` | `300` | `<any value>` | Rate limit burst size. |
 | `API_KEY` | `` | `string`, | API key to use for authentication to the relayer server. Minimum length 32 characters. |
 | `WEBHOOK_SIGNING_KEY` | `` | `string` | Signing key to use for webhook notifications. Minimum length 32 characters. |
@@ -56,10 +56,10 @@ This table lists the environment variables and their default values.
 | `LOG_MAX_SIZE (in bytes)` | `1073741824` | `<any value in bytes>` | Size after which logs needs to be rolled. |
 | `METRICS_ENABLED` | `false` | `bool` | Enable metrics server for external tools to scrape metrics. |
 | `METRICS_PORT` | `8081` | `<any tcp port (preferably choose non-privileged ports i.e. (1024-65535))>` | Port to use for metrics server. |
-| `REDIS_URL` | `redis://localhost:6379` | `<redis connection string>` | Redis connection URL for the relayer. See [Storage Configuration](/relayer/configuration/storage) for Redis setup details. |
-| `REDIS_CONNECTION_TIMEOUT_MS` | `10000` | `<timeout in milliseconds>` | Connection timeout for Redis in milliseconds. See [Storage Configuration](/relayer/configuration/storage) for Redis configuration. |
-| `REDIS_KEY_PREFIX` | `oz-relayer` | `string` | Redis key prefix for namespacing. See [Storage Configuration](/relayer/configuration/storage) for more information. |
-| `STORAGE_ENCRYPTION_KEY` | `` | `string` | Encryption key used to encrypt data at rest in Redis storage. See [Storage Configuration](/relayer/configuration/storage) for security details. |
+| `REDIS_URL` | `redis://localhost:6379` | `<redis connection string>` | Redis connection URL for the relayer. See [Storage Configuration](./configuration/storage) for Redis setup details. |
+| `REDIS_CONNECTION_TIMEOUT_MS` | `10000` | `<timeout in milliseconds>` | Connection timeout for Redis in milliseconds. See [Storage Configuration](./configuration/storage) for Redis configuration. |
+| `REDIS_KEY_PREFIX` | `oz-relayer` | `string` | Redis key prefix for namespacing. See [Storage Configuration](./configuration/storage) for more information. |
+| `STORAGE_ENCRYPTION_KEY` | `` | `string` | Encryption key used to encrypt data at rest in Redis storage. See [Storage Configuration](./configuration/storage) for security details. |
 | `RPC_TIMEOUT_MS` | `10000` | `<timeout in milliseconds>` | Sets the maximum time to wait for RPC connections before timing out. |
 | `PROVIDER_MAX_RETRIES` | `3` | `<number of retries>` | Maximum number of retry attempts for provider operations. |
 | `PROVIDER_RETRY_BASE_DELAY_MS` | `100` | `<delay in milliseconds>` | Base delay between retry attempts in milliseconds. |
@@ -67,6 +67,15 @@ This table lists the environment variables and their default values.
 | `PROVIDER_MAX_FAILOVERS` | `3` | `<number of failovers>` | Maximum number of failovers (switching to different providers). |
 | `ENABLE_SWAGGER` | `false` | `true, false` | Enable or disable Swagger UI for API documentation. |
 | `KEYSTORE_PASSPHRASE` | `` | `<keystore passphrase>` | Passphrase for the keystore file used for signing transactions. |
+| `BACKGROUND_WORKER_TRANSACTION_REQUEST_CONCURRENCY` | `50` | `<any positive number>` | Maximum number of concurrent transaction request jobs that can be processed simultaneously. |
+| `BACKGROUND_WORKER_TRANSACTION_SENDER_CONCURRENCY` | `75` | `<any positive number>` | Maximum number of concurrent transaction submission jobs that can be processed simultaneously. |
+| `BACKGROUND_WORKER_TRANSACTION_STATUS_CHECKER_CONCURRENCY` | `50` | `<any positive number>` | Maximum number of concurrent generic/default transaction status check jobs that can be processed simultaneously. This worker handles Solana and any future networks that don’t have dedicated status checkers. |
+| `BACKGROUND_WORKER_TRANSACTION_STATUS_CHECKER_EVM_CONCURRENCY` | `100` | `<any positive number>` | Maximum number of concurrent EVM transaction status check invocations that can be processed simultaneously. EVM handles the highest volume (~75% of all status checks) and uses optimized retries (8-20s) to avoid triggering premature resubmission. |
+| `BACKGROUND_WORKER_TRANSACTION_STATUS_CHECKER_STELLAR_CONCURRENCY` | `50` | `<any positive number>` | Maximum number of concurrent Stellar transaction status checks that can be processed simultaneously. Stellar status checker uses fast retries (2-3s) optimized for Stellar’s faster block times. |
+| `BACKGROUND_WORKER_NOTIFICATION_SENDER_CONCURRENCY` | `30` | `<any positive number>` | Maximum number of concurrent notifications that can be processed simultaneously. |
+| `BACKGROUND_WORKER_SOLANA_TOKEN_SWAP_REQUEST_CONCURRENCY` | `10` | `<any positive number>` | Maximum number of concurrent Solana token swap requests that can be processed simultaneously. Low volume worker. |
+| `BACKGROUND_WORKER_TRANSACTION_CLEANUP_CONCURRENCY` | `1` | `<any positive number>` | Maximum number of concurrent transaction cleanup invocations that can be processed simultaneously. Defaults to 1 to avoid database conflicts. |
+| `BACKGROUND_WORKER_RELAYER_HEALTH_CHECK_CONCURRENCY` | `10` | `<any positive number>` | Maximum number of concurrent relayer health check invocations that can be processed simultaneously. Low volume worker. |
 
 ### Environment configuration example
 
@@ -78,7 +87,7 @@ CONFIG_DIR=./config
 CONFIG_FILE_NAME=config.json
 WEBHOOK_SIGNING_KEY=e1d42480-6f74-4d0b-85f4-b7f0bb690fae
 API_KEY=5eefd216-0e44-4ca7-b421-2925f90d30d5
-RATE_LIMIT_RPS=100
+RATE_LIMIT_REQUESTS_PER_SECOND=100
 RATE_LIMIT_BURST_SIZE=300
 METRICS_ENABLED=true
 METRICS_PORT=8081
@@ -130,7 +139,7 @@ For comprehensive details on configuring all supported signer types including:
 * CDP signers
 * Security best practices and troubleshooting
 
-See the dedicated [Signers Configuration](/relayer/configuration/signers) guide.
+See the dedicated [Signers Configuration](./configuration/signers) guide.
 
 
 
@@ -218,16 +227,16 @@ Available configuration fields
 | network_type | String | Type of network the relayer will connect to (`evm`, `solana`) |
 | network | String | Network the relayer will connect to. Must match a network identifier defined in your network configuration files. See [Network Configuration](/relayer/network_configuration) for details on defining networks. |
 | custom_rpc_urls | list | Optional custom RPC URLs for the network. If provided, this will be used instead of the public RPC URLs. This is useful for using your own RPC node or a paid service provider. The first url of the list is going to be used as the default |
-| policies | list | Overrides default policies. Please refer to the [`Policies`](/relayer/configuration#network-policies) table |
+| policies | list | Overrides default policies. Please refer to the [`Policies`](./configuration#network-policies) table |
 
 <a name="network_policies"></a>Policies
 | Network type | Policy | Type | Description |
 | --- | --- | --- | --- |
-| solana, evm | min_balance | unsigned 128 | Minimum balance (in lamports or wei) required for the relayer to operate. Optional. |
-| solana | fee_payment_strategy | enum(user,relayer) | Specifies who pays the fee. "user" (default) means the sender pays; "relayer" means the relayer pays. For "user", RPC methods add an instruction to transfer SPL tokens (calculated from the current SOL price plus a configurable margin) from the user to the relayer, ensuring fees are sustainably covered in tokens rather than SOL. |
-| solana | swap_config | SwapConfig | Optional object configuring automated token‐swaps on Solana. |
-| solana | fee_margin_percentage | f32 | Additional margin percentage added to estimated transaction fees to account for price fluctuations. For example, a value of 10 will add 10% to estimated fees. Optional. |
-| solana | max_allowed_fee_lamports | unsigned 64 | Maximum allowed fee (in lamports) for a transaction. Optional. |
+| solana, evm | min_balance | `unsigned 128` | Minimum balance (in lamports or wei) required for the relayer to operate. Optional. |
+| solana | fee_payment_strategy | `enum(user,relayer)` | Specifies who pays the fee. "user" (default) means the sender pays; "relayer" means the relayer pays. For "user", RPC methods add an instruction to transfer SPL tokens (calculated from the current SOL price plus a configurable margin) from the user to the relayer, ensuring fees are sustainably covered in tokens rather than SOL. |
+| solana | swap_config | `SwapConfig` | Optional object configuring automated token‐swaps on Solana. |
+| solana | fee_margin_percentage | `f32` | Additional margin percentage added to estimated transaction fees to account for price fluctuations. For example, a value of 10 will add 10% to estimated fees. Optional. |
+| solana | max_allowed_fee_lamports | `unsigned 64` | Maximum allowed fee (in lamports) for a transaction. Optional. |
 | solana | allowed_tokens | `Vector<AllowedToken>` | List of allowed tokens. Only these tokens are supported if provided. Optional. |
 | solana | allowed_programs | `Vector<String>` | List of allowed programs by their identifiers. Only these programs are supported if provided. |
 | solana | allowed_accounts | `Vector<String>` | List of allowed accounts by their public keys. The relayer will only operate with these accounts if provided. |
@@ -527,6 +536,6 @@ The OpenZeppelin Relayer supports two complementary approaches for configuration
 <Callout>
 
 
-See [Storage Configuration](/relayer/configuration/storage) for detailed information about how file-based and API-based configurations work together, storage behavior, and best practices.
+See [Storage Configuration](./configuration/storage) for detailed information about how file-based and API-based configurations work together, storage behavior, and best practices.
 
 </Callout>

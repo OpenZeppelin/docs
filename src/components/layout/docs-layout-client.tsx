@@ -43,7 +43,7 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 		// Include shared paths in Polkadot tab only if coming from Polkadot context
 		const polkadotUrls =
 			isSharedPath && lastEcosystem === "polkadot"
-				? new Set(["/substrate-runtimes", "/monitor"])
+				? new Set(["/substrate-runtimes", "/monitor", "/relayer"])
 				: new Set(["/substrate-runtimes"]);
 
 		return [
