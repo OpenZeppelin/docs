@@ -8,6 +8,8 @@ import { usePathname } from "next/navigation";
 export function VersionBanner() {
 	const pathname = usePathname();
 
+	if (pathname.startsWith("/monitor") || pathname.startsWith("/relayer"))
+		return null;
 	// Check if this is a versioned page (contains version patterns)
 	const versionMatch = pathname.match(/\/([\d.]+x?)(?:\/|$)/);
 

@@ -145,7 +145,7 @@ export default function HomePage() {
 						/>
 
 						<FeatureCard
-							href="/monitor"
+							href="/monitor/1.1.x"
 							icon={<MonitorIcon className="h-6 w-6 sm:h-8 sm:w-8" />}
 							title="Monitor"
 							description="Monitor onchain activity in real time to watch critical events, detect anomalies, trigger alerts on your preferred channels, and set automated responses with Relayer."

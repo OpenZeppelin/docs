@@ -102,10 +102,12 @@ TRANSACTION_EXPIRATION_HOURS=8
 
 This file can exist in any directory, but the default location is `./config/config.json`.
 
+<Callout>
 
 
 All components defined in `config.json` can also be managed via REST API endpoints. This provides runtime flexibility for adding, updating, or removing relayers, signers, and notifications without restarting the service. See the ***API Reference*** page for detailed endpoints documentation.
 
+</Callout>
 
 Key sections in this file include:
 
@@ -125,6 +127,7 @@ For comprehensive details on configuring all supported signer types including:
 * HashiCorp Vault (secret and transit)
 * Cloud KMS providers (Google Cloud, AWS)
 * Turnkey signers
+* CDP signers
 * Security best practices and troubleshooting
 
 See the dedicated [Signers Configuration](/relayer/configuration/signers) guide.
@@ -175,7 +178,7 @@ See the ***API Reference*** page for detailed endpoints documentation.
 
 ```json
 "relayers": [
-
+  {
     "id": "solana-testnet",
     "name": "Solana Testnet",
     "paused": false,
@@ -187,19 +190,19 @@ See the ***API Reference*** page for detailed endpoints documentation.
       {
         "url": "https://primary-rpc.example.com",
         "weight": 2  // Higher weight routes more requests to this endpoint. The value must be an integer between 0 and 100 (inclusive).
-      ,
-
+      },
+      {
         "url": "https://backup-rpc.example.com",
         "weight": 1
-
+      }
     ],
-    "policies":
+    "policies": {
       "allowed_programs": [
           "11111111111111111111111111111111",
           "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
           "BPFLoaderUpgradeab1e11111111111111111111111"
         ]
-
+    }
   }
 ]
 ```
@@ -226,13 +229,13 @@ Available configuration fields
 | solana | fee_margin_percentage | f32 | Additional margin percentage added to estimated transaction fees to account for price fluctuations. For example, a value of 10 will add 10% to estimated fees. Optional. |
 | solana | max_allowed_fee_lamports | unsigned 64 | Maximum allowed fee (in lamports) for a transaction. Optional. |
 | solana | allowed_tokens | `Vector<AllowedToken>` | List of allowed tokens. Only these tokens are supported if provided. Optional. |
-| solana | allowed_programs | `Vector<String>` | List of allowed programs by their identifiers. Only these programs are supported if provided. Optional. |
+| solana | allowed_programs | `Vector<String>` | List of allowed programs by their identifiers. Only these programs are supported if provided. |
 | solana | allowed_accounts | `Vector<String>` | List of allowed accounts by their public keys. The relayer will only operate with these accounts if provided. |
 | solana | disallowed_accounts | `Vector<String>` | List of disallowed accounts by their public keys. These accounts will be explicitly blocked. |
-| solana | max_tx_data_size | unsigned 16 | Maximum transaction size. Optional. |
-| solana | max_signatures | unsigned 8 | Maximum supported signatures. Optional. |
-| evm | gas_price_cap | unsigned 128 | Specify a maximum gas price for every transaction sent with the Relayer. When enabled, any transaction exceeding the cap will have its gasPrice or maxFeePerGas overwritten. (Optional) |
-| evm | gas_limit_estimation | bool | Automatic gas_limit calculation. Enabled by default. (Optional) |
+| solana | max_tx_data_size | `unsigned 16` | Maximum transaction size. Optional. |
+| solana | max_signatures | `unsigned 8` | Maximum supported signatures. Optional. |
+| evm | gas_price_cap | `unsigned 128` | Specify a maximum gas price for every transaction sent with the Relayer. When enabled, any transaction exceeding the cap will have its gasPrice or maxFeePerGas overwritten. (Optional) |
+| evm | gas_limit_estimation | `bool` | Automatic gas_limit calculation. Enabled by default. (Optional) |
 | evm | whitelist_receivers | `Vector<String>` | A list of authorized contracts for each transaction sent using the Relayer. Transactions will be rejected if the destination address is not on the list. (Optional) |
 
 #### RPC URL Configuration
@@ -244,21 +247,21 @@ The relayer supports two ways to configure RPC URLs:
 
 ```json
 "custom_rpc_urls": [
-
+  {
     "url": "https://primary-rpc.example.com",
     "weight": 2  // Higher weight routes more requests to this endpoint. The value must be an integer between 0 and 100 (inclusive).
-  ,
-
+  },
+  {
     "url": "https://secondary-rpc.example.com",
     "weight": 100, // Max allowed weight
-  ,
-
+  },
+  {
     "url": "https://backup-rpc.example.com"  // No weight specified, defaults to 100
-  ,
-
+  },
+  {
     "url": "https://backup2-rpc.example.com",
     "weight": 0, //  A value of 0 disables the endpoint.
-
+  }
 ]
 ```
 
@@ -521,6 +524,9 @@ The OpenZeppelin Relayer supports two complementary approaches for configuration
 * Perfect for dynamic environments
 * Supports automated configuration management
 
+<Callout>
 
 
 See [Storage Configuration](/relayer/configuration/storage) for detailed information about how file-based and API-based configurations work together, storage behavior, and best practices.
+
+</Callout>

@@ -103,9 +103,26 @@ The `FungibleBlockList` trait extends the `FungibleToken` trait to provide a blo
 can be managed by an authorized account. This extension ensures that blocked accounts cannot transfer/receive
 tokens, or approve token transfers.
 
-## Utility Modules
+## Stellar Asset Contract (SAC)
 
-The package includes utility modules to help with common token implementation patterns:
+The Stellar Asset Contract (SAC) is a special built-in implementation of [CAP-46-6 Smart Contract Standardized Asset](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0046-06.md) and [SEP-41 Token Interface](https://developers.stellar.org/docs/tokens/token-interface). The SAC acts as a bridge between traditional Stellar assets and Soroban smart contracts.
+
+SAC automatically wraps existing Stellar assets (like USDC, XLM, or any issued asset) so they can be used in smart contracts. Think of it as the "smart contract version" of any Stellar asset.
+
+Key points to know:
+- Every Stellar asset gets its own SAC instance with a deterministic contract address
+- No bridging or wrapping tokens needed - it's the same asset, just accessible via smart contracts
+- Anyone can deploy a SAC for any asset (the original issuer doesn't need to be involved)
+- When you transfer between Stellar accounts and contracts, the balances are stored differently but represent the same underlying asset
+- SAC implements the same SEP-41 interface as OpenZeppelin fungible tokens
+
+When to use SAC vs OpenZeppelin tokens:
+- Use SAC: When you want to interact with existing Stellar assets (USDC, XLM, etc.) in your smart contracts
+- Use OpenZeppelin: When creating new custom tokens with specialized logic, access controls, or unique tokenomics
+
+For example, if you want to build a DeFi protocol that uses USDC, you'd deploy the SAC for USDC rather than creating a new token. Users can then interact with the same USDC they hold in their Stellar wallets directly through your smart contract.
+
+Every SAC has an admin interface for privileged operations like minting or clawback. The OpenZeppelin fungible token module provides utilities that enable you to set a separate contract as the admin for these operations:
 
 ### - SAC Admin Generic
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/fungible/utils/sac_admin_generic)
@@ -132,6 +149,6 @@ To comply with the SEP-41 specification, a contract must implement both the `Fun
 
 ## TTL Management
 
-The library handles the TTL (Time-To-Live) of only `temporary` and `persistent` storage entries declared
-by the library. The `instance` TTL management is left to the implementor due to flexibility. The library
-exposes default values for extending the TTL: `INSTANCE_TTL_THRESHOLD` and `INSTANCE_EXTEND_AMOUNT`.
+The library handles the TTL (Time-To-Live) of only `temporary` and `persistent` storage entries declared by the library. The `instance` TTL management is left to the implementor due to flexibility. The library exposes default values for extending the TTL: `INSTANCE_TTL_THRESHOLD` and `INSTANCE_EXTEND_AMOUNT`.
+
+For a comprehensive understanding of Soroban's three storage types (`temporary`, `persistent`, and `instance`) and their archival behavior, see the [State Archival documentation](https://developers.stellar.org/docs/learn/fundamentals/contract-development/storage/state-archival#contract-data-type-descriptions).

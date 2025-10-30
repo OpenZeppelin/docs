@@ -29,10 +29,12 @@ In the rapidly evolving world of blockchain technology, effective monitoring is 
 * ***Webhooks*** - Send HTTP requests to custom endpoints
 * ***Custom Scripts*** - Execute Python, JavaScript, or Bash scripts
 
+<Callout>
 
 
 To get started immediately, see [Quickstart](/monitor/quickstart).
 
+</Callout>
 
 ## Installation
 
@@ -40,6 +42,38 @@ To get started immediately, see [Quickstart](/monitor/quickstart).
 
 * Use ***Rust 2021 edition***, version `1.86` or later.
 * ***Docker*** (optional, for containerized deployment)
+
+#### System Dependencies (Linux)
+
+For Ubuntu 22.04+ or Debian-based systems (both x86 and ARM64 architectures), install required packages:
+
+***Note:*** Python 3.9+ is required for pre-commit hooks compatibility.
+
+```bash
+# Install required packages directly
+sudo apt update
+sudo apt install -y \
+    build-essential \
+    curl \
+    git \
+    pkg-config \
+    libssl-dev \
+    libffi-dev \
+    libyaml-dev \
+    python3 \
+    python3-venv \
+    python3-pip
+```
+
+Or use the provided system package script (automatically ensures Python 3.9+ compatibility):
+
+```bash
+chmod +x ./scripts/linux/sys_pkgs_core.sh
+chmod +x ./scripts/linux/sys_pkgs_dev.sh
+# Installs required packages and ensures compatible Python version
+./scripts/linux/sys_pkgs_core.sh   // For runtime dependencies only
+./scripts/linux/sys_pkgs_dev.sh    // For Python/dev dependencies (calls core script)
+```
 
 ### Local Installation
 
@@ -160,6 +194,7 @@ By default, predefined metrics within a dashboard is populated in grafana.
     "triggers": ["large_transfer_slack"],
     ...
   }
+
   ```
 
 <Callout type='warn'>
@@ -465,8 +500,8 @@ A Trigger defines actions to take when monitored conditions are met. Triggers ca
         "value": "https://hooks.slack.com/services/A/B/C"
       },
       "message": {
-        "title": "large_transfer_slack triggered",
-        "body": "Large transfer of ${events.0.args.value} USDC from $events.0.args.from to $events.0.args.to | https://etherscan.io/tx/$transaction.hash#eventlog"
+        "title": "${monitor.name} triggered",
+        "body": "Large transfer of ${events.0.args.value} USDC from ${events.0.args.from} to ${events.0.args.to} | https://etherscan.io/tx/${transaction.hash}#eventlog"
       }
     }
   },
@@ -480,7 +515,7 @@ A Trigger defines actions to take when monitored conditions are met. Triggers ca
       },
       "message": {
         "title": "large_transfer_usdc_slack triggered",
-        "body": "${monitor.name} triggered because of a large transfer of $functions.0.args.amount USDC to $functions.0.args.to | https://stellar.expert/explorer/testnet/tx/$transaction.hash"
+        "body": "${monitor.name} triggered because of a large transfer of ${functions.0.args.amount} USDC to ${functions.0.args.to} | https://stellar.expert/explorer/testnet/tx/${transaction.hash}"
       }
     }
   }
@@ -528,7 +563,7 @@ A Trigger defines actions to take when monitored conditions are met. Triggers ca
   },
   "message": {
     "title": "Alert Subject",
-    "body": "Alert message for ${transaction.hash}"
+    "body": "Alert message for ${transaction.hash}",
   },
   "sender": "sender@example.com",
   "recipients": ["recipient@example.com"]
@@ -674,8 +709,8 @@ The monitor uses a structured JSON format with nested objects for template varia
 | --- | --- |
 | `**monitor.name**` | Name of the triggered monitor |
 | `**transaction.hash**` | Hash of the transaction |
-| `**functions.[index].signature**` | Function signature |
-| `**events.[index].signature**` | Event signature |
+| `**functions**` | All functions matched and their parameters |
+| `**events**` | All events matched and their parameters |
 
 ##### Network-Specific Variables
 
@@ -685,19 +720,24 @@ The monitor uses a structured JSON format with nested objects for template varia
 | `**transaction.from**` | Sender address |
 | `**transaction.to**` | Recipient address |
 | `**transaction.value**` | Transaction value |
+| `**events.[index].signature**` | Event signature |
 | `**events.[index].args.[param]**` | Event parameters by name |
+| `**functions.[index].signature**` | Function signature |
 | `**functions.[index].args.[param]**` | Function parameters by name |
 
 ###### Stellar Variables
 | **Variable** | **Description** |
 | --- | --- |
 | `**events.[index].args.[position]**` | Event parameters by position |
+| `**events.[index].args.[param]**` | Event parameters by name (only in case the contract supports event parameters name) |
 | `**functions.[index].args.[param]**` | Function parameters by name |
 
+<Callout>
 
 
 Transaction-related variables (`transaction.from`, `transaction.to`, `transaction.value`) are not available for Stellar networks.
 
+</Callout>
 
 #### Message Formatting
 
@@ -716,7 +756,7 @@ Slack, Discord, Telegram, Email and Webhook support Markdown formatting in their
       "password": {"type": "plain", "value": "password"},
       "message": {
         "title": "**High Value Transfer Alert**",
-        "body": "### Transaction Details\n\n* **Amount:** ${events.0.args.value} USDC\n* **From:** `$events.0.args.from`\n* **To:** `$events.0.args.to`\n\n> Transaction Hash: $transaction.hash\n\n[View on Explorer](https://etherscan.io/tx/$transaction.hash)"
+        "body": "### Transaction Details\n\n* **Amount:** ${events.0.args.value} USDC\n* **From:** `${events.0.args.from}`\n* **To:** `${events.0.args.to}`\n\n> Transaction Hash: ${transaction.hash}\n\n[View on Explorer](https://etherscan.io/tx/${transaction.hash})"
       },
       "sender": "alerts@example.com",
       "recipients": ["recipient@example.com"]
@@ -735,7 +775,7 @@ Slack, Discord, Telegram, Email and Webhook support Markdown formatting in their
       "slack_url": {"type": "plain", "value": "https://hooks.slack.com/services/XXX/YYY/ZZZ"},
       "message": {
         "title": "*🚨 High Value Transfer Alert*",
-        "body": "*Transaction Details*\n\n• *Amount:* `${events.0.args.value}` USDC\n• *From:* `$events.0.args.from`\n• *To:* `$events.0.args.to`\n\n>Transaction Hash: `$transaction.hash`\n\n<https://etherscan.io/tx/$transaction.hash|View on Explorer>"
+        "body": "*Transaction Details*\n\n• *Amount:* `${events.0.args.value}` USDC\n• *From:* `${events.0.args.from}`\n• *To:* `${events.0.args.to}`\n\n>Transaction Hash: `${transaction.hash}`\n\n<https://etherscan.io/tx/${transaction.hash}|View on Explorer>"
       }
     }
   }
@@ -752,7 +792,7 @@ Slack, Discord, Telegram, Email and Webhook support Markdown formatting in their
       "discord_url": {"type": "plain", "value": "https://discord.com/api/webhooks/XXX/YYY"},
       "message": {
         "title": "**🚨 High Value Transfer Alert**",
-        "body": "# Transaction Details\n\n* **Amount:** `${events.0.args.value}` USDC\n* **From:** `$events.0.args.from`\n* **To:** `$events.0.args.to`\n\n>>> Transaction Hash: `$transaction.hash`\n\n**[View on Explorer](https://etherscan.io/tx/$transaction.hash)"
+        "body": "# Transaction Details\n\n* **Amount:** `${events.0.args.value}` USDC\n* **From:** `${events.0.args.from}`\n* **To:** `${events.0.args.to}`\n\n>>> Transaction Hash: `${transaction.hash}`\n\n**[View on Explorer](https://etherscan.io/tx/${transaction.hash})"
       }
     }
   }
@@ -770,7 +810,7 @@ Slack, Discord, Telegram, Email and Webhook support Markdown formatting in their
       "chat_id": "9876543210",
       "message": {
         "title": "*🚨 High Value Transfer Alert*",
-        "body": "*Transaction Details*\n\n• *Amount:* `${events.0.args.value}` USDC\n• *From:* `$events.0.args.from`\n• *To:* `$events.0.args.to`\n\n`Transaction Hash: $transaction.hash`\n\n[View on Explorer](https://etherscan.io/tx/$transaction.hash)"
+        "body": "*Transaction Details*\n\n• *Amount:* `${events.0.args.value}` USDC\n• *From:* `${events.0.args.from}`\n• *To:* `${events.0.args.to}`\n\n`Transaction Hash: ${transaction.hash}`\n\n[View on Explorer](https://etherscan.io/tx/${transaction.hash})"
       }
     }
   }
@@ -834,7 +874,7 @@ A Monitor defines what blockchain activity to watch and what actions to take whe
     {
       "script_path": "./config/filters/evm_filter_block_number.sh",
       "language": "bash",
-      "arguments": ["--verbose"],
+      "arguments": "--verbose",
       "timeout_ms": 1000
     }
   ],
@@ -949,6 +989,7 @@ Expressions allow for condition checking of function arguments, event parameters
 | `**Array (EVM/Stellar)**` | Ordered list of items. For Stellar, often a JSON string in config (e.g., ’["a", "id":1]'`). For EVM, typically decoded from ABI parameters. | `contains`, `==`, `!=`, `[index]` | Detailed operations, including indexed access and behavior of `contains`, vary by network. See "Operations on Complex Types" below. |
 | `**Object/Map (Stellar)**` | Key-value pairs, typically represented as a JSON string in config (e.g., ’"key": "value", "id": 123'`). | `.key_access`, `==`, `!=` | Supports dot notation for field access (e.g., `data.id`). See "Operations on Complex Types" for details. |
 | `**Vec (Stellar)**` | Ordered list, where the parameter’s value can be a CSV string (e.g., `"foo,bar"`) or a JSON array string (e.g., ’["foo","bar"]'`). | `contains`, `==`, `!=` | Behavior of `contains` and `==` differs based on whether the value is CSV or a JSON array string. See "Operations on Complex Types" for details. |
+| `**Tuple (EVM)**` | Ordered list represented as a JSON array string (e.g., ’["Alice", 0x1234..., 25, true, [12,34]]'`). | `contains`, `==`, `!=` | The `contains` operation performs a case-insensitive deep search through all tuple elements. `==` and `!=` perform comparisons against the entire tuple values. See "Operations on Complex Types" for details. |
 
 **Logical Operators:**
 
@@ -1033,6 +1074,27 @@ When an EVM parameter is an array (often represented internally or configured wi
 * `array_param != '["raw_json_array_string"]'` the negation of the above
 * `array_param[0]` indexed access
 
+**Tuple Operations (`kind: "tuple"`)**
+
+* `tuple_param contains 'value'` checks if the string ’value'` exists within the tuple.
+* `tuple_param == (12, "hello", "testing", 34)` checks if the tuple is equal.
+* `tuple_param != (12, "hello", "testing", 34)` checks if the tuple is not equal.
+
+Where `tuple_param` is the name of tuple param (we should have only one param for tuples).
+
+**Note on Solidity Structs:** When working with Solidity smart contracts, struct types are automatically converted to tuples during ABI encoding/decoding. For example, a Solidity struct like:
+
+```solidity
+struct User {
+    uint256 id;
+    string name;
+    string email;
+    uint256 age;
+}
+```
+
+Will be represented as a tuple `**(12, "user_name", "user_email", 34)**` where the values correspond to the struct fields in their declaration order. This conversion is handled transparently by the Solidity compiler and Web3 libraries, allowing you to use the tuple operations above to work with struct data returned from smart contract calls.
+
 ##### Stellar Specifics
 
 **Object (`kind: "object"`) / Map (`kind: "Map"`) Operations**
@@ -1060,7 +1122,23 @@ When a Stellar parameter has `kind: "vec"`, its value can be either a CSV string
 
 **Event Parameter Access (Stellar)**
 
-Stellar event parameters are typically accessed by their numeric index as the base variable name (e.g., `0`, `1`, `2`). If an indexed event parameter is itself a complex type (like an array or map, represented as a JSON string), you can then apply the respective access methods:
+Starting with Stellar Protocol 23, Soroban contracts can include event definitions in their contract specifications. This enables two ways to access event parameters:
+
+**Access by Name (Protocol 23+):**
+When a contract specification includes event definitions, you can access event parameters by their defined names:
+
+* If an event has a parameter named `recipient` (kind: "Address"):
+  * `recipient == 'GBBD...ABCD'`
+* If an event has a parameter named `amount` (kind: "U128"):
+  * `amount > 1000000`
+* If an event has a parameter named `metadata` (kind: "Map") containing ’"id": 123, "name": "Test"'`:
+  * `metadata.id == 123`
+  * `metadata.name contains 'test'` (case-insensitive)
+* If an event has a parameter named `items` (kind: "array") containing ’["alpha", "beta"]'`:
+  * `items contains 'beta'` (case-insensitive deep search)
+
+**Access by Index (Legacy):**
+For contracts without event definitions in their specification, or when working with older contracts, event parameters can be accessed by their numeric index (e.g., `0`, `1`, `2`):
 
 * If event parameter `0` (kind: "Map") is ’"id": 123, "name": "Test"'`:
   * `0.id == 123`
@@ -1069,6 +1147,11 @@ Stellar event parameters are typically accessed by their numeric index as the ba
   * `1[0] == 'ALPHA'` (case-insensitive)
   * `1[1].val == 'Beta'` (case-insensitive)
   * `1 contains 'beta'` (case-insensitive deep search)
+
+
+
+Named access is recommended when available as it makes expressions more readable and maintainable. The monitor will automatically use named parameters if they’re available in the contract specification, otherwise it falls back to indexed access.
+
 
 ##### EVM Examples
 
@@ -1116,7 +1199,7 @@ Assume `event.ids` is `[10, 20, 30]` and `event.participants` is `["user": "Alic
 
 "event.participants contains 'Alice'"  // True (deep search, case-insensitive)
 "event.participants contains 'editor'" // True (deep search, case-insensitive)
-"event.participants == '[\"user\": \"Alice\", \"role\": \"admin\", \"user\": \"Bob\", \"role\": \"editor\"]'" // Raw JSON match (case-sensitive for structure and keys)
+"event.participants == '[{\"user\": \"Alice\", \"role\": \"admin\"}, {\"user\": \"Bob\", \"role\": \"editor\"}]'" // Raw JSON match (case-sensitive for structure and keys)
 ```
 
 ##### Stellar Examples
@@ -1194,6 +1277,17 @@ Assume event parameter `0` is `12345` (u64), `1` (kind: "array") is ’["Val1", 
 "2.keyB < 1000"
 ```
 
+Now, after Stellar Protocol 23 we can access to Event parameters by name (first, make sure the contract supports the feature)
+
+```
+"0 > 10000"
+"param_name[0] == 'val1'"
+"param_name contains 'val2'"
+"param_name.keyA == 'DATAX'"
+"param_name.keyB < 1000"
+```
+
+<Callout>
 
 
 With SEP-48 support, Stellar functions can now reference parameters by name (e.g., `amount > 1000`) instead of position (e.g., `2 > 1000`). Events still use indexed parameters until SEP-48 support is added for events.
@@ -1201,6 +1295,7 @@ With SEP-48 support, Stellar functions can now reference parameters by name (e.g
 You can find the contract specification through Stellar contract explorer tool. For example:
 [Stellar DEX Contract Interface](https://lab.stellar.org/smart-contracts/contract-explorer?$=network$id=mainnet&label=Mainnet&horizonUrl=https:////horizon.stellar.org&rpcUrl=https:////mainnet.sorobanrpc.com&passphrase=Public%20Global%20Stellar%20Network%20/;%20September%202015;&smartContracts$explorer$contractId=CA6PUJLBYKZKUEKLZJMKBZLEKP2OTHANDEOWSFF44FTSYLKQPIICCJBE;;)
 
+</Callout>
 
 #### Trigger Conditions (Custom filters)
 

@@ -25,7 +25,51 @@ Until the transfer is accepted, the original owner retains full control and can 
 
 The Ownable module allows the owner to permanently renounce ownership of the contract. This is a one-way operation that cannot be undone. After ownership is renounced, all functions marked with `#[only_owner]` become permanently inaccessible.
 
-This feature is useful for contracts that need to become fully decentralized after an initial setup phase.
+This feature is useful for contracts that need to become fully decentralized after an initial setup phase, or to make a contract **immutable and non-upgradeable** by removing administrative control entirely.
+
+#### Example: Making a Contract Immutable
+
+A common use case is renouncing ownership after initial setup to ensure the contract becomes immutable and cannot be upgraded:
+
+```rust
+use soroban_sdk::{contract, contractimpl, Address, Env};
+use stellar_access::ownable::{self as ownable, Ownable};
+use stellar_macros::only_owner;
+
+#[contract]
+pub struct MyContract;
+
+#[contractimpl]
+impl MyContract {
+    pub fn __constructor(e: &Env, initial_owner: Address) {
+        ownable::set_owner(e, &initial_owner);
+    }
+
+    #[only_owner]
+    pub fn finalize_and_lock(e: &Env) {
+        // Perform any final configuration here
+        // ...
+
+        // Renounce ownership to make the contract immutable
+        // After this call, no owner-restricted functions can ever be called again
+        ownable::renounce_ownership(e);
+
+        // The contract is now permanently locked and non-upgradeable
+    }
+
+    #[only_owner]
+    pub fn emergency_upgrade(e: &Env, new_wasm_hash: BytesN<32>) {
+        // This function becomes permanently inaccessible after renounce_ownership
+        e.deployer().update_current_contract_wasm(new_wasm_hash);
+    }
+}
+```
+
+**Important Notes:**
+- Once `renounce_ownership()` is called, there is no way to restore ownership
+- All functions marked with `#[only_owner]` become permanently inaccessible
+- This effectively makes the contract immutable and non-upgradeable
+- You cannot renounce ownership while a transfer is in progress
 
 ### Procedural Macro
 
