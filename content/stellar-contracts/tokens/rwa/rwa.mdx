@@ -238,14 +238,28 @@ The RWA package includes several supporting modules that work together to provid
 
 This is a mandatory module, since RWA token contract expects the compliance checks and hooks to be available.
 
-Provides a modular framework for implementing custom compliance rules.
-[Compliance Contract](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/tokens/src/rwa/compliance/mod.rs#L67) uses a hook-based architecture where multiple [compliance modules](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/tokens/src/rwa/compliance/mod.rs#L327) can be registered for specific events:
+Provides a modular framework for implementing custom compliance rules through a hook-based architecture where multiple
+[compliance modules](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/tokens/src/rwa/compliance/mod.rs#L327)
+can be registered to the [Compliance Contract](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/tokens/src/rwa/compliance/mod.rs#L67).
 
-- **Transferred**: Called after tokens are successfully transferred
-- **Created**: Called after tokens are successfully minted
-- **Destroyed**: Called after tokens are successfully burned
-- **CanTransfer**: Called during transfer validation (read-only)
-- **CanCreate**: Called during mint validation (read-only)
+**Compliance Validation Flow:**
+
+```mermaid
+graph TD
+    A[RWA Token Transfer/Mint] --> B[Compliance Contract]
+    B --> C{Hook Type<br/>CanTransfer<br/>CanCreate<br/>etc.}
+    C --> D[Registered Modules 1..N]
+    D --> E[Transfer Limit Module]
+    D --> F[Country Restriction Module]
+    D --> G[Investor Count Module]
+    D --> H[Custom Module X]
+    E --> I{All modules<br/>return true?}
+    F --> I
+    G --> I
+    H --> I
+    I -->|Yes| J[Operation Proceeds]
+    I -->|No| K[Operation Reverts]
+```
 
 The compliance contract is designed to be shared across multiple RWA tokens, with each hook function accepting a
 `token` parameter to identify the calling token.
@@ -367,11 +381,23 @@ Claims are issued by trusted authorities and contain:
 
 This module is an implementation detail. It is provided as the suggested implementation for the **Claim-based** approach.
 
-Validates cryptographic claims with support for multiple signature schemes:
+Validates cryptographic claims and provides comprehensive claim lifecycle management. The module includes:
 
+**Signature Verification:**
 - Ed25519 (Stellar native)
 - Secp256k1 (Ethereum compatible)
 - Secp256r1 (Enterprise PKI compatible)
+
+**Key Management:**
+- Topic-specific key authorization with registry tracking
+- Each public key is tied to a signature scheme
+- A signing key (public key + scheme) can be authorized to sign claims for specific topic and registry combinations
+- The same signing key can be authorized across multiple topics and registries independently
+
+**Claim Invalidation Mechanisms:**
+- **Passive Expiration**: Helper functions to encode/decode expiration metadata (`created_at` and `valid_until` timestamps) within claim data, allowing claims to automatically expire without on-chain action
+- **Per-claim Revocation**: Fine-grained revocation of individual claims for precise control
+- **Signature Invalidation**: Efficient bulk invalidation via nonce increment for revoking all claims signed by a specific key
 
 ## Extensions
 
