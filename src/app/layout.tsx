@@ -93,7 +93,7 @@ export default function Layout({ children }: { children: ReactNode }) {
 					id="telegram"
 					variant="rainbow"
 					rainbowColors={["#4F57FA", "#2F99FF"]}
-					className="gap-2"
+					className="gap-1.5 text-xs sm:text-base"
 				>
 					<p>Join our community of builders on</p>
 					<Link
