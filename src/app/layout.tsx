@@ -1,11 +1,11 @@
 import "@/app/global.css";
 import { GoogleAnalytics, GoogleTagManager } from "@next/third-parties/google";
+import Link from "fumadocs-core/link";
+import { Banner } from "fumadocs-ui/components/banner";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import type { ReactNode } from "react";
 import { Provider } from "./provider";
-import { Banner } from "fumadocs-ui/components/banner";
-import Link from "fumadocs-core/link";
 
 const inter = Inter({
 	subsets: ["latin"],
