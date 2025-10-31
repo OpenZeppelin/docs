@@ -131,6 +131,52 @@ Product-specific icons located in `src/components/icons/`:
 - **Version Switching**: Multi-version documentation support
 - **Responsive Design**: Mobile-optimized navigation and content
 
+## Solidity Docgen
+
+Any library using Solidity Docgen can utilize the `docgen` templates and config file in their repo to generate markdown API references for the docs. To get started follow the instructions below:
+
+### 1. Add the templates to your repo
+
+Inside this docs repo is the [`docgen`](https://github.com/OpenZeppelin/docs/tree/main/docgen) folder which contains [`templates-md`](https://github.com/OpenZeppelin/docs/tree/main/docgen/templates-md) and [`config-md.js`](https://github.com/OpenZeppelin/docs/blob/main/docgen/config-md.js). Copy both of these items into your `docs` folder in your repo. Once there open the [`templates-md/helpers.js`](https://github.com/OpenZeppelin/docs/blob/main/docgen/templates-md/helpers.js) file and update the `API_DOCS_PATH` constant to match your export path.
+
+```js
+const API_DOCS_PATH = 'contracts/5.x/api';
+// const API_DOCS_PATH = 'community-contracts/api';
+// const API_DOCS_PATH = 'confidential-contracts/api';
+// const API_DOCS_PATH = 'uniswap-hooks/api';
+```
+
+### 2. Update the `hardhat.config.js` file
+
+With the `config-md.js` file now in the `docs` folder, update your `hardhat.config.js` to use the new config file.
+
+```js
+{
+  // other config options
+  docgen: require('./docs/config-md'),
+}
+```
+
+Once added make sure these are accessible in your branches going forward. If you are generating an API reference for previous branches you will need to repeat steps 1 and 2 for those branches.
+
+### 3. Run the `generate-api-docs.js` script
+
+With your remote repo setup with the new template files you can run the `scripts/generate-api-docs.js` script. Be sure to pass in the correct arguements for your docs
+
+```bash
+node scripts/generate-api-docs.js \
+  --repo https://github.com/OpenZeppelin/openzeppelin-community-contracts.git \
+  --branch release-v5.5 \
+  --api-output content/contracts/5.x/api \
+  --examples-output examples
+```
+
+This wil lexport the contents to
+
+### Automated Setup
+
+In the case you want to setup an automated GitHub workflow to create these API docs visit the [docs-api-generation-workflows](https://github.com/OpenZeppelin/docs-api-generation-workflows) for more info. This repo (`OpenZeppelin/docs`) is the `Docs Receiver` side of the equation.
+
 ## Content Management
 
 ### Adding New Content
