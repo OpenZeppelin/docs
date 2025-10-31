@@ -137,7 +137,7 @@ Any library using Solidity Docgen can utilize the `docgen` templates and config 
 
 ### 1. Add the templates to your repo
 
-Inside this docs repo is the `docgen` folder which contains `templates-md` and `config-md.js`. Copy both of these items into your `docs` folder in your repo. Once there open the `templates-md/helpers.js` file and update the `API_DOCS_PATH` constant to match your export path.
+Inside this docs repo is the [`docgen`](https://github.com/OpenZeppelin/docs/tree/main/docgen) folder which contains [`templates-md`](https://github.com/OpenZeppelin/docs/tree/main/docgen/templates-md) and [`config-md.js`](https://github.com/OpenZeppelin/docs/blob/main/docgen/config-md.js). Copy both of these items into your `docs` folder in your repo. Once there open the [`templates-md/helpers.js`](https://github.com/OpenZeppelin/docs/blob/main/docgen/templates-md/helpers.js) file and update the `API_DOCS_PATH` constant to match your export path.
 
 ```js
 const API_DOCS_PATH = 'contracts/5.x/api';
