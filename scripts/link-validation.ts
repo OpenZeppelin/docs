@@ -7,6 +7,20 @@ import {
 import type { InferPageType } from "fumadocs-core/source";
 import { source } from "@/lib/source";
 import { writeFileSync } from "fs";
+import {
+	arbitrumStylusTree,
+	ethereumEvmTree,
+	impactTree,
+	midnightTree,
+	polkadotTree,
+	starknetTree,
+	stellarTree,
+	uniswapTree,
+	zamaTree,
+	type NavigationNode,
+	type NavigationPage,
+	type NavigationFolder,
+} from "@/navigation";
 
 async function checkLinks() {
 	// Parse command line arguments
@@ -52,6 +66,11 @@ async function checkLinks() {
 		checkRelativePaths: "as-url",
 	});
 
+	// Validate navigation URLs if requested
+	let navigationErrors: Array<{ tree: string; url: string; reason: string }> =
+		[];
+	navigationErrors = await validateNavigationUrls(scanned);
+
 	if (outputFile) {
 		// Generate custom output format for file
 		let output = "";
@@ -70,16 +89,41 @@ async function checkLinks() {
 			}
 		}
 
-		output += `\nSummary: ${totalErrors} errors found in ${validationResults.filter((r) => r.errors.length > 0).length} files out of ${totalFiles} total files\n`;
+		// Add navigation errors to output
+		if (navigationErrors.length > 0) {
+			output += `\nInvalid URLs in Navigation Trees:\n`;
+			for (const error of navigationErrors) {
+				totalErrors++;
+				output += `${error.tree}: ${error.url} - ${error.reason}\n`;
+			}
+			output += "------\n";
+		}
+
+		output += `\nSummary: ${totalErrors} errors found in ${validationResults.filter((r) => r.errors.length > 0).length} files out of ${totalFiles} total files`;
+		if (navigationErrors.length > 0) {
+			output += ` + ${navigationErrors.length} navigation errors`;
+		}
+		output += `\n`;
 
 		writeFileSync(outputFile, output);
 		console.log(`Results saved to ${outputFile}`);
 		console.log(
 			`${totalErrors} errors found in ${validationResults.filter((r) => r.errors.length > 0).length} files`,
 		);
+		if (navigationErrors.length > 0) {
+			console.log(`${navigationErrors.length} navigation errors found`);
+		}
 	} else {
 		// Use default printErrors for console output
 		printErrors(validationResults, true);
+
+		// Print navigation errors
+		if (navigationErrors.length > 0) {
+			console.log("\n❌ Navigation URL Errors:");
+			for (const error of navigationErrors) {
+				console.log(`  ${error.tree}: ${error.url} - ${error.reason}`);
+			}
+		}
 	}
 }
 
@@ -134,6 +178,88 @@ function getFiles(scope?: string | null) {
 	);
 
 	return Promise.all(promises);
+}
+
+function extractUrlsFromNavigation(
+	nodes: NavigationNode[],
+	urls: string[] = [],
+): string[] {
+	for (const node of nodes) {
+		if (node.type === "page") {
+			const page = node as NavigationPage;
+			// Only validate internal URLs (not external links)
+			if (!page.external && page.url) {
+				urls.push(page.url);
+			}
+		} else if (node.type === "folder") {
+			const folder = node as NavigationFolder;
+			if (folder.index && !folder.index.external) {
+				urls.push(folder.index.url);
+			}
+			if (folder.children) {
+				extractUrlsFromNavigation(folder.children, urls);
+			}
+		}
+	}
+	return urls;
+}
+
+async function validateNavigationUrls(
+	scanned: Awaited<ReturnType<typeof scanURLs>>,
+): Promise<Array<{ tree: string; url: string; reason: string }>> {
+	const navigationTrees = {
+		"Ethereum & EVM": ethereumEvmTree,
+		"Arbitrum Stylus": arbitrumStylusTree,
+		Stellar: stellarTree,
+		Midnight: midnightTree,
+		Starknet: starknetTree,
+		"Zama FHEVM": zamaTree,
+		"Uniswap Hooks": uniswapTree,
+		Polkadot: polkadotTree,
+		"OpenZeppelin Impact": impactTree,
+	};
+
+	const errors: Array<{ tree: string; url: string; reason: string }> = [];
+
+	for (const [treeName, tree] of Object.entries(navigationTrees)) {
+		const urls = extractUrlsFromNavigation(tree.children);
+
+		for (const url of urls) {
+			// Split URL into path and fragment
+			const [urlPath, fragment] = url.split("#");
+
+			// Check if the URL path exists in the scanned pages
+			// scanned.urls is a Map<string, UrlMeta>
+			const found = scanned.urls.has(urlPath);
+
+			if (!found) {
+				// Check fallback URLs (dynamic routes)
+				const foundInFallback = scanned.fallbackUrls.some((fallback) =>
+					fallback.url.test(urlPath),
+				);
+
+				if (!foundInFallback) {
+					errors.push({
+						tree: treeName,
+						url,
+						reason: "URL not found in site pages",
+					});
+				}
+			} else if (fragment) {
+				// If URL has a fragment, validate that the fragment exists on the page
+				const urlMeta = scanned.urls.get(urlPath);
+				if (urlMeta?.hashes && !urlMeta.hashes.includes(fragment)) {
+					errors.push({
+						tree: treeName,
+						url,
+						reason: `Fragment '#${fragment}' not found on page`,
+					});
+				}
+			}
+		}
+	}
+
+	return errors;
 }
 
 void checkLinks();
