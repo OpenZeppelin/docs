@@ -4,15 +4,16 @@ title: Real World Asset (RWA) Token
 
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa)
 
-Real World Asset (RWA) tokens are security tokens that represent ownership or rights to real-world assets
-such as real estate, commodities, securities, or other regulated financial instruments.
-These tokens must comply with various regulatory requirements including KYC/AML verification, transfer restrictions,
-and compliance rules. The RWA module provides a comprehensive framework based on the T-REX
-(Token for Regulated Exchanges) standard.
+Real World Asset (RWA) tokens are security tokens that represent ownership or rights to real-world assets such as
+real estate, commodities, securities, or other regulated financial instruments. These tokens must comply with various
+regulatory requirements including KYC/AML verification, transfer restrictions, and compliance rules. The RWA module
+provides a comprehensive framework based on the T-REX (Token for Regulated Exchanges) standard,
+which implements the [ERC-3643](https://docs.erc3643.org/erc-3643) specification.
 
 ## Overview
 
-The [RWA](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa) module provides a complete implementation of regulated security tokens with built-in compliance,
+The [RWA](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa) module
+provides a complete implementation of regulated security tokens with built-in compliance,
 identity verification, and administrative controls. The module is designed to be flexible and extensible,
 allowing integration with various identity registry and compliance frameworks.
 
@@ -37,16 +38,15 @@ The RWA module follows a modular architecture that separates concerns and allows
 `FungibleToken` and `Pausable` traits.
 
 2. **Identity Verifier**: A separate contract responsible for verifying user identities.
-The RWA token expects the following function to be available:
-- `fn verify_identity(e: &Env, account: &Address);`
+The RWA token expects the following function to be available: `fn verify_identity(e: &Env, account: &Address);`.
 
 3. **Compliance Contract**: A separate contract that validates transfers, minting, and burning operations.
 The RWA token expects the following functions to be available:
-- `fn can_transfer(e: &Env, from: Address, to: Address, amount: i128, token: Address) -> bool;`
-- `fn can_create(e: &Env, to: Address, amount: i128, token: Address) -> bool;`
-- `fn created(e: &Env, to: Address, amount: i128, token: Address);`
-- `fn destroyed(e: &Env, from: Address, amount: i128, token: Address);`
-- `fn transferred(e: &Env, from: Address, to: Address, amount: i128, token: Address);`
+    - `fn can_transfer(e: &Env, from: Address, to: Address, amount: i128, token: Address) -> bool;`
+    - `fn can_create(e: &Env, to: Address, amount: i128, token: Address) -> bool;`
+    - `fn created(e: &Env, to: Address, amount: i128, token: Address);`
+    - `fn destroyed(e: &Env, from: Address, amount: i128, token: Address);`
+    - `fn transferred(e: &Env, from: Address, to: Address, amount: i128, token: Address);`
 
 This loose coupling between the RWA token and the modules allows the following:
 - Share identity verifier and compliance contracts across multiple RWA tokens
@@ -176,11 +176,11 @@ RWA::unfreeze_partial_tokens(e, &user_address, amount, &operator);
 
 ### Recovery System
 
-Balance Recovery System is handled on the RWA token contract, whereas Identity Recovery System is handled
-on a separate contract as a module (may be a part of the Identity Registry contract).
-
 The recovery system allows authorized operators to transfer tokens from a lost/old account to a
 new account for the same verified investor:
+
+Balance Recovery System is handled on the RWA token contract, whereas Identity Recovery System is handled
+on a separate contract as a module (may be a part of the Identity Registry contract).
 
 ```rust
 // Recover tokens from old account to new account
@@ -216,27 +216,30 @@ It uses a hook-based architecture where compliance modules can be registered for
 - **CanTransfer**: Called during transfer validation (read-only)
 - **CanCreate**: Called during mint validation (read-only)
 
-The compliance contract is designed to be shared across multiple RWA tokens, with each hook function accepting a `token` parameter to identify the calling token.
+The compliance contract is designed to be shared across multiple RWA tokens, with each hook function accepting a
+`token` parameter to identify the calling token.
 
 ### - Identity Verifier
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/identity_verifier)
 
-This is a mandatory module, since RWA token contract expects `verify_identity(e: &Env, address: Address)` function to be available.
+This is a mandatory module, since RWA token contract expects `verify_identity(e: &Env, address: Address)`
+function to be available.
 
 The identity verifier module provides the interface for verifying user identities.
-It also supports custom implementation approaches:
+It can also support possible custom implementation approaches:
 
-- **Claim-based**: Cryptographic claims from trusted issuers (default implementation)
+- **Claim-based**: Cryptographic claims from trusted issuers (provided default implementation)
 - **Merkle Tree**: Efficient verification using merkle proofs
 - **Zero-Knowledge**: Privacy-preserving verification with custom ZK circuits
-- **Custom approaches**: Any implementation that satisfies the `verify_identity` interface
+- **Other custom approaches**: Any implementation that satisfies the `verify_identity` interface
 
-The default claim-based implementation integrates with the Claim Topics and Issuers module and Identity Registry Storage.
+The default claim-based implementation integrates with the Claim Topics and Issuers module and
+Identity Registry Storage.
 
 ### - Claim Topics and Issuers
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/claim_topics_and_issuers)
 
-This module is an implementation detail. It is provided as the suggested implementation for the `Claim-based` approach.
+This module is an implementation detail. It is provided as the suggested implementation for the **Claim-based** approach.
 
 Manages trusted claim issuers and claim topics (e.g., KYC=1, AML=2, Accredited Investor=3). This module:
 
@@ -248,7 +251,7 @@ Manages trusted claim issuers and claim topics (e.g., KYC=1, AML=2, Accredited I
 ### - Identity Registry Storage
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/identity_registry_storage)
 
-This module is an implementation detail. It is provided as the suggested implementation for the `Claim-based` approach.
+This module is an implementation detail. It is provided as the suggested implementation for the **Claim-based** approach.
 
 Stores identity information for verified investors, including:
 
@@ -260,7 +263,7 @@ Stores identity information for verified investors, including:
 ### - Identity Claims
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/identity_claims)
 
-This module is an implementation detail. It is provided as the suggested implementation for the `Claim-based` approach.
+This module is an implementation detail. It is provided as the suggested implementation for the **Claim-based** approach.
 
 Manages on-chain identity claims with cryptographic signatures. Claims are issued by trusted authorities and contain:
 
@@ -272,7 +275,7 @@ Manages on-chain identity claims with cryptographic signatures. Claims are issue
 ### - Claim Issuer
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/claim_issuer)
 
-This module is an implementation detail. It is provided as the suggested implementation for the `Claim-based` approach.
+This module is an implementation detail. It is provided as the suggested implementation for the **Claim-based** approach.
 
 Validates cryptographic claims with support for multiple signature schemes:
 
@@ -289,7 +292,8 @@ The following optional extensions are provided:
 
 This module is not mandatory.
 
-The `DocumentManager` trait extends the `RWAToken` trait to provide document management capabilities following the ERC-1643 standard. This extension allows contracts to:
+The `DocumentManager` trait extends the `RWAToken` trait to provide document management capabilities following the
+ERC-1643 standard. This extension allows contracts to:
 
 - Attach documents with URI, hash, and timestamp
 - Update existing document metadata
@@ -303,7 +307,8 @@ This is useful for attaching legal documents, prospectuses, or other regulatory 
 ### - Token Binder
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/utils/token_binder)
 
-The `TokenBinder` trait provides a standardized interface for linking tokens to periphery contracts such as identity registries and compliance contracts. This allows a single periphery contract to serve multiple RWA tokens.
+The `TokenBinder` trait provides a standardized interface for linking tokens to periphery contracts such as identity
+registries and compliance contracts. This allows a single periphery contract to serve multiple RWA tokens.
 
 Features:
 - Bind/unbind tokens to periphery services
