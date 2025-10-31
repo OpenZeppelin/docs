@@ -39,54 +39,34 @@ graph TB
     COMP[Compliance]
     IDV[Identity Verifier]
 
-    subgraph "Compliance Modules (Optional)"
+    subgraph "Optional Modules"
         CM1[Transfer Limit Module]
         CM2[Country Restriction Module]
-        CM3[Investor Count Module]
-        CM4[Custom Modules...]
-
-        CM_TITLE["<b>Compliance Modules (Optional)</b>"]
-        CM_TITLE ~~~ CM1
+        CM3[Other Custom Modules...]
     end
-
-    subgraph " "
-        CTI[Claim Topics & Issuers]
-        IRS[Identity Registry Storage]
-        CI[Claim Issuer]
-        IC[Identity Claims]
-
-        IV_TITLE["Claim-Based Identity Verification"]
-        IV_TITLE ~~~ IRS
-    end
-
-
-
-    CTI ~~~ IRS ~~~ COMP
 
     subgraph "Optional Extensions"
         DM[Document Manager<br/>ERC-1643]
     end
 
-    RWA -->|"can_transfer(), can_create(), transferred(), created(), destroyed()"| COMP
-    RWA -->|"verify_identity()"| IDV
+    IDV --> IVS
+
+
+
+    subgraph "Identity Stack"
+        IVS[Custom Identity Suite]
+    end
+
+    RWA -->|"can_transfer()<br/>can_create()<br/>transferred()<br/>created()<br/>destroyed()"| COMP
+    RWA -->|"verify_identity()<br/>recovery_target()"| IDV
     RWA -.-> DM
 
     COMP --> CM1
     COMP --> CM2
     COMP --> CM3
-    COMP --> CM4
-
-    IDV -->|"get_claim_topics_and_issuers()"| CTI
-    IDV -->|"stored_identity()<br/>get_recovered_to()"| IRS
-    IDV -->|"try_is_claim_valid()"| CI
-    IDV -->|"get_claim_ids_by_topic()<br/>get_claim()"| IC
-
-    CI --> |"has_claim_topic()"| CTI
-    IC --> |"is_claim_valid()"| CI
-
-    style CM_TITLE fill:none,stroke:#ff9800,stroke-width:2px
-    style IV_TITLE fill:none,stroke:#ff9800,stroke-width:2px
 ```
+
+
 
 ### Core Components
 
@@ -334,8 +314,39 @@ It can also support possible custom implementation approaches:
 - **Zero-Knowledge**: Privacy-preserving verification with custom ZK circuits
 - **Other custom approaches**: Any implementation that satisfies the `verify_identity` interface
 
-The default claim-based implementation integrates with the **Claim Topics and Issuers Module** and
-Identity Registry Storage.
+The architecture of the default claim-based implementation is shown in the diagram below:
+
+```mermaid
+graph TB
+
+    RWA[RWA Token]
+    IDV[Identity Verifier]
+
+    subgraph " "
+        CTI[Claim Topics & Issuers]
+        IRS[Identity Registry Storage]
+        CI[Claim Issuer]
+        IC[Identity Claims]
+
+        IV_TITLE["Claim-Based Identity Verification"]
+        IV_TITLE ~~~ IRS
+    end
+
+
+
+    RWA -->|"verify_identity()<br/>recovery_target()"| IDV
+
+
+    IDV -->|"get_claim_topics_and_issuers()"| CTI
+    IDV -->|"stored_identity()<br/>get_recovered_to()"| IRS
+    IDV -->|"try_is_claim_valid()"| CI
+    IDV -->|"get_claim_ids_by_topic()<br/>get_claim()"| IC
+
+    CI --> |"has_claim_topic()"| CTI
+    IC --> |"is_claim_valid()"| CI
+
+    style IV_TITLE fill:none,stroke:#ff9800,stroke-width:2px
+```
 
 ### - Claim Topics and Issuers
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/claim_topics_and_issuers)
