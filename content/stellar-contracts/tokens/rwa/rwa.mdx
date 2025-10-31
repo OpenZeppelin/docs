@@ -6,15 +6,15 @@ title: Real World Asset (RWA) Token
 
 Real World Asset (RWA) tokens are security tokens that represent ownership or rights to real-world assets such as
 real estate, commodities, securities, or other regulated financial instruments. These tokens must comply with various
-regulatory requirements including KYC/AML verification, transfer restrictions, and compliance rules. The RWA module
+regulatory requirements including KYC/AML verification, transfer restrictions, and compliance rules. The RWA suite
 provides a comprehensive framework based on the T-REX (Token for Regulated Exchanges) standard,
 which implements the [ERC-3643](https://docs.erc3643.org/erc-3643) specification.
 
 ## Overview
 
-The [RWA](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa) module
+The [RWA](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa) suite
 provides a complete implementation of regulated security tokens with built-in compliance,
-identity verification, and administrative controls. The module is designed to be flexible and extensible,
+identity verification, and administrative controls. The suite is designed to be flexible and extensible,
 allowing integration with various identity registry and compliance frameworks.
 
 The RWA token extends the standard fungible token functionality with regulatory features required for
@@ -30,7 +30,7 @@ security tokens, including:
 
 ## Architecture
 
-The RWA module follows a modular architecture that separates concerns and allows for flexible integration:
+The RWA suite follows a modular architecture that separates concerns and allows for flexible integration:
 
 ### Core Components
 
@@ -84,7 +84,14 @@ pub struct RealEstateToken;
 
 #[contractimpl]
 impl RealEstateToken {
-    pub fn __constructor(e: &Env, admin: Address, manager: Address, initial_supply: i128) {
+    pub fn __constructor(
+        e: &Env,
+        admin: Address,
+        manager: Address,
+        compliance: Address,
+        identity_verifier: Address,
+        initial_supply: i128,
+    ) {
         // Set token metadata
         Base::set_metadata(
             e,
@@ -92,6 +99,10 @@ impl RealEstateToken {
             String::from_str(e, "Real Estate Token"),
             String::from_str(e, "REST"),
         );
+
+        // Set compliance and identity verifier contracts
+        RWA::set_compliance(e, &compliance);
+        RWA::set_identity_verifier(e, &identity_verifier);
 
         // Set up access control
         access_control::set_admin(e, &admin);
@@ -131,16 +142,36 @@ Identity Verification is handled on a separate contract as a module.
 All token recipients must have verified identities before receiving tokens. The RWA token integrates
 with an identity verifier contract that validates user identities against cryptographic claims.
 
+Every token operation that involves receiving tokens (mint, transfer, recovery) automatically calls the
+identity verifier contract to ensure the recipient has a valid identity with the required claims (KYC, AML, etc.).
+
 ```rust
-// Minting requires identity verification
-RWA::mint(e, &verified_investor, amount);
+// Example: Minting tokens
+// Internally calls: identity_verifier.verify_identity(&recipient)
+// Then calls: compliance.can_create(&recipient, &amount)
+// Finally calls: compliance.created(&recipient, &amount) after minting
+RWA::mint(e, &recipient, amount);
 
-// Transfers automatically verify recipient identity
-RWA::transfer(e, &from, &verified_recipient, amount);
+// Example: Transferring tokens
+// Internally calls: identity_verifier.verify_identity(&from)
+// Then calls: identity_verifier.verify_identity(&to)
+// Then calls: compliance.can_transfer(&from, &to, &amount)
+// Finally calls: compliance.transferred(&from, &to, &amount) after transfer
+RWA::transfer(e, &from, &to, amount);
 
-// Wallet recovery for lost/old accounts
+// Example: Wallet recovery for lost/old accounts
+// Internally calls: identity_verifier.verify_identity(&new_account)
+// Then calls: identity_verifier.recovery_target(&old_account) to verify the new account
+//             is the authorized recovery target for the old account
+// Transfers all tokens and preserves frozen status
 RWA::recover_balance(e, &old_account, &new_account, &operator);
 ```
+
+**Identity Verification Flow:**
+1. The RWA token calls `identity_verifier.verify_identity(&address)`
+2. The identity verifier checks if the address has a registered identity
+3. The identity verifier validates that the identity has all required claims from trusted issuers
+4. If verification fails, the entire operation reverts with `IdentityVerificationFailed` error
 
 ### Compliance Validation
 
@@ -207,8 +238,8 @@ The RWA package includes several supporting modules that work together to provid
 
 This is a mandatory module, since RWA token contract expects the compliance checks and hooks to be available.
 
-The compliance module provides a modular framework for implementing custom compliance rules.
-It uses a hook-based architecture where compliance modules can be registered for specific events:
+Provides a modular framework for implementing custom compliance rules.
+[Compliance Contract](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/tokens/src/rwa/compliance/mod.rs#L67) uses a hook-based architecture where multiple [compliance modules](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/tokens/src/rwa/compliance/mod.rs#L327) can be registered for specific events:
 
 - **Transferred**: Called after tokens are successfully transferred
 - **Created**: Called after tokens are successfully minted
@@ -225,7 +256,7 @@ The compliance contract is designed to be shared across multiple RWA tokens, wit
 This is a mandatory module, since RWA token contract expects `verify_identity(e: &Env, address: Address)`
 function to be available.
 
-The identity verifier module provides the interface for verifying user identities.
+The **Identity Verifier Module** provides the interface for verifying user identities.
 It can also support possible custom implementation approaches:
 
 - **Claim-based**: Cryptographic claims from trusted issuers (provided default implementation)
@@ -233,7 +264,7 @@ It can also support possible custom implementation approaches:
 - **Zero-Knowledge**: Privacy-preserving verification with custom ZK circuits
 - **Other custom approaches**: Any implementation that satisfies the `verify_identity` interface
 
-The default claim-based implementation integrates with the Claim Topics and Issuers module and
+The default claim-based implementation integrates with the **Claim Topics and Issuers Module** and
 Identity Registry Storage.
 
 ### - Claim Topics and Issuers
@@ -241,12 +272,63 @@ Identity Registry Storage.
 
 This module is an implementation detail. It is provided as the suggested implementation for the **Claim-based** approach.
 
-Manages trusted claim issuers and claim topics (e.g., KYC=1, AML=2, Accredited Investor=3). This module:
+Acts as the trust registry that defines which claim topics are required and which issuers are authorized to provide those claims.
 
-- Maintains a registry of trusted claim issuers
-- Defines which claim topics are required for token participation
-- Maps issuers to the claim topics they are authorized to issue
-- Can be shared across multiple RWA tokens
+Key features/responsibilities of the **Claim Topics and Issuers Module** are:
+  - **Claim Topic Registry**: Defines which types of claims are required for token participation (e.g., KYC=1, AML=2, Accredited Investor=3)
+  - **Trusted Issuer Registry**: Maintains a list of authorized claim issuers (e.g., KYC providers, compliance firms)
+  - **Authorization Mapping**: Maps each trusted issuer to the specific claim topics they are authorized to issue
+    - Example: Issuer A can issue KYC and AML claims, but not Accreditation claims
+    - Example: Issuer B can only issue Accreditation claims
+  - **Multi-Token Support**: Can be shared across multiple RWA tokens, reducing deployment costs
+
+**Configuration Example:**
+```rust
+// Add claim topics
+add_claim_topic(e, 1, operator); // KYC
+add_claim_topic(e, 2, operator); // AML
+add_claim_topic(e, 3, operator); // Accredited Investor
+
+// Add trusted issuer with authorized topics
+add_trusted_issuer(e, issuer_a, vec![1, 2], operator); // Can issue KYC and AML
+add_trusted_issuer(e, issuer_b, vec![3], operator);    // Can only issue Accreditation
+```
+
+#### Understanding Claims
+
+**What is a Claim?**
+
+A claim is a cryptographically signed attestation made by a trusted authority (claim issuer) about a specific aspect
+of an identity. Think of it as a digital certificate that proves something about an investor.
+
+**Claim Structure:**
+
+Each claim contains:
+- **Topic**: A numeric identifier for what the claim attests to (e.g., KYC=1, AML=2, Accredited Investor=3)
+- **Issuer**: The address of the trusted authority that issued the claim
+- **Signature**: Cryptographic proof that the issuer created this claim
+- **Data**: The actual claim information (can include expiration dates, metadata)
+- **Scheme**: The signature algorithm used (Ed25519, Secp256k1, Secp256r1)
+
+**How Claims Work:**
+
+1. **Issuance**: A trusted authority (e.g., KYC provider) verifies an investor's identity off-chain
+2. **Signing**: The authority creates a cryptographic signature over the claim data using their private key
+3. **Storage**: The claim is stored on-chain in the investor's identity contract
+4. **Verification**: When the investor tries to receive tokens, the RWA contract:
+   - Retrieves the required claims from the identity contract
+   - Validates the cryptographic signatures using the issuer's public key
+   - Checks that the claims haven't expired or been revoked
+   - Ensures the issuer is trusted and authorized for those claim topics
+
+**Example Flow:**
+```
+Investor → KYC Provider (off-chain verification)
+         → Claim Issuer Contract (signs claim with private key)
+         → Identity Contract (stores signed claim on-chain)
+         → RWA Token (validates claim during transfer/mint)
+```
+
 
 ### - Identity Registry Storage
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/identity_registry_storage)
@@ -265,7 +347,15 @@ Stores identity information for verified investors, including:
 
 This module is an implementation detail. It is provided as the suggested implementation for the **Claim-based** approach.
 
-Manages on-chain identity claims with cryptographic signatures. Claims are issued by trusted authorities and contain:
+Manages on-chain identity claims with cryptographic signatures.
+
+This module can be used to extend or be embedded in identity systems.
+
+<Callout type="info">
+This contract is under the control of the investors themselves, who are responsible for storing their claims and corresponding signatures. This gives investors ownership of their identity data.
+</Callout>
+
+Claims are issued by trusted authorities and contain:
 
 - Claim topic (e.g., KYC, AML)
 - Claim data (encrypted or hashed information)
