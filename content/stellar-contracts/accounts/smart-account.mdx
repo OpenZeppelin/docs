@@ -1,0 +1,51 @@
+---
+title: Smart Accounts
+---
+
+[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/accounts)
+
+Smart accounts in Soroban are contracts that manage the composition of authorization intents from multiple sources, such as policies and signing keys from different cryptographic curves. They enable flexible combinations and allow multiple authorization mechanisms to work together seamlessly.
+
+## Overview
+
+The [accounts](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/accounts) package provides a comprehensive smart account framework for Soroban, enabling flexible, programmable authorization. Instead of hard-coding signature checks, smart accounts organize authorization as a composition of context rules, signers, and policies.
+
+Smart accounts in Soroban implement `CustomAccountInterface` and define authorization as data and behavior that can evolve over time. The framework is context-centric: it distinguishes who is allowed to act (signers), what they are allowed to do (scope), and how those permissions are enforced (policies).
+
+The framework externalizes some parts of the logic and state to separate contracts. Policies are external contracts that manage enforcement rules and can maintain their own state, while verifiers are external contracts that handle signature validation logic. This separation of concerns enables modularity and flexibility, and allows multiple smart accounts to share well-audited verification and policy logic. Protocol 23 improvements make this modular design practical, with substantially cheaper cross-contract calls enabling efficient composition of multiple external components.
+
+## Core Components
+
+The framework separates three distinct concerns:
+
+- **What** (Context Rules): Defines the scope and conditions
+- **Who** (Signers): Identifies the authorized entities
+- **How** (Policies): Enforces business logic and constraints
+
+### Context Rules
+Context rules function like routing tables for authorization. For each context, they specify scope, lifetime, and the conditions (signers and policies) that must be satisfied before execution proceeds.
+
+For detailed documentation, see [Context Rules](/stellar-contracts/accounts/context-rules).
+
+### Signers and Verifiers
+Signers define who can authorize operations. The framework supports both delegated signers (any Soroban address) and external signers that use specialized verifier contracts for signature validation. Verifiers are cryptographic oracles that validate signatures for external signers.
+
+For detailed documentation, see [Signers and Verifiers](/stellar-contracts/accounts/signers-and-verifiers).
+
+### Policies
+Policies act as enforcement modules attached to context rules. They perform read-only prechecks and can update state to enforce limits or workflows.
+
+For detailed documentation, see [Policies](/stellar-contracts/accounts/policies).
+
+This separation allows for clean composition of authorization requirements while maintaining auditability and flexibility.
+
+## Authorization Flow
+
+Authorization is determined by matching the current call context against the account's context rules:
+
+1. **Rule Collection**: Retrieve all non-expired rules for the specific context type and default rules
+2. **Rule Evaluation**: For each rule (newest first), authenticate signers and validate policies
+3. **Policy Enforcement**: If enough signers are authenticated and policy prechecks succeed, trigger policy state changes
+4. **Result**: Grant or deny authorization
+
+For detailed documentation, see [Authorization Flow](/stellar-contracts/accounts/authorization-flow).
