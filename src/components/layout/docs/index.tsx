@@ -128,25 +128,26 @@ export function DocsLayout(props: DocsLayoutProps) {
 		} = sidebarProps;
 		const iconLinks = links.filter((item) => item.type === "icon");
 
-		const rootToggle = (
-			<>
-				{tabMode === "sidebar" && tabs.length > 0 && (
-					<>
-						<p
-							style={{ marginTop: "8px" }}
-							className="text-fd-muted-foreground text-xs"
-						>
-							Select Ecosystem
-						</p>
+		const rootToggle =
+			tabs.length > 0 ? (
+				<>
+					{tabMode === "sidebar" && (
+						<>
+							<p
+								style={{ marginTop: "8px" }}
+								className="text-fd-muted-foreground text-xs"
+							>
+								Select Ecosystem
+							</p>
 
-						<RootToggle className="mb-2" options={tabs} />
-					</>
-				)}
-				{tabMode === "navbar" && tabs.length > 0 && (
-					<RootToggle options={tabs} className="lg:hidden" />
-				)}
-			</>
-		);
+							<RootToggle className="mb-2" options={tabs} />
+						</>
+					)}
+					{tabMode === "navbar" && (
+						<RootToggle options={tabs} className="lg:hidden" />
+					)}
+				</>
+			) : null;
 
 		const sidebarNav = (
 			<div className="flex justify-between">

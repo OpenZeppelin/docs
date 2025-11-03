@@ -27,6 +27,11 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 
 	// Determine if shared paths should be included in Stellar tab based on sessionStorage
 	const tabs = useMemo(() => {
+		// Don't show ecosystem tabs on impact pages
+		if (pathname.startsWith("/impact")) {
+			return [];
+		}
+
 		const isSharedPath =
 			pathname.startsWith("/monitor") || pathname.startsWith("/relayer");
 		const lastEcosystem =
@@ -39,6 +44,12 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 			isSharedPath && lastEcosystem === "stellar"
 				? new Set(["/stellar-contracts", "/monitor", "/relayer"])
 				: new Set(["/stellar-contracts"]);
+
+		// Include shared paths in Polkadot tab only if coming from Polkadot context
+		const polkadotUrls =
+			isSharedPath && lastEcosystem === "polkadot"
+				? new Set(["/substrate-runtimes", "/monitor", "/relayer"])
+				: new Set(["/substrate-runtimes"]);
 
 		return [
 			{
@@ -83,6 +94,7 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 				title: "Polkadot",
 				url: "/substrate-runtimes",
 				icon: <PolkadotIcon className="w-5 h-5" />,
+				urls: polkadotUrls,
 			},
 			{
 				title: "Uniswap Hooks",

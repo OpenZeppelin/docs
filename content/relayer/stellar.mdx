@@ -80,13 +80,40 @@ Example configuration for a Stellar relayer:
 }
 ```
 
-For more configuration examples, visit the [OpenZeppelin Relayer examples repository](https://github.com/OpenZeppelin/openzeppelin-relayer/tree/main/examples).
+For more configuration examples, visit the [OpenZeppelin Relayer examples repository, window=_blank](https://github.com/OpenZeppelin/openzeppelin-relayer/tree/main/examples).
 
 ## Configuration
 
 ### Relayer Policies
 
-Stellar relayers support standard relayer configuration options. Check all options in [User Documentation - Relayers](/relayer#3-relayers).
+Stellar relayers support standard relayer configuration options along with Stellar-specific policies:
+
+| Policy | Type | Default | Description |
+| --- | --- | --- | --- |
+| `min_balance` | integer | None | Minimum balance in stroops (1 XLM = 10,000,000 stroops) required for the relayer account |
+| `max_fee` | integer | None | Maximum transaction fee in stroops the relayer is willing to pay |
+| `timeout_seconds` | integer | None | Transaction timeout in seconds |
+| `concurrent_transactions` | boolean | false | Enable concurrent transaction processing. When enabled, bypasses the lane gating mechanism that normally ensures sequential processing for each relayer. Only enable this when your relayer manages transactions from multiple accounts with independent sequence number pools. |
+
+Example configuration with policies:
+```json
+{
+  "id": "stellar-example",
+  "name": "Stellar Example",
+  "network": "testnet",
+  "paused": false,
+  "network_type": "stellar",
+  "signer_id": "local-signer",
+  "policies": {
+    "min_balance": 10000000,
+    "max_fee": 1000000,
+    "timeout_seconds": 30,
+    "concurrent_transactions": false
+  }
+}
+```
+
+For general relayer configuration options, check [User Documentation - Relayers](/relayer#3_relayers).
 
 ## API Reference
 
@@ -129,9 +156,10 @@ The relayer supports three ways to submit transactions:
 
 1. ***Operations-based***: Build a transaction by specifying the `operations` array (recommended for most use cases)
 2. ***Transaction XDR (unsigned)***: Submit a pre-built unsigned transaction using `transaction_xdr` field (advanced use case)
-3. ***Transaction XDR (signed) with fee bump***: Submit a signed transaction using `transaction_xdr` with `fee_bump: true` to wrap it in a fee bump transaction
+3. ***Transaction XDR (signed)***: Submit a signed transaction using `transaction_xdr` with `fee_bump: true` (required for signed XDR) to wrap it in a fee bump transaction
 
-Example: Send Transaction
+#### Example 1: Operations-based Transaction
+
 ```bash
 curl --location --request POST 'http://localhost:8080/api/v1/relayers/<stellar_relayer_id>/transactions' \
 --header 'Authorization: Bearer <api_key>' \
@@ -142,18 +170,63 @@ curl --location --request POST 'http://localhost:8080/api/v1/relayers/<stellar_r
     {
       "type": "payment",
       "destination": "GD77B6LYQ5XDCW6CND7CQMA23FSV7MZQGLBAU5OMEOXQM6XFTCMWQQCJ",
-      "asset": {
-        "type": "native"
-      },
+      "asset": {"type": "native"},
       "amount": 1000000
     }
   ],
-  "memo": {
-    "type": "text",
-    "value": "Payment for services"
-  }
+  "memo": {"type": "text", "value": "Payment for services"}
 }'
 ```
+
+#### Example 2: Unsigned Transaction XDR
+
+Submit a pre-built unsigned transaction. The relayer will sign it with its configured signer:
+
+```bash
+curl --location --request POST 'http://localhost:8080/api/v1/relayers/<stellar_relayer_id>/transactions' \
+--header 'Authorization: Bearer <api_key>' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "network": "testnet",
+  "transaction_xdr": "AAAAAgAAAACige4lTdwSB/sto4SniEdJ2kOa2X65s5bqkd40J4DjSwAAAGQAAHAkAAAADgAAAAAAAAAAAAAAAQAAAAAAAAABAAAAAKKB7iVN3BIH+y2jhKeIR0naQ5rZfrmzluqR3jQngONLAAAAAAAAAAAAD0JAAAAAAAAAAAA="
+}'
+```
+
+The `transaction_xdr` field should contain a base64-encoded unsigned transaction envelope. This is useful when:
+- You need precise control over transaction structure
+- You want to use advanced Stellar features not exposed via the operations API
+
+#### Example 3: Signed Transaction XDR
+
+Submit a pre-signed transaction with fee bump wrapper. ***Note: `fee_bump: true` is required when submitting signed XDR***:
+
+```bash
+curl --location --request POST 'http://localhost:8080/api/v1/relayers/<stellar_relayer_id>/transactions' \
+--header 'Authorization: Bearer <api_key>' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "network": "testnet",
+  "transaction_xdr": "AAAAAgAAAABjc+mbXCnvmVk4lxqVl7s0LAz5slXqmkHBg8PpH7p3DgAAAGQABpK0AAAACQAAAAAAAAAAAAAAAQAAAAAAAAABAAAAAGN0qQBW8x3mfbwGGYndt2uq4O4sZPUrDx5HlwuQke9zAAAAAAAAAAAAAA9CAAAAAQAAAAA=",
+  "fee_bump": true,
+  "max_fee": 10000000
+}'
+```
+
+The fee bump feature is useful when:
+- You have a pre-signed transaction from another system or wallet
+- You want the relayer to pay transaction fees on behalf of the original signer
+- You need to increase the fee for a transaction to ensure timely execution
+
+<Callout type='warn'>
+
+
+When using `transaction_xdr`:
+- The XDR must be properly formatted and valid for the target network
+- For unsigned XDR, the relayer will add its signature before submission
+- ***For signed XDR, `fee_bump: true` is mandatory*** - the relayer requires this to wrap the signed transaction in a fee bump envelope
+- The `max_fee` parameter (in stroops) controls the maximum fee for fee bump transactions (defaults to 1,000,000 = 0.1 XLM)
+
+</Callout>
 
 See [API Reference](https://release-v1-0-0%2D%2Dopenzeppelin-relayer.netlify.app/api_docs.html) for full details and examples.
 
@@ -163,7 +236,7 @@ Assets in Stellar operations must be specified with a type field:
 
 ***Native XLM:***
 ```json
-"type": "native"
+{"type": "native"}
 ```
 
 ***Credit Asset (4 characters or less):***
@@ -194,10 +267,12 @@ Transactions can include optional memos:
 * ***Hash Memo***: `"type": "hash", "value": "deadbeef..."` (32 bytes hex)
 * ***Return Memo***: `"type": "return", "value": "deadbeef..."` (32 bytes hex)
 
+<Callout>
 
 
 Memos are not supported for Soroban contract operations (invoke_contract, create_contract, upload_wasm). Attempting to include a memo with these operations will result in an error.
 
+</Callout>
 
 ### Soroban Contract Operations
 
@@ -209,7 +284,7 @@ Call a deployed Soroban smart contract:
 curl --location --request POST 'http://localhost:8080/api/v1/relayers/<stellar_relayer_id>/transactions' \
 --header 'Authorization: Bearer <api_key>' \
 --header 'Content-Type: application/json' \
---data-raw '
+--data-raw '{
   "network": "testnet",
   "operations": [
     {
@@ -217,11 +292,11 @@ curl --location --request POST 'http://localhost:8080/api/v1/relayers/<stellar_r
       "contract_address": "CA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJUWDA",
       "function_name": "transfer",
       "args": [
-        {"address": "GCRID3RFJXOBEB73FWRYJJ4II5E5UQ413F7LTM4W5KI54NBHQDRUXVLY",
-        "address": "GD77B6LYQ5XDCW6CND7CQMA23FSV7MZQGLBAU5OMEOXQM6XFTCMWQQCJ",
-        "i128": {"hi": "0", "lo": "1000000"}
+        {"address": "GCRID3RFJXOBEB73FWRYJJ4II5E5UQ413F7LTM4W5KI54NBHQDRUXVLY"},
+        {"address": "GD77B6LYQ5XDCW6CND7CQMA23FSV7MZQGLBAU5OMEOXQM6XFTCMWQQCJ"},
+        {"i128": {"hi": "0", "lo": "1000000"}}
       ],
-      "auth": "type": "source_account"
+      "auth": {"type": "source_account"}
     }
   ]
 }'
@@ -288,8 +363,8 @@ When invoking contract functions, arguments must be provided as ScVal values in 
 | Symbol | `"symbol": "transfer"` | Symbol (used for function names) |
 | Address | `"address": "GCRID3RFJXOBEB73FWRYJJ4II5E5UQ413F7LTM4W5KI54NBHQDRUXVLY"` | Stellar account or contract address |
 | Bytes | `"bytes": "deadbeef"` | Hex-encoded byte array |
-| Vector | `"vec": [{"u32": 1, "u32": 2, "u32": 3]}` | Array of ScVal values |
-| Map | `"map": [{"key": {"symbol": "name", "val": "string": "MyToken"}]}` | Key-value pairs |
+| Vector | `"vec": ["u32": 1, "u32": 2, "u32": 3]` | Array of ScVal values |
+| Map | `"map": ["key": "symbol": "name", "val": "string": "MyToken"]` | Key-value pairs |
 
 Additional types like U128, I128, U256, and I256 are also supported using multi-part representations.
 
@@ -303,6 +378,20 @@ Soroban operations support different authorization modes:
 | `source_account` | Use the transaction source account (default) |
 | `addresses` | Use specific addresses (future feature) |
 | `xdr` | Advanced: provide base64-encoded XDR entries. This allows you to provide pre-signed SorobanAuthorizationEntry objects for complex authorization scenarios. See the [official Stellar documentation on authorization](https://developers.stellar.org/docs/learn/smart-contract-internals/authorization) for detailed information about SorobanAuthorizationEntries. |
+
+## Signer Support
+
+Stellar networks support the following signer types:
+
+* ***Local Signer***: Uses encrypted keystore files (suitable for development)
+* ***Google Cloud KMS***: Uses Google Cloud Key Management Service with ED25519 keys (recommended for production)
+* ***Turnkey***: Uses Turnkey’s secure key management infrastructure with ED25519 keys (recommended for production)
+
+For detailed signer configuration, see the [Signers Configuration](/relayer/configuration/signers) guide.
+
+For complete examples:
+- Google Cloud KMS: [stellar-gcp-kms-signer example](https://github.com/OpenZeppelin/openzeppelin-relayer/tree/main/examples/stellar-gcp-kms-signer)
+- Turnkey: [stellar-turnkey-signer example](https://github.com/OpenZeppelin/openzeppelin-relayer/tree/main/examples/stellar-turnkey-signer)
 
 ## Security
 

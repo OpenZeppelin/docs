@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import {
 	arbitrumStylusTree,
 	ethereumEvmTree,
+	impactTree,
 	midnightTree,
 	polkadotTree,
 	starknetTree,
@@ -22,6 +23,8 @@ export function useNavigationTree() {
 
 		if (pathname.startsWith("/stellar-contracts")) {
 			sessionStorage.setItem("lastEcosystem", "stellar");
+		} else if (pathname.startsWith("/substrate-runtimes")) {
+			sessionStorage.setItem("lastEcosystem", "polkadot");
 		} else if (
 			pathname.startsWith("/contracts") ||
 			pathname.startsWith("/community-contracts") ||
@@ -37,7 +40,9 @@ export function useNavigationTree() {
 	}, [pathname]);
 
 	// Determine which navigation tree to use based on the current path
-	if (pathname.startsWith("/contracts-stylus")) {
+	if (pathname.startsWith("/impact")) {
+		return impactTree;
+	} else if (pathname.startsWith("/contracts-stylus")) {
 		return arbitrumStylusTree;
 	} else if (pathname.startsWith("/contracts-cairo")) {
 		return starknetTree;
@@ -64,6 +69,8 @@ export function useNavigationTree() {
 			switch (lastEcosystem) {
 				case "stellar":
 					return stellarTree;
+				case "polkadot":
+					return polkadotTree;
 				case "ethereum":
 					return ethereumEvmTree;
 				default:

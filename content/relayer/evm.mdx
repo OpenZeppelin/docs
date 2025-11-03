@@ -37,13 +37,16 @@ For detailed network configuration options, see the [Network Configuration](/rel
 * `turnkey` (hosted Turnkey signer)
 * `google_cloud_kms` (Google Cloud KMS)
 * `aws_kms` (Amazon AWS KMS)
+* `cdp` (hosted Coinbase Developer Platform signer)
 
 For detailed signer configuration options, see the [Signers](/relayer/configuration/signers) guide.
 
+<Callout>
 
 
-In production systems, hosted signers (AWS KMS, Google Cloud KMS, Turnkey) are recommended for the best security model.
+In production systems, hosted signers (AWS KMS, Google Cloud KMS, Turnkey, CDP) are recommended for the best security model.
 
+</Callout>
 
 ## Quickstart
 
@@ -75,19 +78,19 @@ Example configuration for an EVM relayer:
     }
   ],
   "policies": {
-    "gas_price_cap": 100000000000,
-    "eip1559_pricing": true,
-    "gas_limit_estimation": true,
-    "whitelist_receivers": [
-      "0x1234567890123456789012345678901234567890",
-      "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
-    ],
-    "min_balance": 1000000000000000000
+     "gas_price_cap": 100000000000,
+      "eip1559_pricing": true,
+      "gas_limit_estimation": true,
+      "whitelist_receivers": [
+        "0x1234567890123456789012345678901234567890",
+        "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+      ],
+      "min_balance": 1000000000000000000
   }
-}
+},
 ```
 
-For more configuration examples, visit the [OpenZeppelin Relayer examples repository](https://github.com/OpenZeppelin/openzeppelin-relayer/tree/main/examples).
+For more configuration examples, visit the [OpenZeppelin Relayer examples repository, window=_blank](https://github.com/OpenZeppelin/openzeppelin-relayer/tree/main/examples).
 
 ## Configuration
 
@@ -101,7 +104,7 @@ In addition to standard relayer configuration and policies, EVM relayers support
 * `min_balance`: Minimum balance required for the relayer to operate (in wei)
 * `eip1559_pricing`: Enable/disable EIP-1559 pricing methodology for transaction fees
 
-You can check all options in [User Documentation - Relayers](/relayer#3-relayers).
+You can check all options in [User Documentation - Relayers](/relayer#3_relayers).
 
 ### Gas Management Configuration
 
@@ -111,7 +114,7 @@ Set a maximum gas price to protect against extreme network congestion:
 ```json
 {
   "policies": {
-    "gas_price_cap": 100000000000
+    "gas_price_cap": 100000000000  // 100 Gwei maximum
   }
 }
 ```
@@ -122,7 +125,7 @@ Enable or disable automatic gas limit estimation:
 ```json
 {
   "policies": {
-    "gas_limit_estimation": true
+    "gas_limit_estimation": true  // Enable automatic estimation
   }
 }
 ```
@@ -140,10 +143,12 @@ The relayer uses a two-tier approach for gas limit estimation:
    * ***ERC721/ERC20 transferFrom*** (`0x23b872dd`): 80,000 gas
    * ***Complex contracts*** (all other function calls): 200,000 gas
 
+<Callout>
 
 
 For advanced users working with complex transactions or custom contracts, it is recommended to include an explicit `gas_limit` parameter in the transaction request to ensure optimal gas usage and avoid estimation errors.
 
+</Callout>
 
 #### Whitelist Receivers
 Restrict transactions to specific contract addresses:
@@ -172,65 +177,65 @@ Common endpoints:
 ### Send Transaction - Speed params
 
 ```bash
-curl --location --request POST 'http://localhost:8080/api/v1/relayers/solana-example/transactions' \
+curl --location --request POST 'http://localhost:8080/api/v1/relayers/sepolia-example/transactions' \
 --header 'Authorization: Bearer <api_key>' \
 --header 'Content-Type: application/json' \
 --data-raw '{
-  "value": 1,
-  "data": "0x",
-  "to": "0xd9b55a2ba539031e3c18c9528b0dc3a7f603a93b",
-  "speed": "average"
+    "value": 1,
+    "data": "0x",
+    "to": "0xd9b55a2ba539031e3c18c9528b0dc3a7f603a93b",
+    "speed": "average"
 }'
 ```
 
 ### Send Transaction - Speed params with gas limit included
 
 ```bash
-curl --location --request POST 'http://localhost:8080/api/v1/relayers/solana-example/transactions' \
+curl --location --request POST 'http://localhost:8080/api/v1/relayers/sepolia-example/transactions' \
 --header 'Authorization: Bearer <api_key>' \
 --header 'Content-Type: application/json' \
 --data-raw '{
-  "value": 1,
-  "data": "0x",
-  "to": "0xd9b55a2ba539031e3c18c9528b0dc3a7f603a93b",
-  "speed": "average",
-  "gas_limit": 21000
+    "value": 1,
+    "data": "0x",
+    "to": "0xd9b55a2ba539031e3c18c9528b0dc3a7f603a93b",
+    "speed": "average",
+    "gas_limit": 21000
 }'
 ```
 
 ### Transaction with EIP-1559 Pricing
 
 ```bash
-curl --location --request POST 'http://localhost:8080/api/v1/relayers/solana-example/transactions' \
+curl --location --request POST 'http://localhost:8080/api/v1/relayers/sepolia-example/transactions' \
 --header 'Authorization: Bearer <api_key>' \
 --header 'Content-Type: application/json' \
 --data-raw '{
-  "value": 1,
-  "data": "0x",
-  "to": "0xd9b55a2ba539031e3c18c9528b0dc3a7f603a93b",
-  "max_fee_per_gas": 30000000000,
-  "max_priority_fee_per_gas": 20000000000
+    "value": 1,
+    "data": "0x",
+    "to": "0xd9b55a2ba539031e3c18c9528b0dc3a7f603a93b",
+    "max_fee_per_gas": 30000000000,
+    "max_priority_fee_per_gas": 20000000000,
 }'
 ```
 
 ### Transaction with Legacy Pricing - gas estimation included
 
 ```bash
-curl --location --request POST 'http://localhost:8080/api/v1/relayers/solana-example/transactions' \
+curl --location --request POST 'http://localhost:8080/api/v1/relayers/sepolia-example/transactions' \
 --header 'Authorization: Bearer <api_key>' \
 --header 'Content-Type: application/json' \
 --data-raw '{
-  "value": 1,
-  "data": "0x",
-  "to": "0xd9b55a2ba539031e3c18c9528b0dc3a7f603a93b",
-  "gas_price": "12312313123"
+    "value": 1,
+    "data": "0x",
+    "to": "0xd9b55a2ba539031e3c18c9528b0dc3a7f603a93b",
+    "gas_price": "12312313123"
 }'
 ```
 
 ### Get Transaction Status
 
 ```bash
-curl --location --request GET 'http://localhost:8080/api/v1/relayers/solana-example/transactions/<transaction_id>' \
+curl --location --request GET 'http://localhost:8080/api/v1/relayers/sepolia-example/transactions/<transaction_id>' \
 --header 'Authorization: Bearer <api_key>'
 ```
 
