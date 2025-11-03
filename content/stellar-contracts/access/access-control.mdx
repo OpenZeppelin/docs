@@ -31,6 +31,53 @@ The module supports a hierarchical role system where each role can have an "admi
 
 This allows for creating complex organizational structures with chains of command and delegated authority.
 
+#### Setting Up Role Hierarchies
+
+Here's how to establish and use role hierarchies in practice:
+
+```rust
+use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env, Symbol};
+use stellar_access::access_control::{self as access_control, AccessControl};
+
+const MANAGER_ROLE: Symbol = symbol_short!("manager");
+const GUARDIAN_ROLE: Symbol = symbol_short!("guardian");
+
+#[contract]
+pub struct MyContract;
+
+#[contractimpl]
+impl MyContract {
+    pub fn __constructor(e: &Env, admin: Address, manager: Address) {
+        // Set the contract admin
+        access_control::set_admin(e, &admin);
+        
+        // 1. Set MANAGER_ROLE as the admin role for GUARDIAN_ROLE:
+        // accounts with MANAGER_ROLE can manage accounts with GUARDIAN_ROLE
+        access_control::set_role_admin_no_auth(e, &admin, &GUARDIAN_ROLE, &MANAGER_ROLE);
+
+        // 2. Admin grants MANAGER_ROLE to the manager account
+        access_control::grant_role_no_auth(e, &admin, &manager, &MANAGER_ROLE);
+    }
+
+    pub fn manage_guardians(e: &Env, manager: Address, guardian1: Address, guardian2: Address) {
+        // Manager must be authorized
+        manager.require_auth();
+        
+        // 3. Now the manager can grant GUARDIAN_ROLE to other accounts
+        access_control::grant_role_no_auth(e, &manager, &guardian1, &GUARDIAN_ROLE);
+        access_control::grant_role_no_auth(e, &manager, &guardian2, &GUARDIAN_ROLE);
+        
+        // Manager can also revoke GUARDIAN_ROLE
+        access_control::revoke_role_no_auth(e, &manager, &guardian1, &GUARDIAN_ROLE);
+    }
+}
+```
+
+In this example:
+1. The `admin` sets `MANAGER_ROLE` as the admin role for `GUARDIAN_ROLE` using `set_role_admin()`
+2. The `admin` grants the `MANAGER_ROLE` role to the `manager` account
+3. The `manager` can now grant/revoke the `GUARDIAN_ROLE` role to other accounts without requiring admin intervention
+
 ### Role Enumeration
 
 The system tracks account-role pairs in storage with additional enumeration logic:
@@ -40,6 +87,78 @@ The system tracks account-role pairs in storage with additional enumeration logi
 * If all accounts are removed from a role, the helper storage items become empty or 0
 
 Roles exist only through their relationships with accounts, so a role with zero accounts is indistinguishable from a role that never existed.
+
+## Procedural Macros
+
+The module includes several procedural macros to simplify authorization checks in your contract functions. These macros are divided into two categories:
+
+### Authorization-Enforcing Macros
+
+These macros automatically call `require_auth()` on the specified account before executing the function:
+
+#### @only_admin
+
+Restricts access to the contract admin only:
+
+```rust
+#[only_admin]
+pub fn admin_function(e: &Env) {
+    // Only the admin can call this function
+    // require_auth() is automatically called
+}
+```
+
+#### @only_role
+
+Restricts access to accounts with a specific role:
+
+```rust
+#[only_role(caller, "minter")]
+pub fn mint(e: &Env, caller: Address, to: Address, token_id: u32) {
+    // Only accounts with the "minter" role can call this
+    // require_auth() is automatically called on caller
+}
+```
+
+#### @only_any_role
+
+Restricts access to accounts with any of the specified roles:
+
+```rust
+#[only_any_role(caller, ["minter", "burner"])]
+pub fn multi_role_action(e: &Env, caller: Address) {
+    // Accounts with either "minter" or "burner" role can call this
+    // require_auth() is automatically called on caller
+}
+```
+
+### Role-Checking Macros
+
+These macros check role membership but do **not** enforce authorization. You must manually call `require_auth()` if needed:
+
+#### @has_role
+
+Checks if an account has a specific role:
+
+```rust
+#[has_role(caller, "minter")]
+pub fn conditional_mint(e: &Env, caller: Address, to: Address, token_id: u32) {
+    // Checks if caller has "minter" role, but doesn't call require_auth()
+    caller.require_auth(); // Must manually authorize if needed
+}
+```
+
+#### @has_any_role
+
+Checks if an account has any of the specified roles:
+
+```rust
+#[has_any_role(caller, ["minter", "burner"])]
+pub fn multi_role_check(e: &Env, caller: Address) {
+    // Checks if caller has either role, but doesn't call require_auth()
+    caller.require_auth(); // Must manually authorize if needed
+}
+```
 
 ## Usage Example
 
