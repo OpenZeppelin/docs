@@ -10,7 +10,7 @@ sequenceDiagram
     participant User
     participant SmartAccount
     participant ContextRule
-    participant DelegateSigner
+    participant DelegatedSigner
     participant Verifier
     participant Policy
 
@@ -19,12 +19,14 @@ sequenceDiagram
     ContextRule->>ContextRule: Filter expired rules<br/>Sort newest first
 
     loop Each rule until match
-        Note over ContextRule,DelegateSigner: Built-in authorization <br/>for delegate signers
-        ContextRule->>DelegateSigner: require_auth_for_args()
-        DelegateSigner-->>ContextRule: Authorized
+        Note over ContextRule,DelegatedSigner: Built-in authorization <br/>for delegated signers
+        ContextRule->>DelegatedSigner: require_auth_for_args()
+        DelegatedSigner-->>ContextRule: Authorized
+
         Note over ContextRule,Verifier: Signature verification for external signers
         ContextRule->>Verifier: verify()
         Verifier-->>ContextRule: Valid
+
         Note over ContextRule,Policy: Policy pre-checks
         ContextRule->>Policy: can_enforce()
         Policy-->>ContextRule: True/False
