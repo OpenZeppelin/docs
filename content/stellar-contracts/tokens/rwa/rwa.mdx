@@ -312,7 +312,7 @@ It can also support possible custom implementation approaches:
 - **Zero-Knowledge**: Privacy-preserving verification with custom ZK circuits
 - **Other custom approaches**: Any implementation that satisfies the `verify_identity` interface
 
-The architecture of the default claim-based implementation is shown in the diagram below:
+The diagram below illustrates how identity verification works in the claim-based identity stack:
 
 ```mermaid
 graph TB
@@ -326,24 +326,14 @@ graph TB
         CI[Claim Issuer]
         IC[Identity Claims]
 
-        IV_TITLE["Claim-Based Identity Verification"]
-        IV_TITLE ~~~ IRS
     end
 
-
-
-    RWA -->|"verify_identity()<br/>recovery_target()"| IDV
-
+    RWA -->|"verify_identity()"| IDV
 
     IDV -->|"get_claim_topics_and_issuers()"| CTI
-    IDV -->|"stored_identity()<br/>get_recovered_to()"| IRS
-    IDV -->|"try_is_claim_valid()"| CI
+    IDV -->|"stored_identity()"| IRS
+    IDV -->|"is_claim_valid()"| CI
     IDV -->|"get_claim_ids_by_topic()<br/>get_claim()"| IC
-
-    CI --> |"has_claim_topic()"| CTI
-    IC --> |"is_claim_valid()"| CI
-
-    style IV_TITLE fill:none,stroke:#ff9800,stroke-width:2px
 ```
 
 ### - Claim Topics and Issuers
@@ -392,22 +382,16 @@ Each claim contains:
 
 **How Claims Work:**
 
-1. **Issuance**: A trusted authority (e.g., KYC provider) verifies an investor's identity off-chain
-2. **Signing**: The authority creates a cryptographic signature over the claim data using their private key
-3. **Storage**: The claim is stored on-chain in the investor's identity contract
-4. **Verification**: When the investor tries to receive tokens, the RWA contract:
-   - Retrieves the required claims from the identity contract
-   - Validates the cryptographic signatures using the issuer's public key
-   - Checks that the claims haven't expired or been revoked
-   - Ensures the issuer is trusted and authorized for those claim topics
+1. **Off-chain Verification**: KYC Provider verifies investor's identity documents off-chain
+2. **Off-chain Signing**: KYC Provider signs the claim with their private key off-chain
+3. **On-chain Storage**: Signed claim is stored in the investor's Identity Contract
+4. **Token Validation**: When investor attempts to receive tokens, the RWA Token:
+   - Retrieves claims from the Identity Contract
+   - Calls the Claim Issuer Contract to validate signatures
+   - Checks for revocations (stored in Claim Issuer Contract)
+   - Verifies the issuer is trusted (via Claim Topics and Issuers registry)
 
-**Example Flow:**
-```
-Investor → KYC Provider (off-chain verification)
-         → Claim Issuer Contract (signs claim with private key)
-         → Identity Contract (stores signed claim on-chain)
-         → RWA Token (validates claim during transfer/mint)
-```
+**Note:** The KYC Provider and Claim Issuer are the same entity. Signing happens off-chain; only the signed claim and revocation data are stored on-chain.
 
 
 ### - Identity Registry Storage
