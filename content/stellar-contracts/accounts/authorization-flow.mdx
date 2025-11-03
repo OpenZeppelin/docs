@@ -5,6 +5,41 @@ title: Authorization Flow
 Authorization in smart accounts is determined by matching the current context against the account's context rules. Rules are gathered, ordered by recency, and evaluated until one satisfies the requirements. If a matching rule is found, its policies (if any) are enforced. Otherwise, authorization fails.
 
 ## Detailed Flow
+```mermaid
+sequenceDiagram
+    participant User
+    participant SmartAccount
+    participant ContextRule
+    participant DelegateSigner
+    participant Verifier
+    participant Policy
+
+    User->>SmartAccount: Signatures
+    SmartAccount->>ContextRule: Match context<br/>(CallContract, Default, ...)
+    ContextRule->>ContextRule: Filter expired rules<br/>Sort newest first
+
+    loop Each rule until match
+        Note over ContextRule,DelegateSigner: Built-in authorization <br/>for delegate signers
+        ContextRule->>DelegateSigner: require_auth_for_args()
+        DelegateSigner-->>ContextRule: Authorized
+        Note over ContextRule,Verifier: Signature verification for external signers
+        ContextRule->>Verifier: verify()
+        Verifier-->>ContextRule: Valid
+        Note over ContextRule,Policy: Policy pre-checks
+        ContextRule->>Policy: can_enforce()
+        Policy-->>ContextRule: True/False
+
+        alt All checks pass
+            ContextRule->>Policy: enforce()
+            Policy->>Policy: Update state
+            ContextRule-->>SmartAccount: ✓ Authorized
+        else Any check fails
+            ContextRule->>ContextRule: Try next rule
+        end
+    end
+
+    SmartAccount-->>User: Success
+```
 
 ### 1. Rule Collection
 
