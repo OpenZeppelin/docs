@@ -482,6 +482,49 @@ Features:
 - Efficient storage with bucket-based architecture (supports up to 10,000 tokens)
 - Swap-remove pattern for compact storage
 
+## Architecture Overview
+
+Now that we've covered each module individually, let's see how they work together. We'll walk through a `transfer()` operation to illustrate how the components interact:
+
+```mermaid
+sequenceDiagram
+    participant InvestorA
+    participant Token
+    participant IdentityVerifier
+    participant IdentityRegistryStorage
+    participant ClaimTopicsAndIssuers
+    participant TrustedIssuer
+    participant InvestorB IdentityClaims
+    participant ComplianceContract
+
+    Note over Token,ComplianceContract: 1. Eligibility
+
+    InvestorA->>Token: transfer(B, amount)
+    Token->>IdentityVerifier: is_verified(B)
+
+    IdentityVerifier->>IdentityRegistryStorage: Fetch identity: stored_identity(B)
+    IdentityVerifier->>ClaimTopicsAndIssuers: Fetch required claims and issuers: get_claim_topics_and_issuers()
+
+    loop every pair of claim topic and issuer
+        IdentityVerifier->>InvestorB IdentityClaims: Fetch claim ids: get_claim_ids_by_topic()
+        loop every claim
+            IdentityVerifier->>InvestorB IdentityClaims: Fetch claim: get_claim()
+            IdentityVerifier->>TrustedIssuer: Check validity: is_claim_valid()
+        end
+    end
+
+    IdentityVerifier-->>Token: B eligible
+
+    Note over Token,ComplianceContract: 2. Compliance
+
+    Token->>ComplianceContract: can_transfer(A, B, amount)
+    ComplianceContract->>ComplianceContract: checks all compliance modules
+    ComplianceContract-->>Token: transfer compliant
+
+    Token->>Token: process transfer
+    Token->>InvestorA: notification hook: transferred()
+```
+
 ## Security Considerations
 
 When implementing RWA tokens, consider the following security aspects:
