@@ -1,7 +1,7 @@
 "use client";
 
-import { useTheme } from "next-themes";
 import { use, useEffect, useId, useState } from "react";
+import { useTheme } from "next-themes";
 
 export function Mermaid({ chart }: { chart: string }) {
 	const [mounted, setMounted] = useState(false);
@@ -40,7 +40,7 @@ function MermaidContent({ chart }: { chart: string }) {
 		securityLevel: "loose",
 		fontFamily: "inherit",
 		themeCSS: "margin: 1.5rem auto 0;",
-		theme: "default",
+		theme: resolvedTheme === "dark" ? "dark" : "default",
 	});
 
 	const { svg, bindFunctions } = use(
