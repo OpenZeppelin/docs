@@ -36,7 +36,7 @@ This directory includes contracts to build accounts for ERC-4337. These include:
 
 ## `Account`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/account/Account.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/account/Account.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -49,7 +49,7 @@ import "@openzeppelin/contracts/account/Account.sol";
 A simple ERC4337 account implementation. This base implementation only includes the minimal logic to process
 user operations.
 
-Developers must implement the [`AbstractSigner._rawSignatureValidation`](./utils/cryptography#AbstractSigner-_rawSignatureValidation-bytes32-bytes-) function to define the account's validation logic.
+Developers must implement the [`AbstractSigner._rawSignatureValidation`](/contracts/5.x/api/utils/cryptography#AbstractSigner-_rawSignatureValidation-bytes32-bytes-) function to define the account's validation logic.
 
 <Callout>
 This core account doesn't include any mechanism for performing arbitrary external calls. This is an essential
@@ -59,7 +59,7 @@ Common choices include ERC-6900, ERC-7579 and ERC-7821 (among others).
 
 <Callout type="warn">
 Implementing a mechanism to validate signatures is a security-sensitive operation as it may allow an
-attacker to bypass the account's security measures. Check out [`SignerECDSA`](./utils/cryptography#SignerECDSA), [`SignerP256`](./utils/cryptography#SignerP256), or [`SignerRSA`](./utils/cryptography#SignerRSA) for
+attacker to bypass the account's security measures. Check out [`SignerECDSA`](/contracts/5.x/api/utils/cryptography#SignerECDSA), [`SignerP256`](/contracts/5.x/api/utils/cryptography#SignerP256), or [`SignerRSA`](/contracts/5.x/api/utils/cryptography#SignerRSA) for
 digital signature validation implementations.
 </Callout>
 
@@ -80,7 +80,7 @@ digital signature validation implementations.
 - [getNonce()](#Account-getNonce--)
 - [getNonce(key)](#Account-getNonce-uint192-)
 - [validateUserOp(userOp, userOpHash, missingAccountFunds)](#Account-validateUserOp-struct-PackedUserOperation-bytes32-uint256-)
-- [_validateUserOp(userOp, userOpHash)](#Account-_validateUserOp-struct-PackedUserOperation-bytes32-)
+- [_validateUserOp(userOp, userOpHash, signature)](#Account-_validateUserOp-struct-PackedUserOperation-bytes32-bytes-)
 - [_signableUserOpHash(, userOpHash)](#Account-_signableUserOpHash-struct-PackedUserOperation-bytes32-)
 - [_payPrefund(missingAccountFunds)](#Account-_payPrefund-uint256-)
 - [_checkEntryPoint()](#Account-_checkEntryPoint--)
@@ -217,20 +217,25 @@ Returns an encoded packed validation data that is composed of the following elem
 </div>
 </div>
 
-<a id="Account-_validateUserOp-struct-PackedUserOperation-bytes32-"></a>
+<a id="Account-_validateUserOp-struct-PackedUserOperation-bytes32-bytes-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">_validateUserOp(struct PackedUserOperation userOp, bytes32 userOpHash) → uint256</p>
+<p className="font-bold text-sm font-mono">_validateUserOp(struct PackedUserOperation userOp, bytes32 userOpHash, bytes signature) → uint256</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="Account-_validateUserOp-struct-PackedUserOperation-bytes32-">#</a>
+<a className="peer" data-card href="Account-_validateUserOp-struct-PackedUserOperation-bytes32-bytes-">#</a>
 </div>
 </div>
 <div className="px-4">
 
 Returns the validationData for a given user operation. By default, this checks the signature of the
-signable hash (produced by [`Account._signableUserOpHash`](#Account-_signableUserOpHash-struct-PackedUserOperation-bytes32-)) using the abstract signer ([`AbstractSigner._rawSignatureValidation`](./utils/cryptography#AbstractSigner-_rawSignatureValidation-bytes32-bytes-)).
+signable hash (produced by [`Account._signableUserOpHash`](#Account-_signableUserOpHash-struct-PackedUserOperation-bytes32-)) using the abstract signer ([`AbstractSigner._rawSignatureValidation`](/contracts/5.x/api/utils/cryptography#AbstractSigner-_rawSignatureValidation-bytes32-bytes-)).
+
+The `signature` parameter is taken directly from the user operation's `signature` field.
+This design enables derived contracts to implement custom signature handling logic,
+such as embedding additional data within the signature and processing it by overriding this function
+and optionally invoking `super`.
 
 <Callout>
 The userOpHash is assumed to be correct. Calling this function with a userOpHash that does not match the
@@ -350,7 +355,7 @@ Unauthorized call to the account.
 
 ## `AccountERC7579`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/account/extensions/draft-AccountERC7579.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/account/extensions/draft-AccountERC7579.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -363,7 +368,7 @@ import "@openzeppelin/contracts/account/extensions/draft-AccountERC7579.sol";
 Extension of [`Account`](#Account) that implements support for ERC-7579 modules.
 
 To comply with the ERC-1271 support requirement, this contract defers signature validation to
-installed validator modules by calling [`IERC7579Validator.isValidSignatureWithSender`](./interfaces#IERC7579Validator-isValidSignatureWithSender-address-bytes32-bytes-).
+installed validator modules by calling [`IERC7579Validator.isValidSignatureWithSender`](/contracts/5.x/api/interfaces#IERC7579Validator-isValidSignatureWithSender-address-bytes32-bytes-).
 
 This contract does not implement validation logic for user operations since this functionality
 is often delegated to self-contained validation modules. Developers must install a validator module
@@ -383,7 +388,7 @@ contract MyAccountERC7579 is AccountERC7579, Initializable {
   internal virtual functions [`AccountERC7579._extractUserOpValidator`](#AccountERC7579-_extractUserOpValidator-struct-PackedUserOperation-) and [`AccountERC7579._extractSignatureValidator`](#AccountERC7579-_extractSignatureValidator-bytes-). Both are implemented
   following common practices. However, this part is not standardized in ERC-7579 (or in any follow-up ERC). Some
   accounts may want to override these internal functions.
-* When combined with [`ERC7739`](./utils/cryptography#ERC7739), resolution ordering of [`AccountERC7579.isValidSignature`](#AccountERC7579-isValidSignature-bytes32-bytes-) may have an impact ([`ERC7739`](./utils/cryptography#ERC7739) does not
+* When combined with [`ERC7739`](/contracts/5.x/api/utils/cryptography#ERC7739), resolution ordering of [`AccountERC7579.isValidSignature`](#AccountERC7579-isValidSignature-bytes32-bytes-) may have an impact ([`ERC7739`](/contracts/5.x/api/utils/cryptography#ERC7739) does not
   call super). Manual resolution might be necessary.
 * Static calls (using callType `0xfe`) are currently NOT supported.
 </Callout>
@@ -411,7 +416,7 @@ Removing all validator modules will render the account inoperable, as no user op
 - [execute(mode, executionCalldata)](#AccountERC7579-execute-bytes32-bytes-)
 - [executeFromExecutor(mode, executionCalldata)](#AccountERC7579-executeFromExecutor-bytes32-bytes-)
 - [isValidSignature(hash, signature)](#AccountERC7579-isValidSignature-bytes32-bytes-)
-- [_validateUserOp(userOp, userOpHash)](#AccountERC7579-_validateUserOp-struct-PackedUserOperation-bytes32-)
+- [_validateUserOp(userOp, userOpHash, signature)](#AccountERC7579-_validateUserOp-struct-PackedUserOperation-bytes32-bytes-)
 - [_execute(mode, executionCalldata)](#AccountERC7579-_execute-Mode-bytes-)
 - [_installModule(moduleTypeId, module, initData)](#AccountERC7579-_installModule-uint256-address-bytes-)
 - [_uninstallModule(moduleTypeId, module, deInitData)](#AccountERC7579-_uninstallModule-uint256-address-bytes-)
@@ -460,6 +465,7 @@ Removing all validator modules will render the account inoperable, as no user op
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
 - [ERC7579MissingFallbackHandler(selector)](#AccountERC7579-ERC7579MissingFallbackHandler-bytes4-)
+- [ERC7579CannotDecodeFallbackData()](#AccountERC7579-ERC7579CannotDecodeFallbackData--)
 #### IERC7579ModuleConfig [!toc]
 #### IERC7579AccountConfig [!toc]
 #### IERC7579Execution [!toc]
@@ -671,28 +677,28 @@ Implement ERC-1271 through IERC7579Validator modules. If module based validation
 "native" validation by the abstract signer.
 
 <Callout>
-when combined with [`ERC7739`](./utils/cryptography#ERC7739), resolution ordering may have an impact ([`ERC7739`](./utils/cryptography#ERC7739) does not call super).
+when combined with [`ERC7739`](/contracts/5.x/api/utils/cryptography#ERC7739), resolution ordering may have an impact ([`ERC7739`](/contracts/5.x/api/utils/cryptography#ERC7739) does not call super).
 Manual resolution might be necessary.
 </Callout>
 
 </div>
 </div>
 
-<a id="AccountERC7579-_validateUserOp-struct-PackedUserOperation-bytes32-"></a>
+<a id="AccountERC7579-_validateUserOp-struct-PackedUserOperation-bytes32-bytes-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">_validateUserOp(struct PackedUserOperation userOp, bytes32 userOpHash) → uint256</p>
+<p className="font-bold text-sm font-mono">_validateUserOp(struct PackedUserOperation userOp, bytes32 userOpHash, bytes signature) → uint256</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="AccountERC7579-_validateUserOp-struct-PackedUserOperation-bytes32-">#</a>
+<a className="peer" data-card href="AccountERC7579-_validateUserOp-struct-PackedUserOperation-bytes32-bytes-">#</a>
 </div>
 </div>
 <div className="px-4">
 
 Validates a user operation with [`Account._signableUserOpHash`](#Account-_signableUserOpHash-struct-PackedUserOperation-bytes32-) and returns the validation data
 if the module specified by the first 20 bytes of the nonce key is installed. Falls back to
-[`Account._validateUserOp`](#Account-_validateUserOp-struct-PackedUserOperation-bytes32-) otherwise.
+[`Account._validateUserOp`](#Account-_validateUserOp-struct-PackedUserOperation-bytes32-bytes-) otherwise.
 
 See [`AccountERC7579._extractUserOpValidator`](#AccountERC7579-_extractUserOpValidator-struct-PackedUserOperation-) for the module extraction logic.
 
@@ -733,7 +739,7 @@ Reverts if the call type is not supported.
 Installs a module of the given type with the given initialization data.
 
 For the fallback module type, the `initData` is expected to be the (packed) concatenation of a 4-byte
-selector and the rest of the data to be sent to the handler when calling [`IERC7579Module.onInstall`](./interfaces#IERC7579Module-onInstall-bytes-).
+selector and the rest of the data to be sent to the handler when calling [`IERC7579Module.onInstall`](/contracts/5.x/api/interfaces#IERC7579Module-onInstall-bytes-).
 
 Requirements:
 
@@ -741,7 +747,7 @@ Requirements:
 * Module must be of the given type. Reverts with [`ERC7579Utils.ERC7579MismatchedModuleTypeId`](#ERC7579Utils-ERC7579MismatchedModuleTypeId-uint256-address-).
 * Module must not be already installed. Reverts with [`ERC7579Utils.ERC7579AlreadyInstalledModule`](#ERC7579Utils-ERC7579AlreadyInstalledModule-uint256-address-).
 
-Emits a [`IERC7579ModuleConfig.ModuleInstalled`](./interfaces#IERC7579ModuleConfig-ModuleInstalled-uint256-address-) event.
+Emits a [`IERC7579ModuleConfig.ModuleInstalled`](/contracts/5.x/api/interfaces#IERC7579ModuleConfig-ModuleInstalled-uint256-address-) event.
 
 </div>
 </div>
@@ -761,7 +767,7 @@ Emits a [`IERC7579ModuleConfig.ModuleInstalled`](./interfaces#IERC7579ModuleConf
 Uninstalls a module of the given type with the given de-initialization data.
 
 For the fallback module type, the `deInitData` is expected to be the (packed) concatenation of a 4-byte
-selector and the rest of the data to be sent to the handler when calling [`IERC7579Module.onUninstall`](./interfaces#IERC7579Module-onUninstall-bytes-).
+selector and the rest of the data to be sent to the handler when calling [`IERC7579Module.onUninstall`](/contracts/5.x/api/interfaces#IERC7579Module-onUninstall-bytes-).
 
 Requirements:
 
@@ -891,6 +897,10 @@ The default behavior of this function replicates the behavior of
 
 This is not standardized in ERC-7579 (or in any follow-up ERC). Some accounts may want to override these internal functions.
 
+<Callout>
+This function expects the signature to be at least 20 bytes long. Panics with [`Panic.ARRAY_OUT_OF_BOUNDS`](/contracts/5.x/api/utils#Panic-ARRAY_OUT_OF_BOUNDS-uint256) (0x32) otherwise.
+</Callout>
+
 </div>
 </div>
 
@@ -953,13 +963,30 @@ The account's [`AccountERC7579.fallback`](#AccountERC7579-fallback-bytes-) was c
 </div>
 </div>
 
+<a id="AccountERC7579-ERC7579CannotDecodeFallbackData--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7579CannotDecodeFallbackData()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="AccountERC7579-ERC7579CannotDecodeFallbackData--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The provided initData/deInitData for a fallback module is too short to extract a selector.
+
+</div>
+</div>
+
 <a id="AccountERC7579Hooked"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
 ## `AccountERC7579Hooked`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/account/extensions/draft-AccountERC7579Hooked.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/account/extensions/draft-AccountERC7579Hooked.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -971,11 +998,11 @@ import "@openzeppelin/contracts/account/extensions/draft-AccountERC7579Hooked.so
 
 Extension of [`AccountERC7579`](#AccountERC7579) with support for a single hook module (type 4).
 
-If installed, this extension will call the hook module's [`IERC7579Hook.preCheck`](./interfaces#IERC7579Hook-preCheck-address-uint256-bytes-) before executing any operation
-with [`AccountERC7579._execute`](#AccountERC7579-_execute-Mode-bytes-) (including [`AccessManager.execute`](./access#AccessManager-execute-address-bytes-) and [`AccountERC7579.executeFromExecutor`](#AccountERC7579-executeFromExecutor-bytes32-bytes-) by default) and [`IERC7579Hook.postCheck`](./interfaces#IERC7579Hook-postCheck-bytes-) thereafter.
+If installed, this extension will call the hook module's [`IERC7579Hook.preCheck`](/contracts/5.x/api/interfaces#IERC7579Hook-preCheck-address-uint256-bytes-) before executing any operation
+with [`AccountERC7579._execute`](#AccountERC7579-_execute-Mode-bytes-) (including [`AccessManager.execute`](/contracts/5.x/api/access#AccessManager-execute-address-bytes-) and [`AccountERC7579.executeFromExecutor`](#AccountERC7579-executeFromExecutor-bytes32-bytes-) by default) and [`IERC7579Hook.postCheck`](/contracts/5.x/api/interfaces#IERC7579Hook-postCheck-bytes-) thereafter.
 
 <Callout>
-Hook modules break the check-effect-interaction pattern. In particular, the [`IERC7579Hook.preCheck`](./interfaces#IERC7579Hook-preCheck-address-uint256-bytes-) hook can
+Hook modules break the check-effect-interaction pattern. In particular, the [`IERC7579Hook.preCheck`](/contracts/5.x/api/interfaces#IERC7579Hook-preCheck-address-uint256-bytes-) hook can
 lead to potentially dangerous reentrancy. Using the `withHook()` modifier is safe if no effect is performed
 before the preHook or after the postHook. That is the case on all functions here, but it may not be the case if
 functions that have this modifier are overridden. Developers should be extremely careful when implementing hook
@@ -1008,7 +1035,7 @@ modules or further overriding functions that involve hooks.
 - [execute(mode, executionCalldata)](#AccountERC7579-execute-bytes32-bytes-)
 - [executeFromExecutor(mode, executionCalldata)](#AccountERC7579-executeFromExecutor-bytes32-bytes-)
 - [isValidSignature(hash, signature)](#AccountERC7579-isValidSignature-bytes32-bytes-)
-- [_validateUserOp(userOp, userOpHash)](#AccountERC7579-_validateUserOp-struct-PackedUserOperation-bytes32-)
+- [_validateUserOp(userOp, userOpHash, signature)](#AccountERC7579-_validateUserOp-struct-PackedUserOperation-bytes32-bytes-)
 - [_fallbackHandler(selector)](#AccountERC7579-_fallbackHandler-bytes4-)
 - [_checkModule(moduleTypeId, module, additionalContext)](#AccountERC7579-_checkModule-uint256-address-bytes-)
 - [_extractUserOpValidator(userOp)](#AccountERC7579-_extractUserOpValidator-struct-PackedUserOperation-)
@@ -1056,6 +1083,7 @@ modules or further overriding functions that involve hooks.
 - [ERC7579HookModuleAlreadyPresent(hook)](#AccountERC7579Hooked-ERC7579HookModuleAlreadyPresent-address-)
 #### AccountERC7579 [!toc]
 - [ERC7579MissingFallbackHandler(selector)](#AccountERC7579-ERC7579MissingFallbackHandler-bytes4-)
+- [ERC7579CannotDecodeFallbackData()](#AccountERC7579-ERC7579CannotDecodeFallbackData--)
 #### IERC7579ModuleConfig [!toc]
 #### IERC7579AccountConfig [!toc]
 #### IERC7579Execution [!toc]
@@ -1080,7 +1108,7 @@ modules or further overriding functions that involve hooks.
 
 <div className="px-4">
 
-Calls [`IERC7579Hook.preCheck`](./interfaces#IERC7579Hook-preCheck-address-uint256-bytes-) before executing the modified function and [`IERC7579Hook.postCheck`](./interfaces#IERC7579Hook-postCheck-bytes-)
+Calls [`IERC7579Hook.preCheck`](/contracts/5.x/api/interfaces#IERC7579Hook-preCheck-address-uint256-bytes-) before executing the modified function and [`IERC7579Hook.postCheck`](/contracts/5.x/api/interfaces#IERC7579Hook-postCheck-bytes-)
 thereafter.
 
 </div>
@@ -1245,7 +1273,7 @@ A hook module is already present. This contract only supports one hook module.
 
 ## `ERC7821`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/account/extensions/draft-ERC7821.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/account/extensions/draft-ERC7821.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1257,7 +1285,7 @@ import "@openzeppelin/contracts/account/extensions/draft-ERC7821.sol";
 
 Minimal batch executor following ERC-7821.
 
-Only supports supports single batch mode (`0x01000000000000000000`). Does not support optional "opData".
+Only supports single batch mode (`0x01000000000000000000`). Does not support optional "opData".
 
 @custom:stateless
 
@@ -1335,7 +1363,7 @@ Only returns true for:
 </div>
 <div className="px-4">
 
-Access control mechanism for the [`AccessManager.execute`](./access#AccessManager-execute-address-bytes-) function.
+Access control mechanism for the [`AccessManager.execute`](/contracts/5.x/api/access#AccessManager-execute-address-bytes-) function.
 By default, only the contract itself is allowed to execute.
 
 Override this function to implement custom access control, for example to allow the
@@ -1375,7 +1403,7 @@ function _erc7821AuthorizedExecutor(
 
 ## `EIP7702Utils`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/account/utils/EIP7702Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/account/utils/EIP7702Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1408,7 +1436,7 @@ See [ERC-7702](https://eips.ethereum.org/EIPS/eip-7702).
 </div>
 <div className="px-4">
 
-Returns the address of the delegate if `account` as an EIP-7702 delegation setup, or address(0) otherwise.
+Returns the address of the delegate if `account` has an EIP-7702 delegation setup, or address(0) otherwise.
 
 </div>
 </div>
@@ -1419,7 +1447,7 @@ Returns the address of the delegate if `account` as an EIP-7702 delegation setup
 
 ## `IEntryPointExtra`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/account/utils/draft-ERC4337Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/account/utils/draft-ERC4337Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1459,7 +1487,7 @@ This is available on all entrypoint since v0.4.0, but is not formally part of th
 
 ## `ERC4337Utils`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/account/utils/draft-ERC4337Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/account/utils/draft-ERC4337Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1613,7 +1641,7 @@ Get the hash of a user operation for a given entrypoint
 </div>
 <div className="px-4">
 
-Returns `factory` from the [`PackedUserOperation`](./interfaces#PackedUserOperation), or address(0) if the initCode is empty or not properly formatted.
+Returns `factory` from the [`PackedUserOperation`](/contracts/5.x/api/interfaces#PackedUserOperation), or address(0) if the initCode is empty or not properly formatted.
 
 </div>
 </div>
@@ -1630,7 +1658,7 @@ Returns `factory` from the [`PackedUserOperation`](./interfaces#PackedUserOperat
 </div>
 <div className="px-4">
 
-Returns `factoryData` from the [`PackedUserOperation`](./interfaces#PackedUserOperation), or empty bytes if the initCode is empty or not properly formatted.
+Returns `factoryData` from the [`PackedUserOperation`](/contracts/5.x/api/interfaces#PackedUserOperation), or empty bytes if the initCode is empty or not properly formatted.
 
 </div>
 </div>
@@ -1647,7 +1675,7 @@ Returns `factoryData` from the [`PackedUserOperation`](./interfaces#PackedUserOp
 </div>
 <div className="px-4">
 
-Returns `verificationGasLimit` from the [`PackedUserOperation`](./interfaces#PackedUserOperation).
+Returns `verificationGasLimit` from the [`PackedUserOperation`](/contracts/5.x/api/interfaces#PackedUserOperation).
 
 </div>
 </div>
@@ -1664,7 +1692,7 @@ Returns `verificationGasLimit` from the [`PackedUserOperation`](./interfaces#Pac
 </div>
 <div className="px-4">
 
-Returns `callGasLimit` from the [`PackedUserOperation`](./interfaces#PackedUserOperation).
+Returns `callGasLimit` from the [`PackedUserOperation`](/contracts/5.x/api/interfaces#PackedUserOperation).
 
 </div>
 </div>
@@ -1681,7 +1709,7 @@ Returns `callGasLimit` from the [`PackedUserOperation`](./interfaces#PackedUserO
 </div>
 <div className="px-4">
 
-Returns the first section of `gasFees` from the [`PackedUserOperation`](./interfaces#PackedUserOperation).
+Returns the first section of `gasFees` from the [`PackedUserOperation`](/contracts/5.x/api/interfaces#PackedUserOperation).
 
 </div>
 </div>
@@ -1698,7 +1726,7 @@ Returns the first section of `gasFees` from the [`PackedUserOperation`](./interf
 </div>
 <div className="px-4">
 
-Returns the second section of `gasFees` from the [`PackedUserOperation`](./interfaces#PackedUserOperation).
+Returns the second section of `gasFees` from the [`PackedUserOperation`](/contracts/5.x/api/interfaces#PackedUserOperation).
 
 </div>
 </div>
@@ -1715,7 +1743,7 @@ Returns the second section of `gasFees` from the [`PackedUserOperation`](./inter
 </div>
 <div className="px-4">
 
-Returns the total gas price for the [`PackedUserOperation`](./interfaces#PackedUserOperation) (ie. `maxFeePerGas` or `maxPriorityFeePerGas + basefee`).
+Returns the total gas price for the [`PackedUserOperation`](/contracts/5.x/api/interfaces#PackedUserOperation) (ie. `maxFeePerGas` or `maxPriorityFeePerGas + basefee`).
 
 </div>
 </div>
@@ -1732,7 +1760,7 @@ Returns the total gas price for the [`PackedUserOperation`](./interfaces#PackedU
 </div>
 <div className="px-4">
 
-Returns the first section of `paymasterAndData` from the [`PackedUserOperation`](./interfaces#PackedUserOperation).
+Returns the first section of `paymasterAndData` from the [`PackedUserOperation`](/contracts/5.x/api/interfaces#PackedUserOperation).
 
 </div>
 </div>
@@ -1749,7 +1777,7 @@ Returns the first section of `paymasterAndData` from the [`PackedUserOperation`]
 </div>
 <div className="px-4">
 
-Returns the second section of `paymasterAndData` from the [`PackedUserOperation`](./interfaces#PackedUserOperation).
+Returns the second section of `paymasterAndData` from the [`PackedUserOperation`](/contracts/5.x/api/interfaces#PackedUserOperation).
 
 </div>
 </div>
@@ -1766,7 +1794,7 @@ Returns the second section of `paymasterAndData` from the [`PackedUserOperation`
 </div>
 <div className="px-4">
 
-Returns the third section of `paymasterAndData` from the [`PackedUserOperation`](./interfaces#PackedUserOperation).
+Returns the third section of `paymasterAndData` from the [`PackedUserOperation`](/contracts/5.x/api/interfaces#PackedUserOperation).
 
 </div>
 </div>
@@ -1783,7 +1811,7 @@ Returns the third section of `paymasterAndData` from the [`PackedUserOperation`]
 </div>
 <div className="px-4">
 
-Returns the fourth section of `paymasterAndData` from the [`PackedUserOperation`](./interfaces#PackedUserOperation).
+Returns the fourth section of `paymasterAndData` from the [`PackedUserOperation`](/contracts/5.x/api/interfaces#PackedUserOperation).
 
 </div>
 </div>
@@ -1794,7 +1822,7 @@ Returns the fourth section of `paymasterAndData` from the [`PackedUserOperation`
 
 ## `Mode`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/account/utils/draft-ERC7579Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/account/utils/draft-ERC7579Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1810,7 +1838,7 @@ import "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 
 ## `CallType`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/account/utils/draft-ERC7579Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/account/utils/draft-ERC7579Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1826,7 +1854,7 @@ import "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 
 ## `ExecType`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/account/utils/draft-ERC7579Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/account/utils/draft-ERC7579Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1842,7 +1870,7 @@ import "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 
 ## `ModeSelector`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/account/utils/draft-ERC7579Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/account/utils/draft-ERC7579Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1858,7 +1886,7 @@ import "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 
 ## `ModePayload`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/account/utils/draft-ERC7579Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/account/utils/draft-ERC7579Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1874,7 +1902,7 @@ import "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 
 ## `ERC7579Utils`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/account/utils/draft-ERC7579Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/account/utils/draft-ERC7579Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2259,7 +2287,7 @@ Input calldata not properly formatted and possibly malicious.
 
 ## `eqCallType`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/account/utils/draft-ERC7579Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/account/utils/draft-ERC7579Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2294,7 +2322,7 @@ Compares two `CallType` values for equality.
 
 ## `eqExecType`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/account/utils/draft-ERC7579Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/account/utils/draft-ERC7579Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2329,7 +2357,7 @@ Compares two `ExecType` values for equality.
 
 ## `eqModeSelector`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/account/utils/draft-ERC7579Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/account/utils/draft-ERC7579Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2364,7 +2392,7 @@ Compares two `ModeSelector` values for equality.
 
 ## `eqModePayload`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/account/utils/draft-ERC7579Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/account/utils/draft-ERC7579Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 

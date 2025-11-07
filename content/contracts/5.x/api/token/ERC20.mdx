@@ -6,7 +6,7 @@ description: "Smart contract ERC20 utilities and implementations"
 This set of interfaces, contracts, and utilities are all related to the [ERC-20 Token Standard](https://eips.ethereum.org/EIPS/eip-20).
 
 <Callout>
-For an overview of ERC-20 tokens and a walk through on how to create a token contract read our [ERC-20 guide](../../erc20).
+For an overview of ERC-20 tokens and a walk through on how to create a token contract read our [ERC-20 guide](/contracts/5.x/erc20).
 </Callout>
 
 There are a few core contracts that implement the behavior specified in the ERC-20 standard:
@@ -23,7 +23,7 @@ Additionally there are multiple custom extensions, including:
 * [`ERC20Capped`](#ERC20Capped): enforcement of a cap to the total supply when minting tokens.
 * [`ERC20Pausable`](#ERC20Pausable): ability to pause token transfers.
 * [`ERC20FlashMint`](#ERC20FlashMint): token level support for flash loans through the minting and burning of ephemeral tokens (standardized as ERC-3156).
-* [`ERC20Votes`](#ERC20Votes): support for voting and vote delegation.
+* [`ERC20Votes`](#ERC20Votes): support for voting and vote delegation. [See the governance guide for a minimal example (with the required overrides when combining ERC20 + ERC20Permit + ERC20Votes)](/contracts/5.x/api/governance#token).
 * [`ERC20Wrapper`](#ERC20Wrapper): wrapper to create an ERC-20 backed by another ERC-20, with deposit and withdraw methods. Useful in conjunction with [`ERC20Votes`](#ERC20Votes).
 * [`ERC20TemporaryApproval`](#ERC20TemporaryApproval): support for approvals lasting for only one transaction, as defined in ERC-7674.
 * [`ERC1363`](#ERC1363): support for calling the target of a transfer or approval, enabling code execution on the receiver within a single transaction.
@@ -87,7 +87,7 @@ This core set of contracts is designed to be unopinionated, allowing developers 
 
 ## `ERC20`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/token/ERC20/ERC20.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC20/ERC20.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -100,7 +100,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 Implementation of the [`IERC20`](#IERC20) interface.
 
 This implementation is agnostic to the way tokens are created. This means
-that a supply mechanism has to be added in a derived contract using [`ERC1155._mint`](./ERC1155#ERC1155-_mint-address-uint256-uint256-bytes-).
+that a supply mechanism has to be added in a derived contract using [`ERC1155._mint`](/contracts/5.x/api/token/ERC1155#ERC1155-_mint-address-uint256-uint256-bytes-).
 
 <Callout>
 For a detailed writeup see our guide
@@ -180,7 +180,7 @@ applications.
 </div>
 <div className="px-4">
 
-Sets the values for [`Governor.name`](../governance#Governor-name--) and [`IERC777.symbol`](../interfaces#IERC777-symbol--).
+Sets the values for [`Governor.name`](../governance#Governor-name--) and [`IERC6909Metadata.symbol`](../interfaces#IERC6909Metadata-symbol-uint256-).
 
 Both values are immutable: they can only be set once during construction.
 
@@ -406,7 +406,7 @@ e.g. implement automatic token fees, slashing mechanisms, etc.
 Emits a [`IERC6909.Transfer`](../interfaces#IERC6909-Transfer-address-address-address-uint256-uint256-) event.
 
 <Callout>
-This function is not virtual, [`ERC1155._update`](./ERC1155#ERC1155-_update-address-address-uint256---uint256---) should be overridden instead.
+This function is not virtual, [`ERC1155._update`](/contracts/5.x/api/token/ERC1155#ERC1155-_update-address-address-uint256---uint256---) should be overridden instead.
 </Callout>
 
 </div>
@@ -451,7 +451,7 @@ Relies on the `_update` mechanism
 Emits a [`IERC6909.Transfer`](../interfaces#IERC6909-Transfer-address-address-address-uint256-uint256-) event with `from` set to the zero address.
 
 <Callout>
-This function is not virtual, [`ERC1155._update`](./ERC1155#ERC1155-_update-address-address-uint256---uint256---) should be overridden instead.
+This function is not virtual, [`ERC1155._update`](/contracts/5.x/api/token/ERC1155#ERC1155-_update-address-address-uint256---uint256---) should be overridden instead.
 </Callout>
 
 </div>
@@ -475,7 +475,7 @@ Relies on the `_update` mechanism.
 Emits a [`IERC6909.Transfer`](../interfaces#IERC6909-Transfer-address-address-address-uint256-uint256-) event with `to` set to the zero address.
 
 <Callout>
-This function is not virtual, [`ERC1155._update`](./ERC1155#ERC1155-_update-address-address-uint256---uint256---) should be overridden instead
+This function is not virtual, [`ERC1155._update`](/contracts/5.x/api/token/ERC1155#ERC1155-_update-address-address-uint256---uint256---) should be overridden instead
 </Callout>
 
 </div>
@@ -525,10 +525,10 @@ Overrides to this logic should be done to the variant with an additional `bool e
 Variant of [`ERC20._approve`](#ERC20-_approve-address-address-uint256-bool-) with an optional flag to enable or disable the [`IERC6909.Approval`](../interfaces#IERC6909-Approval-address-address-uint256-uint256-) event.
 
 By default (when calling [`ERC20._approve`](#ERC20-_approve-address-address-uint256-bool-)) the flag is set to true. On the other hand, approval changes made by
-`_spendAllowance` during the `transferFrom` operation set the flag to false. This saves gas by not emitting any
+`_spendAllowance` during the `transferFrom` operation sets the flag to false. This saves gas by not emitting any
 `Approval` event during `transferFrom` operations.
 
-Anyone who wishes to continue emitting `Approval` events on the`transferFrom` operation can force the flag to
+Anyone who wishes to continue emitting `Approval` events on the `transferFrom` operation can force the flag to
 true using the following override:
 
 ```solidity
@@ -570,7 +570,7 @@ Does not emit an [`IERC6909.Approval`](../interfaces#IERC6909-Approval-address-a
 
 ## `IERC20`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/token/ERC20/IERC20.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC20/IERC20.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -777,7 +777,7 @@ a call to [`IERC6909.approve`](../interfaces#IERC6909-approve-address-uint256-ui
 
 ## `ERC1363`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/token/ERC20/extensions/ERC1363.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC20/extensions/ERC1363.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1077,7 +1077,7 @@ Indicates a failure within the [`IERC6909.approve`](../interfaces#IERC6909-appro
 
 ## `ERC20Burnable`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/token/ERC20/extensions/ERC20Burnable.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC20/extensions/ERC20Burnable.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1197,7 +1197,7 @@ Requirements:
 
 ## `ERC20Capped`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/token/ERC20/extensions/ERC20Capped.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC20/extensions/ERC20Capped.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1363,7 +1363,7 @@ The supplied cap is not a valid cap.
 
 ## `ERC20FlashMint`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/token/ERC20/extensions/ERC20FlashMint.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC20/extensions/ERC20FlashMint.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1602,7 +1602,7 @@ The receiver of a flashloan is not a valid [`IERC3156FlashBorrower.onFlashLoan`]
 
 ## `ERC20Pausable`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/token/ERC20/extensions/ERC20Pausable.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC20/extensions/ERC20Pausable.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1719,7 +1719,7 @@ Requirements:
 
 ## `ERC20Permit`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/token/ERC20/extensions/ERC20Permit.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC20/extensions/ERC20Permit.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1853,7 +1853,7 @@ given ``owner``'s signed approval.
 
 <Callout type="warn">
 The same issues [`IERC20.approve`](#IERC20-approve-address-uint256-) has related to transaction
-ordering also apply here.
+ordering also applies here.
 </Callout>
 
 Emits an [`IERC6909.Approval`](../interfaces#IERC6909-Approval-address-address-uint256-uint256-) event.
@@ -1953,7 +1953,7 @@ Mismatched signature.
 
 ## `ERC20Votes`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/token/ERC20/extensions/ERC20Votes.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC20/extensions/ERC20Votes.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2101,9 +2101,9 @@ requires users to delegate to themselves in order to activate checkpoints and ha
 
 Maximum token supply. Defaults to `type(uint208).max` (2^208^ - 1).
 
-This maximum is enforced in [`ERC1155._update`](./ERC1155#ERC1155-_update-address-address-uint256---uint256---). It limits the total supply of the token, which is otherwise a uint256,
+This maximum is enforced in [`ERC1155._update`](/contracts/5.x/api/token/ERC1155#ERC1155-_update-address-address-uint256---uint256---). It limits the total supply of the token, which is otherwise a uint256,
 so that checkpoints can be stored in the Trace208 structure used by [`Votes`](../governance#Votes). Increasing this value will not
-remove the underlying limitation, and will cause [`ERC1155._update`](./ERC1155#ERC1155-_update-address-address-uint256---uint256---) to fail because of a math overflow in
+remove the underlying limitation, and will cause [`ERC1155._update`](/contracts/5.x/api/token/ERC1155#ERC1155-_update-address-address-uint256---uint256---) to fail because of a math overflow in
 [`Votes._transferVotingUnits`](../governance#Votes-_transferVotingUnits-address-address-uint256-). An override could be used to further restrict the total supply (to a lower value) if
 additional logic requires it. When resolving override conflicts on this function, the minimum should be
 returned.
@@ -2209,7 +2209,7 @@ Total supply cap has been exceeded, introducing a risk of votes overflowing.
 
 ## `ERC20Wrapper`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/token/ERC20/extensions/ERC20Wrapper.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC20/extensions/ERC20Wrapper.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2226,7 +2226,7 @@ in conjunction with other modules. For example, combining this wrapping mechanis
 wrapping of an existing "basic" ERC-20 into a governance token.
 
 <Callout type="warn">
-Any mechanism in which the underlying token changes the [`IERC777.balanceOf`](../interfaces#IERC777-balanceOf-address-) of an account without an explicit transfer
+Any mechanism in which the underlying token changes the [`IERC6909.balanceOf`](../interfaces#IERC6909-balanceOf-address-uint256-) of an account without an explicit transfer
 may desynchronize this contract's supply and its underlying balance. Please exercise caution when wrapping tokens that
 may undercollateralize the wrapper (i.e. wrapper's total supply is higher than its underlying balance). See [`ERC20Wrapper._recover`](#ERC20Wrapper-_recover-address-)
 for recovering value accrued to the wrapper.
@@ -2414,7 +2414,7 @@ The underlying token couldn't be wrapped.
 
 ## `ERC4626`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/token/ERC20/extensions/ERC4626.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC20/extensions/ERC4626.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2448,7 +2448,7 @@ itself determines the initial exchange rate. While not fully preventing the atta
 offset (0) makes it non-profitable even if an attacker is able to capture value from multiple user deposits, as a result
 of the value being captured by the virtual shares (out of the attacker's donation) matching the attacker's expected gains.
 With a larger offset, the attack becomes orders of magnitude more expensive than it is profitable. More details about the
-underlying math can be found [here](../../erc4626#security-concern-inflation-attack).
+underlying math can be found [here](/contracts/5.x/erc4626#inflation-attack).
 
 The drawback of this approach is that the virtual shares do capture (a very small) part of the value being accrued
 to the vault. Also, if the vault experiences losses, the users try to exit the vault, the virtual shares and assets
@@ -2456,7 +2456,25 @@ will cause the first user to exit to experience reduced losses in detriment to t
 bigger losses. Developers willing to revert back to the pre-v4.9 behavior just need to override the
 `_convertToShares` and `_convertToAssets` functions.
 
-To learn more, check out our [ERC-4626 guide](../../erc4626).
+To learn more, check out our [ERC-4626 guide](/contracts/5.x/erc4626).
+</Callout>
+<Callout>
+When overriding this contract, some elements must be considered:
+
+* When overriding the behavior of the deposit or withdraw mechanisms, it is recommended to override the internal
+functions. Overriding [`ERC4626._deposit`](#ERC4626-_deposit-address-address-uint256-uint256-) automatically affects both [`IERC4626.deposit`](../interfaces#IERC4626-deposit-uint256-address-) and [`IERC4626.mint`](../interfaces#IERC4626-mint-uint256-address-). Similarly, overriding [`ERC4626._withdraw`](#ERC4626-_withdraw-address-address-address-uint256-uint256-)
+automatically affects both [`IERC4626.withdraw`](../interfaces#IERC4626-withdraw-uint256-address-address-) and [`IERC4626.redeem`](../interfaces#IERC4626-redeem-uint256-address-address-). Overall it is not recommended to override the public facing
+functions since that could lead to inconsistent behaviors between the [`IERC4626.deposit`](../interfaces#IERC4626-deposit-uint256-address-) and [`IERC4626.mint`](../interfaces#IERC4626-mint-uint256-address-) or between [`IERC4626.withdraw`](../interfaces#IERC4626-withdraw-uint256-address-address-) and
+[`IERC4626.redeem`](../interfaces#IERC4626-redeem-uint256-address-address-), which is documented to have lead to loss of funds.
+
+* Overrides to the deposit or withdraw mechanism must be reflected in the preview functions as well.
+
+* [`IERC4626.maxWithdraw`](../interfaces#IERC4626-maxWithdraw-address-) depends on [`IERC4626.maxRedeem`](../interfaces#IERC4626-maxRedeem-address-). Therefore, overriding [`IERC4626.maxRedeem`](../interfaces#IERC4626-maxRedeem-address-) only is enough. On the other hand,
+overriding [`IERC4626.maxWithdraw`](../interfaces#IERC4626-maxWithdraw-address-) only would have no effect on [`IERC4626.maxRedeem`](../interfaces#IERC4626-maxRedeem-address-), and could create an inconsistency between the two
+functions.
+
+* If [`IERC4626.previewRedeem`](../interfaces#IERC4626-previewRedeem-uint256-) is overridden to revert, [`IERC4626.maxWithdraw`](../interfaces#IERC4626-maxWithdraw-address-) must be overridden as necessary to ensure it
+always return successfully.
 </Callout>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
@@ -2903,7 +2921,7 @@ share price or some other type of condition, meaning the depositor will lose ass
 </div>
 <div className="px-4">
 
-Mints shares Vault shares to receiver by depositing exactly amount of underlying tokens.
+Deposit `assets` underlying tokens and send the corresponding number of vault shares (`shares`) to `receiver`.
 
 - MUST emit the Deposit event.
 - MAY support an additional flow in which the underlying tokens are owned by the Vault contract before the
@@ -2930,7 +2948,7 @@ most implementations will require pre-approval of the Vault with the Vault’s u
 </div>
 <div className="px-4">
 
-Mints exactly shares Vault shares to receiver by depositing amount of underlying tokens.
+Mints exactly `shares` vault shares to `receiver` in exchange for `assets` underlying tokens.
 
 - MUST emit the Deposit event.
 - MAY support an additional flow in which the underlying tokens are owned by the Vault contract before the mint
@@ -3156,7 +3174,7 @@ Attempted to redeem more shares than the max amount for `receiver`.
 
 ## `IERC20Metadata`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/token/ERC20/extensions/IERC20Metadata.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC20/extensions/IERC20Metadata.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3250,7 +3268,7 @@ Returns the decimals places of the token.
 
 ## `IERC20Permit`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/token/ERC20/extensions/IERC20Permit.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC20/extensions/IERC20Permit.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3321,7 +3339,7 @@ given ``owner``'s signed approval.
 
 <Callout type="warn">
 The same issues [`IERC20.approve`](#IERC20-approve-address-uint256-) has related to transaction
-ordering also apply here.
+ordering also applies here.
 </Callout>
 
 Emits an [`IERC6909.Approval`](../interfaces#IERC6909-Approval-address-address-uint256-uint256-) event.
@@ -3387,7 +3405,7 @@ Returns the domain separator used in the encoding of the signature for [`ERC20Pe
 
 ## `ERC20Bridgeable`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/token/ERC20/extensions/draft-ERC20Bridgeable.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC20/extensions/draft-ERC20Bridgeable.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3576,7 +3594,7 @@ customizing the list of allowed senders. Consider using [`AccessControl`](../acc
 
 ## `ERC20TemporaryApproval`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/token/ERC20/extensions/draft-ERC20TemporaryApproval.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC20/extensions/draft-ERC20TemporaryApproval.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3768,7 +3786,7 @@ is enough to cover the spending.
 
 ## `ERC1363Utils`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/token/ERC20/utils/ERC1363Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC20/utils/ERC1363Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3884,7 +3902,7 @@ Indicates a failure with the token `spender`. Used in approvals.
 
 ## `SafeERC20`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/token/ERC20/utils/SafeERC20.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC20/utils/SafeERC20.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3990,7 +4008,7 @@ Variant of [`SafeERC20.safeTransfer`](#SafeERC20-safeTransfer-contract-IERC20-ad
 </div>
 <div className="px-4">
 
-Variant of [`ERC1155.safeTransferFrom`](./ERC1155#ERC1155-safeTransferFrom-address-address-uint256-uint256-bytes-) that returns a bool instead of reverting if the operation is not successful.
+Variant of [`ERC1155.safeTransferFrom`](/contracts/5.x/api/token/ERC1155#ERC1155-safeTransferFrom-address-address-uint256-uint256-bytes-) that returns a bool instead of reverting if the operation is not successful.
 
 </div>
 </div>
@@ -4083,7 +4101,7 @@ set here.
 <div className="px-4">
 
 Performs an [`ERC1363`](#ERC1363) transferAndCall, with a fallback to the simple [`ERC20`](#ERC20) transfer if the target has no
-code. This can be used to implement an [`ERC721`](./ERC721#ERC721)-like safe transfer that rely on [`ERC1363`](#ERC1363) checks when
+code. This can be used to implement an [`ERC721`](/contracts/5.x/api/token/ERC721#ERC721)-like safe transfer that relies on [`ERC1363`](#ERC1363) checks when
 targeting contracts.
 
 Reverts if the returned value is other than `true`.
@@ -4104,7 +4122,7 @@ Reverts if the returned value is other than `true`.
 <div className="px-4">
 
 Performs an [`ERC1363`](#ERC1363) transferFromAndCall, with a fallback to the simple [`ERC20`](#ERC20) transferFrom if the target
-has no code. This can be used to implement an [`ERC721`](./ERC721#ERC721)-like safe transfer that rely on [`ERC1363`](#ERC1363) checks when
+has no code. This can be used to implement an [`ERC721`](/contracts/5.x/api/token/ERC721#ERC721)-like safe transfer that relies on [`ERC1363`](#ERC1363) checks when
 targeting contracts.
 
 Reverts if the returned value is other than `true`.
@@ -4125,12 +4143,12 @@ Reverts if the returned value is other than `true`.
 <div className="px-4">
 
 Performs an [`ERC1363`](#ERC1363) approveAndCall, with a fallback to the simple [`ERC20`](#ERC20) approve if the target has no
-code. This can be used to implement an [`ERC721`](./ERC721#ERC721)-like safe transfer that rely on [`ERC1363`](#ERC1363) checks when
+code. This can be used to implement an [`ERC721`](/contracts/5.x/api/token/ERC721#ERC721)-like safe transfer that rely on [`ERC1363`](#ERC1363) checks when
 targeting contracts.
 
 <Callout>
 When the recipient address (`to`) has no code (i.e. is an EOA), this function behaves as [`SafeERC20.forceApprove`](#SafeERC20-forceApprove-contract-IERC20-address-uint256-).
-Opposedly, when the recipient address (`to`) has code, this function only attempts to call [`ERC1363.approveAndCall`](#ERC1363-approveAndCall-address-uint256-bytes-)
+Oppositely, when the recipient address (`to`) has code, this function only attempts to call [`ERC1363.approveAndCall`](#ERC1363-approveAndCall-address-uint256-bytes-)
 once without retrying, and relies on the returned value to be true.
 </Callout>
 

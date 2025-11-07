@@ -12,7 +12,7 @@ This modular system of Governor contracts allows the deployment on-chain voting 
 <Callout>
 For a guided experience, set up your Governor contract using [Contracts Wizard](https://wizard.openzeppelin.com/#governor).
 
-For a written walkthrough, check out our guide on [How to set up on-chain governance](../governance).
+For a written walkthrough, check out our guide on [How to set up on-chain governance](/contracts/5.x/governance).
 </Callout>
 
 * [`Governor`](#Governor): The core contract that contains all the logic and primitives. It is abstract and requires choosing one of each of the modules below, or custom ones.
@@ -31,7 +31,7 @@ Counting modules determine valid voting options.
 
 Timelock extensions add a delay for governance decisions to be executed. The workflow is extended to require a `queue` step before execution. With these modules, proposals are executed by the external timelock contract, thus it is the timelock that has to hold the assets that are being governed.
 
-* [`GovernorTimelockAccess`](#GovernorTimelockAccess): Connects with an instance of an [`AccessManager`](./access#AccessManager). This allows restrictions (and delays) enforced by the manager to be considered by the Governor and integrated into the AccessManager’s "schedule + execute" workflow.
+* [`GovernorTimelockAccess`](#GovernorTimelockAccess): Connects with an instance of an [`AccessManager`](/contracts/5.x/api/access#AccessManager). This allows restrictions (and delays) enforced by the manager to be considered by the Governor and integrated into the AccessManager’s "schedule + execute" workflow.
 * [`GovernorTimelockControl`](#GovernorTimelockControl): Connects with an instance of [`TimelockController`](#TimelockController). Allows multiple proposers and executors, in addition to the Governor itself.
 * [`GovernorTimelockCompound`](#GovernorTimelockCompound): Connects with an instance of Compound’s [`Timelock`](https://github.com/compound-finance/compound-protocol/blob/master/contracts/Timelock.sol) contract.
 
@@ -123,7 +123,7 @@ In a governance system, the [`TimelockController`](#TimelockController) contract
 
 #### Operation structure
 
-Operation executed by the [`TimelockController`](/contracts/5.x/api/governance#TimelockController) can contain one or multiple subsequent calls. Depending on whether you need to multiple calls to be executed atomically, you can either use simple or batched operations.
+Operation executed by the [`TimelockController`](contracts/5.x/api/governance#TimelockController) can contain one or multiple subsequent calls. Depending on whether you need to multiple calls to be executed atomically, you can either use simple or batched operations.
 
 Both operations contain:
 
@@ -146,16 +146,16 @@ Timelocked operations are identified by a unique id (their hash) and follow a sp
 
 `Unset` -> `Pending` -> `Pending` + `Ready` -> `Done`
 
-* By calling [`schedule`](/contracts/5.x/api/governance#TimelockController-schedule-address-uint256-bytes-bytes32-bytes32-uint256-) (or [`scheduleBatch`](/contracts/5.x/api/governance#TimelockController-scheduleBatch-address---uint256---bytes---bytes32-bytes32-uint256-)), a proposer moves the operation from the `Unset` to the `Pending` state. This starts a timer that must be longer than the minimum delay. The timer expires at a timestamp accessible through the [`getTimestamp`](/contracts/5.x/api/governance#TimelockController-getTimestamp-bytes32-) method.
+* By calling [`schedule`](contracts/5.x/api/governance#TimelockController-schedule-address-uint256-bytes-bytes32-bytes32-uint256-) (or [`scheduleBatch`](contracts/5.x/api/governance#TimelockController-scheduleBatch-address---uint256---bytes---bytes32-bytes32-uint256-)), a proposer moves the operation from the `Unset` to the `Pending` state. This starts a timer that must be longer than the minimum delay. The timer expires at a timestamp accessible through the [`getTimestamp`](contracts/5.x/api/governance#TimelockController-getTimestamp-bytes32-) method.
 * Once the timer expires, the operation automatically gets the `Ready` state. At this point, it can be executed.
-* By calling [`execute`](/contracts/5.x/api/governance#TimelockController-TimelockController-execute-address-uint256-bytes-bytes32-bytes32-) (or [`executeBatch`](/contracts/5.x/api/governance#TimelockController-executeBatch-address---uint256---bytes---bytes32-bytes32-)), an executor triggers the operation’s underlying transactions and moves it to the `Done` state. If the operation has a predecessor, it has to be in the `Done` state for this transition to succeed.
-* [`cancel`](/contracts/5.x/api/governance#TimelockController-TimelockController-cancel-bytes32-) allows proposers to cancel any `Pending` operation. This resets the operation to the `Unset` state. It is thus possible for a proposer to re-schedule an operation that has been cancelled. In this case, the timer restarts when the operation is rescheduled.
+* By calling [`execute`](contracts/5.x/api/governance#TimelockController-TimelockController-execute-address-uint256-bytes-bytes32-bytes32-) (or [`executeBatch`](contracts/5.x/api/governance#TimelockController-executeBatch-address---uint256---bytes---bytes32-bytes32-)), an executor triggers the operation’s underlying transactions and moves it to the `Done` state. If the operation has a predecessor, it has to be in the `Done` state for this transition to succeed.
+* [`cancel`](contracts/5.x/api/governance#TimelockController-TimelockController-cancel-bytes32-) allows proposers to cancel any `Pending` operation. This resets the operation to the `Unset` state. It is thus possible for a proposer to re-schedule an operation that has been cancelled. In this case, the timer restarts when the operation is rescheduled.
 
 Operations status can be queried using the functions:
 
-* [`isOperationPending(bytes32)`](/contracts/5.x/api/governance#TimelockController-isOperationPending-bytes32-)
-* [`isOperationReady(bytes32)`](/contracts/5.x/api/governance#TimelockController-isOperationReady-bytes32-)
-* [`isOperationDone(bytes32)`](/contracts/5.x/api/governance#TimelockController-isOperationDone-bytes32-)
+* [`isOperationPending(bytes32)`](contracts/5.x/api/governance#TimelockController-isOperationPending-bytes32-)
+* [`isOperationReady(bytes32)`](contracts/5.x/api/governance#TimelockController-isOperationReady-bytes32-)
+* [`isOperationDone(bytes32)`](contracts/5.x/api/governance#TimelockController-isOperationDone-bytes32-)
 
 #### Roles
 
@@ -180,7 +180,7 @@ The executors are in charge of executing the operations scheduled by the propose
 This role is identified by the **EXECUTOR_ROLE** value: `0xd8aa0f3194971a2a116679f7c2090f6939c8d4e01a2a8d7e41d55e5351469e63`
 
 <Callout type="warn">
-A live contract without at least one proposer and one executor is locked. Make sure these roles are filled by reliable entities before the deployer renounces its administrative rights in favour of the timelock contract itself. See the [`AccessControl`](./access#AccessControl) documentation to learn more about role management.
+A live contract without at least one proposer and one executor is locked. Make sure these roles are filled by reliable entities before the deployer renounces its administrative rights in favour of the timelock contract itself. See the [`AccessControl`](/contracts/5.x/api/access#AccessControl) documentation to learn more about role management.
 </Callout>
 
 <a id="Governor"></a>
@@ -189,7 +189,7 @@ A live contract without at least one proposer and one executor is locked. Make s
 
 ## `Governor`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/Governor.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/Governor.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -367,7 +367,7 @@ parameter setters in [`GovernorSettings`](#GovernorSettings) are protected using
 
 The governance executing address may be different from the Governor's own address, for example it could be a
 timelock. This can be customized by modules by overriding [`Governor._executor`](#Governor-_executor--). The executor is only able to invoke these
-functions during the execution of the governor's [`AccessManager.execute`](./access#AccessManager-execute-address-bytes-) function, and not under any other circumstances. Thus,
+functions during the execution of the governor's [`AccessManager.execute`](/contracts/5.x/api/access#AccessManager-execute-address-bytes-) function, and not under any other circumstances. Thus,
 for example, additional timelock proposers are not able to change governance parameters without going through the
 governance protocol (since v4.6).
 
@@ -645,7 +645,7 @@ Whether a proposal needs to be queued before execution.
 <div className="px-4">
 
 Reverts if the `msg.sender` is not the executor. In case the executor is not this contract
-itself, the function reverts if `msg.data` is not whitelisted as a result of an [`AccessManager.execute`](./access#AccessManager-execute-address-bytes-)
+itself, the function reverts if `msg.data` is not whitelisted as a result of an [`AccessManager.execute`](/contracts/5.x/api/access#AccessManager-execute-address-bytes-)
 operation. See [`Governor.onlyGovernance`](#Governor-onlyGovernance--).
 
 </div>
@@ -888,7 +888,7 @@ performed (for example adding a vault/timelock).
 
 <Callout>
 Calling this function directly will NOT check the current state of the proposal, set the executed flag to
-true or emit the `ProposalExecuted` event. Executing a proposal should be done using [`AccessManager.execute`](./access#AccessManager-execute-address-bytes-).
+true or emit the `ProposalExecuted` event. Executing a proposal should be done using [`AccessManager.execute`](/contracts/5.x/api/access#AccessManager-execute-address-bytes-).
 </Callout>
 
 </div>
@@ -949,7 +949,7 @@ Emits a [`IGovernor.ProposalCanceled`](#IGovernor-ProposalCanceled-uint256-) eve
 Voting power of an `account` at a specific `timepoint`.
 
 Note: this can be implemented in a number of ways, for example by reading the delegated balance from one (or
-multiple), [`ERC20Votes`](./token/ERC20#ERC20Votes) tokens.
+multiple), [`ERC20Votes`](/contracts/5.x/api/token/ERC20#ERC20Votes) tokens.
 
 </div>
 </div>
@@ -1147,7 +1147,7 @@ Emits a [`IGovernor.VoteCast`](#IGovernor-VoteCast-address-uint256-uint8-uint256
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">relay(address target, uint256 value, bytes data)</p>
 <div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">external</p>
+<p className="font-light text-sm">public</p>
 <a className="peer" data-card href="Governor-relay-address-uint256-bytes-">#</a>
 </div>
 </div>
@@ -1173,7 +1173,7 @@ Note that if the executor is simply the governor itself, use of `relay` is redun
 </div>
 <div className="px-4">
 
-Address through which the governor executes action. Will be overloaded by module that execute actions
+Address through which the governor executes action. Will be overloaded by module that executes actions
 through another contract such as a timelock.
 
 </div>
@@ -1191,7 +1191,7 @@ through another contract such as a timelock.
 </div>
 <div className="px-4">
 
-See [`IERC721Receiver.onERC721Received`](./token/ERC721#IERC721Receiver-onERC721Received-address-address-uint256-bytes-).
+See [`IERC721Receiver.onERC721Received`](/contracts/5.x/api/token/ERC721#IERC721Receiver-onERC721Received-address-address-uint256-bytes-).
 Receiving tokens is disabled if the governance executor is other than the governor itself (eg. when using with a timelock).
 
 </div>
@@ -1209,7 +1209,7 @@ Receiving tokens is disabled if the governance executor is other than the govern
 </div>
 <div className="px-4">
 
-See [`IERC1155Receiver.onERC1155Received`](./token/ERC1155#IERC1155Receiver-onERC1155Received-address-address-uint256-uint256-bytes-).
+See [`IERC1155Receiver.onERC1155Received`](/contracts/5.x/api/token/ERC1155#IERC1155Receiver-onERC1155Received-address-address-uint256-uint256-bytes-).
 Receiving tokens is disabled if the governance executor is other than the governor itself (eg. when using with a timelock).
 
 </div>
@@ -1227,7 +1227,7 @@ Receiving tokens is disabled if the governance executor is other than the govern
 </div>
 <div className="px-4">
 
-See [`IERC1155Receiver.onERC1155BatchReceived`](./token/ERC1155#IERC1155Receiver-onERC1155BatchReceived-address-address-uint256---uint256---bytes-).
+See [`IERC1155Receiver.onERC1155BatchReceived`](/contracts/5.x/api/token/ERC1155#IERC1155Receiver-onERC1155BatchReceived-address-address-uint256---uint256---bytes-).
 Receiving tokens is disabled if the governance executor is other than the governor itself (eg. when using with a timelock).
 
 </div>
@@ -1367,7 +1367,7 @@ proposal starts.
 
 <Callout>
 While this interface returns a uint256, timepoints are stored as uint48 following the ERC-6372 clock type.
-Consequently this value must fit in a uint48 (when added to the current clock). See [`IERC6372.clock`](./interfaces#IERC6372-clock--).
+Consequently this value must fit in a uint48 (when added to the current clock). See [`IERC6372.clock`](/contracts/5.x/api/interfaces#IERC6372-clock--).
 </Callout>
 
 </div>
@@ -1418,7 +1418,7 @@ Minimum number of cast voted required for a proposal to be successful.
 
 <Callout>
 The `timepoint` parameter corresponds to the snapshot used for counting vote. This allows to scale the
-quorum depending on values such as the totalSupply of a token at this timepoint (see [`ERC20Votes`](./token/ERC20#ERC20Votes)).
+quorum depending on values such as the totalSupply of a token at this timepoint (see [`ERC20Votes`](/contracts/5.x/api/token/ERC20#ERC20Votes)).
 </Callout>
 
 </div>
@@ -1460,7 +1460,7 @@ quorum depending on values such as the totalSupply of a token at this timepoint 
 
 ## `IGovernor`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/IGovernor.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/IGovernor.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1806,7 +1806,7 @@ proposal starts.
 
 <Callout>
 While this interface returns a uint256, timepoints are stored as uint48 following the ERC-6372 clock type.
-Consequently this value must fit in a uint48 (when added to the current clock). See [`IERC6372.clock`](./interfaces#IERC6372-clock--).
+Consequently this value must fit in a uint48 (when added to the current clock). See [`IERC6372.clock`](/contracts/5.x/api/interfaces#IERC6372-clock--).
 </Callout>
 
 </div>
@@ -1857,7 +1857,7 @@ Minimum number of cast voted required for a proposal to be successful.
 
 <Callout>
 The `timepoint` parameter corresponds to the snapshot used for counting vote. This allows to scale the
-quorum depending on values such as the totalSupply of a token at this timepoint (see [`ERC20Votes`](./token/ERC20#ERC20Votes)).
+quorum depending on values such as the totalSupply of a token at this timepoint (see [`ERC20Votes`](/contracts/5.x/api/token/ERC20#ERC20Votes)).
 </Callout>
 
 </div>
@@ -1878,7 +1878,7 @@ quorum depending on values such as the totalSupply of a token at this timepoint 
 Voting power of an `account` at a specific `timepoint`.
 
 Note: this can be implemented in a number of ways, for example by reading the delegated balance from one (or
-multiple), [`ERC20Votes`](./token/ERC20#ERC20Votes) tokens.
+multiple), [`ERC20Votes`](/contracts/5.x/api/token/ERC20#ERC20Votes) tokens.
 
 </div>
 </div>
@@ -1929,7 +1929,7 @@ Returns whether `account` has cast a vote on `proposalId`.
 </div>
 <div className="px-4">
 
-Create a new proposal. Vote start after a delay specified by [`IGovernor.votingDelay`](#IGovernor-votingDelay--) and lasts for a
+Create a new proposal. Vote starts after a delay specified by [`IGovernor.votingDelay`](#IGovernor-votingDelay--) and lasts for a
 duration specified by [`IGovernor.votingPeriod`](#IGovernor-votingPeriod--).
 
 Emits a [`IGovernor.ProposalCreated`](#IGovernor-ProposalCreated-uint256-address-address---uint256---string---bytes---uint256-uint256-string-) event.
@@ -2475,7 +2475,7 @@ The proposal has already been queued.
 <div className="px-4">
 
 The provided signature is not valid for the expected `voter`.
-If the `voter` is a contract, the signature is not valid using [`IERC1271.isValidSignature`](./interfaces#IERC1271-isValidSignature-bytes32-bytes-).
+If the `voter` is a contract, the signature is not valid using [`IERC1271.isValidSignature`](/contracts/5.x/api/interfaces#IERC1271-isValidSignature-bytes32-bytes-).
 
 </div>
 </div>
@@ -2503,7 +2503,7 @@ The given `account` is unable to cancel the proposal with given `proposalId`.
 
 ## `TimelockController`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/TimelockController.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/TimelockController.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2946,7 +2946,7 @@ Requirements:
 </div>
 <div className="px-4">
 
-Execute an (ready) operation containing a single transaction.
+Execute a ready operation containing a single transaction.
 
 Emits a [`TimelockController.CallExecuted`](#TimelockController-CallExecuted-bytes32-uint256-address-uint256-bytes-) event.
 
@@ -2969,7 +2969,7 @@ Requirements:
 </div>
 <div className="px-4">
 
-Execute an (ready) operation containing a batch of transactions.
+Execute a ready operation containing a batch of transactions.
 
 Emits one [`TimelockController.CallExecuted`](#TimelockController-CallExecuted-bytes32-uint256-address-uint256-bytes-) event per transaction in the batch.
 
@@ -3003,7 +3003,7 @@ Execute an operation's call.
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">updateDelay(uint256 newDelay)</p>
 <div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">external</p>
+<p className="font-light text-sm">public</p>
 <a className="peer" data-card href="TimelockController-updateDelay-uint256-">#</a>
 </div>
 </div>
@@ -3272,7 +3272,7 @@ The caller account is not authorized.
 
 ## `GovernorCountingFractional`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/extensions/GovernorCountingFractional.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorCountingFractional.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3636,7 +3636,7 @@ A fractional vote params uses more votes than are available for that user.
 
 ## `GovernorCountingOverridable`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/extensions/GovernorCountingOverridable.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorCountingOverridable.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -4094,7 +4094,7 @@ A delegated vote on `proposalId` was overridden by `weight`
 
 ## `GovernorCountingSimple`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/extensions/GovernorCountingSimple.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorCountingSimple.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -4372,7 +4372,7 @@ See [`Governor._countVote`](#Governor-_countVote-uint256-address-uint8-uint256-b
 
 ## `GovernorNoncesKeyed`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/extensions/GovernorNoncesKeyed.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorNoncesKeyed.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -4382,7 +4382,7 @@ See [`Governor._countVote`](#Governor-_countVote-uint256-address-uint8-uint256-b
 import "@openzeppelin/contracts/governance/extensions/GovernorNoncesKeyed.sol";
 ```
 
-An extension of [`Governor`](#Governor) that extends existing nonce management to use [`NoncesKeyed`](./utils#NoncesKeyed), where the key is the low-order 192 bits of the `proposalId`.
+An extension of [`Governor`](#Governor) that extends existing nonce management to use [`NoncesKeyed`](/contracts/5.x/api/utils#NoncesKeyed), where the key is the low-order 192 bits of the `proposalId`.
 This is useful for voting by signature while maintaining separate sequences of nonces for each proposal.
 
 <Callout>
@@ -4597,7 +4597,7 @@ Side effects may be skipped depending on the linearization of the function.
 
 ## `GovernorPreventLateQuorum`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/extensions/GovernorPreventLateQuorum.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorPreventLateQuorum.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -4913,7 +4913,7 @@ Emitted when the [`GovernorPreventLateQuorum.lateQuorumVoteExtension`](#Governor
 
 ## `GovernorProposalGuardian`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/extensions/GovernorProposalGuardian.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorProposalGuardian.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -5168,7 +5168,7 @@ Override [`Governor._validateCancel`](#Governor-_validateCancel-uint256-address-
 
 ## `GovernorSequentialProposalId`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/extensions/GovernorSequentialProposalId.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorSequentialProposalId.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -5415,7 +5415,7 @@ The [`GovernorSequentialProposalId.latestProposalId`](#GovernorSequentialProposa
 
 ## `GovernorSettings`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/extensions/GovernorSettings.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorSettings.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -5804,7 +5804,7 @@ Emits a [`GovernorSettings.ProposalThresholdSet`](#GovernorSettings-ProposalThre
 
 ## `GovernorStorage`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/extensions/GovernorStorage.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorStorage.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -5814,7 +5814,7 @@ Emits a [`GovernorSettings.ProposalThresholdSet`](#GovernorSettings-ProposalThre
 import "@openzeppelin/contracts/governance/extensions/GovernorStorage.sol";
 ```
 
-Extension of [`Governor`](#Governor) that implements storage of proposal details. This modules also provides primitives for
+Extension of [`Governor`](#Governor) that implements storage of proposal details. This module also provides primitives for
 the enumerability of proposals.
 
 Use cases for this module include:
@@ -6090,7 +6090,7 @@ Returns the details (including the proposalId) of a proposal given its sequentia
 
 ## `GovernorSuperQuorum`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/extensions/GovernorSuperQuorum.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorSuperQuorum.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -6261,7 +6261,7 @@ without waiting for the proposal deadline.
 
 <Callout>
 The `timepoint` parameter corresponds to the snapshot used for counting the vote. This enables scaling of the
-quorum depending on values such as the `totalSupply` of a token at this timepoint (see [`ERC20Votes`](./token/ERC20#ERC20Votes)).
+quorum depending on values such as the `totalSupply` of a token at this timepoint (see [`ERC20Votes`](/contracts/5.x/api/token/ERC20#ERC20Votes)).
 </Callout>
 
 <Callout>
@@ -6323,7 +6323,7 @@ types of scenarios.
 
 ## `GovernorTimelockAccess`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/extensions/GovernorTimelockAccess.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorTimelockAccess.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -6333,7 +6333,7 @@ types of scenarios.
 import "@openzeppelin/contracts/governance/extensions/GovernorTimelockAccess.sol";
 ```
 
-This module connects a [`Governor`](#Governor) instance to an [`AccessManager`](./access#AccessManager) instance, allowing the governor to make calls
+This module connects a [`Governor`](#Governor) instance to an [`AccessManager`](/contracts/5.x/api/access#AccessManager) instance, allowing the governor to make calls
 that are delay-restricted by the manager using the normal [`Governor.queue`](#Governor-queue-address---uint256---bytes---bytes32-) workflow. An optional base delay is applied to
 operations that are not delayed externally by the manager. Execution of a proposal will be delayed as much as
 necessary to meet the required delays of all of its operations.
@@ -6341,7 +6341,7 @@ necessary to meet the required delays of all of its operations.
 This extension allows the governor to hold and use its own assets and permissions, unlike [`GovernorTimelockControl`](#GovernorTimelockControl)
 and [`GovernorTimelockCompound`](#GovernorTimelockCompound), where the timelock is a separate contract that must be the one to hold assets and
 permissions. Operations that are delay-restricted by the manager, however, will be executed through the
-[`AccessManager.execute`](./access#AccessManager-execute-address-bytes-) function.
+[`AccessManager.execute`](/contracts/5.x/api/access#AccessManager-execute-address-bytes-) function.
 
 ==== Security Considerations
 
@@ -6359,7 +6359,7 @@ possible. All of the governor's own functions (e.g., [`GovernorTimelockAccess.se
 
 <Callout>
 `AccessManager` does not support scheduling more than one operation with the same target and calldata at
-the same time. See [`AccessManager.schedule`](./access#AccessManager-schedule-address-bytes-uint48-) for a workaround.
+the same time. See [`AccessManager.schedule`](/contracts/5.x/api/access#AccessManager-schedule-address-bytes-uint48-) for a workaround.
 </Callout>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
@@ -6525,7 +6525,7 @@ the same time. See [`AccessManager.schedule`](./access#AccessManager-schedule-ad
 </div>
 <div className="px-4">
 
-Initialize the governor with an [`AccessManager`](./access#AccessManager) and initial base delay.
+Initialize the governor with an [`AccessManager`](/contracts/5.x/api/access#AccessManager) and initial base delay.
 
 </div>
 </div>
@@ -6542,7 +6542,7 @@ Initialize the governor with an [`AccessManager`](./access#AccessManager) and in
 </div>
 <div className="px-4">
 
-Returns the [`AccessManager`](./access#AccessManager) instance associated to this governor.
+Returns the [`AccessManager`](/contracts/5.x/api/access#AccessManager) instance associated to this governor.
 
 </div>
 </div>
@@ -6617,7 +6617,7 @@ Change the value of [`GovernorTimelockAccess.baseDelaySeconds`](#GovernorTimeloc
 </div>
 <div className="px-4">
 
-Check if restrictions from the associated [`AccessManager`](./access#AccessManager) are ignored for a target function. Returns true
+Check if restrictions from the associated [`AccessManager`](/contracts/5.x/api/access#AccessManager) are ignored for a target function. Returns true
 when the target function will be invoked directly regardless of `AccessManager` settings for the function.
 See [`GovernorTimelockAccess.setAccessManagerIgnored`](#GovernorTimelockAccess-setAccessManagerIgnored-address-bytes4---bool-) and Security Considerations above.
 
@@ -6636,7 +6636,7 @@ See [`GovernorTimelockAccess.setAccessManagerIgnored`](#GovernorTimelockAccess-s
 </div>
 <div className="px-4">
 
-Configure whether restrictions from the associated [`AccessManager`](./access#AccessManager) are ignored for a target function.
+Configure whether restrictions from the associated [`AccessManager`](/contracts/5.x/api/access#AccessManager) are ignored for a target function.
 See Security Considerations above.
 
 </div>
@@ -6673,7 +6673,7 @@ Internal version of [`GovernorTimelockAccess.setAccessManagerIgnored`](#Governor
 
 Public accessor to check the execution plan, including the number of seconds that the proposal will be
 delayed since queuing, an array indicating which of the proposal actions will be executed indirectly through
-the associated [`AccessManager`](./access#AccessManager), and another indicating which will be scheduled in [`Governor.queue`](#Governor-queue-address---uint256---bytes---bytes32-). Note that
+the associated [`AccessManager`](/contracts/5.x/api/access#AccessManager), and another indicating which will be scheduled in [`Governor.queue`](#Governor-queue-address---uint256---bytes---bytes32-). Note that
 those that must be scheduled are cancellable by `AccessManager` guardians.
 
 </div>
@@ -6743,7 +6743,7 @@ off if the delay was updated since proposal creation. In this case, the proposal
 </div>
 <div className="px-4">
 
-Mechanism to execute a proposal, potentially going through [`AccessManager.execute`](./access#AccessManager-execute-address-bytes-) for delayed operations.
+Mechanism to execute a proposal, potentially going through [`AccessManager.execute`](/contracts/5.x/api/access#AccessManager-execute-address-bytes-) for delayed operations.
 
 </div>
 </div>
@@ -6850,7 +6850,7 @@ Emits a [`IGovernor.ProposalCanceled`](#IGovernor-ProposalCanceled-uint256-) eve
 
 ## `GovernorTimelockCompound`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/extensions/GovernorTimelockCompound.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorTimelockCompound.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -7170,7 +7170,7 @@ Accept admin right over the timelock.
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">updateTimelock(contract ICompoundTimelock newTimelock)</p>
 <div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">external</p>
+<p className="font-light text-sm">public</p>
 <a className="peer" data-card href="GovernorTimelockCompound-updateTimelock-contract-ICompoundTimelock-">#</a>
 </div>
 </div>
@@ -7215,7 +7215,7 @@ Emitted when the timelock controller used for proposal execution is modified.
 
 ## `GovernorTimelockControl`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/extensions/GovernorTimelockControl.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorTimelockControl.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -7226,7 +7226,7 @@ import "@openzeppelin/contracts/governance/extensions/GovernorTimelockControl.so
 ```
 
 Extension of [`Governor`](#Governor) that binds the execution process to an instance of [`TimelockController`](#TimelockController). This adds a
-delay, enforced by the [`TimelockController`](#TimelockController) to all successful proposal (in addition to the voting duration). The
+delay, enforced by the [`TimelockController`](#TimelockController) to all successful proposals (in addition to the voting duration). The
 [`Governor`](#Governor) needs the proposer (and ideally the executor and canceller) roles for the [`Governor`](#Governor) to work properly.
 
 Using this model means the proposal will be operated by the [`TimelockController`](#TimelockController) and not by the [`Governor`](#Governor). Thus,
@@ -7523,7 +7523,7 @@ Address through which the governor executes action. In this case, the timelock.
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">updateTimelock(contract TimelockController newTimelock)</p>
 <div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">external</p>
+<p className="font-light text-sm">public</p>
 <a className="peer" data-card href="GovernorTimelockControl-updateTimelock-contract-TimelockController-">#</a>
 </div>
 </div>
@@ -7561,7 +7561,7 @@ Emitted when the timelock controller used for proposal execution is modified.
 
 ## `GovernorVotes`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/extensions/GovernorVotes.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorVotes.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -7571,7 +7571,7 @@ Emitted when the timelock controller used for proposal execution is modified.
 import "@openzeppelin/contracts/governance/extensions/GovernorVotes.sol";
 ```
 
-Extension of [`Governor`](#Governor) for voting weight extraction from an [`ERC20Votes`](./token/ERC20#ERC20Votes) token, or since v4.5 an [`ERC721Votes`](./token/ERC721#ERC721Votes)
+Extension of [`Governor`](#Governor) for voting weight extraction from an [`ERC20Votes`](/contracts/5.x/api/token/ERC20#ERC20Votes) token, or since v4.5 an [`ERC721Votes`](/contracts/5.x/api/token/ERC721#ERC721Votes)
 token.
 
 <div className="bg-secondary p-4 rounded-md mb-6">
@@ -7801,7 +7801,7 @@ Machine-readable description of the clock as specified in ERC-6372.
 
 ## `GovernorVotesQuorumFraction`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/extensions/GovernorVotesQuorumFraction.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorVotesQuorumFraction.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -7811,7 +7811,7 @@ Machine-readable description of the clock as specified in ERC-6372.
 import "@openzeppelin/contracts/governance/extensions/GovernorVotesQuorumFraction.sol";
 ```
 
-Extension of [`Governor`](#Governor) for voting weight extraction from an [`ERC20Votes`](./token/ERC20#ERC20Votes) token and a quorum expressed as a
+Extension of [`Governor`](#Governor) for voting weight extraction from an [`ERC20Votes`](/contracts/5.x/api/token/ERC20#ERC20Votes) token and a quorum expressed as a
 fraction of the total supply.
 
 <div className="bg-secondary p-4 rounded-md mb-6">
@@ -8059,7 +8059,7 @@ Returns the quorum for a timepoint, in terms of number of votes: `supply * numer
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">updateQuorumNumerator(uint256 newQuorumNumerator)</p>
 <div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">external</p>
+<p className="font-light text-sm">public</p>
 <a className="peer" data-card href="GovernorVotesQuorumFraction-updateQuorumNumerator-uint256-">#</a>
 </div>
 </div>
@@ -8156,7 +8156,7 @@ The quorum set is not a valid fraction.
 
 ## `GovernorVotesSuperQuorumFraction`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/extensions/GovernorVotesSuperQuorumFraction.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorVotesSuperQuorumFraction.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -8575,7 +8575,7 @@ The quorum set is not valid as it exceeds the super quorum.
 
 ## `IVotes`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/utils/IVotes.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/utils/IVotes.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -8585,7 +8585,7 @@ The quorum set is not valid as it exceeds the super quorum.
 import "@openzeppelin/contracts/governance/utils/IVotes.sol";
 ```
 
-Common interface for [`ERC20Votes`](./token/ERC20#ERC20Votes), [`ERC721Votes`](./token/ERC721#ERC721Votes), and other [`Votes`](#Votes)-enabled contracts.
+Common interface for [`ERC20Votes`](/contracts/5.x/api/token/ERC20#ERC20Votes), [`ERC721Votes`](/contracts/5.x/api/token/ERC721#ERC721Votes), and other [`Votes`](#Votes)-enabled contracts.
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Functions</h3>
@@ -8782,7 +8782,7 @@ The signature used has expired.
 
 ## `Votes`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/utils/Votes.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/utils/Votes.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -8799,15 +8799,15 @@ decisions. In fact, voting units _must_ be delegated in order to count as actual
 delegate those votes to itself if it wishes to participate in decisions and does not have a trusted representative.
 
 This contract is often combined with a token contract such that voting units correspond to token units. For an
-example, see [`ERC721Votes`](./token/ERC721#ERC721Votes).
+example, see [`ERC721Votes`](/contracts/5.x/api/token/ERC721#ERC721Votes).
 
 The full history of delegate votes is tracked on-chain so that governance protocols can consider votes as distributed
 at a particular block number to protect against flash loans and double voting. The opt-in delegate system makes the
 cost of this history tracking optional.
 
 When using this module the derived contract must implement [`Votes._getVotingUnits`](#Votes-_getVotingUnits-address-) (for example, make it return
-[`ERC721.balanceOf`](./token/ERC721#ERC721-balanceOf-address-)), and can use [`Votes._transferVotingUnits`](#Votes-_transferVotingUnits-address-address-uint256-) to track a change in the distribution of those units (in the
-previous example, it would be included in [`ERC721._update`](./token/ERC721#ERC721-_update-address-uint256-address-)).
+[`ERC721.balanceOf`](/contracts/5.x/api/token/ERC721#ERC721-balanceOf-address-)), and can use [`Votes._transferVotingUnits`](#Votes-_transferVotingUnits-address-address-uint256-) to track a change in the distribution of those units (in the
+previous example, it would be included in [`ERC721._update`](/contracts/5.x/api/token/ERC721#ERC721-_update-address-uint256-address-)).
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Functions</h3>
@@ -9208,7 +9208,7 @@ Lookup to future votes is not available.
 
 ## `VotesExtended`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.4.0/contracts/governance/utils/VotesExtended.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/utils/VotesExtended.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -9242,7 +9242,7 @@ contract VotingToken is Token, VotesExtended {
 }
 ```
 
-[`ERC20Votes`](./token/ERC20#ERC20Votes) and [`ERC721Votes`](./token/ERC721#ERC721Votes) follow this pattern and are thus safe to use with [`VotesExtended`](#VotesExtended).
+[`ERC20Votes`](/contracts/5.x/api/token/ERC20#ERC20Votes) and [`ERC721Votes`](/contracts/5.x/api/token/ERC721#ERC721Votes) follow this pattern and are thus safe to use with [`VotesExtended`](#VotesExtended).
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Functions</h3>
