@@ -243,6 +243,12 @@ export function Footer() {
 							>
 								Customer Stories
 							</Link>
+							<Link
+								href="https://www.openzeppelin.com/financial-institutions"
+								className="block text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors"
+							>
+								Financial Institutions Stack
+							</Link>
 						</div>
 					</div>
 
@@ -269,12 +275,6 @@ export function Footer() {
 								className="block text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors"
 							>
 								ZKP Audit
-							</Link>
-							<Link
-								href="https://www.openzeppelin.com/financial-institutions"
-								className="block text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors"
-							>
-								Financial Institutions Stack
 							</Link>
 						</div>
 					</div>
