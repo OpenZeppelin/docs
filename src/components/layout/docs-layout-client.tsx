@@ -51,9 +51,10 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 				? new Set(["/substrate-runtimes", "/monitor", "/relayer"])
 				: new Set(["/substrate-runtimes"]);
 
-		const arbitrumStylusUrls = isSharedPath && lastEcosystem === "contracts-stylus"
-			? new Set(["/contracts-stylus", "/monitor", "/relayer"])
-			: new Set(["/contracts-stylus"]);
+		const arbitrumStylusUrls =
+			isSharedPath && lastEcosystem === "contracts-stylus"
+				? new Set(["/contracts-stylus", "/monitor", "/relayer"])
+				: new Set(["/contracts-stylus"]);
 
 		return [
 			{
