@@ -51,6 +51,10 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 				? new Set(["/substrate-runtimes", "/monitor", "/relayer"])
 				: new Set(["/substrate-runtimes"]);
 
+		const arbitrumStylusUrls = isSharedPath && lastEcosystem === "contracts-stylus"
+			? new Set(["/contracts-stylus", "/monitor", "/relayer"])
+			: new Set(["/contracts-stylus"]);
+
 		return [
 			{
 				title: "Ethereum & EVM",
@@ -73,6 +77,7 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 				title: "Arbitrum Stylus",
 				url: "/contracts-stylus",
 				icon: <ArbitrumIcon className="w-5 h-5" />,
+				urls: arbitrumStylusUrls,
 			},
 			{
 				title: "Starknet",
