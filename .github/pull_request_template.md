@@ -19,9 +19,9 @@ Fixes #
 Relates to #
 
 ### Checklist
-- [ ] Build succeeds locall with `pnpm run build`
+- [ ] Build succeeds locally with `pnpm run build`
 - [ ] Lint is successful when running `pnpm run check`
-- [ ] Docs follow [OpenZeppelin Documentation Standards](../STANDARDS.md)
+- [ ] Docs follow [OpenZeppelin Documentation Standards](https://github.com/OpenZeppelin/docs/blob/main/STANDARDS.md)
 
 ### Additional Notes
 <!-- Any additional context, concerns, or information for reviewers -->

@@ -10,7 +10,7 @@ Please follow this guide if you have something to contribute.
 
 If you find a bug or have a suggestion for improvement:
 
-1. Check if the issue already exists in [GitHub issues]()
+1. Check if the issue already exists in [GitHub issues](https://github.com/OpenZeppelin/docs/issues)
 2. If not, create a new issue with a clear description
 3. Wait for a team member to comment before moving forward with a pull request
 
@@ -19,8 +19,9 @@ If you find a bug or have a suggestion for improvement:
 1. Fork the repository
 2. Create a new branch for your change
 3. Follow the local development guide in the [README](README.md) or with the steps [below](#development-setup)
-4. Use [conventional commits]() when making changes
-5. Submit a pull request
+4. Use [conventional commits](https://www.conventionalcommits.org/) when making changes
+5. Make sure your changes follow the [OpenZeppelin Docs Standards](STANDARDS.md)
+6. Submit a pull request
 
 ### Pull Request Guidelines
 

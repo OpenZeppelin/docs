@@ -2,7 +2,7 @@
 
 ![cover](public/social.png)
 
-Welcome to the OpenZeppelin Docs repo! Before opening an issue or creating a PR please consult our [contribution guide](CONTRIBUTING.md)
+Welcome to the OpenZeppelin Docs repo! Before opening an issue or creating a PR please consult our [contribution guide](CONTRIBUTING.md) as well as the [OpenZeppelin Documentation Standards](STANDARDS.md)
 
 ## Development
 
@@ -28,6 +28,13 @@ pnpm install
 
 ```bash
 pnpm dev
+```
+
+**4. Run `build` and `lint`**
+
+```bash
+pnpm run build
+pnpm run check
 ```
 
 ## Project Structure
