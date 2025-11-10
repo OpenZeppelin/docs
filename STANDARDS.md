@@ -1,4 +1,4 @@
-## Docs Standards
+## OpenZeppelin Documentation Standards
 
 OpenZeppelin has implemented a categorization standard to be used across all ecosystems to help ensure our contributors cover the bases for the ideal documentation:
 
