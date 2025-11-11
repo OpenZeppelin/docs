@@ -33,7 +33,9 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 		}
 
 		const isSharedPath =
-			pathname.startsWith("/monitor") || pathname.startsWith("/relayer");
+			pathname.startsWith("/monitor") ||
+			pathname.startsWith("/relayer") ||
+			pathname.startsWith("/ui-builder");
 		const lastEcosystem =
 			typeof window !== "undefined"
 				? sessionStorage.getItem("lastEcosystem")
@@ -42,7 +44,7 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 		// Include shared paths in Stellar tab only if coming from Stellar context
 		const stellarUrls =
 			isSharedPath && lastEcosystem === "stellar"
-				? new Set(["/stellar-contracts", "/monitor", "/relayer"])
+				? new Set(["/stellar-contracts", "/monitor", "/relayer", "/ui-builder"])
 				: new Set(["/stellar-contracts"]);
 
 		// Include shared paths in Polkadot tab only if coming from Polkadot context

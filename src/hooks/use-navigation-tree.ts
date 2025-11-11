@@ -30,13 +30,14 @@ export function useNavigationTree() {
 			pathname.startsWith("/community-contracts") ||
 			pathname.startsWith("/upgrades-plugins") ||
 			pathname.startsWith("/wizard") ||
-			pathname.startsWith("/ui-builder") ||
 			pathname.startsWith("/upgrades") ||
 			pathname.startsWith("/defender") ||
 			pathname.startsWith("/tools")
 		) {
 			sessionStorage.setItem("lastEcosystem", "ethereum");
 		}
+		// Note: /ui-builder, /monitor, and /relayer paths are intentionally NOT set here
+		// They inherit the lastEcosystem from whichever tab the user was in before navigating
 	}, [pathname]);
 
 	// Determine which navigation tree to use based on the current path
@@ -65,7 +66,11 @@ export function useNavigationTree() {
 	if (typeof window !== "undefined") {
 		const lastEcosystem = sessionStorage.getItem("lastEcosystem");
 
-		if (pathname.startsWith("/monitor") || pathname.startsWith("/relayer")) {
+		if (
+			pathname.startsWith("/monitor") ||
+			pathname.startsWith("/relayer") ||
+			pathname.startsWith("/ui-builder")
+		) {
 			switch (lastEcosystem) {
 				case "stellar":
 					return stellarTree;
