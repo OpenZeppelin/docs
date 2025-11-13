@@ -64,6 +64,7 @@ content/
 ```
 
 Each product directory contains:
+
 - `index.mdx` - Main documentation entry point
 - `changelog.mdx` - Version history and changes
 - Subdirectories for specific features/modules
@@ -107,11 +108,13 @@ Sidebar navigation is handled in `src/navigation/` where multiple navigation JSO
 ### Key Components
 
 #### Layout Components
+
 - `DocsLayoutClient` - Client-side docs layout with sidebar
 - `BaseLayoutProps` - Shared layout configuration
 - `PageClient` - Individual page wrapper
 
 #### UI Components
+
 - `Card` & `SmallCard` - Content cards for homepage
 - `TOC` - Table of contents with scrollspy
 - `Search` - Search interface with custom results
@@ -119,7 +122,9 @@ Sidebar navigation is handled in `src/navigation/` where multiple navigation JSO
 - `VersionBanner` - Version-specific messaging
 
 #### Custom Icons
+
 Product-specific icons located in `src/components/icons/`:
+
 - Ethereum, Arbitrum, StarkNet, Stellar, Polkadot chains
 - Product icons for Contracts, Defender, Monitor, etc.
 - Tool icons for Wizard, Ethernaut, etc.
@@ -127,12 +132,14 @@ Product-specific icons located in `src/components/icons/`:
 ### Content Features
 
 #### MDX Enhancements
+
 - **Math Support**: LaTeX math rendering with KaTeX
 - **Mermaid Diagrams**: Flowcharts and diagrams
 - **Code Highlighting**: Multi-theme syntax highlighting
 - **OpenAPI Integration**: Automatic API documentation generation
 
 #### Interactive Elements
+
 - **OpenZeppelin Wizard**: Embedded contract generation tool
 - **Code Examples**: Copy-to-clipboard functionality
 - **Version Switching**: Multi-version documentation support
@@ -177,8 +184,6 @@ node scripts/generate-api-docs.js \
   --api-output content/contracts/5.x/api \
   --examples-output examples
 ```
-
-This wil lexport the contents to
 
 ### Automated Setup
 
