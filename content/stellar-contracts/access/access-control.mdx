@@ -50,7 +50,7 @@ impl MyContract {
     pub fn __constructor(e: &Env, admin: Address, manager: Address) {
         // Set the contract admin
         access_control::set_admin(e, &admin);
-        
+
         // 1. Set MANAGER_ROLE as the admin role for GUARDIAN_ROLE:
         // accounts with MANAGER_ROLE can manage accounts with GUARDIAN_ROLE
         access_control::set_role_admin_no_auth(e, &admin, &GUARDIAN_ROLE, &MANAGER_ROLE);
@@ -62,11 +62,11 @@ impl MyContract {
     pub fn manage_guardians(e: &Env, manager: Address, guardian1: Address, guardian2: Address) {
         // Manager must be authorized
         manager.require_auth();
-        
+
         // 3. Now the manager can grant GUARDIAN_ROLE to other accounts
         access_control::grant_role_no_auth(e, &manager, &guardian1, &GUARDIAN_ROLE);
         access_control::grant_role_no_auth(e, &manager, &guardian2, &GUARDIAN_ROLE);
-        
+
         // Manager can also revoke GUARDIAN_ROLE
         access_control::revoke_role_no_auth(e, &manager, &guardian1, &GUARDIAN_ROLE);
     }
@@ -114,7 +114,7 @@ Restricts access to accounts with a specific role:
 
 ```rust
 #[only_role(caller, "minter")]
-pub fn mint(e: &Env, caller: Address, to: Address, token_id: u32) {
+pub fn mint(e: &Env, to: Address, token_id: u32, caller: Address) {
     // Only accounts with the "minter" role can call this
     // require_auth() is automatically called on caller
 }
@@ -142,7 +142,7 @@ Checks if an account has a specific role:
 
 ```rust
 #[has_role(caller, "minter")]
-pub fn conditional_mint(e: &Env, caller: Address, to: Address, token_id: u32) {
+pub fn conditional_mint(e: &Env, to: Address, token_id: u32, caller: Address) {
     // Checks if caller has "minter" role, but doesn't call require_auth()
     caller.require_auth(); // Must manually authorize if needed
 }
@@ -192,7 +192,7 @@ impl MyContract {
     // we want `require_auth()` provided by the macro, since there is no
     // `require_auth()` in `Base::mint`.
     #[only_role(caller, "minter")]
-    pub fn mint(e: &Env, caller: Address, to: Address, token_id: u32) {
+    pub fn mint(e: &Env, to: Address, token_id: u32, caller: Address) {
         Base::mint(e, &to, token_id)
 
     }
