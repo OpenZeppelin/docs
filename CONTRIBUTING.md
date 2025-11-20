@@ -54,7 +54,7 @@ pnpm dev
 4. After making changes run the lint command to make formatting rules are applied
 
 ```bash
-pnpm run check:fix
+pnpm run check
 ```
 
 ## Project Structure
@@ -114,7 +114,7 @@ The application follows Next.js 13+ app directory structure:
 
 ### Configuration Files
 
-- `source.config.ts` - Fumadocs MDX configuration with math, mermaid, and code highlighting support
+- `source.config.ts` - [Fumadocs](https://fumadocs.dev) MDX configuration with math, mermaid, and code highlighting support
 - `next.config.mjs` - Next.js configuration
 - `postcss.config.mjs` - PostCSS configuration for styling
 - `tsconfig.json` - TypeScript configuration
@@ -245,7 +245,7 @@ To add or modify navigation:
 - Receives the navigation tree from `useNavigationTree` hook
 
 **DocsLayout** (`src/components/layout/docs.tsx`)
-- Base documentation layout component from Fumadocs
+- Base documentation layout component from [Fumadocs](https://fumadocs.dev)
 - Renders the sidebar, navigation, and page content
 - Configured with navigation tree and tab information
 
@@ -271,11 +271,311 @@ Product-specific icons located in `src/components/icons/`:
 
 Icons are React components that accept className props for styling.
 
+## Documentation Framework
+
+This project is built on [Fumadocs](https://fumadocs.dev), a modern documentation framework that provides:
+
+- **MDX Support**: Write documentation in MDX with React components
+- **Built-in Search**: Full-text search powered by Algolia
+- **OpenAPI Integration**: Automatic API reference generation from OpenAPI specs
+- **Type-safe Content**: TypeScript integration for content and navigation
+- **Theme Support**: Built-in light/dark mode with customizable themes
+
+Fumadocs handles the core infrastructure, allowing us to focus on content and customization. For detailed framework documentation, visit [fumadocs.dev](https://fumadocs.dev).
+
+## Automation Scripts
+
+The repository includes several automation scripts in the `scripts/` directory to help maintain documentation quality and automate repetitive tasks.
+
+### API Documentation Generation
+
+**Script**: `scripts/generate-api-docs.js`
+
+This script automates the generation of Solidity API reference documentation from OpenZeppelin contract repositories using Solidity Docgen.
+
+**How it works:**
+
+1. Clones a specified contracts repository (with branch selection)
+2. Installs dependencies and runs the `npm run prepare-docs` command
+3. Copies generated markdown files from the `docs/modules/api/pages` directory
+4. Copies example files from `docs/modules/api/examples` if available
+5. Places the generated documentation in the specified output directory
+6. Cleans up temporary files
+
+**Usage:**
+
+```bash
+node scripts/generate-api-docs.js \
+  --repo https://github.com/OpenZeppelin/openzeppelin-contracts.git \
+  --branch master \
+  --api-output content/contracts/5.x/api \
+  --examples-output examples
+```
+
+**Options:**
+
+- `--repo, -r` - Contracts repository URL
+- `--branch, -b` - Branch to clone (default: master)
+- `--temp-dir, -t` - Temporary directory for cloning (default: temp-contracts)
+- `--api-output, -a` - API documentation output directory
+- `--examples-output, -e` - Examples output directory
+- `--help, -h` - Show help message
+
+**Requirements:**
+
+The target repository must have:
+- A `docs/config-md.js` file (Solidity Docgen configuration)
+- A `docs/templates-md/` directory (markdown templates)
+- An `npm run prepare-docs` script that generates documentation
+
+See the [README](README.md#solidity-docgen) for instructions on setting up a repository for API generation.
+
+### OpenAPI Documentation
+
+**File**: `src/lib/openapi.ts`
+
+This file configures OpenAPI specification integration using Fumadocs OpenAPI server utilities.
+
+**How it works:**
+
+The `openapi.ts` file creates an OpenAPI instance that:
+1. Fetches OpenAPI spec files from remote URLs (e.g., GitHub raw URLs)
+2. Parses the specifications
+3. Makes them available to Fumadocs for automatic API documentation generation
+
+**Current configuration:**
+
+```typescript
+export const openapi = createOpenAPI({
+  input: [
+    "https://raw.githubusercontent.com/OpenZeppelin/openzeppelin-relayer/refs/heads/main/openapi.json",
+  ],
+});
+```
+
+**Adding new OpenAPI specs:**
+
+To add documentation for a new API, add the URL to the `input` array:
+
+```typescript
+export const openapi = createOpenAPI({
+  input: [
+    "https://raw.githubusercontent.com/OpenZeppelin/openzeppelin-relayer/refs/heads/main/openapi.json",
+    "https://raw.githubusercontent.com/YourOrg/your-api/main/openapi.json",
+  ],
+});
+```
+
+The OpenAPI documentation is automatically rendered in MDX files using Fumadocs transformers configured in `source.config.ts`.
+
+### Changelog Generation
+
+**Script**: `scripts/generate-changelog.js`
+
+This script automatically generates changelog documentation from GitHub releases using the `changelog-from-release` tool.
+
+**How it works:**
+
+1. Uses the `changelog-from-release` CLI tool to fetch GitHub releases
+2. Formats the release notes as markdown
+3. Adds MDX frontmatter with title metadata
+4. Removes the tool's generated tag
+5. Writes the formatted changelog to `changelog.mdx`
+
+**Usage:**
+
+```bash
+node scripts/generate-changelog.js <repo_url> <output_directory>
+```
+
+**Example:**
+
+```bash
+node scripts/generate-changelog.js \
+  OpenZeppelin/openzeppelin-relayer \
+  content/relayer/1.2.x
+```
+
+This generates `content/relayer/1.2.x/changelog.mdx` with all releases from the repository.
+
+**Requirements:**
+
+Install `changelog-from-release`:
+```bash
+# macOS
+brew install changelog-from-release
+
+# Or download from: https://github.com/rhysd/changelog-from-release
+```
+
+**Output format:**
+
+```mdx
+---
+title: Changelog
+---
+
+# [Version] - Date
+
+Release notes content...
+```
+
+### Link Validation
+
+**Script**: `scripts/link-validation.ts`
+
+A comprehensive link validation tool that checks all internal links in documentation files and navigation structures.
+
+**How it works:**
+
+1. **Scans all MDX files** in the `content/` directory
+2. **Extracts URLs** from markdown links and custom components (like `Card` components)
+3. **Validates navigation trees** to ensure all URLs in JSON navigation files exist
+4. **Checks fragments** (hash links) to ensure heading IDs exist on target pages
+5. **Reports broken links** with file locations and line numbers
+
+**Usage:**
+
+```bash
+# Check all links and print to console
+npx tsx scripts/link-validation.ts
+
+# Check specific scope (e.g., only contracts documentation)
+npx tsx scripts/link-validation.ts --scope "/contracts/*"
+
+# Output results to a file
+npx tsx scripts/link-validation.ts --output link-errors.txt
+
+# Disable fragment checking
+npx tsx scripts/link-validation.ts --no-ignore-fragments
+```
+
+**Options:**
+
+- `--scope <pattern>` - Validate only files matching the pattern (supports wildcards)
+- `--output <file>` - Write results to a file instead of console
+- `--no-ignore-fragments` - Include fragment validation (hash links)
+
+**What it validates:**
+
+1. **File links**: All markdown links in `.mdx` files
+2. **Component links**: `href` attributes in custom components like `Card`
+3. **Navigation URLs**: All URLs in navigation JSON files
+4. **Fragment links**: Heading anchors (`#heading-id`) on pages
+5. **Relative paths**: Relative file paths resolved as URLs
+
+**Example output:**
+
+```
+Invalid URLs in content/contracts/5.x/tokens.mdx:
+/contracts/invalid-page: URL not found in site pages at line 45 column 12
+/contracts/5.x/erc20#nonexistent-heading: Fragment '#nonexistent-heading' not found on page at line 78 column 5
+------
+
+Invalid URLs in Navigation Trees:
+Ethereum & EVM: /deprecated/old-page - URL not found in site pages
+------
+
+Summary: 3 errors found in 2 files out of 150 total files
+```
+
+**When to run:**
+
+- Before submitting a pull request
+- After adding or reorganizing documentation
+- After updating navigation structures
+- As part of CI/CD pipeline (recommended)
+
+### Search Content Synchronization
+
+**Script**: `scripts/sync-search-content.ts`  
+**Workflow**: `.github/workflows/sync-search.yml`
+
+This script synchronizes documentation content with Algolia search indexes, enabling full-text search across the documentation.
+
+**How it works:**
+
+1. **Creates a temporary route** (`src/app/static.json/route.ts`) that exports search indexes
+2. **Runs a Next.js build** to generate static search data at `.next/server/app/static.json.body`
+3. **Reads the generated search records** containing page metadata and content
+4. **Syncs to Algolia** using the Fumadocs Algolia integration
+5. **Cleans up temporary files** after completion
+
+**Search index structure:**
+
+The script uses `src/lib/export-search-indexes.ts` to generate search records:
+
+```typescript
+{
+  _id: "/contracts/5.x/erc20",           // Page URL (unique ID)
+  url: "/contracts/5.x/erc20",           // Page URL
+  title: "ERC-20 Tokens",                 // Page title
+  description: "Guide to ERC-20...",      // Page description
+  structured: { ... },                    // Structured content for search
+  extra_data: { ... }                     // Full page content
+}
+```
+
+**Version filtering:**
+
+The script automatically excludes old documentation versions from search to keep results focused on current content:
+
+```typescript
+const excludedVersions = ["/3.x/", "/4.x/", "/1.0.0/", "/0.1.0/", ...];
+```
+
+**Manual usage:**
+
+```bash
+# Sync search content to Algolia
+bun run scripts/sync-search-content.ts
+```
+
+**Required environment variables:**
+
+```bash
+NEXT_PUBLIC_ALGOLIA_ID=your-algolia-app-id
+ALGOLIA_PRIVATE_KEY=your-algolia-admin-api-key
+```
+
+**Automated workflow:**
+
+The `.github/workflows/sync-search.yml` workflow automatically runs on every push to the `main` branch:
+
+```yaml
+on:
+  push:
+    branches: [main]
+```
+
+**How Algolia search works:**
+
+1. **Indexing**: The sync script sends document records to Algolia's `document` index
+2. **Search UI**: Fumadocs provides a built-in search component that queries Algolia
+3. **Real-time updates**: Search results are updated automatically when content changes
+4. **Ranked results**: Algolia handles relevance ranking, typo tolerance, and result highlighting
+
+**Configuration:**
+
+Search behavior is configured through Fumadocs in `src/lib/source.ts` and the search component in the layout. Algolia handles:
+- Instant search with type-ahead
+- Fuzzy matching for typos
+- Result highlighting
+- Search analytics
+
+**Troubleshooting:**
+
+If search results are outdated:
+1. Check if the GitHub workflow ran successfully
+2. Verify environment variables are set in GitHub secrets
+3. Manually run the sync script locally
+4. Check Algolia dashboard for index status
+
 ## Content Features
 
 ### MDX Enhancements
 
-The site uses Fumadocs with the following MDX enhancements:
+The site uses [Fumadocs](https://fumadocs.dev) with the following MDX enhancements:
 
 - **Math Support**: LaTeX math rendering with KaTeX
 - **Mermaid Diagrams**: Flowcharts and diagrams using Mermaid syntax
@@ -286,11 +586,13 @@ The site uses Fumadocs with the following MDX enhancements:
 
 **OpenZeppelin Wizard** - Embedded contract generation tool for creating Solidity smart contracts
 
-**Code Examples** - Copy-to-clipboard functionality for code blocks
+**Code Examples** - Copy-to-clipboard functionality for code blocks powered by Fumadocs
 
 **Version Switching** - Multi-version documentation support with version-specific content
 
 **Responsive Design** - Mobile-optimized navigation and content rendering
+
+For more information on Fumadocs features, see the [official documentation](https://fumadocs.dev/docs).
 
 ## Adding New Content
 
