@@ -37,113 +37,29 @@ pnpm run build
 pnpm run check
 ```
 
-## Project Structure
+## Project Overview
 
-### Content Organization
+This documentation site is built with:
 
-The documentation content is organized in the `content/` directory with the following structure:
+- **Next.js** - React framework for the application
+- **Fumadocs** - Documentation framework with MDX support
+- **TypeScript** - Type-safe development
+
+### Directory Structure
 
 ```
-content/
-├── community-contracts/     # Community-contributed contracts
-├── confidential-contracts/  # Confidential/privacy-focused contracts
-├── contracts/              # Core OpenZeppelin Contracts documentation
-├── contracts-cairo/        # Cairo contracts for StarkNet
-├── contracts-compact/      # Compact contract implementations
-├── contracts-stylus/       # Stylus contracts for Arbitrum
-├── ui-builder/   # UI Builder documentation
-├── defender/               # Defender platform documentation
-├── monitor/                # Monitoring tools documentation
-├── relayer/                # Relayer service documentation
-├── stellar-contracts/      # Stellar blockchain contracts
-├── substrate-runtimes/     # Substrate runtime documentation
-├── uniswap-hooks/          # Uniswap v4 hooks
-├── upgrades-plugins/       # Upgrade plugins documentation
-├── upgrades.mdx           # General upgrades guide
-└── wizard.mdx             # Contract wizard documentation
+docs/
+├── content/           # MDX documentation files organized by product
+├── src/
+│   ├── app/          # Next.js app directory (routes and layouts)
+│   ├── components/   # React components
+│   ├── navigation/   # Navigation configuration files
+│   └── lib/          # Utility libraries
+├── public/           # Static assets
+└── scripts/          # Build and utility scripts
 ```
 
-Each product directory contains:
-
-- `index.mdx` - Main documentation entry point
-- `changelog.mdx` - Version history and changes
-- Subdirectories for specific features/modules
-- API reference files
-
-### Application Structure
-
-| Path                                    | Description                                                    |
-| --------------------------------------- | -------------------------------------------------------------- |
-| `src/app/(docs)/`                      | Documentation pages route group                               |
-| `src/app/(docs)/layout.tsx`           | Docs layout wrapper                                           |
-| `src/app/(docs)/[...slug]/page.tsx`   | Dynamic documentation pages                                    |
-| `src/app/page.tsx`                     | Homepage                                                       |
-| `src/app/layout.tsx`                   | Root application layout                                        |
-| `src/app/layout.config.tsx`           | Shared layout configuration and navigation                     |
-| `src/components/`                      | Reusable React components                                      |
-| `src/components/layout/`               | Layout-specific components                                     |
-| `src/components/icons/`                | Custom SVG icons for products                                  |
-| `src/components/ui/`                   | UI component library                                           |
-| `src/lib/source.ts`                    | Content source adapter with Fumadocs loader                   |
-
-### Configuration Files
-
-- `source.config.ts` - Fumadocs MDX configuration with math, mermaid, and code highlighting
-- `next.config.mjs` - Next.js configuration
-- `postcss.config.mjs` - PostCSS configuration for styling
-
-## Navigation & Components
-
-### Navigation Structure
-
-The top navigation is configured in `src/app/layout.config.tsx` and includes:
-
-- **Main Navigation**: Home, Forum, Website links
-- **Product Categories**: Auto-generated from content structure
-- **Search**: Full-text search across all documentation
-- **Theme Toggle**: Light/dark mode switching
-
-Sidebar navigation is handled in `src/navigation/` where multiple navigation JSON trees are exported and used inside `src/components/layout/docs-layout-client.tsx`
-
-### Key Components
-
-#### Layout Components
-
-- `DocsLayoutClient` - Client-side docs layout with sidebar
-- `BaseLayoutProps` - Shared layout configuration
-- `PageClient` - Individual page wrapper
-
-#### UI Components
-
-- `Card` & `SmallCard` - Content cards for homepage
-- `TOC` - Table of contents with scrollspy
-- `Search` - Search interface with custom results
-- `ThemeToggle` - Theme switching
-- `VersionBanner` - Version-specific messaging
-
-#### Custom Icons
-
-Product-specific icons located in `src/components/icons/`:
-
-- Ethereum, Arbitrum, StarkNet, Stellar, Polkadot chains
-- Product icons for Contracts, Defender, Monitor, etc.
-- Tool icons for Wizard, Ethernaut, etc.
-
-### Content Features
-
-#### MDX Enhancements
-
-- **Math Support**: LaTeX math rendering with KaTeX
-- **Mermaid Diagrams**: Flowcharts and diagrams
-- **Code Highlighting**: Multi-theme syntax highlighting
-- **OpenAPI Integration**: Automatic API documentation generation
-
-#### Interactive Elements
-
-- **OpenZeppelin Wizard**: Embedded contract generation tool
-- **Code Examples**: Copy-to-clipboard functionality
-- **Version Switching**: Multi-version documentation support
-- **Responsive Design**: Mobile-optimized navigation and content
+For detailed information about the codebase structure, navigation system, and component architecture, see [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Solidity Docgen
 
