@@ -1,0 +1,470 @@
+---
+title: "Governance"
+description: "Smart contract governance utilities and implementations"
+---
+
+This directory includes extensions and utilities for on-chain governance.
+
+* TimelockControllerEnumerable: Extension of OpenZeppelin’s TimelockController with enumerable operations support.
+
+[`TimelockControllerEnumerable`](#TimelockControllerEnumerable)
+
+<a id="TimelockControllerEnumerable"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `TimelockControllerEnumerable`
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-community-contracts/blob/master/contracts/governance/TimelockControllerEnumerable.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/contracts/governance/TimelockControllerEnumerable.sol";
+```
+
+Extends the TimelockController to allow for enumerable operations
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [schedule(target, value, data, predecessor, salt, delay)](#TimelockControllerEnumerable-schedule-address-uint256-bytes-bytes32-bytes32-uint256-)
+- [scheduleBatch(targets, values, payloads, predecessor, salt, delay)](#TimelockControllerEnumerable-scheduleBatch-address---uint256---bytes---bytes32-bytes32-uint256-)
+- [cancel(id)](#TimelockControllerEnumerable-cancel-bytes32-)
+- [operations()](#TimelockControllerEnumerable-operations--)
+- [operations(start, end)](#TimelockControllerEnumerable-operations-uint256-uint256-)
+- [operationsCount()](#TimelockControllerEnumerable-operationsCount--)
+- [operation(index)](#TimelockControllerEnumerable-operation-uint256-)
+- [operation(id)](#TimelockControllerEnumerable-operation-bytes32-)
+- [operationsBatch()](#TimelockControllerEnumerable-operationsBatch--)
+- [operationsBatch(start, end)](#TimelockControllerEnumerable-operationsBatch-uint256-uint256-)
+- [operationsBatchCount()](#TimelockControllerEnumerable-operationsBatchCount--)
+- [operationBatch(index)](#TimelockControllerEnumerable-operationBatch-uint256-)
+- [operationBatch(id)](#TimelockControllerEnumerable-operationBatch-bytes32-)
+#### TimelockController [!toc]
+- [receive()](#TimelockController-receive--)
+- [supportsInterface(interfaceId)](#TimelockController-supportsInterface-bytes4-)
+- [isOperation(id)](#TimelockController-isOperation-bytes32-)
+- [isOperationPending(id)](#TimelockController-isOperationPending-bytes32-)
+- [isOperationReady(id)](#TimelockController-isOperationReady-bytes32-)
+- [isOperationDone(id)](#TimelockController-isOperationDone-bytes32-)
+- [getTimestamp(id)](#TimelockController-getTimestamp-bytes32-)
+- [getOperationState(id)](#TimelockController-getOperationState-bytes32-)
+- [getMinDelay()](#TimelockController-getMinDelay--)
+- [hashOperation(target, value, data, predecessor, salt)](#TimelockController-hashOperation-address-uint256-bytes-bytes32-bytes32-)
+- [hashOperationBatch(targets, values, payloads, predecessor, salt)](#TimelockController-hashOperationBatch-address---uint256---bytes---bytes32-bytes32-)
+- [execute(target, value, payload, predecessor, salt)](#TimelockController-execute-address-uint256-bytes-bytes32-bytes32-)
+- [executeBatch(targets, values, payloads, predecessor, salt)](#TimelockController-executeBatch-address---uint256---bytes---bytes32-bytes32-)
+- [_execute(target, value, data)](#TimelockController-_execute-address-uint256-bytes-)
+- [updateDelay(newDelay)](#TimelockController-updateDelay-uint256-)
+- [_encodeStateBitmap(operationState)](#TimelockController-_encodeStateBitmap-enum-TimelockController-OperationState-)
+- [PROPOSER_ROLE()](#TimelockController-PROPOSER_ROLE-bytes32)
+- [EXECUTOR_ROLE()](#TimelockController-EXECUTOR_ROLE-bytes32)
+- [CANCELLER_ROLE()](#TimelockController-CANCELLER_ROLE-bytes32)
+#### ERC1155Holder [!toc]
+- [onERC1155Received(, , , , )](#ERC1155Holder-onERC1155Received-address-address-uint256-uint256-bytes-)
+- [onERC1155BatchReceived(, , , , )](#ERC1155Holder-onERC1155BatchReceived-address-address-uint256---uint256---bytes-)
+#### IERC1155Receiver [!toc]
+#### ERC721Holder [!toc]
+- [onERC721Received(, , , )](#ERC721Holder-onERC721Received-address-address-uint256-bytes-)
+#### IERC721Receiver [!toc]
+#### AccessControl [!toc]
+- [hasRole(role, account)](#AccessControl-hasRole-bytes32-address-)
+- [_checkRole(role)](#AccessControl-_checkRole-bytes32-)
+- [_checkRole(role, account)](#AccessControl-_checkRole-bytes32-address-)
+- [getRoleAdmin(role)](#AccessControl-getRoleAdmin-bytes32-)
+- [grantRole(role, account)](#AccessControl-grantRole-bytes32-address-)
+- [revokeRole(role, account)](#AccessControl-revokeRole-bytes32-address-)
+- [renounceRole(role, callerConfirmation)](#AccessControl-renounceRole-bytes32-address-)
+- [_setRoleAdmin(role, adminRole)](#AccessControl-_setRoleAdmin-bytes32-bytes32-)
+- [_grantRole(role, account)](#AccessControl-_grantRole-bytes32-address-)
+- [_revokeRole(role, account)](#AccessControl-_revokeRole-bytes32-address-)
+- [DEFAULT_ADMIN_ROLE()](#AccessControl-DEFAULT_ADMIN_ROLE-bytes32)
+#### ERC165 [!toc]
+#### IERC165 [!toc]
+#### IAccessControl [!toc]
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+#### TimelockController [!toc]
+- [CallScheduled(id, index, target, value, data, predecessor, delay)](#TimelockController-CallScheduled-bytes32-uint256-address-uint256-bytes-bytes32-uint256-)
+- [CallExecuted(id, index, target, value, data)](#TimelockController-CallExecuted-bytes32-uint256-address-uint256-bytes-)
+- [CallSalt(id, salt)](#TimelockController-CallSalt-bytes32-bytes32-)
+- [Cancelled(id)](#TimelockController-Cancelled-bytes32-)
+- [MinDelayChange(oldDuration, newDuration)](#TimelockController-MinDelayChange-uint256-uint256-)
+#### ERC1155Holder [!toc]
+#### IERC1155Receiver [!toc]
+#### ERC721Holder [!toc]
+#### IERC721Receiver [!toc]
+#### AccessControl [!toc]
+#### ERC165 [!toc]
+#### IERC165 [!toc]
+#### IAccessControl [!toc]
+- [RoleAdminChanged(role, previousAdminRole, newAdminRole)](#IAccessControl-RoleAdminChanged-bytes32-bytes32-bytes32-)
+- [RoleGranted(role, account, sender)](#IAccessControl-RoleGranted-bytes32-address-address-)
+- [RoleRevoked(role, account, sender)](#IAccessControl-RoleRevoked-bytes32-address-address-)
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [OperationIndexNotFound(index)](#TimelockControllerEnumerable-OperationIndexNotFound-uint256-)
+- [OperationIdNotFound(id)](#TimelockControllerEnumerable-OperationIdNotFound-bytes32-)
+- [OperationBatchIndexNotFound(index)](#TimelockControllerEnumerable-OperationBatchIndexNotFound-uint256-)
+- [OperationBatchIdNotFound(id)](#TimelockControllerEnumerable-OperationBatchIdNotFound-bytes32-)
+- [InvalidIndexRange(start, end)](#TimelockControllerEnumerable-InvalidIndexRange-uint256-uint256-)
+#### TimelockController [!toc]
+- [TimelockInvalidOperationLength(targets, payloads, values)](#TimelockController-TimelockInvalidOperationLength-uint256-uint256-uint256-)
+- [TimelockInsufficientDelay(delay, minDelay)](#TimelockController-TimelockInsufficientDelay-uint256-uint256-)
+- [TimelockUnexpectedOperationState(operationId, expectedStates)](#TimelockController-TimelockUnexpectedOperationState-bytes32-bytes32-)
+- [TimelockUnexecutedPredecessor(predecessorId)](#TimelockController-TimelockUnexecutedPredecessor-bytes32-)
+- [TimelockUnauthorizedCaller(caller)](#TimelockController-TimelockUnauthorizedCaller-address-)
+#### ERC1155Holder [!toc]
+#### IERC1155Receiver [!toc]
+#### ERC721Holder [!toc]
+#### IERC721Receiver [!toc]
+#### AccessControl [!toc]
+#### ERC165 [!toc]
+#### IERC165 [!toc]
+#### IAccessControl [!toc]
+- [AccessControlUnauthorizedAccount(account, neededRole)](#IAccessControl-AccessControlUnauthorizedAccount-address-bytes32-)
+- [AccessControlBadConfirmation()](#IAccessControl-AccessControlBadConfirmation--)
+</div>
+</div>
+
+<a id="TimelockControllerEnumerable-schedule-address-uint256-bytes-bytes32-bytes32-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">schedule(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="TimelockControllerEnumerable-schedule-address-uint256-bytes-bytes32-bytes32-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Schedule an operation containing a single transaction.
+
+Emits `CallSalt` if salt is nonzero, and `CallScheduled`.
+
+Requirements:
+
+- the caller must have the 'proposer' role.
+
+</div>
+</div>
+
+<a id="TimelockControllerEnumerable-scheduleBatch-address---uint256---bytes---bytes32-bytes32-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">scheduleBatch(address[] targets, uint256[] values, bytes[] payloads, bytes32 predecessor, bytes32 salt, uint256 delay)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="TimelockControllerEnumerable-scheduleBatch-address---uint256---bytes---bytes32-bytes32-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Schedule an operation containing a batch of transactions.
+
+Emits `CallSalt` if salt is nonzero, and one `CallScheduled` event per transaction in the batch.
+
+Requirements:
+
+- the caller must have the 'proposer' role.
+
+</div>
+</div>
+
+<a id="TimelockControllerEnumerable-cancel-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">cancel(bytes32 id)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="TimelockControllerEnumerable-cancel-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Cancel an operation.
+
+Requirements:
+
+- the caller must have the 'canceller' role.
+
+</div>
+</div>
+
+<a id="TimelockControllerEnumerable-operations--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">operations() → struct TimelockControllerEnumerable.Operation[] operations_</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="TimelockControllerEnumerable-operations--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Return all scheduled operations
+<Callout type="warn">
+This is designed for view accessors queried without gas fees. Using it in state-changing
+functions may become uncallable if the list grows too large.
+</Callout>
+
+</div>
+</div>
+
+<a id="TimelockControllerEnumerable-operations-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">operations(uint256 start, uint256 end) → struct TimelockControllerEnumerable.Operation[] operations_</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="TimelockControllerEnumerable-operations-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Return the operations in the given index range
+
+</div>
+</div>
+
+<a id="TimelockControllerEnumerable-operationsCount--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">operationsCount() → uint256 operationsCount_</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="TimelockControllerEnumerable-operationsCount--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Return the number of operations from the set
+
+</div>
+</div>
+
+<a id="TimelockControllerEnumerable-operation-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">operation(uint256 index) → struct TimelockControllerEnumerable.Operation operation_</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="TimelockControllerEnumerable-operation-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Return the operation at the given index
+
+</div>
+</div>
+
+<a id="TimelockControllerEnumerable-operation-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">operation(bytes32 id) → struct TimelockControllerEnumerable.Operation operation_</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="TimelockControllerEnumerable-operation-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Return the operation with the given id
+
+</div>
+</div>
+
+<a id="TimelockControllerEnumerable-operationsBatch--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">operationsBatch() → struct TimelockControllerEnumerable.OperationBatch[] operationsBatch_</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="TimelockControllerEnumerable-operationsBatch--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Return all scheduled operation batches
+<Callout type="warn"
+This is designed for view accessors queried without gas fees. Using it in state-changing
+functions may become uncallable if the list grows too large.
+</Callout>
+
+</div>
+</div>
+
+<a id="TimelockControllerEnumerable-operationsBatch-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">operationsBatch(uint256 start, uint256 end) → struct TimelockControllerEnumerable.OperationBatch[] operationsBatch_</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="TimelockControllerEnumerable-operationsBatch-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Return the operationsBatch in the given index range
+
+</div>
+</div>
+
+<a id="TimelockControllerEnumerable-operationsBatchCount--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">operationsBatchCount() → uint256 operationsBatchCount_</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="TimelockControllerEnumerable-operationsBatchCount--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Return the number of operationsBatch from the set
+
+</div>
+</div>
+
+<a id="TimelockControllerEnumerable-operationBatch-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">operationBatch(uint256 index) → struct TimelockControllerEnumerable.OperationBatch operationBatch_</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="TimelockControllerEnumerable-operationBatch-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Return the operationsBatch at the given index
+
+</div>
+</div>
+
+<a id="TimelockControllerEnumerable-operationBatch-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">operationBatch(bytes32 id) → struct TimelockControllerEnumerable.OperationBatch operationBatch_</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="TimelockControllerEnumerable-operationBatch-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Return the operationsBatch with the given id
+
+</div>
+</div>
+
+<a id="TimelockControllerEnumerable-OperationIndexNotFound-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">OperationIndexNotFound(uint256 index)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="TimelockControllerEnumerable-OperationIndexNotFound-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The error when the operation index is not found
+
+</div>
+</div>
+
+<a id="TimelockControllerEnumerable-OperationIdNotFound-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">OperationIdNotFound(bytes32 id)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="TimelockControllerEnumerable-OperationIdNotFound-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The error when the operation id is not found
+
+</div>
+</div>
+
+<a id="TimelockControllerEnumerable-OperationBatchIndexNotFound-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">OperationBatchIndexNotFound(uint256 index)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="TimelockControllerEnumerable-OperationBatchIndexNotFound-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The error when the operation batch index is not found
+
+</div>
+</div>
+
+<a id="TimelockControllerEnumerable-OperationBatchIdNotFound-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">OperationBatchIdNotFound(bytes32 id)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="TimelockControllerEnumerable-OperationBatchIdNotFound-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The error when the operation batch id is not found
+
+</div>
+</div>
+
+<a id="TimelockControllerEnumerable-InvalidIndexRange-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">InvalidIndexRange(uint256 start, uint256 end)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="TimelockControllerEnumerable-InvalidIndexRange-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The error when the index range is invalid
+
+</div>
+</div>
+
