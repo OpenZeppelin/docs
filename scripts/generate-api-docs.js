@@ -102,7 +102,7 @@ async function generateApiDocs(options) {
 		// Clone the contracts repository
 		console.log("📦 Cloning contracts repository...");
 		execSync(
-			`git clone --depth 1 --branch "${contractsBranch}" --recurse-submodules "${contractsRepo}" "${tempDir}"`,
+			`git clone --depth 1 --revision "${contractsBranch}" --recurse-submodules "${contractsRepo}" "${tempDir}"`,
 			{
 				stdio: "inherit",
 			},
