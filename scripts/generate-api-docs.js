@@ -91,6 +91,16 @@ async function generateApiDocs(options) {
 	console.log(`📂 Examples Output: ${examplesOutputDir}`);
 
 	try {
+		// Back up index.mdx if it exists
+		const indexPath = path.join(apiOutputDir, "index.mdx");
+		let indexBackup = null;
+		try {
+			indexBackup = await fs.readFile(indexPath, "utf8");
+			console.log("💾 Backing up existing index.mdx...");
+		} catch (error) {
+			// index.mdx doesn't exist, no need to back up
+		}
+
 		// Clean up previous runs
 		console.log("🧹 Cleaning up previous runs...");
 		await fs.rm(tempDir, { recursive: true, force: true });
@@ -183,6 +193,12 @@ async function generateApiDocs(options) {
 		} finally {
 			// Go back to original directory
 			process.chdir(originalDir);
+		}
+
+		// Restore index.mdx if it was backed up
+		if (indexBackup) {
+			console.log("♻️  Restoring index.mdx...");
+			await fs.writeFile(indexPath, indexBackup, "utf8");
 		}
 
 		// Clean up temporary directory
