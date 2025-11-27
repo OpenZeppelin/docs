@@ -534,8 +534,8 @@ bun run scripts/sync-search-content.ts
 **Required environment variables:**
 
 ```bash
-NEXT_PUBLIC_ALGOLIA_ID=your-algolia-app-id
-ALGOLIA_PRIVATE_KEY=your-algolia-admin-api-key
+NEXT_PUBLIC_ALGOLIA_ID=your-algolia-app-id # Set it both GitHub settings and Netlify Settings
+ALGOLIA_PRIVATE_KEY=your-algolia-admin-api-key # Only set locally and GitHub settings
 ```
 
 **Automated workflow:**
