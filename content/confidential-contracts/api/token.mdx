@@ -3,38 +3,48 @@ title: "Token"
 description: "Smart contract token utilities and implementations"
 ---
 
-This set of interfaces, contracts, and utilities are all related to the evolving Confidential Token Standard. The standard utilizes the Zama fhEVM co-processor for manipulating FHE values. All amounts are stored on-chain as ciphertext handles (or pointers) to values stored on the co-processor.
+This set of interfaces, contracts, and utilities are all related to `ERC7984`, an evolving confidential token standard. The standard utilizes the Zama fhEVM co-processor for manipulating FHE values. All amounts are stored on-chain as ciphertext handles (or pointers) to values stored on the co-processor.
 
-* [`ConfidentialFungibleToken`](#ConfidentialFungibleToken): Implementation of [`IConfidentialFungibleToken`](./interfaces#IConfidentialFungibleToken).
-* [`ConfidentialFungibleTokenERC20Wrapper`](#ConfidentialFungibleTokenERC20Wrapper): Extension of [`ConfidentialFungibleToken`](#ConfidentialFungibleToken) which wraps an `ERC20` into a confidential token. The wrapper allows for free conversion in both directions at a fixed rate.
-* [`ConfidentialFungibleTokenUtils`](#ConfidentialFungibleTokenUtils): A library that provides the on-transfer callback check used by [`ConfidentialFungibleToken`](#ConfidentialFungibleToken).
+* [`ERC7984`](#ERC7984): Implementation of [`IERC7984`](/confidential-contracts/api/interfaces#IERC7984).
+* [`ERC7984ERC20Wrapper`](#ERC7984ERC20Wrapper): Extension of [`ERC7984`](#ERC7984) which wraps an `ERC20` into a confidential token. The wrapper allows for free conversion in both directions at a fixed rate.
+* [`ERC7984Freezable`](#ERC7984Freezable): An extension of [`ERC7984`](#ERC7984), which allows accounts granted the "freezer" role to freeze and unfreeze tokens.
+* [`ERC7984ObserverAccess`](#ERC7984ObserverAccess): An extension of [`ERC7984`](#ERC7984), which allows each account to add an observer who is given access to their transfer and balance amounts.
+* [`ERC7984Restricted`](#ERC7984Restricted): An extension of [`ERC7984`](#ERC7984) that implements user account transfer restrictions.
+* [`ERC7984Omnibus`](#ERC7984Omnibus): An extension of [`ERC7984`](#ERC7984) that emits additional events for omnibus transfers, which contain encrypted addresses for the sub-account sender and recipient.
+* [`ERC7984Rwa`](#ERC7984Rwa): Extension of [`ERC7984`](#ERC7984) that supports confidential Real World Assets (RWAs) by providing compliance checks, transfer controls and enforcement actions.
+* [`ERC7984Utils`](#ERC7984Utils): A library that provides the on-transfer callback check used by [`ERC7984`](#ERC7984).
 
 ## Core
-[`ConfidentialFungibleToken`](#ConfidentialFungibleToken)
+[`ERC7984`](#ERC7984)
 
 ## Extensions
-[`ConfidentialFungibleTokenERC20Wrapper`](#ConfidentialFungibleTokenERC20Wrapper)
+[`ERC7984ERC20Wrapper`](#ERC7984ERC20Wrapper)
+[`ERC7984Freezable`](#ERC7984Freezable)
+[`ERC7984ObserverAccess`](#ERC7984ObserverAccess)
+[`ERC7984Restricted`](#ERC7984Restricted)
+[`ERC7984Omnibus`](#ERC7984Omnibus)
+[`ERC7984Rwa`](#ERC7984Rwa)
 
 ## Utilities
-[`ConfidentialFungibleTokenUtils`](#ConfidentialFungibleTokenUtils)
+[`ERC7984Utils`](#ERC7984Utils)
 
-<a id="ConfidentialFungibleToken"></a>
+<a id="ERC7984"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ConfidentialFungibleToken`
+## `ERC7984`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.2.0/contracts/token/ConfidentialFungibleToken.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/release-v0.3.0/contracts/token/ERC7984/ERC7984.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
 </div>
 
 ```solidity
-import "@openzeppelin/confidential-contracts/token/ConfidentialFungibleToken.sol";
+import "@openzeppelin/confidential-contracts/token/ERC7984/ERC7984.sol";
 ```
 
-Reference implementation for [`IConfidentialFungibleToken`](./interfaces#IConfidentialFungibleToken).
+Reference implementation for [`IERC7984`](/confidential-contracts/api/interfaces#IERC7984).
 
 This contract implements a fungible token where balances and transfers are encrypted using the Zama fhEVM,
 providing confidentiality to users. Token amounts are stored as encrypted, unsigned integers (`euint64`)
@@ -51,67 +61,75 @@ Key features:
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Functions</h3>
 <div className="font-mono">
-- [constructor(name_, symbol_, tokenURI_)](#ConfidentialFungibleToken-constructor-string-string-string-)
-- [name()](#ConfidentialFungibleToken-name--)
-- [symbol()](#ConfidentialFungibleToken-symbol--)
-- [decimals()](#ConfidentialFungibleToken-decimals--)
-- [tokenURI()](#ConfidentialFungibleToken-tokenURI--)
-- [confidentialTotalSupply()](#ConfidentialFungibleToken-confidentialTotalSupply--)
-- [confidentialBalanceOf(account)](#ConfidentialFungibleToken-confidentialBalanceOf-address-)
-- [isOperator(holder, spender)](#ConfidentialFungibleToken-isOperator-address-address-)
-- [setOperator(operator, until)](#ConfidentialFungibleToken-setOperator-address-uint48-)
-- [confidentialTransfer(to, encryptedAmount, inputProof)](#ConfidentialFungibleToken-confidentialTransfer-address-externalEuint64-bytes-)
-- [confidentialTransfer(to, amount)](#ConfidentialFungibleToken-confidentialTransfer-address-euint64-)
-- [confidentialTransferFrom(from, to, encryptedAmount, inputProof)](#ConfidentialFungibleToken-confidentialTransferFrom-address-address-externalEuint64-bytes-)
-- [confidentialTransferFrom(from, to, amount)](#ConfidentialFungibleToken-confidentialTransferFrom-address-address-euint64-)
-- [confidentialTransferAndCall(to, encryptedAmount, inputProof, data)](#ConfidentialFungibleToken-confidentialTransferAndCall-address-externalEuint64-bytes-bytes-)
-- [confidentialTransferAndCall(to, amount, data)](#ConfidentialFungibleToken-confidentialTransferAndCall-address-euint64-bytes-)
-- [confidentialTransferFromAndCall(from, to, encryptedAmount, inputProof, data)](#ConfidentialFungibleToken-confidentialTransferFromAndCall-address-address-externalEuint64-bytes-bytes-)
-- [confidentialTransferFromAndCall(from, to, amount, data)](#ConfidentialFungibleToken-confidentialTransferFromAndCall-address-address-euint64-bytes-)
-- [discloseEncryptedAmount(encryptedAmount)](#ConfidentialFungibleToken-discloseEncryptedAmount-euint64-)
-- [finalizeDiscloseEncryptedAmount(requestId, amount, signatures)](#ConfidentialFungibleToken-finalizeDiscloseEncryptedAmount-uint256-uint64-bytes---)
-- [_setOperator(holder, operator, until)](#ConfidentialFungibleToken-_setOperator-address-address-uint48-)
-- [_mint(to, amount)](#ConfidentialFungibleToken-_mint-address-euint64-)
-- [_burn(from, amount)](#ConfidentialFungibleToken-_burn-address-euint64-)
-- [_transfer(from, to, amount)](#ConfidentialFungibleToken-_transfer-address-address-euint64-)
-- [_transferAndCall(from, to, amount, data)](#ConfidentialFungibleToken-_transferAndCall-address-address-euint64-bytes-)
-- [_update(from, to, amount)](#ConfidentialFungibleToken-_update-address-address-euint64-)
-#### IConfidentialFungibleToken [!toc]
+- [constructor(name_, symbol_, contractURI_)](#ERC7984-constructor-string-string-string-)
+- [supportsInterface(interfaceId)](#ERC7984-supportsInterface-bytes4-)
+- [name()](#ERC7984-name--)
+- [symbol()](#ERC7984-symbol--)
+- [decimals()](#ERC7984-decimals--)
+- [contractURI()](#ERC7984-contractURI--)
+- [confidentialTotalSupply()](#ERC7984-confidentialTotalSupply--)
+- [confidentialBalanceOf(account)](#ERC7984-confidentialBalanceOf-address-)
+- [isOperator(holder, spender)](#ERC7984-isOperator-address-address-)
+- [setOperator(operator, until)](#ERC7984-setOperator-address-uint48-)
+- [confidentialTransfer(to, encryptedAmount, inputProof)](#ERC7984-confidentialTransfer-address-externalEuint64-bytes-)
+- [confidentialTransfer(to, amount)](#ERC7984-confidentialTransfer-address-euint64-)
+- [confidentialTransferFrom(from, to, encryptedAmount, inputProof)](#ERC7984-confidentialTransferFrom-address-address-externalEuint64-bytes-)
+- [confidentialTransferFrom(from, to, amount)](#ERC7984-confidentialTransferFrom-address-address-euint64-)
+- [confidentialTransferAndCall(to, encryptedAmount, inputProof, data)](#ERC7984-confidentialTransferAndCall-address-externalEuint64-bytes-bytes-)
+- [confidentialTransferAndCall(to, amount, data)](#ERC7984-confidentialTransferAndCall-address-euint64-bytes-)
+- [confidentialTransferFromAndCall(from, to, encryptedAmount, inputProof, data)](#ERC7984-confidentialTransferFromAndCall-address-address-externalEuint64-bytes-bytes-)
+- [confidentialTransferFromAndCall(from, to, amount, data)](#ERC7984-confidentialTransferFromAndCall-address-address-euint64-bytes-)
+- [requestDiscloseEncryptedAmount(encryptedAmount)](#ERC7984-requestDiscloseEncryptedAmount-euint64-)
+- [discloseEncryptedAmount(encryptedAmount, cleartextAmount, decryptionProof)](#ERC7984-discloseEncryptedAmount-euint64-uint64-bytes-)
+- [_setOperator(holder, operator, until)](#ERC7984-_setOperator-address-address-uint48-)
+- [_mint(to, amount)](#ERC7984-_mint-address-euint64-)
+- [_burn(from, amount)](#ERC7984-_burn-address-euint64-)
+- [_transfer(from, to, amount)](#ERC7984-_transfer-address-address-euint64-)
+- [_transferAndCall(from, to, amount, data)](#ERC7984-_transferAndCall-address-address-euint64-bytes-)
+- [_update(from, to, amount)](#ERC7984-_update-address-address-euint64-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+#### IERC165 [!toc]
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### IConfidentialFungibleToken [!toc]
-- [OperatorSet(holder, operator, until)](#IConfidentialFungibleToken-OperatorSet-address-address-uint48-)
-- [ConfidentialTransfer(from, to, amount)](#IConfidentialFungibleToken-ConfidentialTransfer-address-address-euint64-)
-- [AmountDisclosed(encryptedAmount, amount)](#IConfidentialFungibleToken-AmountDisclosed-euint64-uint64-)
+- [AmountDiscloseRequested(encryptedAmount, requester)](#ERC7984-AmountDiscloseRequested-euint64-address-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+- [OperatorSet(holder, operator, until)](#IERC7984-OperatorSet-address-address-uint48-)
+- [ConfidentialTransfer(from, to, amount)](#IERC7984-ConfidentialTransfer-address-address-euint64-)
+- [AmountDisclosed(encryptedAmount, amount)](#IERC7984-AmountDisclosed-euint64-uint64-)
+#### IERC165 [!toc]
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-- [ConfidentialFungibleTokenInvalidReceiver(receiver)](#ConfidentialFungibleToken-ConfidentialFungibleTokenInvalidReceiver-address-)
-- [ConfidentialFungibleTokenInvalidSender(sender)](#ConfidentialFungibleToken-ConfidentialFungibleTokenInvalidSender-address-)
-- [ConfidentialFungibleTokenUnauthorizedSpender(holder, spender)](#ConfidentialFungibleToken-ConfidentialFungibleTokenUnauthorizedSpender-address-address-)
-- [ConfidentialFungibleTokenZeroBalance(holder)](#ConfidentialFungibleToken-ConfidentialFungibleTokenZeroBalance-address-)
-- [ConfidentialFungibleTokenUnauthorizedUseOfEncryptedAmount(amount, user)](#ConfidentialFungibleToken-ConfidentialFungibleTokenUnauthorizedUseOfEncryptedAmount-euint64-address-)
-- [ConfidentialFungibleTokenUnauthorizedCaller(caller)](#ConfidentialFungibleToken-ConfidentialFungibleTokenUnauthorizedCaller-address-)
-- [ConfidentialFungibleTokenInvalidGatewayRequest(requestId)](#ConfidentialFungibleToken-ConfidentialFungibleTokenInvalidGatewayRequest-uint256-)
-#### IConfidentialFungibleToken [!toc]
+- [ERC7984InvalidReceiver(receiver)](#ERC7984-ERC7984InvalidReceiver-address-)
+- [ERC7984InvalidSender(sender)](#ERC7984-ERC7984InvalidSender-address-)
+- [ERC7984UnauthorizedSpender(holder, spender)](#ERC7984-ERC7984UnauthorizedSpender-address-address-)
+- [ERC7984ZeroBalance(holder)](#ERC7984-ERC7984ZeroBalance-address-)
+- [ERC7984UnauthorizedUseOfEncryptedAmount(amount, user)](#ERC7984-ERC7984UnauthorizedUseOfEncryptedAmount-euint64-address-)
+- [ERC7984UnauthorizedCaller(caller)](#ERC7984-ERC7984UnauthorizedCaller-address-)
+- [ERC7984InvalidGatewayRequest(requestId)](#ERC7984-ERC7984InvalidGatewayRequest-uint256-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+#### IERC165 [!toc]
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-constructor-string-string-string-"></a>
+<a id="ERC7984-constructor-string-string-string-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">constructor(string name_, string symbol_, string tokenURI_)</p>
+<p className="font-bold text-sm font-mono">constructor(string name_, string symbol_, string contractURI_)</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-constructor-string-string-string-">#</a>
+<a className="peer" data-card href="ERC7984-constructor-string-string-string-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -119,14 +137,36 @@ Key features:
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-name--"></a>
+<a id="ERC7984-supportsInterface-bytes4-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">supportsInterface(bytes4 interfaceId) → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984-supportsInterface-bytes4-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns true if this contract implements the interface defined by
+`interfaceId`. See the corresponding
+[ERC section](https://eips.ethereum.org/EIPS/eip-165#how-interfaces-are-identified)
+to learn more about how these ids are created.
+
+This function call must use less than 30 000 gas.
+
+</div>
+</div>
+
+<a id="ERC7984-name--"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">name() → string</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-name--">#</a>
+<a className="peer" data-card href="ERC7984-name--">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -136,14 +176,14 @@ Returns the name of the token.
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-symbol--"></a>
+<a id="ERC7984-symbol--"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">symbol() → string</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-symbol--">#</a>
+<a className="peer" data-card href="ERC7984-symbol--">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -153,14 +193,14 @@ Returns the symbol of the token.
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-decimals--"></a>
+<a id="ERC7984-decimals--"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">decimals() → uint8</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-decimals--">#</a>
+<a className="peer" data-card href="ERC7984-decimals--">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -170,31 +210,31 @@ Returns the number of decimals of the token. Recommended to be 6.
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-tokenURI--"></a>
+<a id="ERC7984-contractURI--"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">tokenURI() → string</p>
+<p className="font-bold text-sm font-mono">contractURI() → string</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-tokenURI--">#</a>
+<a className="peer" data-card href="ERC7984-contractURI--">#</a>
 </div>
 </div>
 <div className="px-4">
 
-Returns the token URI.
+Returns the contract URI. See [ERC-7572](https://eips.ethereum.org/EIPS/eip-7572) for details.
 
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-confidentialTotalSupply--"></a>
+<a id="ERC7984-confidentialTotalSupply--"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">confidentialTotalSupply() → euint64</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-confidentialTotalSupply--">#</a>
+<a className="peer" data-card href="ERC7984-confidentialTotalSupply--">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -204,14 +244,14 @@ Returns the confidential total supply of the token.
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-confidentialBalanceOf-address-"></a>
+<a id="ERC7984-confidentialBalanceOf-address-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">confidentialBalanceOf(address account) → euint64</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-confidentialBalanceOf-address-">#</a>
+<a className="peer" data-card href="ERC7984-confidentialBalanceOf-address-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -221,14 +261,14 @@ Returns the confidential balance of the account `account`.
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-isOperator-address-address-"></a>
+<a id="ERC7984-isOperator-address-address-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">isOperator(address holder, address spender) → bool</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-isOperator-address-address-">#</a>
+<a className="peer" data-card href="ERC7984-isOperator-address-address-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -238,14 +278,14 @@ Returns true if `spender` is currently an operator for `holder`.
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-setOperator-address-uint48-"></a>
+<a id="ERC7984-setOperator-address-uint48-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">setOperator(address operator, uint48 until)</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-setOperator-address-uint48-">#</a>
+<a className="peer" data-card href="ERC7984-setOperator-address-uint48-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -259,14 +299,14 @@ An operator may transfer any amount of tokens on behalf of a holder while approv
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-confidentialTransfer-address-externalEuint64-bytes-"></a>
+<a id="ERC7984-confidentialTransfer-address-externalEuint64-bytes-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">confidentialTransfer(address to, externalEuint64 encryptedAmount, bytes inputProof) → euint64</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-confidentialTransfer-address-externalEuint64-bytes-">#</a>
+<a className="peer" data-card href="ERC7984-confidentialTransfer-address-externalEuint64-bytes-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -278,32 +318,32 @@ Returns the encrypted amount that was actually transferred.
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-confidentialTransfer-address-euint64-"></a>
+<a id="ERC7984-confidentialTransfer-address-euint64-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">confidentialTransfer(address to, euint64 amount) → euint64</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-confidentialTransfer-address-euint64-">#</a>
+<a className="peer" data-card href="ERC7984-confidentialTransfer-address-euint64-">#</a>
 </div>
 </div>
 <div className="px-4">
 
-Similar to interfaces#IConfidentialFungibleToken-confidentialTransfer-address-externalEuint64-bytes- but without an input proof. The caller
+Similar to interfaces#IERC7984-confidentialTransfer-address-externalEuint64-bytes- but without an input proof. The caller
 *must* already be allowed by ACL for the given `amount`.
 
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-confidentialTransferFrom-address-address-externalEuint64-bytes-"></a>
+<a id="ERC7984-confidentialTransferFrom-address-address-externalEuint64-bytes-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">confidentialTransferFrom(address from, address to, externalEuint64 encryptedAmount, bytes inputProof) → euint64 transferred</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-confidentialTransferFrom-address-address-externalEuint64-bytes-">#</a>
+<a className="peer" data-card href="ERC7984-confidentialTransferFrom-address-address-externalEuint64-bytes-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -316,147 +356,151 @@ Returns the encrypted amount that was actually transferred.
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-confidentialTransferFrom-address-address-euint64-"></a>
+<a id="ERC7984-confidentialTransferFrom-address-address-euint64-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">confidentialTransferFrom(address from, address to, euint64 amount) → euint64 transferred</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-confidentialTransferFrom-address-address-euint64-">#</a>
+<a className="peer" data-card href="ERC7984-confidentialTransferFrom-address-address-euint64-">#</a>
 </div>
 </div>
 <div className="px-4">
 
-Similar to interfaces#IConfidentialFungibleToken-confidentialTransferFrom-address-address-externalEuint64-bytes- but without an input proof.
+Similar to interfaces#IERC7984-confidentialTransferFrom-address-address-externalEuint64-bytes- but without an input proof.
 The caller *must* be already allowed by ACL for the given `amount`.
 
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-confidentialTransferAndCall-address-externalEuint64-bytes-bytes-"></a>
+<a id="ERC7984-confidentialTransferAndCall-address-externalEuint64-bytes-bytes-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">confidentialTransferAndCall(address to, externalEuint64 encryptedAmount, bytes inputProof, bytes data) → euint64 transferred</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-confidentialTransferAndCall-address-externalEuint64-bytes-bytes-">#</a>
+<a className="peer" data-card href="ERC7984-confidentialTransferAndCall-address-externalEuint64-bytes-bytes-">#</a>
 </div>
 </div>
 <div className="px-4">
 
-Similar to interfaces#IConfidentialFungibleToken-confidentialTransfer-address-externalEuint64-bytes- but with a callback to `to` after
+Similar to interfaces#IERC7984-confidentialTransfer-address-externalEuint64-bytes- but with a callback to `to` after
 the transfer.
 
-The callback is made to the [`IConfidentialFungibleTokenReceiver.onConfidentialTransferReceived`](./interfaces#IConfidentialFungibleTokenReceiver-onConfidentialTransferReceived-address-address-euint64-bytes-) function on the
+The callback is made to the [`IERC7984Receiver.onConfidentialTransferReceived`](/confidential-contracts/api/interfaces#IERC7984Receiver-onConfidentialTransferReceived-address-address-euint64-bytes-) function on the
 to address with the actual transferred amount (may differ from the given `encryptedAmount`) and the given
 data `data`.
 
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-confidentialTransferAndCall-address-euint64-bytes-"></a>
+<a id="ERC7984-confidentialTransferAndCall-address-euint64-bytes-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">confidentialTransferAndCall(address to, euint64 amount, bytes data) → euint64 transferred</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-confidentialTransferAndCall-address-euint64-bytes-">#</a>
+<a className="peer" data-card href="ERC7984-confidentialTransferAndCall-address-euint64-bytes-">#</a>
 </div>
 </div>
 <div className="px-4">
 
-Similar to interfaces#IConfidentialFungibleToken-confidentialTransfer-address-euint64- but with a callback to `to` after the transfer.
+Similar to interfaces#IERC7984-confidentialTransfer-address-euint64- but with a callback to `to` after the transfer.
 
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-confidentialTransferFromAndCall-address-address-externalEuint64-bytes-bytes-"></a>
+<a id="ERC7984-confidentialTransferFromAndCall-address-address-externalEuint64-bytes-bytes-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">confidentialTransferFromAndCall(address from, address to, externalEuint64 encryptedAmount, bytes inputProof, bytes data) → euint64 transferred</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-confidentialTransferFromAndCall-address-address-externalEuint64-bytes-bytes-">#</a>
+<a className="peer" data-card href="ERC7984-confidentialTransferFromAndCall-address-address-externalEuint64-bytes-bytes-">#</a>
 </div>
 </div>
 <div className="px-4">
 
-Similar to interfaces#IConfidentialFungibleToken-confidentialTransferFrom-address-address-externalEuint64-bytes- but with a callback to `to`
+Similar to interfaces#IERC7984-confidentialTransferFrom-address-address-externalEuint64-bytes- but with a callback to `to`
 after the transfer.
 
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-confidentialTransferFromAndCall-address-address-euint64-bytes-"></a>
+<a id="ERC7984-confidentialTransferFromAndCall-address-address-euint64-bytes-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">confidentialTransferFromAndCall(address from, address to, euint64 amount, bytes data) → euint64 transferred</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-confidentialTransferFromAndCall-address-address-euint64-bytes-">#</a>
+<a className="peer" data-card href="ERC7984-confidentialTransferFromAndCall-address-address-euint64-bytes-">#</a>
 </div>
 </div>
 <div className="px-4">
 
-Similar to interfaces#IConfidentialFungibleToken-confidentialTransferFrom-address-address-euint64- but with a callback to `to`
+Similar to interfaces#IERC7984-confidentialTransferFrom-address-address-euint64- but with a callback to `to`
 after the transfer.
 
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-discloseEncryptedAmount-euint64-"></a>
+<a id="ERC7984-requestDiscloseEncryptedAmount-euint64-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">discloseEncryptedAmount(euint64 encryptedAmount)</p>
+<p className="font-bold text-sm font-mono">requestDiscloseEncryptedAmount(euint64 encryptedAmount)</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-discloseEncryptedAmount-euint64-">#</a>
+<a className="peer" data-card href="ERC7984-requestDiscloseEncryptedAmount-euint64-">#</a>
 </div>
 </div>
 <div className="px-4">
 
-Discloses an encrypted amount `encryptedAmount` publicly via an [`IConfidentialFungibleToken.AmountDisclosed`](./interfaces#IConfidentialFungibleToken-AmountDisclosed-euint64-uint64-)
-event. The caller and this contract must be authorized to use the encrypted amount on the ACL.
+Starts the process to disclose an encrypted amount `encryptedAmount` publicly by making it
+publicly decryptable. Emits the [`ERC7984.AmountDiscloseRequested`](#ERC7984-AmountDiscloseRequested-euint64-address-) event.
 
 <Callout>
-This is an asynchronous operation where the actual decryption happens off-chain and
-[`ConfidentialFungibleToken.finalizeDiscloseEncryptedAmount`](#ConfidentialFungibleToken-finalizeDiscloseEncryptedAmount-uint256-uint64-bytes---) is called with the result.
+Both `msg.sender` and `address(this)` must have permission to access the encrypted amount
+`encryptedAmount` to request disclosure of the encrypted amount `encryptedAmount`.
 </Callout>
 
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-finalizeDiscloseEncryptedAmount-uint256-uint64-bytes---"></a>
+<a id="ERC7984-discloseEncryptedAmount-euint64-uint64-bytes-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">finalizeDiscloseEncryptedAmount(uint256 requestId, uint64 amount, bytes[] signatures)</p>
+<p className="font-bold text-sm font-mono">discloseEncryptedAmount(euint64 encryptedAmount, uint64 cleartextAmount, bytes decryptionProof)</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-finalizeDiscloseEncryptedAmount-uint256-uint64-bytes---">#</a>
+<a className="peer" data-card href="ERC7984-discloseEncryptedAmount-euint64-uint64-bytes-">#</a>
 </div>
 </div>
 <div className="px-4">
 
-Finalizes a disclose encrypted amount request.
+Publicly discloses an encrypted value with a given decryption proof. Emits the [`IERC7984.AmountDisclosed`](/confidential-contracts/api/interfaces#IERC7984-AmountDisclosed-euint64-uint64-) event.
+
+<Callout>
+May not be tied to a prior request via [`ERC7984.requestDiscloseEncryptedAmount`](#ERC7984-requestDiscloseEncryptedAmount-euint64-).
+</Callout>
 
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-_setOperator-address-address-uint48-"></a>
+<a id="ERC7984-_setOperator-address-address-uint48-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">_setOperator(address holder, address operator, uint48 until)</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-_setOperator-address-address-uint48-">#</a>
+<a className="peer" data-card href="ERC7984-_setOperator-address-address-uint48-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -464,14 +508,14 @@ Finalizes a disclose encrypted amount request.
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-_mint-address-euint64-"></a>
+<a id="ERC7984-_mint-address-euint64-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">_mint(address to, euint64 amount) → euint64 transferred</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-_mint-address-euint64-">#</a>
+<a className="peer" data-card href="ERC7984-_mint-address-euint64-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -479,14 +523,14 @@ Finalizes a disclose encrypted amount request.
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-_burn-address-euint64-"></a>
+<a id="ERC7984-_burn-address-euint64-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">_burn(address from, euint64 amount) → euint64 transferred</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-_burn-address-euint64-">#</a>
+<a className="peer" data-card href="ERC7984-_burn-address-euint64-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -494,14 +538,14 @@ Finalizes a disclose encrypted amount request.
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-_transfer-address-address-euint64-"></a>
+<a id="ERC7984-_transfer-address-address-euint64-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">_transfer(address from, address to, euint64 amount) → euint64 transferred</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-_transfer-address-address-euint64-">#</a>
+<a className="peer" data-card href="ERC7984-_transfer-address-address-euint64-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -509,14 +553,14 @@ Finalizes a disclose encrypted amount request.
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-_transferAndCall-address-address-euint64-bytes-"></a>
+<a id="ERC7984-_transferAndCall-address-address-euint64-bytes-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">_transferAndCall(address from, address to, euint64 amount, bytes data) → euint64 transferred</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-_transferAndCall-address-address-euint64-bytes-">#</a>
+<a className="peer" data-card href="ERC7984-_transferAndCall-address-address-euint64-bytes-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -524,14 +568,14 @@ Finalizes a disclose encrypted amount request.
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-_update-address-address-euint64-"></a>
+<a id="ERC7984-_update-address-address-euint64-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">_update(address from, address to, euint64 amount) → euint64 transferred</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-_update-address-address-euint64-">#</a>
+<a className="peer" data-card href="ERC7984-_update-address-address-euint64-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -539,14 +583,32 @@ Finalizes a disclose encrypted amount request.
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-ConfidentialFungibleTokenInvalidReceiver-address-"></a>
+<a id="ERC7984-AmountDiscloseRequested-euint64-address-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">ConfidentialFungibleTokenInvalidReceiver(address receiver)</p>
+<p className="font-bold text-sm font-mono">AmountDiscloseRequested(euint64 indexed encryptedAmount, address indexed requester)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="ERC7984-AmountDiscloseRequested-euint64-address-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when an encrypted amount `encryptedAmount` is requested for disclosure by `requester`.
+
+</div>
+</div>
+
+<a id="ERC7984-ERC7984InvalidReceiver-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7984InvalidReceiver(address receiver)</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">error</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-ConfidentialFungibleTokenInvalidReceiver-address-">#</a>
+<a className="peer" data-card href="ERC7984-ERC7984InvalidReceiver-address-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -556,14 +618,14 @@ The given receiver `receiver` is invalid for transfers.
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-ConfidentialFungibleTokenInvalidSender-address-"></a>
+<a id="ERC7984-ERC7984InvalidSender-address-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">ConfidentialFungibleTokenInvalidSender(address sender)</p>
+<p className="font-bold text-sm font-mono">ERC7984InvalidSender(address sender)</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">error</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-ConfidentialFungibleTokenInvalidSender-address-">#</a>
+<a className="peer" data-card href="ERC7984-ERC7984InvalidSender-address-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -573,14 +635,14 @@ The given sender `sender` is invalid for transfers.
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-ConfidentialFungibleTokenUnauthorizedSpender-address-address-"></a>
+<a id="ERC7984-ERC7984UnauthorizedSpender-address-address-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">ConfidentialFungibleTokenUnauthorizedSpender(address holder, address spender)</p>
+<p className="font-bold text-sm font-mono">ERC7984UnauthorizedSpender(address holder, address spender)</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">error</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-ConfidentialFungibleTokenUnauthorizedSpender-address-address-">#</a>
+<a className="peer" data-card href="ERC7984-ERC7984UnauthorizedSpender-address-address-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -590,14 +652,14 @@ The given holder `holder` is not authorized to spend on behalf of `spender`.
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-ConfidentialFungibleTokenZeroBalance-address-"></a>
+<a id="ERC7984-ERC7984ZeroBalance-address-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">ConfidentialFungibleTokenZeroBalance(address holder)</p>
+<p className="font-bold text-sm font-mono">ERC7984ZeroBalance(address holder)</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">error</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-ConfidentialFungibleTokenZeroBalance-address-">#</a>
+<a className="peer" data-card href="ERC7984-ERC7984ZeroBalance-address-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -607,14 +669,14 @@ The holder `holder` is trying to send tokens but has a balance of 0.
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-ConfidentialFungibleTokenUnauthorizedUseOfEncryptedAmount-euint64-address-"></a>
+<a id="ERC7984-ERC7984UnauthorizedUseOfEncryptedAmount-euint64-address-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">ConfidentialFungibleTokenUnauthorizedUseOfEncryptedAmount(euint64 amount, address user)</p>
+<p className="font-bold text-sm font-mono">ERC7984UnauthorizedUseOfEncryptedAmount(euint64 amount, address user)</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">error</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-ConfidentialFungibleTokenUnauthorizedUseOfEncryptedAmount-euint64-address-">#</a>
+<a className="peer" data-card href="ERC7984-ERC7984UnauthorizedUseOfEncryptedAmount-euint64-address-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -628,14 +690,14 @@ Try using the equivalent transfer function with an input proof.
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-ConfidentialFungibleTokenUnauthorizedCaller-address-"></a>
+<a id="ERC7984-ERC7984UnauthorizedCaller-address-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">ConfidentialFungibleTokenUnauthorizedCaller(address caller)</p>
+<p className="font-bold text-sm font-mono">ERC7984UnauthorizedCaller(address caller)</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">error</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-ConfidentialFungibleTokenUnauthorizedCaller-address-">#</a>
+<a className="peer" data-card href="ERC7984-ERC7984UnauthorizedCaller-address-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -645,14 +707,14 @@ The given caller `caller` is not authorized for the current operation.
 </div>
 </div>
 
-<a id="ConfidentialFungibleToken-ConfidentialFungibleTokenInvalidGatewayRequest-uint256-"></a>
+<a id="ERC7984-ERC7984InvalidGatewayRequest-uint256-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">ConfidentialFungibleTokenInvalidGatewayRequest(uint256 requestId)</p>
+<p className="font-bold text-sm font-mono">ERC7984InvalidGatewayRequest(uint256 requestId)</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">error</p>
-<a className="peer" data-card href="ConfidentialFungibleToken-ConfidentialFungibleTokenInvalidGatewayRequest-uint256-">#</a>
+<a className="peer" data-card href="ERC7984-ERC7984InvalidGatewayRequest-uint256-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -662,24 +724,24 @@ The given gateway request ID `requestId` is invalid.
 </div>
 </div>
 
-<a id="ConfidentialFungibleTokenERC20Wrapper"></a>
+<a id="ERC7984ERC20Wrapper"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ConfidentialFungibleTokenERC20Wrapper`
+## `ERC7984ERC20Wrapper`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.2.0/contracts/token/extensions/ConfidentialFungibleTokenERC20Wrapper.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/release-v0.3.0/contracts/token/ERC7984/extensions/ERC7984ERC20Wrapper.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
 </div>
 
 ```solidity
-import "@openzeppelin/confidential-contracts/token/extensions/ConfidentialFungibleTokenERC20Wrapper.sol";
+import "@openzeppelin/confidential-contracts/token/ERC7984/extensions/ERC7984ERC20Wrapper.sol";
 ```
 
-A wrapper contract built on top of [`ConfidentialFungibleToken`](#ConfidentialFungibleToken) that allows wrapping an `ERC20` token
-into a confidential fungible token. The wrapper contract implements the `IERC1363Receiver` interface
+A wrapper contract built on top of [`ERC7984`](#ERC7984) that allows wrapping an `ERC20` token
+into an `ERC7984` token. The wrapper contract implements the `IERC1363Receiver` interface
 which allows users to transfer `ERC1363` tokens directly to the wrapper with a callback to wrap the tokens.
 
 <Callout type="warn">
@@ -690,83 +752,94 @@ tokens such as fee-on-transfer or other deflationary-type tokens are not support
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Functions</h3>
 <div className="font-mono">
-- [constructor(underlying_)](#ConfidentialFungibleTokenERC20Wrapper-constructor-contract-IERC20-)
-- [decimals()](#ConfidentialFungibleTokenERC20Wrapper-decimals--)
-- [rate()](#ConfidentialFungibleTokenERC20Wrapper-rate--)
-- [underlying()](#ConfidentialFungibleTokenERC20Wrapper-underlying--)
-- [onTransferReceived(, from, amount, data)](#ConfidentialFungibleTokenERC20Wrapper-onTransferReceived-address-address-uint256-bytes-)
-- [wrap(to, amount)](#ConfidentialFungibleTokenERC20Wrapper-wrap-address-uint256-)
-- [unwrap(from, to, amount)](#ConfidentialFungibleTokenERC20Wrapper-unwrap-address-address-euint64-)
-- [unwrap(from, to, encryptedAmount, inputProof)](#ConfidentialFungibleTokenERC20Wrapper-unwrap-address-address-externalEuint64-bytes-)
-- [finalizeUnwrap(requestID, amount, signatures)](#ConfidentialFungibleTokenERC20Wrapper-finalizeUnwrap-uint256-uint64-bytes---)
-- [_unwrap(from, to, amount)](#ConfidentialFungibleTokenERC20Wrapper-_unwrap-address-address-euint64-)
-- [_fallbackUnderlyingDecimals()](#ConfidentialFungibleTokenERC20Wrapper-_fallbackUnderlyingDecimals--)
-- [_maxDecimals()](#ConfidentialFungibleTokenERC20Wrapper-_maxDecimals--)
+- [constructor(underlying_)](#ERC7984ERC20Wrapper-constructor-contract-IERC20-)
+- [decimals()](#ERC7984ERC20Wrapper-decimals--)
+- [rate()](#ERC7984ERC20Wrapper-rate--)
+- [underlying()](#ERC7984ERC20Wrapper-underlying--)
+- [onTransferReceived(, from, amount, data)](#ERC7984ERC20Wrapper-onTransferReceived-address-address-uint256-bytes-)
+- [wrap(to, amount)](#ERC7984ERC20Wrapper-wrap-address-uint256-)
+- [unwrap(from, to, amount)](#ERC7984ERC20Wrapper-unwrap-address-address-euint64-)
+- [unwrap(from, to, encryptedAmount, inputProof)](#ERC7984ERC20Wrapper-unwrap-address-address-externalEuint64-bytes-)
+- [finalizeUnwrap(burntAmount, burntAmountCleartext, decryptionProof)](#ERC7984ERC20Wrapper-finalizeUnwrap-euint64-uint64-bytes-)
+- [_unwrap(from, to, amount)](#ERC7984ERC20Wrapper-_unwrap-address-address-euint64-)
+- [_fallbackUnderlyingDecimals()](#ERC7984ERC20Wrapper-_fallbackUnderlyingDecimals--)
+- [_maxDecimals()](#ERC7984ERC20Wrapper-_maxDecimals--)
 #### IERC1363Receiver [!toc]
-#### ConfidentialFungibleToken [!toc]
-- [name()](#ConfidentialFungibleToken-name--)
-- [symbol()](#ConfidentialFungibleToken-symbol--)
-- [tokenURI()](#ConfidentialFungibleToken-tokenURI--)
-- [confidentialTotalSupply()](#ConfidentialFungibleToken-confidentialTotalSupply--)
-- [confidentialBalanceOf(account)](#ConfidentialFungibleToken-confidentialBalanceOf-address-)
-- [isOperator(holder, spender)](#ConfidentialFungibleToken-isOperator-address-address-)
-- [setOperator(operator, until)](#ConfidentialFungibleToken-setOperator-address-uint48-)
-- [confidentialTransfer(to, encryptedAmount, inputProof)](#ConfidentialFungibleToken-confidentialTransfer-address-externalEuint64-bytes-)
-- [confidentialTransfer(to, amount)](#ConfidentialFungibleToken-confidentialTransfer-address-euint64-)
-- [confidentialTransferFrom(from, to, encryptedAmount, inputProof)](#ConfidentialFungibleToken-confidentialTransferFrom-address-address-externalEuint64-bytes-)
-- [confidentialTransferFrom(from, to, amount)](#ConfidentialFungibleToken-confidentialTransferFrom-address-address-euint64-)
-- [confidentialTransferAndCall(to, encryptedAmount, inputProof, data)](#ConfidentialFungibleToken-confidentialTransferAndCall-address-externalEuint64-bytes-bytes-)
-- [confidentialTransferAndCall(to, amount, data)](#ConfidentialFungibleToken-confidentialTransferAndCall-address-euint64-bytes-)
-- [confidentialTransferFromAndCall(from, to, encryptedAmount, inputProof, data)](#ConfidentialFungibleToken-confidentialTransferFromAndCall-address-address-externalEuint64-bytes-bytes-)
-- [confidentialTransferFromAndCall(from, to, amount, data)](#ConfidentialFungibleToken-confidentialTransferFromAndCall-address-address-euint64-bytes-)
-- [discloseEncryptedAmount(encryptedAmount)](#ConfidentialFungibleToken-discloseEncryptedAmount-euint64-)
-- [finalizeDiscloseEncryptedAmount(requestId, amount, signatures)](#ConfidentialFungibleToken-finalizeDiscloseEncryptedAmount-uint256-uint64-bytes---)
-- [_setOperator(holder, operator, until)](#ConfidentialFungibleToken-_setOperator-address-address-uint48-)
-- [_mint(to, amount)](#ConfidentialFungibleToken-_mint-address-euint64-)
-- [_burn(from, amount)](#ConfidentialFungibleToken-_burn-address-euint64-)
-- [_transfer(from, to, amount)](#ConfidentialFungibleToken-_transfer-address-address-euint64-)
-- [_transferAndCall(from, to, amount, data)](#ConfidentialFungibleToken-_transferAndCall-address-address-euint64-bytes-)
-- [_update(from, to, amount)](#ConfidentialFungibleToken-_update-address-address-euint64-)
-#### IConfidentialFungibleToken [!toc]
+#### ERC7984 [!toc]
+- [supportsInterface(interfaceId)](#ERC7984-supportsInterface-bytes4-)
+- [name()](#ERC7984-name--)
+- [symbol()](#ERC7984-symbol--)
+- [contractURI()](#ERC7984-contractURI--)
+- [confidentialTotalSupply()](#ERC7984-confidentialTotalSupply--)
+- [confidentialBalanceOf(account)](#ERC7984-confidentialBalanceOf-address-)
+- [isOperator(holder, spender)](#ERC7984-isOperator-address-address-)
+- [setOperator(operator, until)](#ERC7984-setOperator-address-uint48-)
+- [confidentialTransfer(to, encryptedAmount, inputProof)](#ERC7984-confidentialTransfer-address-externalEuint64-bytes-)
+- [confidentialTransfer(to, amount)](#ERC7984-confidentialTransfer-address-euint64-)
+- [confidentialTransferFrom(from, to, encryptedAmount, inputProof)](#ERC7984-confidentialTransferFrom-address-address-externalEuint64-bytes-)
+- [confidentialTransferFrom(from, to, amount)](#ERC7984-confidentialTransferFrom-address-address-euint64-)
+- [confidentialTransferAndCall(to, encryptedAmount, inputProof, data)](#ERC7984-confidentialTransferAndCall-address-externalEuint64-bytes-bytes-)
+- [confidentialTransferAndCall(to, amount, data)](#ERC7984-confidentialTransferAndCall-address-euint64-bytes-)
+- [confidentialTransferFromAndCall(from, to, encryptedAmount, inputProof, data)](#ERC7984-confidentialTransferFromAndCall-address-address-externalEuint64-bytes-bytes-)
+- [confidentialTransferFromAndCall(from, to, amount, data)](#ERC7984-confidentialTransferFromAndCall-address-address-euint64-bytes-)
+- [requestDiscloseEncryptedAmount(encryptedAmount)](#ERC7984-requestDiscloseEncryptedAmount-euint64-)
+- [discloseEncryptedAmount(encryptedAmount, cleartextAmount, decryptionProof)](#ERC7984-discloseEncryptedAmount-euint64-uint64-bytes-)
+- [_setOperator(holder, operator, until)](#ERC7984-_setOperator-address-address-uint48-)
+- [_mint(to, amount)](#ERC7984-_mint-address-euint64-)
+- [_burn(from, amount)](#ERC7984-_burn-address-euint64-)
+- [_transfer(from, to, amount)](#ERC7984-_transfer-address-address-euint64-)
+- [_transferAndCall(from, to, amount, data)](#ERC7984-_transferAndCall-address-address-euint64-bytes-)
+- [_update(from, to, amount)](#ERC7984-_update-address-address-euint64-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+#### IERC165 [!toc]
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
+- [UnwrapRequested(receiver, amount)](#ERC7984ERC20Wrapper-UnwrapRequested-address-euint64-)
+- [UnwrapFinalized(receiver, encryptedAmount, cleartextAmount)](#ERC7984ERC20Wrapper-UnwrapFinalized-address-euint64-uint64-)
 #### IERC1363Receiver [!toc]
-#### ConfidentialFungibleToken [!toc]
-#### IConfidentialFungibleToken [!toc]
-- [OperatorSet(holder, operator, until)](#IConfidentialFungibleToken-OperatorSet-address-address-uint48-)
-- [ConfidentialTransfer(from, to, amount)](#IConfidentialFungibleToken-ConfidentialTransfer-address-address-euint64-)
-- [AmountDisclosed(encryptedAmount, amount)](#IConfidentialFungibleToken-AmountDisclosed-euint64-uint64-)
+#### ERC7984 [!toc]
+- [AmountDiscloseRequested(encryptedAmount, requester)](#ERC7984-AmountDiscloseRequested-euint64-address-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+- [OperatorSet(holder, operator, until)](#IERC7984-OperatorSet-address-address-uint48-)
+- [ConfidentialTransfer(from, to, amount)](#IERC7984-ConfidentialTransfer-address-address-euint64-)
+- [AmountDisclosed(encryptedAmount, amount)](#IERC7984-AmountDisclosed-euint64-uint64-)
+#### IERC165 [!toc]
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
+- [InvalidUnwrapRequest(amount)](#ERC7984ERC20Wrapper-InvalidUnwrapRequest-euint64-)
 #### IERC1363Receiver [!toc]
-#### ConfidentialFungibleToken [!toc]
-- [ConfidentialFungibleTokenInvalidReceiver(receiver)](#ConfidentialFungibleToken-ConfidentialFungibleTokenInvalidReceiver-address-)
-- [ConfidentialFungibleTokenInvalidSender(sender)](#ConfidentialFungibleToken-ConfidentialFungibleTokenInvalidSender-address-)
-- [ConfidentialFungibleTokenUnauthorizedSpender(holder, spender)](#ConfidentialFungibleToken-ConfidentialFungibleTokenUnauthorizedSpender-address-address-)
-- [ConfidentialFungibleTokenZeroBalance(holder)](#ConfidentialFungibleToken-ConfidentialFungibleTokenZeroBalance-address-)
-- [ConfidentialFungibleTokenUnauthorizedUseOfEncryptedAmount(amount, user)](#ConfidentialFungibleToken-ConfidentialFungibleTokenUnauthorizedUseOfEncryptedAmount-euint64-address-)
-- [ConfidentialFungibleTokenUnauthorizedCaller(caller)](#ConfidentialFungibleToken-ConfidentialFungibleTokenUnauthorizedCaller-address-)
-- [ConfidentialFungibleTokenInvalidGatewayRequest(requestId)](#ConfidentialFungibleToken-ConfidentialFungibleTokenInvalidGatewayRequest-uint256-)
-#### IConfidentialFungibleToken [!toc]
+#### ERC7984 [!toc]
+- [ERC7984InvalidReceiver(receiver)](#ERC7984-ERC7984InvalidReceiver-address-)
+- [ERC7984InvalidSender(sender)](#ERC7984-ERC7984InvalidSender-address-)
+- [ERC7984UnauthorizedSpender(holder, spender)](#ERC7984-ERC7984UnauthorizedSpender-address-address-)
+- [ERC7984ZeroBalance(holder)](#ERC7984-ERC7984ZeroBalance-address-)
+- [ERC7984UnauthorizedUseOfEncryptedAmount(amount, user)](#ERC7984-ERC7984UnauthorizedUseOfEncryptedAmount-euint64-address-)
+- [ERC7984UnauthorizedCaller(caller)](#ERC7984-ERC7984UnauthorizedCaller-address-)
+- [ERC7984InvalidGatewayRequest(requestId)](#ERC7984-ERC7984InvalidGatewayRequest-uint256-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+#### IERC165 [!toc]
 </div>
 </div>
 
-<a id="ConfidentialFungibleTokenERC20Wrapper-constructor-contract-IERC20-"></a>
+<a id="ERC7984ERC20Wrapper-constructor-contract-IERC20-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">constructor(contract IERC20 underlying_)</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="ConfidentialFungibleTokenERC20Wrapper-constructor-contract-IERC20-">#</a>
+<a className="peer" data-card href="ERC7984ERC20Wrapper-constructor-contract-IERC20-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -774,14 +847,14 @@ tokens such as fee-on-transfer or other deflationary-type tokens are not support
 </div>
 </div>
 
-<a id="ConfidentialFungibleTokenERC20Wrapper-decimals--"></a>
+<a id="ERC7984ERC20Wrapper-decimals--"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">decimals() → uint8</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleTokenERC20Wrapper-decimals--">#</a>
+<a className="peer" data-card href="ERC7984ERC20Wrapper-decimals--">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -791,14 +864,14 @@ Returns the number of decimals of the token. Recommended to be 6.
 </div>
 </div>
 
-<a id="ConfidentialFungibleTokenERC20Wrapper-rate--"></a>
+<a id="ERC7984ERC20Wrapper-rate--"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">rate() → uint256</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleTokenERC20Wrapper-rate--">#</a>
+<a className="peer" data-card href="ERC7984ERC20Wrapper-rate--">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -809,14 +882,14 @@ For example, if the `rate` is 1000, then 1000 units of the underlying token equa
 </div>
 </div>
 
-<a id="ConfidentialFungibleTokenERC20Wrapper-underlying--"></a>
+<a id="ERC7984ERC20Wrapper-underlying--"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">underlying() → contract IERC20</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleTokenERC20Wrapper-underlying--">#</a>
+<a className="peer" data-card href="ERC7984ERC20Wrapper-underlying--">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -826,52 +899,52 @@ Returns the address of the underlying ERC-20 token that is being wrapped.
 </div>
 </div>
 
-<a id="ConfidentialFungibleTokenERC20Wrapper-onTransferReceived-address-address-uint256-bytes-"></a>
+<a id="ERC7984ERC20Wrapper-onTransferReceived-address-address-uint256-bytes-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">onTransferReceived(address, address from, uint256 amount, bytes data) → bytes4</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleTokenERC20Wrapper-onTransferReceived-address-address-uint256-bytes-">#</a>
+<a className="peer" data-card href="ERC7984ERC20Wrapper-onTransferReceived-address-address-uint256-bytes-">#</a>
 </div>
 </div>
 <div className="px-4">
 
 `ERC1363` callback function which wraps tokens to the address specified in `data` or
 the address `from` (if no address is specified in `data`). This function refunds any excess tokens
-sent beyond the nearest multiple of [`ConfidentialFungibleTokenERC20Wrapper.rate`](#ConfidentialFungibleTokenERC20Wrapper-rate--). See [`ConfidentialFungibleTokenERC20Wrapper.wrap`](#ConfidentialFungibleTokenERC20Wrapper-wrap-address-uint256-) from more details on wrapping tokens.
+sent beyond the nearest multiple of [`ERC7984ERC20Wrapper.rate`](#ERC7984ERC20Wrapper-rate--). See [`ERC7984ERC20Wrapper.wrap`](#ERC7984ERC20Wrapper-wrap-address-uint256-) from more details on wrapping tokens.
 
 </div>
 </div>
 
-<a id="ConfidentialFungibleTokenERC20Wrapper-wrap-address-uint256-"></a>
+<a id="ERC7984ERC20Wrapper-wrap-address-uint256-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">wrap(address to, uint256 amount)</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleTokenERC20Wrapper-wrap-address-uint256-">#</a>
+<a className="peer" data-card href="ERC7984ERC20Wrapper-wrap-address-uint256-">#</a>
 </div>
 </div>
 <div className="px-4">
 
 Wraps amount `amount` of the underlying token into a confidential token and sends it to
-`to`. Tokens are exchanged at a fixed rate specified by [`ConfidentialFungibleTokenERC20Wrapper.rate`](#ConfidentialFungibleTokenERC20Wrapper-rate--) such that `amount / rate()` confidential
-tokens are sent. Amount transferred in is rounded down to the nearest multiple of [`ConfidentialFungibleTokenERC20Wrapper.rate`](#ConfidentialFungibleTokenERC20Wrapper-rate--).
+`to`. Tokens are exchanged at a fixed rate specified by [`ERC7984ERC20Wrapper.rate`](#ERC7984ERC20Wrapper-rate--) such that `amount / rate()` confidential
+tokens are sent. Amount transferred in is rounded down to the nearest multiple of [`ERC7984ERC20Wrapper.rate`](#ERC7984ERC20Wrapper-rate--).
 
 </div>
 </div>
 
-<a id="ConfidentialFungibleTokenERC20Wrapper-unwrap-address-address-euint64-"></a>
+<a id="ERC7984ERC20Wrapper-unwrap-address-address-euint64-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">unwrap(address from, address to, euint64 amount)</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleTokenERC20Wrapper-unwrap-address-address-euint64-">#</a>
+<a className="peer" data-card href="ERC7984ERC20Wrapper-unwrap-address-address-euint64-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -880,8 +953,7 @@ Unwraps tokens from `from` and sends the underlying tokens to `to`. The caller m
 or be an approved operator for `from`. `amount * rate()` underlying tokens are sent to `to`.
 
 <Callout>
-This is an asynchronous function and waits for decryption to be completed off-chain before disbursing
-tokens.
+The unwrap request created by this function must be finalized by calling [`ERC7984ERC20Wrapper.finalizeUnwrap`](#ERC7984ERC20Wrapper-finalizeUnwrap-euint64-uint64-bytes-).
 </Callout>
 <Callout>
 The caller *must* already be approved by ACL for the given `amount`.
@@ -890,49 +962,49 @@ The caller *must* already be approved by ACL for the given `amount`.
 </div>
 </div>
 
-<a id="ConfidentialFungibleTokenERC20Wrapper-unwrap-address-address-externalEuint64-bytes-"></a>
+<a id="ERC7984ERC20Wrapper-unwrap-address-address-externalEuint64-bytes-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">unwrap(address from, address to, externalEuint64 encryptedAmount, bytes inputProof)</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleTokenERC20Wrapper-unwrap-address-address-externalEuint64-bytes-">#</a>
+<a className="peer" data-card href="ERC7984ERC20Wrapper-unwrap-address-address-externalEuint64-bytes-">#</a>
 </div>
 </div>
 <div className="px-4">
 
-Variant of [`ConfidentialFungibleTokenERC20Wrapper.unwrap`](#ConfidentialFungibleTokenERC20Wrapper-unwrap-address-address-externalEuint64-bytes-) that passes an `inputProof` which approves the caller for the `encryptedAmount`
+Variant of [`ERC7984ERC20Wrapper.unwrap`](#ERC7984ERC20Wrapper-unwrap-address-address-externalEuint64-bytes-) that passes an `inputProof` which approves the caller for the `encryptedAmount`
 in the ACL.
 
 </div>
 </div>
 
-<a id="ConfidentialFungibleTokenERC20Wrapper-finalizeUnwrap-uint256-uint64-bytes---"></a>
+<a id="ERC7984ERC20Wrapper-finalizeUnwrap-euint64-uint64-bytes-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">finalizeUnwrap(uint256 requestID, uint64 amount, bytes[] signatures)</p>
+<p className="font-bold text-sm font-mono">finalizeUnwrap(euint64 burntAmount, uint64 burntAmountCleartext, bytes decryptionProof)</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleTokenERC20Wrapper-finalizeUnwrap-uint256-uint64-bytes---">#</a>
+<a className="peer" data-card href="ERC7984ERC20Wrapper-finalizeUnwrap-euint64-uint64-bytes-">#</a>
 </div>
 </div>
 <div className="px-4">
 
-Fills an unwrap request for a given request id related to a decrypted unwrap amount.
+Fills an unwrap request for a given cipher-text `burntAmount` with the `cleartextAmount` and `decryptionProof`.
 
 </div>
 </div>
 
-<a id="ConfidentialFungibleTokenERC20Wrapper-_unwrap-address-address-euint64-"></a>
+<a id="ERC7984ERC20Wrapper-_unwrap-address-address-euint64-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">_unwrap(address from, address to, euint64 amount)</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="ConfidentialFungibleTokenERC20Wrapper-_unwrap-address-address-euint64-">#</a>
+<a className="peer" data-card href="ERC7984ERC20Wrapper-_unwrap-address-address-euint64-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -940,70 +1012,1792 @@ Fills an unwrap request for a given request id related to a decrypted unwrap amo
 </div>
 </div>
 
-<a id="ConfidentialFungibleTokenERC20Wrapper-_fallbackUnderlyingDecimals--"></a>
+<a id="ERC7984ERC20Wrapper-_fallbackUnderlyingDecimals--"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">_fallbackUnderlyingDecimals() → uint8</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="ConfidentialFungibleTokenERC20Wrapper-_fallbackUnderlyingDecimals--">#</a>
+<a className="peer" data-card href="ERC7984ERC20Wrapper-_fallbackUnderlyingDecimals--">#</a>
 </div>
 </div>
 <div className="px-4">
 
 Returns the default number of decimals of the underlying ERC-20 token that is being wrapped.
-Used as a default fallback when [`ConfidentialFungibleTokenERC20Wrapper._tryGetAssetDecimals`](#ConfidentialFungibleTokenERC20Wrapper-_tryGetAssetDecimals-contract-IERC20-) fails to fetch decimals of the underlying
+Used as a default fallback when [`ERC7984ERC20Wrapper._tryGetAssetDecimals`](#ERC7984ERC20Wrapper-_tryGetAssetDecimals-contract-IERC20-) fails to fetch decimals of the underlying
 ERC-20 token.
 
 </div>
 </div>
 
-<a id="ConfidentialFungibleTokenERC20Wrapper-_maxDecimals--"></a>
+<a id="ERC7984ERC20Wrapper-_maxDecimals--"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">_maxDecimals() → uint8</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="ConfidentialFungibleTokenERC20Wrapper-_maxDecimals--">#</a>
+<a className="peer" data-card href="ERC7984ERC20Wrapper-_maxDecimals--">#</a>
 </div>
 </div>
 <div className="px-4">
 
-Returns the maximum number that will be used for [`IConfidentialFungibleToken.decimals`](./interfaces#IConfidentialFungibleToken-decimals--) by the wrapper.
+Returns the maximum number that will be used for [`IERC7984.decimals`](/confidential-contracts/api/interfaces#IERC7984-decimals--) by the wrapper.
 
 </div>
 </div>
 
-<a id="ConfidentialFungibleTokenVotes"></a>
+<a id="ERC7984ERC20Wrapper-UnwrapRequested-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">UnwrapRequested(address indexed receiver, euint64 amount)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="ERC7984ERC20Wrapper-UnwrapRequested-address-euint64-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+</div>
+</div>
+<a id="ERC7984ERC20Wrapper-UnwrapFinalized-address-euint64-uint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">UnwrapFinalized(address indexed receiver, euint64 encryptedAmount, uint64 cleartextAmount)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="ERC7984ERC20Wrapper-UnwrapFinalized-address-euint64-uint64-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="ERC7984ERC20Wrapper-InvalidUnwrapRequest-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">InvalidUnwrapRequest(euint64 amount)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="ERC7984ERC20Wrapper-InvalidUnwrapRequest-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="ERC7984Freezable"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ConfidentialFungibleTokenVotes`
+## `ERC7984Freezable`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.2.0/contracts/token/extensions/ConfidentialFungibleTokenVotes.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/release-v0.3.0/contracts/token/ERC7984/extensions/ERC7984Freezable.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
 </div>
 
 ```solidity
-import "@openzeppelin/confidential-contracts/token/extensions/ConfidentialFungibleTokenVotes.sol";
+import "@openzeppelin/confidential-contracts/token/ERC7984/extensions/ERC7984Freezable.sol";
 ```
 
-Extension of [`ConfidentialFungibleToken`](#ConfidentialFungibleToken) supporting confidential votes tracking and delegation.
+Extension of [`ERC7984`](#ERC7984) that implements a confidential
+freezing mechanism that can be managed by an authorized account with
+[`IERC7984Rwa.setConfidentialFrozen`](/confidential-contracts/api/interfaces#IERC7984Rwa-setConfidentialFrozen-address-euint64-) functions.
 
-The amount of confidential voting units an account has is equal to the confidential token balance of
+The freezing mechanism provides the guarantee to the contract owner
+(e.g. a DAO or a well-configured multisig) that a specific confidential
+amount of tokens held by an account won't be transferable until those
+tokens are unfrozen.
+
+Inspired by https://github.com/OpenZeppelin/openzeppelin-community-contracts/blob/master/contracts/token/ERC20/extensions/ERC20Freezable.sol
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [confidentialFrozen(account)](#ERC7984Freezable-confidentialFrozen-address-)
+- [confidentialAvailable(account)](#ERC7984Freezable-confidentialAvailable-address-)
+- [_confidentialAvailable(account)](#ERC7984Freezable-_confidentialAvailable-address-)
+- [_setConfidentialFrozen(account, encryptedAmount)](#ERC7984Freezable-_setConfidentialFrozen-address-euint64-)
+- [_update(from, to, encryptedAmount)](#ERC7984Freezable-_update-address-address-euint64-)
+#### ERC7984 [!toc]
+- [supportsInterface(interfaceId)](#ERC7984-supportsInterface-bytes4-)
+- [name()](#ERC7984-name--)
+- [symbol()](#ERC7984-symbol--)
+- [decimals()](#ERC7984-decimals--)
+- [contractURI()](#ERC7984-contractURI--)
+- [confidentialTotalSupply()](#ERC7984-confidentialTotalSupply--)
+- [confidentialBalanceOf(account)](#ERC7984-confidentialBalanceOf-address-)
+- [isOperator(holder, spender)](#ERC7984-isOperator-address-address-)
+- [setOperator(operator, until)](#ERC7984-setOperator-address-uint48-)
+- [confidentialTransfer(to, encryptedAmount, inputProof)](#ERC7984-confidentialTransfer-address-externalEuint64-bytes-)
+- [confidentialTransfer(to, amount)](#ERC7984-confidentialTransfer-address-euint64-)
+- [confidentialTransferFrom(from, to, encryptedAmount, inputProof)](#ERC7984-confidentialTransferFrom-address-address-externalEuint64-bytes-)
+- [confidentialTransferFrom(from, to, amount)](#ERC7984-confidentialTransferFrom-address-address-euint64-)
+- [confidentialTransferAndCall(to, encryptedAmount, inputProof, data)](#ERC7984-confidentialTransferAndCall-address-externalEuint64-bytes-bytes-)
+- [confidentialTransferAndCall(to, amount, data)](#ERC7984-confidentialTransferAndCall-address-euint64-bytes-)
+- [confidentialTransferFromAndCall(from, to, encryptedAmount, inputProof, data)](#ERC7984-confidentialTransferFromAndCall-address-address-externalEuint64-bytes-bytes-)
+- [confidentialTransferFromAndCall(from, to, amount, data)](#ERC7984-confidentialTransferFromAndCall-address-address-euint64-bytes-)
+- [requestDiscloseEncryptedAmount(encryptedAmount)](#ERC7984-requestDiscloseEncryptedAmount-euint64-)
+- [discloseEncryptedAmount(encryptedAmount, cleartextAmount, decryptionProof)](#ERC7984-discloseEncryptedAmount-euint64-uint64-bytes-)
+- [_setOperator(holder, operator, until)](#ERC7984-_setOperator-address-address-uint48-)
+- [_mint(to, amount)](#ERC7984-_mint-address-euint64-)
+- [_burn(from, amount)](#ERC7984-_burn-address-euint64-)
+- [_transfer(from, to, amount)](#ERC7984-_transfer-address-address-euint64-)
+- [_transferAndCall(from, to, amount, data)](#ERC7984-_transferAndCall-address-address-euint64-bytes-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+#### IERC165 [!toc]
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+- [TokensFrozen(account, encryptedAmount)](#ERC7984Freezable-TokensFrozen-address-euint64-)
+#### ERC7984 [!toc]
+- [AmountDiscloseRequested(encryptedAmount, requester)](#ERC7984-AmountDiscloseRequested-euint64-address-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+- [OperatorSet(holder, operator, until)](#IERC7984-OperatorSet-address-address-uint48-)
+- [ConfidentialTransfer(from, to, amount)](#IERC7984-ConfidentialTransfer-address-address-euint64-)
+- [AmountDisclosed(encryptedAmount, amount)](#IERC7984-AmountDisclosed-euint64-uint64-)
+#### IERC165 [!toc]
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+#### ERC7984 [!toc]
+- [ERC7984InvalidReceiver(receiver)](#ERC7984-ERC7984InvalidReceiver-address-)
+- [ERC7984InvalidSender(sender)](#ERC7984-ERC7984InvalidSender-address-)
+- [ERC7984UnauthorizedSpender(holder, spender)](#ERC7984-ERC7984UnauthorizedSpender-address-address-)
+- [ERC7984ZeroBalance(holder)](#ERC7984-ERC7984ZeroBalance-address-)
+- [ERC7984UnauthorizedUseOfEncryptedAmount(amount, user)](#ERC7984-ERC7984UnauthorizedUseOfEncryptedAmount-euint64-address-)
+- [ERC7984UnauthorizedCaller(caller)](#ERC7984-ERC7984UnauthorizedCaller-address-)
+- [ERC7984InvalidGatewayRequest(requestId)](#ERC7984-ERC7984InvalidGatewayRequest-uint256-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+#### IERC165 [!toc]
+</div>
+</div>
+
+<a id="ERC7984Freezable-confidentialFrozen-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">confidentialFrozen(address account) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Freezable-confidentialFrozen-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the confidential frozen balance of an account.
+
+</div>
+</div>
+
+<a id="ERC7984Freezable-confidentialAvailable-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">confidentialAvailable(address account) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Freezable-confidentialAvailable-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the confidential available (unfrozen) balance of an account. Gives ACL allowance to `account`.
+
+</div>
+</div>
+
+<a id="ERC7984Freezable-_confidentialAvailable-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_confidentialAvailable(address account) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="ERC7984Freezable-_confidentialAvailable-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal function to calculate the available balance of an account. Does not give any allowances.
+
+</div>
+</div>
+
+<a id="ERC7984Freezable-_setConfidentialFrozen-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_setConfidentialFrozen(address account, euint64 encryptedAmount)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="ERC7984Freezable-_setConfidentialFrozen-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal function to freeze a confidential amount of tokens for an account.
+
+</div>
+</div>
+
+<a id="ERC7984Freezable-_update-address-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_update(address from, address to, euint64 encryptedAmount) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="ERC7984Freezable-_update-address-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See [`ERC7984._update`](#ERC7984-_update-address-address-euint64-).
+
+The `from` account must have sufficient unfrozen balance,
+otherwise 0 tokens are transferred.
+The default freezing behavior can be changed (for a pass-through for instance) by overriding
+[`ERC7984Freezable._confidentialAvailable`](#ERC7984Freezable-_confidentialAvailable-address-). The internal function is used for actual gating (not the public function)
+to avoid unnecessarily granting ACL allowances.
+
+</div>
+</div>
+
+<a id="ERC7984Freezable-TokensFrozen-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">TokensFrozen(address indexed account, euint64 encryptedAmount)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="ERC7984Freezable-TokensFrozen-address-euint64-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when a confidential amount of token is frozen for an account
+
+</div>
+</div>
+
+<a id="ERC7984ObserverAccess"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC7984ObserverAccess`
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/release-v0.3.0/contracts/token/ERC7984/extensions/ERC7984ObserverAccess.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/confidential-contracts/token/ERC7984/extensions/ERC7984ObserverAccess.sol";
+```
+
+Extension of [`ERC7984`](#ERC7984) that allows each account to add a observer who is given
+permanent ACL access to its transfer and balance amounts. A observer can be added or removed at any point in time.
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [setObserver(account, newObserver)](#ERC7984ObserverAccess-setObserver-address-address-)
+- [observer(account)](#ERC7984ObserverAccess-observer-address-)
+- [_update(from, to, amount)](#ERC7984ObserverAccess-_update-address-address-euint64-)
+#### ERC7984 [!toc]
+- [supportsInterface(interfaceId)](#ERC7984-supportsInterface-bytes4-)
+- [name()](#ERC7984-name--)
+- [symbol()](#ERC7984-symbol--)
+- [decimals()](#ERC7984-decimals--)
+- [contractURI()](#ERC7984-contractURI--)
+- [confidentialTotalSupply()](#ERC7984-confidentialTotalSupply--)
+- [confidentialBalanceOf(account)](#ERC7984-confidentialBalanceOf-address-)
+- [isOperator(holder, spender)](#ERC7984-isOperator-address-address-)
+- [setOperator(operator, until)](#ERC7984-setOperator-address-uint48-)
+- [confidentialTransfer(to, encryptedAmount, inputProof)](#ERC7984-confidentialTransfer-address-externalEuint64-bytes-)
+- [confidentialTransfer(to, amount)](#ERC7984-confidentialTransfer-address-euint64-)
+- [confidentialTransferFrom(from, to, encryptedAmount, inputProof)](#ERC7984-confidentialTransferFrom-address-address-externalEuint64-bytes-)
+- [confidentialTransferFrom(from, to, amount)](#ERC7984-confidentialTransferFrom-address-address-euint64-)
+- [confidentialTransferAndCall(to, encryptedAmount, inputProof, data)](#ERC7984-confidentialTransferAndCall-address-externalEuint64-bytes-bytes-)
+- [confidentialTransferAndCall(to, amount, data)](#ERC7984-confidentialTransferAndCall-address-euint64-bytes-)
+- [confidentialTransferFromAndCall(from, to, encryptedAmount, inputProof, data)](#ERC7984-confidentialTransferFromAndCall-address-address-externalEuint64-bytes-bytes-)
+- [confidentialTransferFromAndCall(from, to, amount, data)](#ERC7984-confidentialTransferFromAndCall-address-address-euint64-bytes-)
+- [requestDiscloseEncryptedAmount(encryptedAmount)](#ERC7984-requestDiscloseEncryptedAmount-euint64-)
+- [discloseEncryptedAmount(encryptedAmount, cleartextAmount, decryptionProof)](#ERC7984-discloseEncryptedAmount-euint64-uint64-bytes-)
+- [_setOperator(holder, operator, until)](#ERC7984-_setOperator-address-address-uint48-)
+- [_mint(to, amount)](#ERC7984-_mint-address-euint64-)
+- [_burn(from, amount)](#ERC7984-_burn-address-euint64-)
+- [_transfer(from, to, amount)](#ERC7984-_transfer-address-address-euint64-)
+- [_transferAndCall(from, to, amount, data)](#ERC7984-_transferAndCall-address-address-euint64-bytes-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+#### IERC165 [!toc]
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+- [ERC7984ObserverAccessObserverSet(account, oldObserver, newObserver)](#ERC7984ObserverAccess-ERC7984ObserverAccessObserverSet-address-address-address-)
+#### ERC7984 [!toc]
+- [AmountDiscloseRequested(encryptedAmount, requester)](#ERC7984-AmountDiscloseRequested-euint64-address-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+- [OperatorSet(holder, operator, until)](#IERC7984-OperatorSet-address-address-uint48-)
+- [ConfidentialTransfer(from, to, amount)](#IERC7984-ConfidentialTransfer-address-address-euint64-)
+- [AmountDisclosed(encryptedAmount, amount)](#IERC7984-AmountDisclosed-euint64-uint64-)
+#### IERC165 [!toc]
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [Unauthorized()](#ERC7984ObserverAccess-Unauthorized--)
+#### ERC7984 [!toc]
+- [ERC7984InvalidReceiver(receiver)](#ERC7984-ERC7984InvalidReceiver-address-)
+- [ERC7984InvalidSender(sender)](#ERC7984-ERC7984InvalidSender-address-)
+- [ERC7984UnauthorizedSpender(holder, spender)](#ERC7984-ERC7984UnauthorizedSpender-address-address-)
+- [ERC7984ZeroBalance(holder)](#ERC7984-ERC7984ZeroBalance-address-)
+- [ERC7984UnauthorizedUseOfEncryptedAmount(amount, user)](#ERC7984-ERC7984UnauthorizedUseOfEncryptedAmount-euint64-address-)
+- [ERC7984UnauthorizedCaller(caller)](#ERC7984-ERC7984UnauthorizedCaller-address-)
+- [ERC7984InvalidGatewayRequest(requestId)](#ERC7984-ERC7984InvalidGatewayRequest-uint256-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+#### IERC165 [!toc]
+</div>
+</div>
+
+<a id="ERC7984ObserverAccess-setObserver-address-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">setObserver(address account, address newObserver)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984ObserverAccess-setObserver-address-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Sets the observer for the given account `account` to `newObserver`. Can be called by the
+account or the existing observer to abdicate the observer role (may only set to `address(0)`).
+
+</div>
+</div>
+
+<a id="ERC7984ObserverAccess-observer-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">observer(address account) → address</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984ObserverAccess-observer-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the observer for the given account `account`.
+
+</div>
+</div>
+
+<a id="ERC7984ObserverAccess-_update-address-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_update(address from, address to, euint64 amount) → euint64 transferred</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="ERC7984ObserverAccess-_update-address-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="ERC7984ObserverAccess-ERC7984ObserverAccessObserverSet-address-address-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7984ObserverAccessObserverSet(address account, address oldObserver, address newObserver)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="ERC7984ObserverAccess-ERC7984ObserverAccessObserverSet-address-address-address-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when the observer is changed for the given account `account`.
+
+</div>
+</div>
+
+<a id="ERC7984ObserverAccess-Unauthorized--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">Unauthorized()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="ERC7984ObserverAccess-Unauthorized--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Thrown when an account tries to set a `newObserver` for a given `account` without proper authority.
+
+</div>
+</div>
+
+<a id="ERC7984Omnibus"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC7984Omnibus`
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/release-v0.3.0/contracts/token/ERC7984/extensions/ERC7984Omnibus.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/confidential-contracts/token/ERC7984/extensions/ERC7984Omnibus.sol";
+```
+
+Extension of [`ERC7984`](#ERC7984) that emits additional events for omnibus transfers.
+These events contain encrypted addresses for the sub-account sender and recipient.
+
+<Callout>
+There is no onchain accounting for sub-accounts--integrators must track sub-account
+balances externally.
+</Callout>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [confidentialTransferOmnibus(omnibusTo, externalSender, externalRecipient, externalAmount, inputProof)](#ERC7984Omnibus-confidentialTransferOmnibus-address-externalEaddress-externalEaddress-externalEuint64-bytes-)
+- [confidentialTransferOmnibus(omnibusTo, sender, recipient, amount)](#ERC7984Omnibus-confidentialTransferOmnibus-address-eaddress-eaddress-euint64-)
+- [confidentialTransferFromOmnibus(omnibusFrom, omnibusTo, externalSender, externalRecipient, externalAmount, inputProof)](#ERC7984Omnibus-confidentialTransferFromOmnibus-address-address-externalEaddress-externalEaddress-externalEuint64-bytes-)
+- [confidentialTransferFromOmnibus(omnibusFrom, omnibusTo, sender, recipient, amount)](#ERC7984Omnibus-confidentialTransferFromOmnibus-address-address-eaddress-eaddress-euint64-)
+- [confidentialTransferAndCallOmnibus(omnibusTo, externalSender, externalRecipient, externalAmount, inputProof, data)](#ERC7984Omnibus-confidentialTransferAndCallOmnibus-address-externalEaddress-externalEaddress-externalEuint64-bytes-bytes-)
+- [confidentialTransferAndCallOmnibus(omnibusTo, sender, recipient, amount, data)](#ERC7984Omnibus-confidentialTransferAndCallOmnibus-address-eaddress-eaddress-euint64-bytes-)
+- [confidentialTransferFromAndCallOmnibus(omnibusFrom, omnibusTo, externalSender, externalRecipient, externalAmount, inputProof, data)](#ERC7984Omnibus-confidentialTransferFromAndCallOmnibus-address-address-externalEaddress-externalEaddress-externalEuint64-bytes-bytes-)
+- [confidentialTransferFromAndCallOmnibus(omnibusFrom, omnibusTo, sender, recipient, amount, data)](#ERC7984Omnibus-confidentialTransferFromAndCallOmnibus-address-address-eaddress-eaddress-euint64-bytes-)
+- [_confidentialTransferFromOmnibus(omnibusFrom, omnibusTo, sender, recipient, amount)](#ERC7984Omnibus-_confidentialTransferFromOmnibus-address-address-eaddress-eaddress-euint64-)
+- [_confidentialTransferFromAndCallOmnibus(omnibusFrom, omnibusTo, sender, recipient, amount, data)](#ERC7984Omnibus-_confidentialTransferFromAndCallOmnibus-address-address-eaddress-eaddress-euint64-bytes-)
+#### ERC7984 [!toc]
+- [supportsInterface(interfaceId)](#ERC7984-supportsInterface-bytes4-)
+- [name()](#ERC7984-name--)
+- [symbol()](#ERC7984-symbol--)
+- [decimals()](#ERC7984-decimals--)
+- [contractURI()](#ERC7984-contractURI--)
+- [confidentialTotalSupply()](#ERC7984-confidentialTotalSupply--)
+- [confidentialBalanceOf(account)](#ERC7984-confidentialBalanceOf-address-)
+- [isOperator(holder, spender)](#ERC7984-isOperator-address-address-)
+- [setOperator(operator, until)](#ERC7984-setOperator-address-uint48-)
+- [confidentialTransfer(to, encryptedAmount, inputProof)](#ERC7984-confidentialTransfer-address-externalEuint64-bytes-)
+- [confidentialTransfer(to, amount)](#ERC7984-confidentialTransfer-address-euint64-)
+- [confidentialTransferFrom(from, to, encryptedAmount, inputProof)](#ERC7984-confidentialTransferFrom-address-address-externalEuint64-bytes-)
+- [confidentialTransferFrom(from, to, amount)](#ERC7984-confidentialTransferFrom-address-address-euint64-)
+- [confidentialTransferAndCall(to, encryptedAmount, inputProof, data)](#ERC7984-confidentialTransferAndCall-address-externalEuint64-bytes-bytes-)
+- [confidentialTransferAndCall(to, amount, data)](#ERC7984-confidentialTransferAndCall-address-euint64-bytes-)
+- [confidentialTransferFromAndCall(from, to, encryptedAmount, inputProof, data)](#ERC7984-confidentialTransferFromAndCall-address-address-externalEuint64-bytes-bytes-)
+- [confidentialTransferFromAndCall(from, to, amount, data)](#ERC7984-confidentialTransferFromAndCall-address-address-euint64-bytes-)
+- [requestDiscloseEncryptedAmount(encryptedAmount)](#ERC7984-requestDiscloseEncryptedAmount-euint64-)
+- [discloseEncryptedAmount(encryptedAmount, cleartextAmount, decryptionProof)](#ERC7984-discloseEncryptedAmount-euint64-uint64-bytes-)
+- [_setOperator(holder, operator, until)](#ERC7984-_setOperator-address-address-uint48-)
+- [_mint(to, amount)](#ERC7984-_mint-address-euint64-)
+- [_burn(from, amount)](#ERC7984-_burn-address-euint64-)
+- [_transfer(from, to, amount)](#ERC7984-_transfer-address-address-euint64-)
+- [_transferAndCall(from, to, amount, data)](#ERC7984-_transferAndCall-address-address-euint64-bytes-)
+- [_update(from, to, amount)](#ERC7984-_update-address-address-euint64-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+#### IERC165 [!toc]
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+- [OmnibusConfidentialTransfer(omnibusFrom, omnibusTo, sender, recipient, amount)](#ERC7984Omnibus-OmnibusConfidentialTransfer-address-address-eaddress-eaddress-euint64-)
+#### ERC7984 [!toc]
+- [AmountDiscloseRequested(encryptedAmount, requester)](#ERC7984-AmountDiscloseRequested-euint64-address-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+- [OperatorSet(holder, operator, until)](#IERC7984-OperatorSet-address-address-uint48-)
+- [ConfidentialTransfer(from, to, amount)](#IERC7984-ConfidentialTransfer-address-address-euint64-)
+- [AmountDisclosed(encryptedAmount, amount)](#IERC7984-AmountDisclosed-euint64-uint64-)
+#### IERC165 [!toc]
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [ERC7984UnauthorizedUseOfEncryptedAddress(addr, user)](#ERC7984Omnibus-ERC7984UnauthorizedUseOfEncryptedAddress-eaddress-address-)
+#### ERC7984 [!toc]
+- [ERC7984InvalidReceiver(receiver)](#ERC7984-ERC7984InvalidReceiver-address-)
+- [ERC7984InvalidSender(sender)](#ERC7984-ERC7984InvalidSender-address-)
+- [ERC7984UnauthorizedSpender(holder, spender)](#ERC7984-ERC7984UnauthorizedSpender-address-address-)
+- [ERC7984ZeroBalance(holder)](#ERC7984-ERC7984ZeroBalance-address-)
+- [ERC7984UnauthorizedUseOfEncryptedAmount(amount, user)](#ERC7984-ERC7984UnauthorizedUseOfEncryptedAmount-euint64-address-)
+- [ERC7984UnauthorizedCaller(caller)](#ERC7984-ERC7984UnauthorizedCaller-address-)
+- [ERC7984InvalidGatewayRequest(requestId)](#ERC7984-ERC7984InvalidGatewayRequest-uint256-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+#### IERC165 [!toc]
+</div>
+</div>
+
+<a id="ERC7984Omnibus-confidentialTransferOmnibus-address-externalEaddress-externalEaddress-externalEuint64-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">confidentialTransferOmnibus(address omnibusTo, externalEaddress externalSender, externalEaddress externalRecipient, externalEuint64 externalAmount, bytes inputProof) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Omnibus-confidentialTransferOmnibus-address-externalEaddress-externalEaddress-externalEuint64-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Wraps the interfaces#IERC7984-confidentialTransfer-address-externalEuint64-bytes- function and emits the [`ERC7984Omnibus.OmnibusConfidentialTransfer`](#ERC7984Omnibus-OmnibusConfidentialTransfer-address-address-eaddress-eaddress-euint64-) event.
+
+</div>
+</div>
+
+<a id="ERC7984Omnibus-confidentialTransferOmnibus-address-eaddress-eaddress-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">confidentialTransferOmnibus(address omnibusTo, eaddress sender, eaddress recipient, euint64 amount) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Omnibus-confidentialTransferOmnibus-address-eaddress-eaddress-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Wraps the interfaces#IERC7984-confidentialTransfer-address-euint64- function and emits the [`ERC7984Omnibus.OmnibusConfidentialTransfer`](#ERC7984Omnibus-OmnibusConfidentialTransfer-address-address-eaddress-eaddress-euint64-) event.
+
+</div>
+</div>
+
+<a id="ERC7984Omnibus-confidentialTransferFromOmnibus-address-address-externalEaddress-externalEaddress-externalEuint64-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">confidentialTransferFromOmnibus(address omnibusFrom, address omnibusTo, externalEaddress externalSender, externalEaddress externalRecipient, externalEuint64 externalAmount, bytes inputProof) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Omnibus-confidentialTransferFromOmnibus-address-address-externalEaddress-externalEaddress-externalEuint64-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Wraps the interfaces#IERC7984-confidentialTransferFrom-address-address-externalEuint64-bytes- function and emits the [`ERC7984Omnibus.OmnibusConfidentialTransfer`](#ERC7984Omnibus-OmnibusConfidentialTransfer-address-address-eaddress-eaddress-euint64-) event.
+
+</div>
+</div>
+
+<a id="ERC7984Omnibus-confidentialTransferFromOmnibus-address-address-eaddress-eaddress-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">confidentialTransferFromOmnibus(address omnibusFrom, address omnibusTo, eaddress sender, eaddress recipient, euint64 amount) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Omnibus-confidentialTransferFromOmnibus-address-address-eaddress-eaddress-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Wraps the interfaces#IERC7984-confidentialTransferFrom-address-address-euint64- function and emits the [`ERC7984Omnibus.OmnibusConfidentialTransfer`](#ERC7984Omnibus-OmnibusConfidentialTransfer-address-address-eaddress-eaddress-euint64-) event.
+
+</div>
+</div>
+
+<a id="ERC7984Omnibus-confidentialTransferAndCallOmnibus-address-externalEaddress-externalEaddress-externalEuint64-bytes-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">confidentialTransferAndCallOmnibus(address omnibusTo, externalEaddress externalSender, externalEaddress externalRecipient, externalEuint64 externalAmount, bytes inputProof, bytes data) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Omnibus-confidentialTransferAndCallOmnibus-address-externalEaddress-externalEaddress-externalEuint64-bytes-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Wraps the interfaces#IERC7984-confidentialTransferAndCall-address-externalEuint64-bytes-bytes- function and emits the [`ERC7984Omnibus.OmnibusConfidentialTransfer`](#ERC7984Omnibus-OmnibusConfidentialTransfer-address-address-eaddress-eaddress-euint64-) event.
+
+</div>
+</div>
+
+<a id="ERC7984Omnibus-confidentialTransferAndCallOmnibus-address-eaddress-eaddress-euint64-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">confidentialTransferAndCallOmnibus(address omnibusTo, eaddress sender, eaddress recipient, euint64 amount, bytes data) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Omnibus-confidentialTransferAndCallOmnibus-address-eaddress-eaddress-euint64-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Wraps the interfaces#IERC7984-confidentialTransferAndCall-address-euint64-bytes- function and emits the [`ERC7984Omnibus.OmnibusConfidentialTransfer`](#ERC7984Omnibus-OmnibusConfidentialTransfer-address-address-eaddress-eaddress-euint64-) event.
+
+</div>
+</div>
+
+<a id="ERC7984Omnibus-confidentialTransferFromAndCallOmnibus-address-address-externalEaddress-externalEaddress-externalEuint64-bytes-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">confidentialTransferFromAndCallOmnibus(address omnibusFrom, address omnibusTo, externalEaddress externalSender, externalEaddress externalRecipient, externalEuint64 externalAmount, bytes inputProof, bytes data) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Omnibus-confidentialTransferFromAndCallOmnibus-address-address-externalEaddress-externalEaddress-externalEuint64-bytes-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Wraps the interfaces#IERC7984-confidentialTransferFromAndCall-address-address-externalEuint64-bytes-bytes- function and emits the [`ERC7984Omnibus.OmnibusConfidentialTransfer`](#ERC7984Omnibus-OmnibusConfidentialTransfer-address-address-eaddress-eaddress-euint64-) event.
+
+</div>
+</div>
+
+<a id="ERC7984Omnibus-confidentialTransferFromAndCallOmnibus-address-address-eaddress-eaddress-euint64-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">confidentialTransferFromAndCallOmnibus(address omnibusFrom, address omnibusTo, eaddress sender, eaddress recipient, euint64 amount, bytes data) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Omnibus-confidentialTransferFromAndCallOmnibus-address-address-eaddress-eaddress-euint64-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Wraps the interfaces#IERC7984-confidentialTransferFromAndCall-address-address-euint64-bytes- function and emits the [`ERC7984Omnibus.OmnibusConfidentialTransfer`](#ERC7984Omnibus-OmnibusConfidentialTransfer-address-address-eaddress-eaddress-euint64-) event.
+
+</div>
+</div>
+
+<a id="ERC7984Omnibus-_confidentialTransferFromOmnibus-address-address-eaddress-eaddress-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_confidentialTransferFromOmnibus(address omnibusFrom, address omnibusTo, eaddress sender, eaddress recipient, euint64 amount) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="ERC7984Omnibus-_confidentialTransferFromOmnibus-address-address-eaddress-eaddress-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Handles the ACL allowances, does the transfer without a callback, and emits [`ERC7984Omnibus.OmnibusConfidentialTransfer`](#ERC7984Omnibus-OmnibusConfidentialTransfer-address-address-eaddress-eaddress-euint64-).
+
+</div>
+</div>
+
+<a id="ERC7984Omnibus-_confidentialTransferFromAndCallOmnibus-address-address-eaddress-eaddress-euint64-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_confidentialTransferFromAndCallOmnibus(address omnibusFrom, address omnibusTo, eaddress sender, eaddress recipient, euint64 amount, bytes data) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="ERC7984Omnibus-_confidentialTransferFromAndCallOmnibus-address-address-eaddress-eaddress-euint64-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Handles the ACL allowances, does the transfer with a callback, and emits [`ERC7984Omnibus.OmnibusConfidentialTransfer`](#ERC7984Omnibus-OmnibusConfidentialTransfer-address-address-eaddress-eaddress-euint64-).
+
+</div>
+</div>
+
+<a id="ERC7984Omnibus-OmnibusConfidentialTransfer-address-address-eaddress-eaddress-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">OmnibusConfidentialTransfer(address indexed omnibusFrom, address indexed omnibusTo, eaddress sender, eaddress indexed recipient, euint64 amount)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="ERC7984Omnibus-OmnibusConfidentialTransfer-address-address-eaddress-eaddress-euint64-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when a confidential transfer is made representing the onchain settlement of
+an omnibus transfer from `sender` to `recipient` of amount `amount`. Settlement occurs between
+`omnibusFrom` and `omnibusTo` and is represented in a matching [`IERC7984.ConfidentialTransfer`](/confidential-contracts/api/interfaces#IERC7984-ConfidentialTransfer-address-address-euint64-) event.
+
+<Callout>
+`omnibusFrom` and `omnibusTo` get permanent ACL allowances for `sender` and `recipient`.
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7984Omnibus-ERC7984UnauthorizedUseOfEncryptedAddress-eaddress-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7984UnauthorizedUseOfEncryptedAddress(eaddress addr, address user)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="ERC7984Omnibus-ERC7984UnauthorizedUseOfEncryptedAddress-eaddress-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The caller `user` does not have access to the encrypted address `addr`.
+
+<Callout>
+Try using the equivalent transfer function with an input proof.
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7984Restricted"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC7984Restricted`
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/release-v0.3.0/contracts/token/ERC7984/extensions/ERC7984Restricted.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/confidential-contracts/token/ERC7984/extensions/ERC7984Restricted.sol";
+```
+
+Extension of [`ERC7984`](#ERC7984) that implements user account transfer restrictions through the
+[`IERC7984Rwa.isUserAllowed`](/confidential-contracts/api/interfaces#IERC7984Rwa-isUserAllowed-address-) function. Inspired by
+https://github.com/OpenZeppelin/openzeppelin-community-contracts/blob/master/contracts/token/ERC20/extensions/ERC20Restricted.sol.
+
+By default, each account has no explicit restriction. The [`IERC7984Rwa.isUserAllowed`](/confidential-contracts/api/interfaces#IERC7984Rwa-isUserAllowed-address-) function acts as
+a blocklist. Developers can override [`IERC7984Rwa.isUserAllowed`](/confidential-contracts/api/interfaces#IERC7984Rwa-isUserAllowed-address-) to check that `restriction == ALLOWED`
+to implement an allowlist.
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [getRestriction(account)](#ERC7984Restricted-getRestriction-address-)
+- [isUserAllowed(account)](#ERC7984Restricted-isUserAllowed-address-)
+- [_update(from, to, value)](#ERC7984Restricted-_update-address-address-euint64-)
+- [_setRestriction(account, restriction)](#ERC7984Restricted-_setRestriction-address-enum-ERC7984Restricted-Restriction-)
+- [_blockUser(account)](#ERC7984Restricted-_blockUser-address-)
+- [_allowUser(account)](#ERC7984Restricted-_allowUser-address-)
+- [_resetUser(account)](#ERC7984Restricted-_resetUser-address-)
+- [_checkRestriction(account)](#ERC7984Restricted-_checkRestriction-address-)
+- [_checkSenderRestriction(account)](#ERC7984Restricted-_checkSenderRestriction-address-)
+- [_checkRecipientRestriction(account)](#ERC7984Restricted-_checkRecipientRestriction-address-)
+#### ERC7984 [!toc]
+- [supportsInterface(interfaceId)](#ERC7984-supportsInterface-bytes4-)
+- [name()](#ERC7984-name--)
+- [symbol()](#ERC7984-symbol--)
+- [decimals()](#ERC7984-decimals--)
+- [contractURI()](#ERC7984-contractURI--)
+- [confidentialTotalSupply()](#ERC7984-confidentialTotalSupply--)
+- [confidentialBalanceOf(account)](#ERC7984-confidentialBalanceOf-address-)
+- [isOperator(holder, spender)](#ERC7984-isOperator-address-address-)
+- [setOperator(operator, until)](#ERC7984-setOperator-address-uint48-)
+- [confidentialTransfer(to, encryptedAmount, inputProof)](#ERC7984-confidentialTransfer-address-externalEuint64-bytes-)
+- [confidentialTransfer(to, amount)](#ERC7984-confidentialTransfer-address-euint64-)
+- [confidentialTransferFrom(from, to, encryptedAmount, inputProof)](#ERC7984-confidentialTransferFrom-address-address-externalEuint64-bytes-)
+- [confidentialTransferFrom(from, to, amount)](#ERC7984-confidentialTransferFrom-address-address-euint64-)
+- [confidentialTransferAndCall(to, encryptedAmount, inputProof, data)](#ERC7984-confidentialTransferAndCall-address-externalEuint64-bytes-bytes-)
+- [confidentialTransferAndCall(to, amount, data)](#ERC7984-confidentialTransferAndCall-address-euint64-bytes-)
+- [confidentialTransferFromAndCall(from, to, encryptedAmount, inputProof, data)](#ERC7984-confidentialTransferFromAndCall-address-address-externalEuint64-bytes-bytes-)
+- [confidentialTransferFromAndCall(from, to, amount, data)](#ERC7984-confidentialTransferFromAndCall-address-address-euint64-bytes-)
+- [requestDiscloseEncryptedAmount(encryptedAmount)](#ERC7984-requestDiscloseEncryptedAmount-euint64-)
+- [discloseEncryptedAmount(encryptedAmount, cleartextAmount, decryptionProof)](#ERC7984-discloseEncryptedAmount-euint64-uint64-bytes-)
+- [_setOperator(holder, operator, until)](#ERC7984-_setOperator-address-address-uint48-)
+- [_mint(to, amount)](#ERC7984-_mint-address-euint64-)
+- [_burn(from, amount)](#ERC7984-_burn-address-euint64-)
+- [_transfer(from, to, amount)](#ERC7984-_transfer-address-address-euint64-)
+- [_transferAndCall(from, to, amount, data)](#ERC7984-_transferAndCall-address-address-euint64-bytes-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+#### IERC165 [!toc]
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+- [UserRestrictionUpdated(account, restriction)](#ERC7984Restricted-UserRestrictionUpdated-address-enum-ERC7984Restricted-Restriction-)
+#### ERC7984 [!toc]
+- [AmountDiscloseRequested(encryptedAmount, requester)](#ERC7984-AmountDiscloseRequested-euint64-address-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+- [OperatorSet(holder, operator, until)](#IERC7984-OperatorSet-address-address-uint48-)
+- [ConfidentialTransfer(from, to, amount)](#IERC7984-ConfidentialTransfer-address-address-euint64-)
+- [AmountDisclosed(encryptedAmount, amount)](#IERC7984-AmountDisclosed-euint64-uint64-)
+#### IERC165 [!toc]
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [UserRestricted(account)](#ERC7984Restricted-UserRestricted-address-)
+#### ERC7984 [!toc]
+- [ERC7984InvalidReceiver(receiver)](#ERC7984-ERC7984InvalidReceiver-address-)
+- [ERC7984InvalidSender(sender)](#ERC7984-ERC7984InvalidSender-address-)
+- [ERC7984UnauthorizedSpender(holder, spender)](#ERC7984-ERC7984UnauthorizedSpender-address-address-)
+- [ERC7984ZeroBalance(holder)](#ERC7984-ERC7984ZeroBalance-address-)
+- [ERC7984UnauthorizedUseOfEncryptedAmount(amount, user)](#ERC7984-ERC7984UnauthorizedUseOfEncryptedAmount-euint64-address-)
+- [ERC7984UnauthorizedCaller(caller)](#ERC7984-ERC7984UnauthorizedCaller-address-)
+- [ERC7984InvalidGatewayRequest(requestId)](#ERC7984-ERC7984InvalidGatewayRequest-uint256-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+#### IERC165 [!toc]
+</div>
+</div>
+
+<a id="ERC7984Restricted-getRestriction-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">getRestriction(address account) → enum ERC7984Restricted.Restriction</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Restricted-getRestriction-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the restriction of a user account.
+
+</div>
+</div>
+
+<a id="ERC7984Restricted-isUserAllowed-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">isUserAllowed(address account) → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Restricted-isUserAllowed-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns whether a user account is allowed to interact with the token.
+
+Default implementation only disallows explicitly BLOCKED accounts (i.e. a blocklist).
+
+</div>
+</div>
+
+<a id="ERC7984Restricted-_update-address-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_update(address from, address to, euint64 value) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="ERC7984Restricted-_update-address-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See [`ERC7984._update`](#ERC7984-_update-address-address-euint64-). Enforces transfer restrictions (excluding minting and burning).
+
+Requirements:
+
+* `from` must be allowed to transfer tokens (see [`IERC7984Rwa.isUserAllowed`](/confidential-contracts/api/interfaces#IERC7984Rwa-isUserAllowed-address-)).
+* `to` must be allowed to receive tokens (see [`IERC7984Rwa.isUserAllowed`](/confidential-contracts/api/interfaces#IERC7984Rwa-isUserAllowed-address-)).
+
+The default restriction behavior can be changed (for a pass-through for instance) by overriding
+[`ERC7984Restricted._checkSenderRestriction`](#ERC7984Restricted-_checkSenderRestriction-address-) and/or [`ERC7984Restricted._checkRecipientRestriction`](#ERC7984Restricted-_checkRecipientRestriction-address-).
+
+</div>
+</div>
+
+<a id="ERC7984Restricted-_setRestriction-address-enum-ERC7984Restricted-Restriction-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_setRestriction(address account, enum ERC7984Restricted.Restriction restriction)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="ERC7984Restricted-_setRestriction-address-enum-ERC7984Restricted-Restriction-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Updates the restriction of a user account.
+
+</div>
+</div>
+
+<a id="ERC7984Restricted-_blockUser-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_blockUser(address account)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="ERC7984Restricted-_blockUser-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Convenience function to block a user account (set to BLOCKED).
+
+</div>
+</div>
+
+<a id="ERC7984Restricted-_allowUser-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_allowUser(address account)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="ERC7984Restricted-_allowUser-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Convenience function to allow a user account (set to ALLOWED).
+
+</div>
+</div>
+
+<a id="ERC7984Restricted-_resetUser-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_resetUser(address account)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="ERC7984Restricted-_resetUser-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Convenience function to reset a user account to default restriction.
+
+</div>
+</div>
+
+<a id="ERC7984Restricted-_checkRestriction-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_checkRestriction(address account)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="ERC7984Restricted-_checkRestriction-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Checks if a user account is restricted. Reverts with [`ERC7984Restricted.UserRestricted`](#ERC7984Restricted-UserRestricted-address-) if so.
+
+</div>
+</div>
+
+<a id="ERC7984Restricted-_checkSenderRestriction-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_checkSenderRestriction(address account)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="ERC7984Restricted-_checkSenderRestriction-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal function which checks restriction of the `from` account before a transfer.
+Working with [`ERC7984._update`](#ERC7984-_update-address-address-euint64-) function.
+
+</div>
+</div>
+
+<a id="ERC7984Restricted-_checkRecipientRestriction-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_checkRecipientRestriction(address account)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="ERC7984Restricted-_checkRecipientRestriction-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal function which checks restriction of the `to` account before a transfer.
+Working with [`ERC7984._update`](#ERC7984-_update-address-address-euint64-) function.
+
+</div>
+</div>
+
+<a id="ERC7984Restricted-UserRestrictionUpdated-address-enum-ERC7984Restricted-Restriction-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">UserRestrictionUpdated(address indexed account, enum ERC7984Restricted.Restriction restriction)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="ERC7984Restricted-UserRestrictionUpdated-address-enum-ERC7984Restricted-Restriction-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when a user account's restriction is updated.
+
+</div>
+</div>
+
+<a id="ERC7984Restricted-UserRestricted-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">UserRestricted(address account)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="ERC7984Restricted-UserRestricted-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The operation failed because the user account is restricted.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC7984Rwa`
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/release-v0.3.0/contracts/token/ERC7984/extensions/ERC7984Rwa.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/confidential-contracts/token/ERC7984/extensions/ERC7984Rwa.sol";
+```
+
+Extension of [`ERC7984`](#ERC7984) that supports confidential Real World Assets (RWAs).
+This interface provides compliance checks, transfer controls and enforcement actions.
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Modifiers</h3>
+<div className="font-mono">
+- [onlyAdmin()](#ERC7984Rwa-onlyAdmin--)
+- [onlyAgent()](#ERC7984Rwa-onlyAgent--)
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [constructor(admin)](#ERC7984Rwa-constructor-address-)
+- [supportsInterface(interfaceId)](#ERC7984Rwa-supportsInterface-bytes4-)
+- [isAdmin(account)](#ERC7984Rwa-isAdmin-address-)
+- [isAgent(account)](#ERC7984Rwa-isAgent-address-)
+- [addAgent(account)](#ERC7984Rwa-addAgent-address-)
+- [removeAgent(account)](#ERC7984Rwa-removeAgent-address-)
+- [pause()](#ERC7984Rwa-pause--)
+- [unpause()](#ERC7984Rwa-unpause--)
+- [blockUser(account)](#ERC7984Rwa-blockUser-address-)
+- [unblockUser(account)](#ERC7984Rwa-unblockUser-address-)
+- [setConfidentialFrozen(account, encryptedAmount, inputProof)](#ERC7984Rwa-setConfidentialFrozen-address-externalEuint64-bytes-)
+- [setConfidentialFrozen(account, encryptedAmount)](#ERC7984Rwa-setConfidentialFrozen-address-euint64-)
+- [confidentialMint(to, encryptedAmount, inputProof)](#ERC7984Rwa-confidentialMint-address-externalEuint64-bytes-)
+- [confidentialMint(to, encryptedAmount)](#ERC7984Rwa-confidentialMint-address-euint64-)
+- [confidentialBurn(account, encryptedAmount, inputProof)](#ERC7984Rwa-confidentialBurn-address-externalEuint64-bytes-)
+- [confidentialBurn(account, encryptedAmount)](#ERC7984Rwa-confidentialBurn-address-euint64-)
+- [forceConfidentialTransferFrom(from, to, encryptedAmount, inputProof)](#ERC7984Rwa-forceConfidentialTransferFrom-address-address-externalEuint64-bytes-)
+- [forceConfidentialTransferFrom(from, to, encryptedAmount)](#ERC7984Rwa-forceConfidentialTransferFrom-address-address-euint64-)
+- [confidentialAvailable(account)](#ERC7984Rwa-confidentialAvailable-address-)
+- [confidentialFrozen(account)](#ERC7984Rwa-confidentialFrozen-address-)
+- [paused()](#ERC7984Rwa-paused--)
+- [isUserAllowed(account)](#ERC7984Rwa-isUserAllowed-address-)
+- [_update(from, to, encryptedAmount)](#ERC7984Rwa-_update-address-address-euint64-)
+- [_forceUpdate(from, to, encryptedAmount)](#ERC7984Rwa-_forceUpdate-address-address-euint64-)
+- [_checkSenderRestriction(account)](#ERC7984Rwa-_checkSenderRestriction-address-)
+- [AGENT_ROLE()](#ERC7984Rwa-AGENT_ROLE-bytes32)
+#### AccessControl [!toc]
+- [hasRole(role, account)](#AccessControl-hasRole-bytes32-address-)
+- [_checkRole(role)](#AccessControl-_checkRole-bytes32-)
+- [_checkRole(role, account)](#AccessControl-_checkRole-bytes32-address-)
+- [getRoleAdmin(role)](#AccessControl-getRoleAdmin-bytes32-)
+- [grantRole(role, account)](#AccessControl-grantRole-bytes32-address-)
+- [revokeRole(role, account)](#AccessControl-revokeRole-bytes32-address-)
+- [renounceRole(role, callerConfirmation)](#AccessControl-renounceRole-bytes32-address-)
+- [_setRoleAdmin(role, adminRole)](#AccessControl-_setRoleAdmin-bytes32-bytes32-)
+- [_grantRole(role, account)](#AccessControl-_grantRole-bytes32-address-)
+- [_revokeRole(role, account)](#AccessControl-_revokeRole-bytes32-address-)
+- [DEFAULT_ADMIN_ROLE()](#AccessControl-DEFAULT_ADMIN_ROLE-bytes32)
+#### Multicall [!toc]
+- [multicall(data)](#Multicall-multicall-bytes---)
+#### Pausable [!toc]
+- [_requireNotPaused()](#Pausable-_requireNotPaused--)
+- [_requirePaused()](#Pausable-_requirePaused--)
+- [_pause()](#Pausable-_pause--)
+- [_unpause()](#Pausable-_unpause--)
+#### ERC7984Restricted [!toc]
+- [getRestriction(account)](#ERC7984Restricted-getRestriction-address-)
+- [_setRestriction(account, restriction)](#ERC7984Restricted-_setRestriction-address-enum-ERC7984Restricted-Restriction-)
+- [_blockUser(account)](#ERC7984Restricted-_blockUser-address-)
+- [_allowUser(account)](#ERC7984Restricted-_allowUser-address-)
+- [_resetUser(account)](#ERC7984Restricted-_resetUser-address-)
+- [_checkRestriction(account)](#ERC7984Restricted-_checkRestriction-address-)
+- [_checkRecipientRestriction(account)](#ERC7984Restricted-_checkRecipientRestriction-address-)
+#### ERC7984Freezable [!toc]
+- [_confidentialAvailable(account)](#ERC7984Freezable-_confidentialAvailable-address-)
+- [_setConfidentialFrozen(account, encryptedAmount)](#ERC7984Freezable-_setConfidentialFrozen-address-euint64-)
+#### ERC7984 [!toc]
+- [name()](#ERC7984-name--)
+- [symbol()](#ERC7984-symbol--)
+- [decimals()](#ERC7984-decimals--)
+- [contractURI()](#ERC7984-contractURI--)
+- [confidentialTotalSupply()](#ERC7984-confidentialTotalSupply--)
+- [confidentialBalanceOf(account)](#ERC7984-confidentialBalanceOf-address-)
+- [isOperator(holder, spender)](#ERC7984-isOperator-address-address-)
+- [setOperator(operator, until)](#ERC7984-setOperator-address-uint48-)
+- [confidentialTransfer(to, encryptedAmount, inputProof)](#ERC7984-confidentialTransfer-address-externalEuint64-bytes-)
+- [confidentialTransfer(to, amount)](#ERC7984-confidentialTransfer-address-euint64-)
+- [confidentialTransferFrom(from, to, encryptedAmount, inputProof)](#ERC7984-confidentialTransferFrom-address-address-externalEuint64-bytes-)
+- [confidentialTransferFrom(from, to, amount)](#ERC7984-confidentialTransferFrom-address-address-euint64-)
+- [confidentialTransferAndCall(to, encryptedAmount, inputProof, data)](#ERC7984-confidentialTransferAndCall-address-externalEuint64-bytes-bytes-)
+- [confidentialTransferAndCall(to, amount, data)](#ERC7984-confidentialTransferAndCall-address-euint64-bytes-)
+- [confidentialTransferFromAndCall(from, to, encryptedAmount, inputProof, data)](#ERC7984-confidentialTransferFromAndCall-address-address-externalEuint64-bytes-bytes-)
+- [confidentialTransferFromAndCall(from, to, amount, data)](#ERC7984-confidentialTransferFromAndCall-address-address-euint64-bytes-)
+- [requestDiscloseEncryptedAmount(encryptedAmount)](#ERC7984-requestDiscloseEncryptedAmount-euint64-)
+- [discloseEncryptedAmount(encryptedAmount, cleartextAmount, decryptionProof)](#ERC7984-discloseEncryptedAmount-euint64-uint64-bytes-)
+- [_setOperator(holder, operator, until)](#ERC7984-_setOperator-address-address-uint48-)
+- [_mint(to, amount)](#ERC7984-_mint-address-euint64-)
+- [_burn(from, amount)](#ERC7984-_burn-address-euint64-)
+- [_transfer(from, to, amount)](#ERC7984-_transfer-address-address-euint64-)
+- [_transferAndCall(from, to, amount, data)](#ERC7984-_transferAndCall-address-address-euint64-bytes-)
+#### ERC165 [!toc]
+#### IERC7984Rwa [!toc]
+#### IERC7984 [!toc]
+#### IERC165 [!toc]
+#### IAccessControl [!toc]
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+#### AccessControl [!toc]
+#### Multicall [!toc]
+#### Pausable [!toc]
+- [Paused(account)](#Pausable-Paused-address-)
+- [Unpaused(account)](#Pausable-Unpaused-address-)
+#### ERC7984Restricted [!toc]
+- [UserRestrictionUpdated(account, restriction)](#ERC7984Restricted-UserRestrictionUpdated-address-enum-ERC7984Restricted-Restriction-)
+#### ERC7984Freezable [!toc]
+- [TokensFrozen(account, encryptedAmount)](#ERC7984Freezable-TokensFrozen-address-euint64-)
+#### ERC7984 [!toc]
+- [AmountDiscloseRequested(encryptedAmount, requester)](#ERC7984-AmountDiscloseRequested-euint64-address-)
+#### ERC165 [!toc]
+#### IERC7984Rwa [!toc]
+#### IERC7984 [!toc]
+- [OperatorSet(holder, operator, until)](#IERC7984-OperatorSet-address-address-uint48-)
+- [ConfidentialTransfer(from, to, amount)](#IERC7984-ConfidentialTransfer-address-address-euint64-)
+- [AmountDisclosed(encryptedAmount, amount)](#IERC7984-AmountDisclosed-euint64-uint64-)
+#### IERC165 [!toc]
+#### IAccessControl [!toc]
+- [RoleAdminChanged(role, previousAdminRole, newAdminRole)](#IAccessControl-RoleAdminChanged-bytes32-bytes32-bytes32-)
+- [RoleGranted(role, account, sender)](#IAccessControl-RoleGranted-bytes32-address-address-)
+- [RoleRevoked(role, account, sender)](#IAccessControl-RoleRevoked-bytes32-address-address-)
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+#### AccessControl [!toc]
+#### Multicall [!toc]
+#### Pausable [!toc]
+- [EnforcedPause()](#Pausable-EnforcedPause--)
+- [ExpectedPause()](#Pausable-ExpectedPause--)
+#### ERC7984Restricted [!toc]
+- [UserRestricted(account)](#ERC7984Restricted-UserRestricted-address-)
+#### ERC7984Freezable [!toc]
+#### ERC7984 [!toc]
+- [ERC7984InvalidReceiver(receiver)](#ERC7984-ERC7984InvalidReceiver-address-)
+- [ERC7984InvalidSender(sender)](#ERC7984-ERC7984InvalidSender-address-)
+- [ERC7984UnauthorizedSpender(holder, spender)](#ERC7984-ERC7984UnauthorizedSpender-address-address-)
+- [ERC7984ZeroBalance(holder)](#ERC7984-ERC7984ZeroBalance-address-)
+- [ERC7984UnauthorizedUseOfEncryptedAmount(amount, user)](#ERC7984-ERC7984UnauthorizedUseOfEncryptedAmount-euint64-address-)
+- [ERC7984UnauthorizedCaller(caller)](#ERC7984-ERC7984UnauthorizedCaller-address-)
+- [ERC7984InvalidGatewayRequest(requestId)](#ERC7984-ERC7984InvalidGatewayRequest-uint256-)
+#### ERC165 [!toc]
+#### IERC7984Rwa [!toc]
+#### IERC7984 [!toc]
+#### IERC165 [!toc]
+#### IAccessControl [!toc]
+- [AccessControlUnauthorizedAccount(account, neededRole)](#IAccessControl-AccessControlUnauthorizedAccount-address-bytes32-)
+- [AccessControlBadConfirmation()](#IAccessControl-AccessControlBadConfirmation--)
+</div>
+</div>
+
+<a id="ERC7984Rwa-onlyAdmin--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">onlyAdmin()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="ERC7984Rwa-onlyAdmin--">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Checks if the sender is an admin.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-onlyAgent--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">onlyAgent()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="ERC7984Rwa-onlyAgent--">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Checks if the sender is an agent.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-constructor-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">constructor(address admin)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="ERC7984Rwa-constructor-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-supportsInterface-bytes4-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">supportsInterface(bytes4 interfaceId) → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-supportsInterface-bytes4-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-isAdmin-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">isAdmin(address account) → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-isAdmin-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns true if has admin role, false otherwise.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-isAgent-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">isAgent(address account) → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-isAgent-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns true if agent, false otherwise.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-addAgent-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">addAgent(address account)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-addAgent-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Adds agent.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-removeAgent-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">removeAgent(address account)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-removeAgent-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Removes agent.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-pause--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">pause()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-pause--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Pauses contract.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-unpause--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">unpause()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-unpause--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Unpauses contract.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-blockUser-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">blockUser(address account)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-blockUser-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Blocks a user account.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-unblockUser-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">unblockUser(address account)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-unblockUser-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Unblocks a user account.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-setConfidentialFrozen-address-externalEuint64-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">setConfidentialFrozen(address account, externalEuint64 encryptedAmount, bytes inputProof)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-setConfidentialFrozen-address-externalEuint64-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Sets confidential frozen for an account with proof.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-setConfidentialFrozen-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">setConfidentialFrozen(address account, euint64 encryptedAmount)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-setConfidentialFrozen-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Sets confidential frozen for an account.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-confidentialMint-address-externalEuint64-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">confidentialMint(address to, externalEuint64 encryptedAmount, bytes inputProof) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-confidentialMint-address-externalEuint64-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Mints confidential amount of tokens to account with proof.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-confidentialMint-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">confidentialMint(address to, euint64 encryptedAmount) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-confidentialMint-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Mints confidential amount of tokens to account.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-confidentialBurn-address-externalEuint64-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">confidentialBurn(address account, externalEuint64 encryptedAmount, bytes inputProof) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-confidentialBurn-address-externalEuint64-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Burns confidential amount of tokens from account with proof.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-confidentialBurn-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">confidentialBurn(address account, euint64 encryptedAmount) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-confidentialBurn-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Burns confidential amount of tokens from account.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-forceConfidentialTransferFrom-address-address-externalEuint64-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">forceConfidentialTransferFrom(address from, address to, externalEuint64 encryptedAmount, bytes inputProof) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-forceConfidentialTransferFrom-address-address-externalEuint64-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Variant of interfaces#IERC7984Rwa-forceConfidentialTransferFrom-address-address-euint64- with an input proof.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-forceConfidentialTransferFrom-address-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">forceConfidentialTransferFrom(address from, address to, euint64 encryptedAmount) → euint64 transferred</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-forceConfidentialTransferFrom-address-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Force transfer callable by the role [`ERC7984Rwa.AGENT_ROLE`](#ERC7984Rwa-AGENT_ROLE-bytes32) which transfers tokens from `from` to `to` and
+bypasses the [`ERC7984Restricted`](#ERC7984Restricted) (only on from) and [`++Pausable++`](https://docs.openzeppelin.com/contracts/api/utils#pausable)
+checks. Frozen tokens are not transferred and must be unfrozen first.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-confidentialAvailable-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">confidentialAvailable(address account) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-confidentialAvailable-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the confidential available (unfrozen) balance of an account. Gives ACL allowance to `account`.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-confidentialFrozen-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">confidentialFrozen(address account) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-confidentialFrozen-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the confidential frozen balance of an account.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-paused--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">paused() → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-paused--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns true if the contract is paused, and false otherwise.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-isUserAllowed-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">isUserAllowed(address account) → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-isUserAllowed-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns whether a user account is allowed to interact with the token.
+
+Default implementation only disallows explicitly BLOCKED accounts (i.e. a blocklist).
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-_update-address-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_update(address from, address to, euint64 encryptedAmount) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="ERC7984Rwa-_update-address-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal function which updates confidential balances while performing frozen and restriction compliance checks.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-_forceUpdate-address-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_forceUpdate(address from, address to, euint64 encryptedAmount) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="ERC7984Rwa-_forceUpdate-address-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal function which forces transfer of confidential amount of tokens from account to account by skipping compliance checks.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-_checkSenderRestriction-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_checkSenderRestriction(address account)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="ERC7984Rwa-_checkSenderRestriction-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Bypasses the `from` restriction check when performing a [`IERC7984Rwa.forceConfidentialTransferFrom`](/confidential-contracts/api/interfaces#IERC7984Rwa-forceConfidentialTransferFrom-address-address-euint64-).
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-AGENT_ROLE-bytes32"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">AGENT_ROLE() → bytes32</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="ERC7984Rwa-AGENT_ROLE-bytes32">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Accounts granted the agent role have the following permissioned abilities:
+
+- Mint/Burn to/from a given address (does not require permission)
+- Force transfer from a given address (does not require permission)
+  - Bypasses pause and restriction checks (not frozen)
+- Pause/Unpause the contract
+- Block/Unblock a given account
+- Set frozen amount of tokens for a given account.
+
+</div>
+</div>
+
+<a id="ERC7984Votes"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC7984Votes`
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/release-v0.3.0/contracts/token/ERC7984/extensions/ERC7984Votes.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/confidential-contracts/token/ERC7984/extensions/ERC7984Votes.sol";
+```
+
+Extension of [`ERC7984`](#ERC7984) supporting confidential votes tracking and delegation.
+
+The amount of confidential voting units an account has is equal to the balance of
 that account. Voing power is taken into account when an account delegates votes to itself or to another
 account.
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Functions</h3>
 <div className="font-mono">
-- [confidentialTotalSupply()](#ConfidentialFungibleTokenVotes-confidentialTotalSupply--)
-- [_update(from, to, amount)](#ConfidentialFungibleTokenVotes-_update-address-address-euint64-)
-- [_getVotingUnits(account)](#ConfidentialFungibleTokenVotes-_getVotingUnits-address-)
+- [confidentialTotalSupply()](#ERC7984Votes-confidentialTotalSupply--)
+- [_update(from, to, amount)](#ERC7984Votes-_update-address-address-euint64-)
+- [_getVotingUnits(account)](#ERC7984Votes-_getVotingUnits-address-)
 #### VotesConfidential [!toc]
 - [clock()](#VotesConfidential-clock--)
 - [CLOCK_MODE()](#VotesConfidential-CLOCK_MODE--)
@@ -1032,30 +2826,33 @@ account.
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
 - [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
-#### ConfidentialFungibleToken [!toc]
-- [name()](#ConfidentialFungibleToken-name--)
-- [symbol()](#ConfidentialFungibleToken-symbol--)
-- [decimals()](#ConfidentialFungibleToken-decimals--)
-- [tokenURI()](#ConfidentialFungibleToken-tokenURI--)
-- [confidentialBalanceOf(account)](#ConfidentialFungibleToken-confidentialBalanceOf-address-)
-- [isOperator(holder, spender)](#ConfidentialFungibleToken-isOperator-address-address-)
-- [setOperator(operator, until)](#ConfidentialFungibleToken-setOperator-address-uint48-)
-- [confidentialTransfer(to, encryptedAmount, inputProof)](#ConfidentialFungibleToken-confidentialTransfer-address-externalEuint64-bytes-)
-- [confidentialTransfer(to, amount)](#ConfidentialFungibleToken-confidentialTransfer-address-euint64-)
-- [confidentialTransferFrom(from, to, encryptedAmount, inputProof)](#ConfidentialFungibleToken-confidentialTransferFrom-address-address-externalEuint64-bytes-)
-- [confidentialTransferFrom(from, to, amount)](#ConfidentialFungibleToken-confidentialTransferFrom-address-address-euint64-)
-- [confidentialTransferAndCall(to, encryptedAmount, inputProof, data)](#ConfidentialFungibleToken-confidentialTransferAndCall-address-externalEuint64-bytes-bytes-)
-- [confidentialTransferAndCall(to, amount, data)](#ConfidentialFungibleToken-confidentialTransferAndCall-address-euint64-bytes-)
-- [confidentialTransferFromAndCall(from, to, encryptedAmount, inputProof, data)](#ConfidentialFungibleToken-confidentialTransferFromAndCall-address-address-externalEuint64-bytes-bytes-)
-- [confidentialTransferFromAndCall(from, to, amount, data)](#ConfidentialFungibleToken-confidentialTransferFromAndCall-address-address-euint64-bytes-)
-- [discloseEncryptedAmount(encryptedAmount)](#ConfidentialFungibleToken-discloseEncryptedAmount-euint64-)
-- [finalizeDiscloseEncryptedAmount(requestId, amount, signatures)](#ConfidentialFungibleToken-finalizeDiscloseEncryptedAmount-uint256-uint64-bytes---)
-- [_setOperator(holder, operator, until)](#ConfidentialFungibleToken-_setOperator-address-address-uint48-)
-- [_mint(to, amount)](#ConfidentialFungibleToken-_mint-address-euint64-)
-- [_burn(from, amount)](#ConfidentialFungibleToken-_burn-address-euint64-)
-- [_transfer(from, to, amount)](#ConfidentialFungibleToken-_transfer-address-address-euint64-)
-- [_transferAndCall(from, to, amount, data)](#ConfidentialFungibleToken-_transferAndCall-address-address-euint64-bytes-)
-#### IConfidentialFungibleToken [!toc]
+#### ERC7984 [!toc]
+- [supportsInterface(interfaceId)](#ERC7984-supportsInterface-bytes4-)
+- [name()](#ERC7984-name--)
+- [symbol()](#ERC7984-symbol--)
+- [decimals()](#ERC7984-decimals--)
+- [contractURI()](#ERC7984-contractURI--)
+- [confidentialBalanceOf(account)](#ERC7984-confidentialBalanceOf-address-)
+- [isOperator(holder, spender)](#ERC7984-isOperator-address-address-)
+- [setOperator(operator, until)](#ERC7984-setOperator-address-uint48-)
+- [confidentialTransfer(to, encryptedAmount, inputProof)](#ERC7984-confidentialTransfer-address-externalEuint64-bytes-)
+- [confidentialTransfer(to, amount)](#ERC7984-confidentialTransfer-address-euint64-)
+- [confidentialTransferFrom(from, to, encryptedAmount, inputProof)](#ERC7984-confidentialTransferFrom-address-address-externalEuint64-bytes-)
+- [confidentialTransferFrom(from, to, amount)](#ERC7984-confidentialTransferFrom-address-address-euint64-)
+- [confidentialTransferAndCall(to, encryptedAmount, inputProof, data)](#ERC7984-confidentialTransferAndCall-address-externalEuint64-bytes-bytes-)
+- [confidentialTransferAndCall(to, amount, data)](#ERC7984-confidentialTransferAndCall-address-euint64-bytes-)
+- [confidentialTransferFromAndCall(from, to, encryptedAmount, inputProof, data)](#ERC7984-confidentialTransferFromAndCall-address-address-externalEuint64-bytes-bytes-)
+- [confidentialTransferFromAndCall(from, to, amount, data)](#ERC7984-confidentialTransferFromAndCall-address-address-euint64-bytes-)
+- [requestDiscloseEncryptedAmount(encryptedAmount)](#ERC7984-requestDiscloseEncryptedAmount-euint64-)
+- [discloseEncryptedAmount(encryptedAmount, cleartextAmount, decryptionProof)](#ERC7984-discloseEncryptedAmount-euint64-uint64-bytes-)
+- [_setOperator(holder, operator, until)](#ERC7984-_setOperator-address-address-uint48-)
+- [_mint(to, amount)](#ERC7984-_mint-address-euint64-)
+- [_burn(from, amount)](#ERC7984-_burn-address-euint64-)
+- [_transfer(from, to, amount)](#ERC7984-_transfer-address-address-euint64-)
+- [_transferAndCall(from, to, amount, data)](#ERC7984-_transferAndCall-address-address-euint64-bytes-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+#### IERC165 [!toc]
 </div>
 </div>
 
@@ -1071,11 +2868,14 @@ account.
 #### IERC5267 [!toc]
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
 #### Nonces [!toc]
-#### ConfidentialFungibleToken [!toc]
-#### IConfidentialFungibleToken [!toc]
-- [OperatorSet(holder, operator, until)](#IConfidentialFungibleToken-OperatorSet-address-address-uint48-)
-- [ConfidentialTransfer(from, to, amount)](#IConfidentialFungibleToken-ConfidentialTransfer-address-address-euint64-)
-- [AmountDisclosed(encryptedAmount, amount)](#IConfidentialFungibleToken-AmountDisclosed-euint64-uint64-)
+#### ERC7984 [!toc]
+- [AmountDiscloseRequested(encryptedAmount, requester)](#ERC7984-AmountDiscloseRequested-euint64-address-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+- [OperatorSet(holder, operator, until)](#IERC7984-OperatorSet-address-address-uint48-)
+- [ConfidentialTransfer(from, to, amount)](#IERC7984-ConfidentialTransfer-address-address-euint64-)
+- [AmountDisclosed(encryptedAmount, amount)](#IERC7984-AmountDisclosed-euint64-uint64-)
+#### IERC165 [!toc]
 </div>
 </div>
 
@@ -1092,26 +2892,28 @@ account.
 #### IERC5267 [!toc]
 #### Nonces [!toc]
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### ConfidentialFungibleToken [!toc]
-- [ConfidentialFungibleTokenInvalidReceiver(receiver)](#ConfidentialFungibleToken-ConfidentialFungibleTokenInvalidReceiver-address-)
-- [ConfidentialFungibleTokenInvalidSender(sender)](#ConfidentialFungibleToken-ConfidentialFungibleTokenInvalidSender-address-)
-- [ConfidentialFungibleTokenUnauthorizedSpender(holder, spender)](#ConfidentialFungibleToken-ConfidentialFungibleTokenUnauthorizedSpender-address-address-)
-- [ConfidentialFungibleTokenZeroBalance(holder)](#ConfidentialFungibleToken-ConfidentialFungibleTokenZeroBalance-address-)
-- [ConfidentialFungibleTokenUnauthorizedUseOfEncryptedAmount(amount, user)](#ConfidentialFungibleToken-ConfidentialFungibleTokenUnauthorizedUseOfEncryptedAmount-euint64-address-)
-- [ConfidentialFungibleTokenUnauthorizedCaller(caller)](#ConfidentialFungibleToken-ConfidentialFungibleTokenUnauthorizedCaller-address-)
-- [ConfidentialFungibleTokenInvalidGatewayRequest(requestId)](#ConfidentialFungibleToken-ConfidentialFungibleTokenInvalidGatewayRequest-uint256-)
-#### IConfidentialFungibleToken [!toc]
+#### ERC7984 [!toc]
+- [ERC7984InvalidReceiver(receiver)](#ERC7984-ERC7984InvalidReceiver-address-)
+- [ERC7984InvalidSender(sender)](#ERC7984-ERC7984InvalidSender-address-)
+- [ERC7984UnauthorizedSpender(holder, spender)](#ERC7984-ERC7984UnauthorizedSpender-address-address-)
+- [ERC7984ZeroBalance(holder)](#ERC7984-ERC7984ZeroBalance-address-)
+- [ERC7984UnauthorizedUseOfEncryptedAmount(amount, user)](#ERC7984-ERC7984UnauthorizedUseOfEncryptedAmount-euint64-address-)
+- [ERC7984UnauthorizedCaller(caller)](#ERC7984-ERC7984UnauthorizedCaller-address-)
+- [ERC7984InvalidGatewayRequest(requestId)](#ERC7984-ERC7984InvalidGatewayRequest-uint256-)
+#### ERC165 [!toc]
+#### IERC7984 [!toc]
+#### IERC165 [!toc]
 </div>
 </div>
 
-<a id="ConfidentialFungibleTokenVotes-confidentialTotalSupply--"></a>
+<a id="ERC7984Votes-confidentialTotalSupply--"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">confidentialTotalSupply() → euint64</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ConfidentialFungibleTokenVotes-confidentialTotalSupply--">#</a>
+<a className="peer" data-card href="ERC7984Votes-confidentialTotalSupply--">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -1121,14 +2923,14 @@ Returns the confidential total supply of the token.
 </div>
 </div>
 
-<a id="ConfidentialFungibleTokenVotes-_update-address-address-euint64-"></a>
+<a id="ERC7984Votes-_update-address-address-euint64-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">_update(address from, address to, euint64 amount) → euint64 transferred</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="ConfidentialFungibleTokenVotes-_update-address-address-euint64-">#</a>
+<a className="peer" data-card href="ERC7984Votes-_update-address-address-euint64-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -1136,14 +2938,14 @@ Returns the confidential total supply of the token.
 </div>
 </div>
 
-<a id="ConfidentialFungibleTokenVotes-_getVotingUnits-address-"></a>
+<a id="ERC7984Votes-_getVotingUnits-address-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">_getVotingUnits(address account) → euint64</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="ConfidentialFungibleTokenVotes-_getVotingUnits-address-">#</a>
+<a className="peer" data-card href="ERC7984Votes-_getVotingUnits-address-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -1151,50 +2953,51 @@ Returns the confidential total supply of the token.
 </div>
 </div>
 
-<a id="ConfidentialFungibleTokenUtils"></a>
+<a id="ERC7984Utils"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ConfidentialFungibleTokenUtils`
+## `ERC7984Utils`
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.2.0/contracts/token/utils/ConfidentialFungibleTokenUtils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/release-v0.3.0/contracts/token/ERC7984/utils/ERC7984Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
 </div>
 
 ```solidity
-import "@openzeppelin/confidential-contracts/token/utils/ConfidentialFungibleTokenUtils.sol";
+import "@openzeppelin/confidential-contracts/token/ERC7984/utils/ERC7984Utils.sol";
 ```
 
-Library that provides common [`ConfidentialFungibleToken`](#ConfidentialFungibleToken) utility functions.
+Library that provides common [`ERC7984`](#ERC7984) utility functions.
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Functions</h3>
 <div className="font-mono">
-- [checkOnTransferReceived(operator, from, to, amount, data)](#ConfidentialFungibleTokenUtils-checkOnTransferReceived-address-address-address-euint64-bytes-)
+- [checkOnTransferReceived(operator, from, to, amount, data)](#ERC7984Utils-checkOnTransferReceived-address-address-address-euint64-bytes-)
 </div>
 </div>
 
-<a id="ConfidentialFungibleTokenUtils-checkOnTransferReceived-address-address-address-euint64-bytes-"></a>
+<a id="ERC7984Utils-checkOnTransferReceived-address-address-address-euint64-bytes-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
 <p className="font-bold text-sm font-mono">checkOnTransferReceived(address operator, address from, address to, euint64 amount, bytes data) → ebool</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="ConfidentialFungibleTokenUtils-checkOnTransferReceived-address-address-address-euint64-bytes-">#</a>
+<a className="peer" data-card href="ERC7984Utils-checkOnTransferReceived-address-address-address-euint64-bytes-">#</a>
 </div>
 </div>
 <div className="px-4">
 
 Performs a transfer callback to the recipient of the transfer `to`. Should be invoked
-after all transfers "withCallback" on a [`ConfidentialFungibleToken`](#ConfidentialFungibleToken).
+after all transfers "withCallback" on a [`ERC7984`](#ERC7984).
 
 The transfer callback is not invoked on the recipient if the recipient has no code (i.e. is an EOA). If the
 recipient has non-zero code, it must implement
-[`IConfidentialFungibleTokenReceiver.onConfidentialTransferReceived`](./interfaces#IConfidentialFungibleTokenReceiver-onConfidentialTransferReceived-address-address-euint64-bytes-) and return an `ebool` indicating
-whether the transfer was accepted or not. If the `ebool` is `false`, the transfer will be reversed.
+[`IERC7984Receiver.onConfidentialTransferReceived`](/confidential-contracts/api/interfaces#IERC7984Receiver-onConfidentialTransferReceived-address-address-euint64-bytes-) and return an `ebool` indicating
+whether the transfer was accepted or not. If the `ebool` is `false`, the transfer function
+should try to refund the `from` address.
 
 </div>
 </div>
