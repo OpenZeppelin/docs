@@ -5,18 +5,14 @@ description: "Smart contract cryptography utilities and implementations"
 
 A collection of contracts and libraries that implement various signature validation schemes and cryptographic primitives. These utilities enable secure authentication, multisignature operations, and advanced cryptographic operations in smart contracts.
 
-* [`ZKEmailUtils`](#ZKEmailUtils): Library for ZKEmail signature validation utilities, enabling email-based authentication through zero-knowledge proofs.
-* [`WebAuthn`](#WebAuthn): Library for verifying WebAuthn Authentication Assertions.
-* [`DKIMRegistry`](#DKIMRegistry): Implementation of [ERC-7969](https://eips.ethereum.org/EIPS/eip-7969) to enable onchain verification of DomainKeys Identified Mail (DKIM) signatures.
-* [`SignerZKEmail`](#SignerZKEmail): Implementation of an [AbstractSigner](https://docs.openzeppelin.com/contracts/5.x/api/utils/cryptography#AbstractSigner) that enables email-based authentication through zero-knowledge proofs.
-* [`SignerWebAuthn`](#SignerWebAuthn): Implementation of [SignerP256](https://docs.openzeppelin.com/contracts/5.x/api/utils/cryptography#SignerP256) that supports WebAuthn authentication assertions.
-* [`ERC7913ZKEmailVerifier`](#ERC7913ZKEmailVerifier), [`ERC7913WebAuthnVerifier`](#ERC7913WebAuthnVerifier): Ready to use ERC-7913 signature verifiers for ZKEmail and WebAuthn.
-
-## Utils
+* ZKEmailUtils: Library for ZKEmail signature validation utilities, enabling email-based authentication through zero-knowledge proofs.
+* DKIMRegistry: Implementation of [ERC-7969](https://eips.ethereum.org/EIPS/eip-7969) to enable onchain verification of DomainKeys Identified Mail (DKIM) signatures.
+* SignerZKEmail: Implementation of an [AbstractSigner](https://docs.openzeppelin.com/contracts/5.x/api/utils/cryptography#AbstractSigner) that enables email-based authentication through zero-knowledge proofs.
+* ERC7913ZKEmailVerifier, ERC7913WebAuthnVerifier: Ready to use ERC-7913 signature verifiers for ZKEmail and WebAuthn.
 
 [`ZKEmailUtils`](#ZKEmailUtils)
 
-[`WebAuthn`](#WebAuthn)
+WebAuthn
 
 [`DKIMRegistry`](#DKIMRegistry)
 
@@ -24,13 +20,11 @@ A collection of contracts and libraries that implement various signature validat
 
 [`SignerZKEmail`](#SignerZKEmail)
 
-[`SignerWebAuthn`](#SignerWebAuthn)
-
 ## Verifiers
 
 [`ERC7913ZKEmailVerifier`](#ERC7913ZKEmailVerifier)
 
-[`ERC7913WebAuthnVerifier`](#ERC7913WebAuthnVerifier)
+ERC7913WebAuthnVerifier
 
 <a id="DKIMRegistry"></a>
 
@@ -45,7 +39,7 @@ A collection of contracts and libraries that implement various signature validat
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/utils/cryptography/DKIMRegistry.sol";
+import "@openzeppelin/contracts/utils/cryptography/DKIMRegistry.sol";
 ```
 
 Implementation of the [ERC-7969](https://eips.ethereum.org/EIPS/eip-7969) interface for registering
@@ -184,127 +178,6 @@ Emits a [`IDKIMRegistry.KeyHashRevoked`](../interfaces#IDKIMRegistry-KeyHashRevo
 </div>
 </div>
 
-<a id="WebAuthn"></a>
-
-<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
-
-## `WebAuthn`
-
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-community-contracts/blob/master/contracts/utils/cryptography/WebAuthn.sol">
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
-</a>
-
-</div>
-
-```solidity
-import "@openzeppelin/community-contracts/utils/cryptography/WebAuthn.sol";
-```
-
-Library for verifying WebAuthn Authentication Assertions.
-
-WebAuthn enables strong authentication for smart contracts using
-[P256](https://docs.openzeppelin.com/contracts/5.x/api/utils#P256)
-as an alternative to traditional secp256k1 ECDSA signatures. This library verifies
-signatures generated during WebAuthn authentication ceremonies as specified in the
-[WebAuthn Level 2 standard](https://www.w3.org/TR/webauthn-2/).
-
-For blockchain use cases, the following WebAuthn validations are intentionally omitted:
-
-* Origin validation: Origin verification in `clientDataJSON` is omitted as blockchain
-  contexts rely on authenticator and dapp frontend enforcement. Standard authenticators
-  implement proper origin validation.
-* RP ID hash validation: Verification of `rpIdHash` in authenticatorData against expected
-  RP ID hash is omitted. This is typically handled by platform-level security measures.
-  Including an expiry timestamp in signed data is recommended for enhanced security.
-* Signature counter: Verification of signature counter increments is omitted. While
-  useful for detecting credential cloning, on-chain operations typically include nonce
-  protection, making this check redundant.
-* Extension outputs: Extension output value verification is omitted as these are not
-  essential for core authentication security in blockchain applications.
-* Attestation: Attestation object verification is omitted as this implementation
-  focuses on authentication (`webauthn.get`) rather than registration ceremonies.
-
-Inspired by:
-
-* [daimo-eth implementation](https://github.com/daimo-eth/p256-verifier/blob/master/src/WebAuthn.sol)
-* [base implementation](https://github.com/base/webauthn-sol/blob/main/src/WebAuthn.sol)
-
-<div className="bg-secondary p-4 rounded-md mb-6">
-<h3 style={{ marginTop: "0"}}>Functions</h3>
-<div className="font-mono">
-- [verify(challenge, auth, qx, qy)](#WebAuthn-verify-bytes-struct-WebAuthn-WebAuthnAuth-bytes32-bytes32-)
-- [verify(challenge, auth, qx, qy, requireUV)](#WebAuthn-verify-bytes-struct-WebAuthn-WebAuthnAuth-bytes32-bytes32-bool-)
-- [tryDecodeAuth(input)](#WebAuthn-tryDecodeAuth-bytes-)
-</div>
-</div>
-
-<a id="WebAuthn-verify-bytes-struct-WebAuthn-WebAuthnAuth-bytes32-bytes32-"></a>
-
-<div className="border rounded-md mb-4">
-<div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">verify(bytes challenge, struct WebAuthn.WebAuthnAuth auth, bytes32 qx, bytes32 qy) → bool</p>
-<div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="WebAuthn-verify-bytes-struct-WebAuthn-WebAuthnAuth-bytes32-bytes32-">#</a>
-</div>
-</div>
-<div className="px-4">
-
-Performs standard verification of a WebAuthn Authentication Assertion.
-
-</div>
-</div>
-
-<a id="WebAuthn-verify-bytes-struct-WebAuthn-WebAuthnAuth-bytes32-bytes32-bool-"></a>
-
-<div className="border rounded-md mb-4">
-<div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">verify(bytes challenge, struct WebAuthn.WebAuthnAuth auth, bytes32 qx, bytes32 qy, bool requireUV) → bool</p>
-<div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="WebAuthn-verify-bytes-struct-WebAuthn-WebAuthnAuth-bytes32-bytes32-bool-">#</a>
-</div>
-</div>
-<div className="px-4">
-
-Performs verification of a WebAuthn Authentication Assertion. This variants allow the caller to select
-whether of not to require the UV flag (step 17).
-
-Verifies:
-
-1. Type is "webauthn.get" (see [`WebAuthn._validateExpectedTypeHash`](#WebAuthn-_validateExpectedTypeHash-string-uint256-))
-2. Challenge matches the expected value (see [`WebAuthn._validateChallenge`](#WebAuthn-_validateChallenge-string-uint256-bytes-))
-3. Cryptographic signature is valid for the given public key
-4. confirming physical user presence during authentication
-5. (if `requireUV` is true) confirming stronger user authentication (biometrics/PIN)
-6. Backup Eligibility (`BE`) and Backup State (BS) bits relationship is valid
-
-</div>
-</div>
-
-<a id="WebAuthn-tryDecodeAuth-bytes-"></a>
-
-<div className="border rounded-md mb-4">
-<div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">tryDecodeAuth(bytes input) → bool success, struct WebAuthn.WebAuthnAuth auth</p>
-<div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="WebAuthn-tryDecodeAuth-bytes-">#</a>
-</div>
-</div>
-<div className="px-4">
-
-Verifies that calldata bytes (`input`) represents a valid `WebAuthnAuth` object. If encoding is valid,
-returns true and the calldata view at the object. Otherwise, returns false and an invalid calldata object.
-
-<Callout>
-The returned `auth` object should not be accessed if `success` is false. Trying to access the data may
-cause revert/panic.
-</Callout>
-
-</div>
-</div>
-
 <a id="ZKEmailUtils"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
@@ -318,7 +191,7 @@ cause revert/panic.
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/utils/cryptography/ZKEmailUtils.sol";
+import "@openzeppelin/contracts/utils/cryptography/ZKEmailUtils.sol";
 ```
 
 Library for [ZKEmail](https://docs.zk.email) Groth16 proof validation utilities.
@@ -359,7 +232,7 @@ mechanism to ensure the email was actually sent and received without revealing i
 </div>
 <div className="px-4">
 
-Variant of [`ZKEmailUtils.isValidZKEmail`](#ZKEmailUtils-isValidZKEmail-struct-EmailProof-contract-IDKIMRegistry-contract-IGroth16Verifier-string---bytes---enum-ZKEmailUtils-Case-) that validates the `["signHash", "../access#AccessManagerLight-ADMIN_ROLE-uint8"]` command template.
+Variant of [`ZKEmailUtils.isValidZKEmail`](#ZKEmailUtils-isValidZKEmail-struct-EmailProof-contract-IDKIMRegistry-contract-IGroth16Verifier-string---bytes---enum-ZKEmailUtils-Case-) that validates the `["signHash", "`uint`"]` command template.
 
 </div>
 </div>
@@ -404,7 +277,7 @@ Attempts to validate the command for all possible string [`ZKEmailUtils.Case`](#
 
 Variant of [`ZKEmailUtils.isValidZKEmail`](#ZKEmailUtils-isValidZKEmail-struct-EmailProof-contract-IDKIMRegistry-contract-IGroth16Verifier-string---bytes---enum-ZKEmailUtils-Case-) that validates a template with a specific string [`ZKEmailUtils.Case`](#ZKEmailUtils-Case).
 
-Useful for templates with Ethereum address matchers (i.e. ``ethAddr``), which are case-sensitive (e.g., `["someCommand", "../access#AccessManagerLight-_groups-mapping-address----Masks-Mask-"]`).
+Useful for templates with Ethereum address matchers (i.e. ``ethAddr``), which are case-sensitive (e.g., `["someCommand", "`address`"]`).
 
 </div>
 </div>
@@ -452,86 +325,6 @@ into a uint256 array in the order expected by the verifier circuit.
 </div>
 </div>
 
-<a id="SignerWebAuthn"></a>
-
-<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
-
-## `SignerWebAuthn`
-
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-community-contracts/blob/master/contracts/utils/cryptography/signers/SignerWebAuthn.sol">
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
-</a>
-
-</div>
-
-```solidity
-import "@openzeppelin/community-contracts/utils/cryptography/signers/SignerWebAuthn.sol";
-```
-
-Implementation of `SignerP256` that supports WebAuthn authentication assertions.
-
-This contract enables signature validation using WebAuthn authentication assertions,
-leveraging the P256 public key stored in the contract. It allows for both WebAuthn
-and raw P256 signature validation, providing compatibility with both signature types.
-
-The signature is expected to be an abi-encoded [`WebAuthn.WebAuthnAuth`](#WebAuthn-WebAuthnAuth) struct.
-
-Example usage:
-
-```solidity
-contract MyAccountWebAuthn is Account, SignerWebAuthn, Initializable {
-    function initialize(bytes32 qx, bytes32 qy) public initializer {
-        _setSigner(qx, qy);
-    }
-}
-```
-
-<Callout type="warn">
-Failing to call [`ERC7579Signature._setSigner`](../account#ERC7579Signature-_setSigner-address-bytes-) either during construction (if used standalone)
-or during initialization (if used as a clone) may leave the signer either front-runnable or unusable.
-</Callout>
-
-<div className="bg-secondary p-4 rounded-md mb-6">
-<h3 style={{ marginTop: "0"}}>Functions</h3>
-<div className="font-mono">
-- [_rawSignatureValidation(hash, signature)](#SignerWebAuthn-_rawSignatureValidation-bytes32-bytes-)
-#### SignerP256 [!toc]
-- [_setSigner(qx, qy)](#SignerP256-_setSigner-bytes32-bytes32-)
-- [signer()](#SignerP256-signer--)
-#### AbstractSigner [!toc]
-</div>
-</div>
-
-<div className="bg-secondary p-4 rounded-md mb-6">
-<h3 style={{ marginTop: "0"}}>Errors</h3>
-<div className="font-mono">
-#### SignerP256 [!toc]
-- [SignerP256InvalidPublicKey(qx, qy)](#SignerP256-SignerP256InvalidPublicKey-bytes32-bytes32-)
-#### AbstractSigner [!toc]
-</div>
-</div>
-
-<a id="SignerWebAuthn-_rawSignatureValidation-bytes32-bytes-"></a>
-
-<div className="border rounded-md mb-4">
-<div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">_rawSignatureValidation(bytes32 hash, bytes signature) → bool</p>
-<div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="SignerWebAuthn-_rawSignatureValidation-bytes32-bytes-">#</a>
-</div>
-</div>
-<div className="px-4">
-
-Validates a raw signature using the WebAuthn authentication assertion.
-
-In case the signature can't be validated, it falls back to the
-`SignerP256-_rawSignatureValidation` method for raw P256 signature validation by passing
-the raw `r` and `s` values from the signature.
-
-</div>
-</div>
-
 <a id="SignerZKEmail"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
@@ -545,7 +338,7 @@ the raw `r` and `s` values from the signature.
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/utils/cryptography/signers/SignerZKEmail.sol";
+import "@openzeppelin/contracts/utils/cryptography/signers/SignerZKEmail.sol";
 ```
 
 Implementation of `AbstractSigner` using [ZKEmail](https://docs.zk.email) signatures.
@@ -763,64 +556,6 @@ Proof verification error.
 </div>
 </div>
 
-<a id="ERC7913WebAuthnVerifier"></a>
-
-<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
-
-## `ERC7913WebAuthnVerifier`
-
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-community-contracts/blob/master/contracts/utils/cryptography/verifiers/ERC7913WebAuthnVerifier.sol">
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
-</a>
-
-</div>
-
-```solidity
-import "@openzeppelin/community-contracts/utils/cryptography/verifiers/ERC7913WebAuthnVerifier.sol";
-```
-
-ERC-7913 signature verifier that supports WebAuthn authentication assertions.
-
-This verifier enables the validation of WebAuthn signatures using P256 public keys.
-The key is expected to be a 64-byte concatenation of the P256 public key coordinates (qx || qy).
-The signature is expected to be an abi-encoded [`WebAuthn.WebAuthnAuth`](#WebAuthn-WebAuthnAuth) struct.
-
-Uses `WebAuthn-verifyMinimal` for signature verification, which performs the essential
-WebAuthn checks: type validation, challenge matching, and cryptographic signature verification.
-
-<Callout>
-Wallets that may require default P256 validation may install a P256 verifier separately.
-</Callout>
-
-<div className="bg-secondary p-4 rounded-md mb-6">
-<h3 style={{ marginTop: "0"}}>Functions</h3>
-<div className="font-mono">
-- [verify(key, hash, signature)](#ERC7913WebAuthnVerifier-verify-bytes-bytes32-bytes-)
-#### IERC7913SignatureVerifier [!toc]
-</div>
-</div>
-
-<a id="ERC7913WebAuthnVerifier-verify-bytes-bytes32-bytes-"></a>
-
-<div className="border rounded-md mb-4">
-<div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">verify(bytes key, bytes32 hash, bytes signature) → bytes4</p>
-<div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">public</p>
-<a className="peer" data-card href="ERC7913WebAuthnVerifier-verify-bytes-bytes32-bytes-">#</a>
-</div>
-</div>
-<div className="px-4">
-
-Verifies `signature` as a valid signature of `hash` by `key`.
-
-MUST return the bytes4 magic value IERC7913SignatureVerifier.verify.selector if the signature is valid.
-SHOULD return 0xffffffff or revert if the signature is not valid.
-SHOULD return 0xffffffff or revert if the key is empty
-
-</div>
-</div>
-
 <a id="ERC7913ZKEmailVerifier"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
@@ -834,7 +569,7 @@ SHOULD return 0xffffffff or revert if the key is empty
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/utils/cryptography/verifiers/ERC7913ZKEmailVerifier.sol";
+import "@openzeppelin/contracts/utils/cryptography/verifiers/ERC7913ZKEmailVerifier.sol";
 ```
 
 ERC-7913 signature verifier that supports ZKEmail accounts.
@@ -934,3 +669,4 @@ bytes memory key = abi.encode(registry, accountSalt, verifier);
 
 </div>
 </div>
+
