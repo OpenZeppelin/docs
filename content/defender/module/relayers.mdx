@@ -761,7 +761,133 @@ The "Download OpenZeppelin Relayer Configurations" button will download a .zip f
 
 4. **Test your relayers**: Verify that transactions are processed correctly before decommissioning Defender relayers
 5. **Transfer funds**: Once your open source relayers are fully configured and running, transfer the funds from your Defender relayers to your new open source relayer addresses using the [Withdraw](#withdrawing-funds) functionality
+6. Gradually move volume from Defender relayer to OpenZeppelin Relayer
 
 Here a video with the process step by step: https://www.loom.com/share/cb5e0f5d8c064a71abc8c18fac273cf0
+
+### SDK Migration
+
+If you are using the [Defender SDK](https://github.com/OpenZeppelin/defender-sdk) (`@openzeppelin/defender-sdk`) to interact with Defender Relayers programmatically, you will need to migrate to the [OpenZeppelin Relayer SDK](https://github.com/OpenZeppelin/openzeppelin-relayer-sdk) (`@openzeppelin/relayer-sdk`).
+
+#### Installation
+
+Replace the Defender SDK with the OpenZeppelin Relayer SDK:
+
+```bash
+# Remove Defender SDK
+npm uninstall @openzeppelin/defender-sdk @openzeppelin/defender-sdk-relay-client @openzeppelin/defender-sdk-relay-signer-client
+
+# Install OpenZeppelin Relayer SDK
+npm install @openzeppelin/relayer-sdk
+```
+
+#### Code Migration Examples
+
+**Sending a Transaction**
+
+Before (Defender SDK):
+
+```jsx
+const { Defender } = require('@openzeppelin/defender-sdk');
+const client = new Defender({
+  relayerApiKey: 'YOUR_API_KEY',
+  relayerApiSecret: 'YOUR_API_SECRET'
+});
+
+const tx = await client.relaySigner.sendTransaction({
+  to: '0x...',
+  value: '1000000000000000000',
+  data: '0x',
+  gasLimit: 21000,
+  speed: 'fast'
+});
+```
+
+After (OpenZeppelin Relayer SDK):
+
+```typescript
+import { RelayerApi, Configuration } from '@openzeppelin/relayer-sdk';
+
+const config = new Configuration({
+  basePath: 'http://localhost:8080/api/v1',
+  accessToken: 'YOUR_API_KEY'
+});
+
+const relayerApi = new RelayerApi(config);
+
+const tx = await relayerApi.sendTransaction('your-relayer-id', {
+  to: '0x...',
+  value: '1000000000000000000',
+  data: '0x',
+  gas_limit: 21000,
+  speed: 'fast'
+});
+```
+
+**Getting Transaction Status**
+
+Before (Defender SDK):
+
+```jsx
+import { Relayer } from '@openzeppelin/defender-sdk-relay-signer-client';
+const relayer = new Relayer({ apiKey: API_KEY, apiSecret: API_SECRET });
+const tx = await relayer.getTransaction(transactionId);
+```
+
+After (OpenZeppelin Relayer SDK):
+
+```typescript
+import { RelayerApi, Configuration } from '@openzeppelin/relayer-sdk';
+
+const config = new Configuration({
+  basePath: 'http://localhost:8080/api/v1',
+  accessToken: 'YOUR_API_KEY'
+});
+
+const relayerApi = new RelayerApi(config);
+const tx = await relayerApi.getTransactionById('your-relayer-id', transactionId);
+```
+
+**Listing Relayers**
+
+Before (Defender SDK):
+
+```jsx
+const { Defender } = require('@openzeppelin/defender-sdk');
+const client = new Defender({
+  apiKey: 'YOUR_API_KEY',
+  apiSecret: 'YOUR_API_SECRET'
+});
+
+const relayers = await client.relay.list();
+```
+
+After (OpenZeppelin Relayer SDK):
+
+```typescript
+import { RelayerApi, Configuration } from '@openzeppelin/relayer-sdk';
+
+const config = new Configuration({
+  basePath: 'http://localhost:8080/api/v1',
+  accessToken: 'YOUR_API_KEY'
+});
+
+const relayerApi = new RelayerApi(config);
+const relayers = await relayerApi.listRelayers();
+```
+
+#### API Method Mapping
+
+| Defender SDK Method | OpenZeppelin Relayer SDK Method |
+|--------------------|--------------------------------|
+| `client.relaySigner.sendTransaction()` | `relayerApi.sendTransaction()` |
+| `relayer.getTransaction()` | `relayerApi.getTransactionById()` |
+| `relayer.list()` | `relayerApi.listTransactions()` |
+| `relayer.replaceTransactionById()` | `relayerApi.replaceTransaction()` |
+| `relayer.cancelTransactionById()` | `relayerApi.cancelTransaction()` |
+| `relayer.sign()` | `relayerApi.sign()` |
+| `relayer.signTypedData()` | `relayerApi.signTypedData()` |
+| `relayer.getRelayer()` | `relayerApi.getRelayer()` |
+| `relayer.getRelayerStatus()` | `relayerApi.getRelayerStatus()` |
 
 For detailed migration instructions and support, visit the [OpenZeppelin Relayer documentation](/relayer/1.2.x).
