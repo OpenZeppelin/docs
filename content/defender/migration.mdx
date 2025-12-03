@@ -111,6 +111,53 @@ The "Download OpenZeppelin Relayer Configurations" button will download a .zip f
 
 Here's a video with the process step by step: https://www.loom.com/share/cb5e0f5d8c064a71abc8c18fac273cf0
 
+### Understanding Signer Migration
+
+<Callout type='warn'>
+**Relayer recreation is required due to AWS KMS security constraints**
+
+Defender Relayers use AWS Key Management Service (AWS KMS) to secure private keys. Due to AWS KMS's security model, **private keys cannot be exported** from the KMS system. This means:
+
+- You cannot export existing Defender Relayer private keys
+- You cannot import Defender Relayer keys into OpenZeppelin Relayer
+- You **must create new relayers with new addresses** when migrating to OpenZeppelin Relayer
+
+This is a fundamental security feature of AWS KMS that protects your keys from unauthorized access.
+</Callout>
+
+### Choosing a Signer Type
+
+OpenZeppelin Relayer supports multiple signer types to accommodate different security requirements and infrastructure setups. Each relayer must be configured with a signer that manages the private key for transaction signing.
+
+#### Available Signer Options
+
+| Signer Type | Description |
+|------------|-------------|
+| **Local** | Encrypted keystore file stored on the filesystem |
+| **AWS KMS** | Amazon Web Services Key Management Service |
+| **Google Cloud KMS** | Google Cloud Key Management Service |
+| **HashiCorp Vault** | Vault secret engine for private key storage |
+| **HashiCorp Vault Transit** | Vault Transit encryption engine |
+| **Turnkey** | Third-party key management service |
+| **Coinbase Developer Platform (CDP)** | Coinbase's managed key solution |
+
+#### Migration Steps for Signers
+
+1. **Select a signer type** that matches your security and infrastructure requirements
+2. **Generate new keys** using your chosen signer service (refer to the [Signer Configuration documentation](/relayer/configuration/signers) for detailed setup instructions)
+3. **Configure your relayers** to use the new signers in your OpenZeppelin Relayer configuration
+4. **Update smart contract permissions**: Since you'll have new addresses, update any:
+   - Access control lists
+   - Whitelist entries
+   - Role assignments
+   - Trusted forwarder configurations
+5. **Transfer funds** from old Defender Relayer addresses to new OpenZeppelin Relayer addresses
+6. **Test thoroughly** before switching production traffic
+
+<Callout type='info'>
+For detailed configuration instructions for each signer type, see the [OpenZeppelin Relayer Signer Configuration documentation](/relayer/configuration/signers).
+</Callout>
+
 ### SDK Migration
 
 If you are using the [Defender SDK](https://github.com/OpenZeppelin/defender-sdk) (`@openzeppelin/defender-sdk`) to interact with Defender Relayers programmatically, you will need to migrate to the [OpenZeppelin Relayer SDK](https://github.com/OpenZeppelin/openzeppelin-relayer-sdk) (`@openzeppelin/relayer-sdk`).
