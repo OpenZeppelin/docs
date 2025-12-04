@@ -16,22 +16,32 @@ contract MyFactoryAccount {
     address private immutable _impl;
 
     constructor(address impl_) {
-        require(impl_.code.length > 0);
         _impl = impl_;
     }
 
     /// @dev Predict the address of the account
-    function predictAddress(bytes calldata callData) public view returns (address) {
-        return _impl.predictDeterministicAddress(keccak256(callData), address(this));
+    function predictAddress(bytes32 salt, bytes calldata callData) public view returns (address, bytes32) {
+        bytes32 calldataSalt = _saltedCallData(salt, callData);
+        return (_impl.predictDeterministicAddress(calldataSalt, address(this)), calldataSalt);
     }
 
     /// @dev Create clone accounts on demand
-    function cloneAndInitialize(bytes calldata callData) public returns (address) {
-        address predicted = predictAddress(callData);
+    function cloneAndInitialize(bytes32 salt, bytes calldata callData) public returns (address) {
+        return _cloneAndInitialize(salt, callData);
+    }
+
+    /// @dev Create clone accounts on demand and return the address. Uses `callData` to initialize the clone.
+    function _cloneAndInitialize(bytes32 salt, bytes calldata callData) internal returns (address) {
+        (address predicted, bytes32 _calldataSalt) = predictAddress(salt, callData);
         if (predicted.code.length == 0) {
-            _impl.cloneDeterministic(keccak256(callData));
+            _impl.cloneDeterministic(_calldataSalt);
             predicted.functionCall(callData);
         }
         return predicted;
+    }
+
+    function _saltedCallData(bytes32 salt, bytes calldata callData) internal pure returns (bytes32) {
+        // Scope salt to the callData to avoid front-running the salt with a different callData
+        return keccak256(abi.encodePacked(salt, callData));
     }
 }

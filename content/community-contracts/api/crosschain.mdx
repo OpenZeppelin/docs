@@ -5,14 +5,12 @@ description: "Smart contract crosschain utilities and implementations"
 
 Gateways are contracts that enable cross-chain communication. These can either be a message source or a destination according to ERC-7786.
 
-* [`ERC7786Receiver`](#ERC7786Receiver): ERC-7786 cross-chain message receiver.
-* [`ERC7786OpenBridge`](#ERC7786OpenBridge): ERC-7786 "N out of M" gateway. Sends a message through M gateways and executes on the destination if N received it.
+* ERC7786Receiver: ERC-7786 cross-chain message receiver.
+* ERC7786OpenBridge: ERC-7786 "N out of M" gateway. Sends a message through M gateways and executes on the destination if N received it.
 
 Developers can access interoperability protocols through gateway adapters. The library includes the following gateway adapters:
 
-* [`AxelarGatewayAdapter`](#AxelarGatewayAdapter): ERC-7786 gateway adapter for Axelar.
-
-## Gateways
+* AxelarGatewayAdapter: ERC-7786 gateway adapter for Axelar.
 
 [`ERC7786OpenBridge`](#ERC7786OpenBridge)
 
@@ -39,7 +37,7 @@ Developers can access interoperability protocols through gateway adapters. The l
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/crosschain/ERC7786OpenBridge.sol";
+import "@openzeppelin/contracts/crosschain/ERC7786OpenBridge.sol";
 ```
 
 N of M gateway: Sends your message through M independent gateways. It will be delivered to the receiver by an
@@ -210,14 +208,14 @@ This function revert if:
   chain.
 * someone tries re-execute a message that was already successfully delivered. This includes gateways that call
   this function a second time with a message that was already executed.
-* the execution of the message (on the [`IERC7786Receiver`](./interfaces#IERC7786Receiver) receiver) is successful but fails to return the
+* the execution of the message (on the [`IERC7786Receiver`](/community-contracts/api/interfaces#IERC7786Receiver) receiver) is successful but fails to return the
   executed value.
 
 This function does not revert if:
 
 * A known gateway delivers a message for the first time, and that message was already executed. In that case
   the message is NOT re-executed, and the correct "magic value" is returned.
-* The execution of the message (on the [`IERC7786Receiver`](./interfaces#IERC7786Receiver) receiver) reverts. In that case a [`ERC7786OpenBridge.ExecutionFailed`](#ERC7786OpenBridge-ExecutionFailed-bytes32-)
+* The execution of the message (on the [`IERC7786Receiver`](/community-contracts/api/interfaces#IERC7786Receiver) receiver) reverts. In that case a [`ERC7786OpenBridge.ExecutionFailed`](#ERC7786OpenBridge-ExecutionFailed-bytes32-)
   event is emitted.
 
 This function emits:
@@ -731,12 +729,12 @@ Recovery method in case value is ever received through [`ERC7786OpenBridge.recei
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/crosschain/axelar/AxelarGatewayAdapter.sol";
+import "@openzeppelin/contracts/crosschain/axelar/AxelarGatewayAdapter.sol";
 ```
 
 Implementation of an ERC-7786 gateway destination adapter for the Axelar Network in dual mode.
 
-The contract implements AxelarExecutable's [`ERC7579DelayedExecutor._execute`](./account#ERC7579DelayedExecutor-_execute-address-bytes32-bytes32-bytes-) function to execute the message, converting Axelar's native
+The contract implements AxelarExecutable's [`ERC7579DelayedExecutor._execute`](/community-contracts/api/account#ERC7579DelayedExecutor-_execute-address-bytes32-bytes32-bytes-) function to execute the message, converting Axelar's native
 workflow into the standard ERC-7786.
 
 <Callout>
@@ -965,9 +963,9 @@ Endpoint for creating a new message. If the message requires further (gateway sp
 it can be sent to the destination chain, then a non-zero `outboxId` must be returned. Otherwise, the
 message MUST be sent and this function must return 0.
 
-* MUST emit a [`IERC7786GatewaySource.MessageSent`](./interfaces#IERC7786GatewaySource-MessageSent-bytes32-bytes-bytes-bytes-uint256-bytes---) event.
+* MUST emit a [`IERC7786GatewaySource.MessageSent`](/community-contracts/api/interfaces#IERC7786GatewaySource-MessageSent-bytes32-bytes-bytes-bytes-uint256-bytes---) event.
 
-If any of the `attributes` is not supported, this function SHOULD revert with an [`IERC7786GatewaySource.UnsupportedAttribute`](./interfaces#IERC7786GatewaySource-UnsupportedAttribute-bytes4-) error.
+If any of the `attributes` is not supported, this function SHOULD revert with an [`IERC7786GatewaySource.UnsupportedAttribute`](/community-contracts/api/interfaces#IERC7786GatewaySource-UnsupportedAttribute-bytes4-) error.
 Other errors SHOULD revert with errors not specified in ERC-7786.
 
 </div>
@@ -1198,7 +1196,7 @@ A chain equivalence has been registered.
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/crosschain/utils/ERC7786Attributes.sol";
+import "@openzeppelin/contracts/crosschain/utils/ERC7786Attributes.sol";
 ```
 
 Library of helper to parse/process ERC-7786 attributes
@@ -1240,7 +1238,7 @@ Parse the `requestRelay(uint256,uint256,address)` (0x4cbb573a) attribute into it
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/crosschain/utils/ERC7786Receiver.sol";
+import "@openzeppelin/contracts/crosschain/utils/ERC7786Receiver.sol";
 ```
 
 Base implementation of an ERC-7786 compliant cross-chain message receiver.
@@ -1369,7 +1367,7 @@ Virtual function that should contain the logic to execute when a cross-chain mes
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/crosschain/wormhole/WormholeGatewayAdapter.sol";
+import "@openzeppelin/contracts/crosschain/wormhole/WormholeGatewayAdapter.sol";
 ```
 
 An ERC-7786 compliant adapter to send and receive messages via Wormhole.
@@ -1723,9 +1721,9 @@ Endpoint for creating a new message. If the message requires further (gateway sp
 it can be sent to the destination chain, then a non-zero `outboxId` must be returned. Otherwise, the
 message MUST be sent and this function must return 0.
 
-* MUST emit a [`IERC7786GatewaySource.MessageSent`](./interfaces#IERC7786GatewaySource-MessageSent-bytes32-bytes-bytes-bytes-uint256-bytes---) event.
+* MUST emit a [`IERC7786GatewaySource.MessageSent`](/community-contracts/api/interfaces#IERC7786GatewaySource-MessageSent-bytes32-bytes-bytes-bytes-uint256-bytes---) event.
 
-If any of the `attributes` is not supported, this function SHOULD revert with an [`IERC7786GatewaySource.UnsupportedAttribute`](./interfaces#IERC7786GatewaySource-UnsupportedAttribute-bytes4-) error.
+If any of the `attributes` is not supported, this function SHOULD revert with an [`IERC7786GatewaySource.UnsupportedAttribute`](/community-contracts/api/interfaces#IERC7786GatewaySource-UnsupportedAttribute-bytes4-) error.
 Other errors SHOULD revert with errors not specified in ERC-7786.
 
 </div>
