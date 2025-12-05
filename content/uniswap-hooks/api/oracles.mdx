@@ -1,0 +1,976 @@
+---
+title: "Oracles"
+description: "Smart contract oracles utilities and implementations"
+---
+
+<a id="BaseOracleHook"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `BaseOracleHook` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v1.2.1/src/oracles/panoptic/BaseOracleHook.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/src/oracles/panoptic/BaseOracleHook.sol";
+```
+
+A hook that enables a Uniswap V4 pool to record price observations and expose an oracle interface
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [constructor(_maxAbsTickDelta)](#BaseOracleHook-constructor-int24-)
+- [getHookPermissions()](#BaseOracleHook-getHookPermissions--)
+- [_afterInitialize(, key, , tick)](#BaseOracleHook-_afterInitialize-address-struct-PoolKey-uint160-int24-)
+- [_beforeSwap(, key, , )](#BaseOracleHook-_beforeSwap-address-struct-PoolKey-struct-SwapParams-bytes-)
+- [observe(secondsAgos, underlyingPoolId)](#BaseOracleHook-observe-uint32---PoolId-)
+- [increaseObservationCardinalityNext(observationCardinalityNext, underlyingPoolId)](#BaseOracleHook-increaseObservationCardinalityNext-uint16-PoolId-)
+- [MAX_ABS_TICK_DELTA()](#BaseOracleHook-MAX_ABS_TICK_DELTA-int24)
+- [observationsById()](#BaseOracleHook-observationsById-mapping-PoolId----struct-Oracle-Observation-65535--)
+- [stateById()](#BaseOracleHook-stateById-mapping-PoolId----struct-BaseOracleHook-ObservationState-)
+#### BaseHook [!toc]
+- [_validateHookAddress(hook)](#BaseHook-_validateHookAddress-contract-BaseHook-)
+- [beforeInitialize(sender, key, sqrtPriceX96)](#BaseHook-beforeInitialize-address-struct-PoolKey-uint160-)
+- [_beforeInitialize(, , )](#BaseHook-_beforeInitialize-address-struct-PoolKey-uint160-)
+- [afterInitialize(sender, key, sqrtPriceX96, tick)](#BaseHook-afterInitialize-address-struct-PoolKey-uint160-int24-)
+- [beforeAddLiquidity(sender, key, params, hookData)](#BaseHook-beforeAddLiquidity-address-struct-PoolKey-struct-ModifyLiquidityParams-bytes-)
+- [_beforeAddLiquidity(, , , )](#BaseHook-_beforeAddLiquidity-address-struct-PoolKey-struct-ModifyLiquidityParams-bytes-)
+- [beforeRemoveLiquidity(sender, key, params, hookData)](#BaseHook-beforeRemoveLiquidity-address-struct-PoolKey-struct-ModifyLiquidityParams-bytes-)
+- [_beforeRemoveLiquidity(, , , )](#BaseHook-_beforeRemoveLiquidity-address-struct-PoolKey-struct-ModifyLiquidityParams-bytes-)
+- [afterAddLiquidity(sender, key, params, delta0, delta1, hookData)](#BaseHook-afterAddLiquidity-address-struct-PoolKey-struct-ModifyLiquidityParams-BalanceDelta-BalanceDelta-bytes-)
+- [_afterAddLiquidity(, , , , , )](#BaseHook-_afterAddLiquidity-address-struct-PoolKey-struct-ModifyLiquidityParams-BalanceDelta-BalanceDelta-bytes-)
+- [afterRemoveLiquidity(sender, key, params, delta0, delta1, hookData)](#BaseHook-afterRemoveLiquidity-address-struct-PoolKey-struct-ModifyLiquidityParams-BalanceDelta-BalanceDelta-bytes-)
+- [_afterRemoveLiquidity(, , , , , )](#BaseHook-_afterRemoveLiquidity-address-struct-PoolKey-struct-ModifyLiquidityParams-BalanceDelta-BalanceDelta-bytes-)
+- [beforeSwap(sender, key, params, hookData)](#BaseHook-beforeSwap-address-struct-PoolKey-struct-SwapParams-bytes-)
+- [afterSwap(sender, key, params, delta, hookData)](#BaseHook-afterSwap-address-struct-PoolKey-struct-SwapParams-BalanceDelta-bytes-)
+- [_afterSwap(, , , , )](#BaseHook-_afterSwap-address-struct-PoolKey-struct-SwapParams-BalanceDelta-bytes-)
+- [beforeDonate(sender, key, amount0, amount1, hookData)](#BaseHook-beforeDonate-address-struct-PoolKey-uint256-uint256-bytes-)
+- [_beforeDonate(, , , , )](#BaseHook-_beforeDonate-address-struct-PoolKey-uint256-uint256-bytes-)
+- [afterDonate(sender, key, amount0, amount1, hookData)](#BaseHook-afterDonate-address-struct-PoolKey-uint256-uint256-bytes-)
+- [_afterDonate(, , , , )](#BaseHook-_afterDonate-address-struct-PoolKey-uint256-uint256-bytes-)
+- [poolManager()](#BaseHook-poolManager-contract-IPoolManager)
+#### IHooks [!toc]
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+- [IncreaseObservationCardinalityNext(underlyingPoolId, observationCardinalityNextOld, observationCardinalityNextNew)](#BaseOracleHook-IncreaseObservationCardinalityNext-PoolId-uint16-uint16-)
+#### BaseHook [!toc]
+#### IHooks [!toc]
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [PoolNotInitialized()](#BaseOracleHook-PoolNotInitialized--)
+#### BaseHook [!toc]
+- [HookNotImplemented()](#BaseHook-HookNotImplemented--)
+- [NotPoolManager()](#BaseHook-NotPoolManager--)
+#### IHooks [!toc]
+</div>
+</div>
+
+<a id="BaseOracleHook-constructor-int24-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">constructor(int24 _maxAbsTickDelta)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="BaseOracleHook-constructor-int24-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Initializes a Uniswap V4 pool with this hook, stores baseline observation state, and optionally performs a cardinality increase.
+
+</div>
+</div>
+
+<a id="BaseOracleHook-getHookPermissions--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">getHookPermissions() → struct Hooks.Permissions</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="BaseOracleHook-getHookPermissions--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Get the hook permissions to signal which hook functions are to be implemented.
+
+Used at deployment to validate the address correctly represents the expected permissions.
+
+</div>
+</div>
+
+<a id="BaseOracleHook-_afterInitialize-address-struct-PoolKey-uint160-int24-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_afterInitialize(address, struct PoolKey key, uint160, int24 tick) → bytes4</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="BaseOracleHook-_afterInitialize-address-struct-PoolKey-uint160-int24-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The hook called after the state of a pool is initialized
+
+</div>
+</div>
+
+<a id="BaseOracleHook-_beforeSwap-address-struct-PoolKey-struct-SwapParams-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_beforeSwap(address, struct PoolKey key, struct SwapParams, bytes) → bytes4, BeforeSwapDelta, uint24</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="BaseOracleHook-_beforeSwap-address-struct-PoolKey-struct-SwapParams-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The hook called before a swap.
+
+<Callout>
+Note that this hook does not return either a `BeforeSwapDelta` or lp fee override — this call is used exclusively for recording price observations.
+</Callout>
+
+</div>
+</div>
+
+<a id="BaseOracleHook-observe-uint32---PoolId-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">observe(uint32[] secondsAgos, PoolId underlyingPoolId) → int56[], int56[]</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">external</p>
+<a className="peer" data-card href="BaseOracleHook-observe-uint32---PoolId-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the cumulative tick as of each timestamp `secondsAgo` from the current block timestamp on `underlyingPoolId`.
+
+<Callout>
+To get a time weighted average tick, you must call this with two values, one representing
+the beginning of the period and another for the end of the period. E.g., to get the last hour time-weighted average tick,
+you must call it with secondsAgos = [3600, 0].
+</Callout>
+
+<Callout>
+The time weighted average tick represents the geometric time weighted average price of the pool, in
+log base sqrt(1.0001) of currency1 / currency0. The TickMath library can be used to go from a tick value to a ratio.
+</Callout>
+
+</div>
+</div>
+
+<a id="BaseOracleHook-increaseObservationCardinalityNext-uint16-PoolId-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">increaseObservationCardinalityNext(uint16 observationCardinalityNext, PoolId underlyingPoolId)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="BaseOracleHook-increaseObservationCardinalityNext-uint16-PoolId-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Increase the maximum number of price and liquidity observations that the oracle of `underlyingPoolId`.
+
+</div>
+</div>
+
+<a id="BaseOracleHook-MAX_ABS_TICK_DELTA-int24"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">MAX_ABS_TICK_DELTA() → int24</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="BaseOracleHook-MAX_ABS_TICK_DELTA-int24">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The maximum absolute tick delta that can be observed for the truncated oracle
+
+</div>
+</div>
+
+<a id="BaseOracleHook-observationsById-mapping-PoolId----struct-Oracle-Observation-65535--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">observationsById() → mapping(PoolId &#x3D;&gt; struct Oracle.Observation[65535])</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="BaseOracleHook-observationsById-mapping-PoolId----struct-Oracle-Observation-65535--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The list of observations for a given pool ID
+
+</div>
+</div>
+
+<a id="BaseOracleHook-stateById-mapping-PoolId----struct-BaseOracleHook-ObservationState-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">stateById() → mapping(PoolId &#x3D;&gt; struct BaseOracleHook.ObservationState)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="BaseOracleHook-stateById-mapping-PoolId----struct-BaseOracleHook-ObservationState-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The current observation array state for the given pool ID
+
+</div>
+</div>
+
+<a id="BaseOracleHook-IncreaseObservationCardinalityNext-PoolId-uint16-uint16-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">IncreaseObservationCardinalityNext(PoolId indexed underlyingPoolId, uint16 observationCardinalityNextOld, uint16 observationCardinalityNextNew)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="BaseOracleHook-IncreaseObservationCardinalityNext-PoolId-uint16-uint16-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted by the hook for increases to the number of observations that can be stored.
+
+<Callout>
+`observationCardinalityNext` is not the observation cardinality until an observation is written at the index
+just before a mint/swap/burn.
+</Callout>
+
+</div>
+</div>
+
+<a id="BaseOracleHook-PoolNotInitialized--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">PoolNotInitialized()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="BaseOracleHook-PoolNotInitialized--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Observation cardinality cannot be increased if the pool is not initialized
+
+</div>
+</div>
+
+<a id="OracleHookWithV3Adapters"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `OracleHookWithV3Adapters` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v1.2.1/src/oracles/panoptic/OracleHookWithV3Adapters.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/src/oracles/panoptic/OracleHookWithV3Adapters.sol";
+```
+
+A hook that enables a Uniswap V4 pool to record price observations and expose an oracle interface with Uniswap V3-compatible adapters
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [constructor(_maxAbsTickDelta)](#OracleHookWithV3Adapters-constructor-int24-)
+- [_afterInitialize(, key, , tick)](#OracleHookWithV3Adapters-_afterInitialize-address-struct-PoolKey-uint160-int24-)
+- [standardAdapter()](#OracleHookWithV3Adapters-standardAdapter-mapping-PoolId----address-)
+- [truncatedAdapter()](#OracleHookWithV3Adapters-truncatedAdapter-mapping-PoolId----address-)
+#### BaseOracleHook [!toc]
+- [getHookPermissions()](#BaseOracleHook-getHookPermissions--)
+- [_beforeSwap(, key, , )](#BaseOracleHook-_beforeSwap-address-struct-PoolKey-struct-SwapParams-bytes-)
+- [observe(secondsAgos, underlyingPoolId)](#BaseOracleHook-observe-uint32---PoolId-)
+- [increaseObservationCardinalityNext(observationCardinalityNext, underlyingPoolId)](#BaseOracleHook-increaseObservationCardinalityNext-uint16-PoolId-)
+- [MAX_ABS_TICK_DELTA()](#BaseOracleHook-MAX_ABS_TICK_DELTA-int24)
+- [observationsById()](#BaseOracleHook-observationsById-mapping-PoolId----struct-Oracle-Observation-65535--)
+- [stateById()](#BaseOracleHook-stateById-mapping-PoolId----struct-BaseOracleHook-ObservationState-)
+#### BaseHook [!toc]
+- [_validateHookAddress(hook)](#BaseHook-_validateHookAddress-contract-BaseHook-)
+- [beforeInitialize(sender, key, sqrtPriceX96)](#BaseHook-beforeInitialize-address-struct-PoolKey-uint160-)
+- [_beforeInitialize(, , )](#BaseHook-_beforeInitialize-address-struct-PoolKey-uint160-)
+- [afterInitialize(sender, key, sqrtPriceX96, tick)](#BaseHook-afterInitialize-address-struct-PoolKey-uint160-int24-)
+- [beforeAddLiquidity(sender, key, params, hookData)](#BaseHook-beforeAddLiquidity-address-struct-PoolKey-struct-ModifyLiquidityParams-bytes-)
+- [_beforeAddLiquidity(, , , )](#BaseHook-_beforeAddLiquidity-address-struct-PoolKey-struct-ModifyLiquidityParams-bytes-)
+- [beforeRemoveLiquidity(sender, key, params, hookData)](#BaseHook-beforeRemoveLiquidity-address-struct-PoolKey-struct-ModifyLiquidityParams-bytes-)
+- [_beforeRemoveLiquidity(, , , )](#BaseHook-_beforeRemoveLiquidity-address-struct-PoolKey-struct-ModifyLiquidityParams-bytes-)
+- [afterAddLiquidity(sender, key, params, delta0, delta1, hookData)](#BaseHook-afterAddLiquidity-address-struct-PoolKey-struct-ModifyLiquidityParams-BalanceDelta-BalanceDelta-bytes-)
+- [_afterAddLiquidity(, , , , , )](#BaseHook-_afterAddLiquidity-address-struct-PoolKey-struct-ModifyLiquidityParams-BalanceDelta-BalanceDelta-bytes-)
+- [afterRemoveLiquidity(sender, key, params, delta0, delta1, hookData)](#BaseHook-afterRemoveLiquidity-address-struct-PoolKey-struct-ModifyLiquidityParams-BalanceDelta-BalanceDelta-bytes-)
+- [_afterRemoveLiquidity(, , , , , )](#BaseHook-_afterRemoveLiquidity-address-struct-PoolKey-struct-ModifyLiquidityParams-BalanceDelta-BalanceDelta-bytes-)
+- [beforeSwap(sender, key, params, hookData)](#BaseHook-beforeSwap-address-struct-PoolKey-struct-SwapParams-bytes-)
+- [afterSwap(sender, key, params, delta, hookData)](#BaseHook-afterSwap-address-struct-PoolKey-struct-SwapParams-BalanceDelta-bytes-)
+- [_afterSwap(, , , , )](#BaseHook-_afterSwap-address-struct-PoolKey-struct-SwapParams-BalanceDelta-bytes-)
+- [beforeDonate(sender, key, amount0, amount1, hookData)](#BaseHook-beforeDonate-address-struct-PoolKey-uint256-uint256-bytes-)
+- [_beforeDonate(, , , , )](#BaseHook-_beforeDonate-address-struct-PoolKey-uint256-uint256-bytes-)
+- [afterDonate(sender, key, amount0, amount1, hookData)](#BaseHook-afterDonate-address-struct-PoolKey-uint256-uint256-bytes-)
+- [_afterDonate(, , , , )](#BaseHook-_afterDonate-address-struct-PoolKey-uint256-uint256-bytes-)
+- [poolManager()](#BaseHook-poolManager-contract-IPoolManager)
+#### IHooks [!toc]
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+- [AdaptersDeployed(poolId, standardAdapter, truncatedAdapter)](#OracleHookWithV3Adapters-AdaptersDeployed-PoolId-address-address-)
+#### BaseOracleHook [!toc]
+- [IncreaseObservationCardinalityNext(underlyingPoolId, observationCardinalityNextOld, observationCardinalityNextNew)](#BaseOracleHook-IncreaseObservationCardinalityNext-PoolId-uint16-uint16-)
+#### BaseHook [!toc]
+#### IHooks [!toc]
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+#### BaseOracleHook [!toc]
+- [PoolNotInitialized()](#BaseOracleHook-PoolNotInitialized--)
+#### BaseHook [!toc]
+- [HookNotImplemented()](#BaseHook-HookNotImplemented--)
+- [NotPoolManager()](#BaseHook-NotPoolManager--)
+#### IHooks [!toc]
+</div>
+</div>
+
+<a id="OracleHookWithV3Adapters-constructor-int24-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">constructor(int24 _maxAbsTickDelta)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="OracleHookWithV3Adapters-constructor-int24-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Initializes a Uniswap V4 pool with this hook, stores baseline observation state, and optionally performs a cardinality increase.
+
+</div>
+</div>
+
+<a id="OracleHookWithV3Adapters-_afterInitialize-address-struct-PoolKey-uint160-int24-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_afterInitialize(address, struct PoolKey key, uint160, int24 tick) → bytes4</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="OracleHookWithV3Adapters-_afterInitialize-address-struct-PoolKey-uint160-int24-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The hook called after the state of a pool is initialized
+
+</div>
+</div>
+
+<a id="OracleHookWithV3Adapters-standardAdapter-mapping-PoolId----address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">standardAdapter() → mapping(PoolId &#x3D;&gt; address)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="OracleHookWithV3Adapters-standardAdapter-mapping-PoolId----address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Maps pool IDs to their standard V3 oracle adapters
+
+</div>
+</div>
+
+<a id="OracleHookWithV3Adapters-truncatedAdapter-mapping-PoolId----address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">truncatedAdapter() → mapping(PoolId &#x3D;&gt; address)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="OracleHookWithV3Adapters-truncatedAdapter-mapping-PoolId----address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Maps pool IDs to their truncated V3 oracle adapters
+
+</div>
+</div>
+
+<a id="OracleHookWithV3Adapters-AdaptersDeployed-PoolId-address-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">AdaptersDeployed(PoolId indexed poolId, address standardAdapter, address truncatedAdapter)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="OracleHookWithV3Adapters-AdaptersDeployed-PoolId-address-address-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when adapter contracts are deployed for a pool.
+
+</div>
+</div>
+
+<a id="V3OracleAdapter"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `V3OracleAdapter` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v1.2.1/src/oracles/panoptic/adapters/V3OracleAdapter.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/src/oracles/panoptic/adapters/V3OracleAdapter.sol";
+```
+
+This adapter exposes the normal tickCumulative values from BaseOracleHook.
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [constructor(_manager, _baseOracleHook, _poolId)](#V3OracleAdapter-constructor-contract-IPoolManager-contract-BaseOracleHook-PoolId-)
+- [slot0()](#V3OracleAdapter-slot0--)
+- [observations(index)](#V3OracleAdapter-observations-uint256-)
+- [observe(secondsAgos)](#V3OracleAdapter-observe-uint32---)
+- [increaseObservationCardinalityNext(observationCardinalityNext)](#V3OracleAdapter-increaseObservationCardinalityNext-uint16-)
+- [baseOracleHook()](#V3OracleAdapter-baseOracleHook-contract-BaseOracleHook)
+- [manager()](#V3OracleAdapter-manager-contract-IPoolManager)
+- [poolId()](#V3OracleAdapter-poolId-PoolId)
+</div>
+</div>
+
+<a id="V3OracleAdapter-constructor-contract-IPoolManager-contract-BaseOracleHook-PoolId-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">constructor(contract IPoolManager _manager, contract BaseOracleHook _baseOracleHook, PoolId _poolId)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="V3OracleAdapter-constructor-contract-IPoolManager-contract-BaseOracleHook-PoolId-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="V3OracleAdapter-slot0--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">slot0() → uint160 sqrtPriceX96, int24 tick, uint16 observationIndex, uint16 observationCardinality, uint16 observationCardinalityNext, uint8 feeProtocol, bool unlocked</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">external</p>
+<a className="peer" data-card href="V3OracleAdapter-slot0--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="V3OracleAdapter-observations-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">observations(uint256 index) → uint32 blockTimestamp, int56 tickCumulative, uint160 secondsPerLiquidityCumulativeX128, bool initialized</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">external</p>
+<a className="peer" data-card href="V3OracleAdapter-observations-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="V3OracleAdapter-observe-uint32---"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">observe(uint32[] secondsAgos) → int56[] tickCumulatives, uint160[] secondsPerLiquidityCumulativeX128s</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">external</p>
+<a className="peer" data-card href="V3OracleAdapter-observe-uint32---">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="V3OracleAdapter-increaseObservationCardinalityNext-uint16-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">increaseObservationCardinalityNext(uint16 observationCardinalityNext)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">external</p>
+<a className="peer" data-card href="V3OracleAdapter-increaseObservationCardinalityNext-uint16-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="V3OracleAdapter-baseOracleHook-contract-BaseOracleHook"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">baseOracleHook() → contract BaseOracleHook</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="V3OracleAdapter-baseOracleHook-contract-BaseOracleHook">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="V3OracleAdapter-manager-contract-IPoolManager"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">manager() → contract IPoolManager</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="V3OracleAdapter-manager-contract-IPoolManager">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="V3OracleAdapter-poolId-PoolId"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">poolId() → PoolId</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="V3OracleAdapter-poolId-PoolId">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="V3TruncatedOracleAdapter"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `V3TruncatedOracleAdapter` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v1.2.1/src/oracles/panoptic/adapters/V3TruncatedOracleAdapter.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/src/oracles/panoptic/adapters/V3TruncatedOracleAdapter.sol";
+```
+
+This adapter exposes the truncated tickCumulative values from BaseOracleHook.
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [constructor(_manager, _baseOracleHook, _poolId)](#V3TruncatedOracleAdapter-constructor-contract-IPoolManager-contract-BaseOracleHook-PoolId-)
+- [slot0()](#V3TruncatedOracleAdapter-slot0--)
+- [observations(index)](#V3TruncatedOracleAdapter-observations-uint256-)
+- [observe(secondsAgos)](#V3TruncatedOracleAdapter-observe-uint32---)
+- [increaseObservationCardinalityNext(observationCardinalityNext)](#V3TruncatedOracleAdapter-increaseObservationCardinalityNext-uint16-)
+- [baseOracleHook()](#V3TruncatedOracleAdapter-baseOracleHook-contract-BaseOracleHook)
+- [manager()](#V3TruncatedOracleAdapter-manager-contract-IPoolManager)
+- [poolId()](#V3TruncatedOracleAdapter-poolId-PoolId)
+</div>
+</div>
+
+<a id="V3TruncatedOracleAdapter-constructor-contract-IPoolManager-contract-BaseOracleHook-PoolId-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">constructor(contract IPoolManager _manager, contract BaseOracleHook _baseOracleHook, PoolId _poolId)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="V3TruncatedOracleAdapter-constructor-contract-IPoolManager-contract-BaseOracleHook-PoolId-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="V3TruncatedOracleAdapter-slot0--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">slot0() → uint160 sqrtPriceX96, int24 tick, uint16 observationIndex, uint16 observationCardinality, uint16 observationCardinalityNext, uint8 feeProtocol, bool unlocked</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">external</p>
+<a className="peer" data-card href="V3TruncatedOracleAdapter-slot0--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="V3TruncatedOracleAdapter-observations-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">observations(uint256 index) → uint32 blockTimestamp, int56 tickCumulativeTruncated, uint160 secondsPerLiquidityCumulativeX128, bool initialized</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">external</p>
+<a className="peer" data-card href="V3TruncatedOracleAdapter-observations-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="V3TruncatedOracleAdapter-observe-uint32---"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">observe(uint32[] secondsAgos) → int56[] tickCumulativesTruncated, uint160[] secondsPerLiquidityCumulativeX128s</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">external</p>
+<a className="peer" data-card href="V3TruncatedOracleAdapter-observe-uint32---">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="V3TruncatedOracleAdapter-increaseObservationCardinalityNext-uint16-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">increaseObservationCardinalityNext(uint16 observationCardinalityNext)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">external</p>
+<a className="peer" data-card href="V3TruncatedOracleAdapter-increaseObservationCardinalityNext-uint16-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="V3TruncatedOracleAdapter-baseOracleHook-contract-BaseOracleHook"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">baseOracleHook() → contract BaseOracleHook</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="V3TruncatedOracleAdapter-baseOracleHook-contract-BaseOracleHook">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="V3TruncatedOracleAdapter-manager-contract-IPoolManager"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">manager() → contract IPoolManager</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="V3TruncatedOracleAdapter-manager-contract-IPoolManager">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="V3TruncatedOracleAdapter-poolId-PoolId"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">poolId() → PoolId</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="V3TruncatedOracleAdapter-poolId-PoolId">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="Oracle"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `Oracle` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v1.2.1/src/oracles/panoptic/libraries/Oracle.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/src/oracles/panoptic/libraries/Oracle.sol";
+```
+
+Instances of stored oracle data, "observations", are collected in the oracle array
+Every pool is initialized with an oracle array length of 1. Anyone can pay the SSTOREs to increase the
+maximum length of the oracle array. New slots will be added when the array is fully populated.
+Observations are overwritten when the full length of the oracle array is populated.
+The most recent observation is available, independent of the length of the oracle array, by passing 0 to observe()
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [transform(last, blockTimestamp, tick, maxAbsTickDelta)](#Oracle-transform-struct-Oracle-Observation-uint32-int24-int24-)
+- [initialize(self, time, tick)](#Oracle-initialize-struct-Oracle-Observation-65535--uint32-int24-)
+- [write(self, index, blockTimestamp, tick, cardinality, cardinalityNext, maxAbsTickDelta)](#Oracle-write-struct-Oracle-Observation-65535--uint16-uint32-int24-uint16-uint16-int24-)
+- [grow(self, current, next)](#Oracle-grow-struct-Oracle-Observation-65535--uint16-uint16-)
+- [lte(time, a, b)](#Oracle-lte-uint32-uint32-uint32-)
+- [binarySearch(self, time, target, index, cardinality)](#Oracle-binarySearch-struct-Oracle-Observation-65535--uint32-uint32-uint16-uint16-)
+- [getSurroundingObservations(self, time, target, tick, index, cardinality, maxAbsTickDelta)](#Oracle-getSurroundingObservations-struct-Oracle-Observation-65535--uint32-uint32-int24-uint16-uint16-int24-)
+- [observeSingle(self, time, secondsAgo, tick, index, cardinality, maxAbsTickDelta)](#Oracle-observeSingle-struct-Oracle-Observation-65535--uint32-uint32-int24-uint16-uint16-int24-)
+- [observe(self, time, secondsAgos, tick, index, cardinality, maxAbsTickDelta)](#Oracle-observe-struct-Oracle-Observation-65535--uint32-uint32---int24-uint16-uint16-int24-)
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [TargetPredatesOldestObservation(oldestTimestamp, targetTimestamp)](#Oracle-TargetPredatesOldestObservation-uint32-uint32-)
+</div>
+</div>
+
+<a id="Oracle-transform-struct-Oracle-Observation-uint32-int24-int24-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">transform(struct Oracle.Observation last, uint32 blockTimestamp, int24 tick, int24 maxAbsTickDelta) → struct Oracle.Observation</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="Oracle-transform-struct-Oracle-Observation-uint32-int24-int24-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+blockTimestamp _must_ be chronologically equal to or greater than last.blockTimestamp, safe for 0 or 1 overflows.
+
+</div>
+</div>
+
+<a id="Oracle-initialize-struct-Oracle-Observation-65535--uint32-int24-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">initialize(struct Oracle.Observation[65535] self, uint32 time, int24 tick) → uint16, uint16</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="Oracle-initialize-struct-Oracle-Observation-65535--uint32-int24-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="Oracle-write-struct-Oracle-Observation-65535--uint16-uint32-int24-uint16-uint16-int24-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">write(struct Oracle.Observation[65535] self, uint16 index, uint32 blockTimestamp, int24 tick, uint16 cardinality, uint16 cardinalityNext, int24 maxAbsTickDelta) → uint16 indexUpdated, uint16 cardinalityUpdated</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="Oracle-write-struct-Oracle-Observation-65535--uint16-uint32-int24-uint16-uint16-int24-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Writable at most once per block. Index represents the most recently written element. cardinality and index must be tracked externally.
+If the index is at the end of the allowable array length (according to cardinality), and the next cardinality
+is greater than the current one, cardinality may be increased. This restriction is created to preserve ordering.
+
+</div>
+</div>
+
+<a id="Oracle-grow-struct-Oracle-Observation-65535--uint16-uint16-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">grow(struct Oracle.Observation[65535] self, uint16 current, uint16 next) → uint16</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="Oracle-grow-struct-Oracle-Observation-65535--uint16-uint16-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="Oracle-lte-uint32-uint32-uint32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">lte(uint32 time, uint32 a, uint32 b) → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="Oracle-lte-uint32-uint32-uint32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+safe for 0 or 1 overflows, a and b _must_ be chronologically before or equal to time
+
+</div>
+</div>
+
+<a id="Oracle-binarySearch-struct-Oracle-Observation-65535--uint32-uint32-uint16-uint16-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">binarySearch(struct Oracle.Observation[65535] self, uint32 time, uint32 target, uint16 index, uint16 cardinality) → struct Oracle.Observation beforeOrAt, struct Oracle.Observation atOrAfter</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="Oracle-binarySearch-struct-Oracle-Observation-65535--uint32-uint32-uint16-uint16-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The answer must be contained in the array, used when the target is located within the stored observation
+boundaries: older than the most recent observation and younger, or the same age as, the oldest observation.
+
+</div>
+</div>
+
+<a id="Oracle-getSurroundingObservations-struct-Oracle-Observation-65535--uint32-uint32-int24-uint16-uint16-int24-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">getSurroundingObservations(struct Oracle.Observation[65535] self, uint32 time, uint32 target, int24 tick, uint16 index, uint16 cardinality, int24 maxAbsTickDelta) → struct Oracle.Observation beforeOrAt, struct Oracle.Observation atOrAfter</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="Oracle-getSurroundingObservations-struct-Oracle-Observation-65535--uint32-uint32-int24-uint16-uint16-int24-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Assumes there is at least 1 initialized observation.
+Used by observeSingle() to compute the counterfactual accumulator values as of a given block timestamp.
+
+</div>
+</div>
+
+<a id="Oracle-observeSingle-struct-Oracle-Observation-65535--uint32-uint32-int24-uint16-uint16-int24-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">observeSingle(struct Oracle.Observation[65535] self, uint32 time, uint32 secondsAgo, int24 tick, uint16 index, uint16 cardinality, int24 maxAbsTickDelta) → int56, int56</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="Oracle-observeSingle-struct-Oracle-Observation-65535--uint32-uint32-int24-uint16-uint16-int24-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Reverts if an observation at or before the desired observation timestamp does not exist.
+0 may be passed as `secondsAgo' to return the current cumulative values.
+If called with a timestamp falling between two observations, returns the counterfactual accumulator values
+at exactly the timestamp between the two observations.
+
+</div>
+</div>
+
+<a id="Oracle-observe-struct-Oracle-Observation-65535--uint32-uint32---int24-uint16-uint16-int24-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">observe(struct Oracle.Observation[65535] self, uint32 time, uint32[] secondsAgos, int24 tick, uint16 index, uint16 cardinality, int24 maxAbsTickDelta) → int56[] tickCumulatives, int56[] tickCumulativeTruncated</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="Oracle-observe-struct-Oracle-Observation-65535--uint32-uint32---int24-uint16-uint16-int24-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Reverts if `secondsAgos` > oldest observation.
+
+</div>
+</div>
+
+<a id="Oracle-TargetPredatesOldestObservation-uint32-uint32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">TargetPredatesOldestObservation(uint32 oldestTimestamp, uint32 targetTimestamp)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="Oracle-TargetPredatesOldestObservation-uint32-uint32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+

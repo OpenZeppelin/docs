@@ -1,18 +1,20 @@
 #!/usr/bin/env node
 
-const fs = require("node:fs").promises;
-const path = require("node:path");
-const { execSync } = require("node:child_process");
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { execSync } from "node:child_process";
 
-// Check if two arguments are provided
-if (process.argv.length !== 4) {
-	console.error("Usage: node generate-changelog.js <repo_url> <file_path>");
+// Check if at least two arguments are provided
+if (process.argv.length < 4) {
+	console.error("Usage: node generate-changelog.js <repo_url> <file_path> [-p]");
+	console.error("  -p: Include pre-releases");
 	process.exit(1);
 }
 
 // Assign arguments to variables
 const url = process.argv[2];
 const filePath = process.argv[3];
+const includePrereleases = process.argv.includes("-p");
 
 // Check if changelog-from-release is installed
 function checkChangelogFromRelease() {
@@ -34,14 +36,18 @@ async function generateChangelog() {
 		const frontmatter = `---
 title: Changelog
 ---
-
+<br/>
 `;
 
 		// Run changelog-from-release and get output
-		const changelogOutput = execSync(`changelog-from-release -r "${url}"`, {
-			encoding: "utf8",
-			stdio: "pipe",
-		});
+		const flags = includePrereleases ? " -p" : "";
+		const changelogOutput = execSync(
+			`changelog-from-release -r "${url}"${flags}`,
+			{
+				encoding: "utf8",
+				stdio: "pipe",
+			},
+		);
 
 		// Remove the generated tag at the end
 		const cleanOutput = changelogOutput

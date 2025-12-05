@@ -4,18 +4,30 @@ title: Uniswap Hooks
 
 A [Solidity library](https://github.com/OpenZeppelin/uniswap-hooks) for secure and modular hooks for [Uniswap v4](https://docs.uniswap.org/contracts/v4/overview). This library includes:
 
-* Base implementations for custom accounting, asynchronous swaps, and custom curves
-* Fee-related implementations for management and enforcement
-* Ready-to-use hooks for general use cases, like sandwich protection
-* Utilities and libraries for hook development
+* Utilities and libraries for advanced hooks development
+* Primitives for implementing features such as custom accounting, asynchronous swaps, and custom curves.
+* Different fee-related implementations, such as dynamic fees, target-or-penalty fees, and hook fees.
+* Ready-to-use hooks for general use cases, like sandwich protection, just in time liquidity protection, limit orders, and rehypothecated liquidity.
 
 ## Overview
 
 ### Installation
 
-The library can only be installed with Foundry using gitmodules for now. Support for Hardhat is coming soon.
+#### Hardhat (npm)
+
+```console
+$ npm install OpenZeppelin/uniswap-hooks
+```
 
 #### Foundry (git)
+
+<Callout type='warn'>
+When installing via git, it is a common error to use the `master` branch. This is a development branch that should be avoided in favor of tagged releases. The release process involves security measures that the `master` branch does not guarantee.
+</Callout>
+
+<Callout type='warn'>
+Foundry installs the latest version initially, but subsequent `forge update` commands will use the `master` branch.
+</Callout>
 
 ```console
 $ forge install OpenZeppelin/uniswap-hooks
@@ -25,6 +37,7 @@ $ forge install OpenZeppelin/uniswap-hooks
 Make sure to add `@openzeppelin/uniswap-hooks/=lib/uniswap-hooks/src/` in `remappings.txt`.
 </Callout>
 
+
 ### Usage
 
 Once installed, you can use the contracts in the library by importing them:
@@ -33,13 +46,13 @@ Once installed, you can use the contracts in the library by importing them:
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {BaseDynamicFee, IPoolManager, PoolKey} from "src/fee/BaseDynamicFee.sol";
+import {BaseDynamicFee, IPoolManager, PoolKey} from "@openzeppelin/uniswap-hooks/fee/BaseDynamicFee.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @dev A hook that allows the owner to dynamically update the LP fee.
  */
-contract DynamicLPFeeHook is BaseDynamicFee, Ownable {
+contract DynamicOwnedLPFeeHook is BaseDynamicFee, Ownable {
     uint24 public fee;
 
     constructor(IPoolManager _poolManager) BaseDynamicFee(_poolManager) Ownable(msg.sender) {
@@ -61,12 +74,25 @@ contract DynamicLPFeeHook is BaseDynamicFee, Ownable {
 }
 ```
 
-To keep your system secure, you should ***always*** use the installed code as-is, and neither copy-paste it from online sources, nor modify it yourself. The library is designed so that only the contracts and functions you use are deployed, so you don’t need to worry about it needlessly increasing gas costs.
+<Callout>
+If you’re new to uniswap v4 hooks development, head to [Uniswap Hooks Quickstart](https://docs.uniswap.org/contracts/v4/quickstart/hooks/setup) to learn to configure your environment for creating and compililing your first hook.
+</Callout>
 
-### Videos
+
+To keep your system secure, you should ***always*** use the installed code as-is, and neither copy-paste it from online sources, nor modify it yourself. The library is designed so that only the contracts and functions you use are included, so you don’t need to worry about it needlessly increasing gas costs.
+
+## API Reference
+
+The [full API](/uniswap-hooks/api/) is also thoroughly documented, and serves as a great reference when developing your smart contract application. You can also ask for help or follow Contracts' development in the [community forum](https://forum.openzeppelin.com) or [telegram channel](https://t.me/openzeppelin_tg).
+
+## Hooks Wizard 🪄
+
+Head to the [Hooks Wizard](https://wizard.openzeppelin.com/uniswap-hooks) to construct feature-rich hooks by selecting the options that fit your needs, generating the code automatically for you.
+
+## Videos
 In order to facilitate understanding of Uniswap Hooks and help start building with them, we’ve released this playlist of guidelines on our YouTube channel.
 
-<iframe width="100%" height="350" src="https://www.youtube.com/embed/videoseries?list=PLdJRkA9gCKOOx-hRyS1tsprm2R4EG2dcZ" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+<iframe width="100%" height="350" src="https://www.youtube.com/embed/videoseries?list=PLdJRkA9gCKOOx-hRyS1tsprm2R4EG2dcZ" title="YouTube video player" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen></iframe>
 
 ## Security
 
