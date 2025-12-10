@@ -77,6 +77,8 @@ For detailed migration instructions and support, visit the [OpenZeppelin Monitor
 
 ### From Defender Relayer to OpenZeppelin Relayer
 
+[OpenZeppelin Relayer](/relayer) is an open-source transaction relaying service that provides secure, reliable transaction submission to blockchain networks. With **Defender shutting down on July 1, 2026**, migrating to OpenZeppelin Relayer ensures continuity of your relaying infrastructure while giving you full control over your deployment.
+
 OpenZeppelin Relayer offers similar functionality to Defender Relayer:
 
 - **Transaction relaying**: Submit transactions to supported blockchain networks efficiently
@@ -89,34 +91,146 @@ OpenZeppelin Relayer offers similar functionality to Defender Relayer:
 
 ### Getting Started
 
-To begin your Relayer migration:
+Follow these steps to migrate your Defender Relayers to OpenZeppelin Relayer:
 
-1. **Review your existing relayers**: Export your Defender Relayer configurations using the "OpenZeppelin Relayer Configurations" button
+#### Step 1: Download Configuration from Defender
+
+Export your Defender Relayer configurations using the "OpenZeppelin Relayer Configurations" button in the Defender UI.
 
 ![Defender Relayer Migration Button](/defender/relayer-migration-button.png)
 
-The "OpenZeppelin Relayer Configurations" button will download a .zip file containing configuration files for every relayer in your Defender account (If for any reason you don't want a specific relayer to be migrated, we recommend you delete the relayer before clicking on the OpenZeppelin Relayer Configurations button ). These configurations are ready to copy and paste directly into OpenZeppelin Relayer. Before running the relayers, make sure to review and update any placeholder values in the configuration files, such as:
+<Callout type='info'>
+If you don't want a specific relayer to be migrated, delete that relayer before clicking the download button.
+</Callout>
 
-- RPC URLs and endpoint addresses
-- Signer configurations and private keys
-- Network-specific policies
-- Webhook URLs for notifications
+**What you'll download:**
 
-### Configuration File Structure
+- **ZIP file**: Downloaded if you have relayers on forked or private networks. The ZIP contains a `config.json` file and a `networks/` folder with custom network definitions.
+- **JSON file**: Downloaded if all your relayers are on standard public networks. This is a single `config.json` file.
 
-After downloading your relayer configurations, you'll need to organize them in your OpenZeppelin Relayer project:
+#### Step 2: Set Up OpenZeppelin Relayer
 
-- **`config.json`**: Place this file in the `config/` directory
-- **Network files**: Place these files in the `config/networks/` directory
+Before importing your configurations, set up the OpenZeppelin Relayer infrastructure by following the [OpenZeppelin Relayer Quick Start Guide](/relayer/quickstart).
 
-This structure ensures OpenZeppelin Relayer can properly locate and load your relayer configurations.
+#### Step 3: Place Configuration Files
 
-2. **Set up OpenZeppelin Relayer**: Follow the [installation guide](/relayer) to deploy the Relayer on your infrastructure
-3. **Import your configurations**: Use the exported configurations to recreate your relayers in OpenZeppelin Relayer
+**If you downloaded a ZIP file:**
 
-4. **Test your relayers**: Verify that transactions are processed correctly before decommissioning Defender relayers
-5. **Transfer funds**: Once your OpenZeppelin Relayers are fully configured and running, transfer the funds from your Defender relayers to your new OpenZeppelin Relayer addresses using the Withdraw functionality
-6. **Gradually move volume**: Shift traffic from Defender relayer to OpenZeppelin Relayer incrementally
+1. Extract the ZIP file
+2. Copy `config.json` to the `config/` directory in your OpenZeppelin Relayer project
+3. Copy the `networks/` folder contents to `config/networks/`
+
+**If you downloaded a plain JSON file:**
+
+1. Copy the downloaded file to the `config/` directory
+2. Rename it to `config.json`
+
+Your directory structure should look like:
+```
+openzeppelin-relayer/
+├── config/
+│   ├── config.json
+│   └── networks/           # Only if you had forked/private networks
+│       ├── my-network.json
+│       └── ...
+```
+
+#### Step 4: Adjust Configuration
+
+After placing the files, you need to update several configuration values:
+
+**For custom networks (if you downloaded a ZIP file):**
+
+Update the RPC URLs in each network definition file under `config/networks/`. Replace placeholder values with your actual RPC endpoint URLs:
+
+```json
+{
+  "network": "my-custom-network",
+  "rpc_urls": [
+    "https://your-rpc-endpoint.com"
+  ]
+}
+```
+
+**For all migrations (both ZIP and JSON):**
+
+Edit `config/config.json` to update:
+
+1. **Signer configuration**: Each relayer needs a signer configured. See [Choosing a Signer Type](#choosing-a-signer-type) below for options and setup instructions.
+
+2. **Notification webhooks**: Update the `notifications` section with your webhook URLs:
+```json
+"notifications": [
+  {
+    "id": "my-webhook",
+    "type": "webhook",
+    "url": "https://your-webhook-endpoint.com/notifications",
+    "signing_key": {
+      "type": "env",
+      "value": "WEBHOOK_SIGNING_KEY"
+    }
+  }
+]
+```
+
+3. **Network-specific policies**: Review and adjust policies for each relayer as needed (gas price caps, minimum balance thresholds, whitelist receivers, etc.).
+
+<Callout type='info'>
+For detailed configuration options, see the [OpenZeppelin Relayer Configuration documentation](/relayer/configuration).
+</Callout>
+
+#### Step 5: Verify OpenZeppelin Relayer Works
+
+After configuring, start the relayer and verify it's working correctly:
+
+1. **Start the relayer** using one of the methods described in the [Quick Start Guide](/relayer/quickstart) (either running locally with Cargo or using Docker Compose).
+
+2. **Check the startup logs** for any configuration errors or warnings.
+
+3. **Test the API endpoints** to verify your relayers are configured correctly:
+
+```bash
+# Get relayer details
+curl -X GET http://localhost:8080/api/v1/relayers/{relayer_id} \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+
+# Check relayer balance
+curl -X GET http://localhost:8080/api/v1/relayers/{relayer_id}/balance \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+Replace `{relayer_id}` with your relayer's ID and `YOUR_API_KEY` with the API key from your `.env` file.
+
+A successful response confirms your relayer is properly configured and connected to the network.
+
+#### Step 6: Transfer Funds
+
+Once OpenZeppelin Relayer is running correctly:
+
+1. Go to **Defender Relayers** in the Defender UI
+2. Select the relayer you want to migrate
+3. Go to settings
+4. Click the **Withdraw** button
+
+![Defender Relayer Withdraw Button](/defender/withdraw.png)
+
+5. **Recommended**: Transfer a small amount first and test with a transaction
+6. If the test transaction succeeds, transfer the remaining funds
+
+<Callout type='warn'>
+Since you're creating new relayer addresses (see [Understanding Signer Migration](#understanding-signer-migration)), make sure to update any smart contract permissions, whitelists, or access control lists to include the new addresses before transferring all funds.
+</Callout>
+
+#### Step 7: Gradually Move Traffic
+
+After successful testing:
+
+1. Run both Defender and OpenZeppelin Relayer in parallel
+2. Shift traffic incrementally from Defender to OpenZeppelin Relayer
+3. Monitor for any issues
+4. Once confident, fully switch over to OpenZeppelin Relayer
 
 Here's a video with the process step by step: https://www.loom.com/share/cb5e0f5d8c064a71abc8c18fac273cf0
 
