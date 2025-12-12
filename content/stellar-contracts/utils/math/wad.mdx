@@ -1,0 +1,376 @@
+---
+title: WAD Fixed-Point Math
+description: High-precision decimal arithmetic
+---
+
+# Overview
+
+The WAD library provides fixed-point decimal arithmetic for Soroban smart contracts with 18 decimal places of precision.
+It's designed specifically for DeFi applications where precise decimal calculations are critical,
+such as interest rates, exchange rates, and token pricing.
+
+It is a fixed-point representation where:
+- **1.0 is represented as `1_000_000_000_000_000_000` (10^18)**
+- **0.5 is represented as `500_000_000_000_000_000`**
+- **123.456 is represented as `123_456_000_000_000_000_000`**
+
+This allows precise decimal arithmetic using only integer operations, avoiding the pitfalls
+of floating-point arithmetic in smart contracts.
+
+# Why WAD?
+
+## Problems with Alternatives
+
+**Native Integers (`i128`, `u64`):**
+- No decimal support - `1/2 = 0` instead of `0.5`
+- Loss of precision in financial calculations
+- Requires manual scaling for each operation
+
+**Floating-Point (`f64`, `f32`):**
+- Non-deterministic behavior across platforms
+- Rounding errors that compound in financial calculations
+- Security vulnerabilities from precision loss
+
+## Why WAD is Better
+
+- **High Precision**: 18 decimals is more than sufficient for financial calculations
+- **Deterministic**: Same inputs always produce same outputs
+- **Gas Efficient**: Uses native `i128` arithmetic under the hood
+- **Battle-Tested**: Used in production by MakerDAO, Uniswap, Aave, and others
+- **Ergonomic**: Operator overloading makes code readable: `a + b * c`
+- **Type Safe**: NewType pattern prevents mixing scaled and unscaled values
+
+# Design Decisions
+
+## 1. Why 18 Decimals?
+
+**18 decimals was chosen for several reasons:**
+
+- **Battle-Tested Standard**: Most DeFi protocols on use 18 decimals
+- **Sufficient Precision**: Provides precision down to 10^-18, far exceeding practical financial needs
+- **Interoperability**: Makes it easier to port DeFi protocols from other ecosystems to Stellar
+- **Performance**: Fits in `i128` without overflow concerns for typical values
+
+**Example Precision:**
+```rust
+// Interest rate: 5.5% = 0.055
+let rate = Wad::from_ratio(&e, 55, 1000); // 55/1000 = 0.055
+
+// Time fraction: 1 day / 365 days ≈ 0.00274
+let time = Wad::from_ratio(&e, 1, 365); // 1/365 ≈ 0.00274
+
+// Interest = principal * rate * time
+let interest = principal * rate * time;
+// Precise to 18 decimal places!
+```
+
+## 2. NewType Pattern
+
+We use a NewType `struct Wad(i128)` instead of a type alias:
+
+```rust
+// ❌ BAD: Type alias
+type Wad = i128;
+
+// ✅ GOOD: NewType
+pub struct Wad(i128);
+```
+
+**Benefits:**
+- **Type Safety**: Cannot accidentally mix scaled and unscaled values
+- **Operator Overloading**: Can implement `+`, `-`, `*`, `/` with correct semantics
+- **Semantic Clarity**: Makes intent explicit in function signatures
+
+## 3. No `From`/`Into` Traits
+
+We deliberately **do not** implement `From<i128>` or `Into<i128>` because it's ambiguous:
+
+```rust
+// What should this mean?
+let wad = Wad::from(5);
+// Is it 5.0 (scaled to 5 * 10^18)?
+// Or 0.000000000000000005 (raw value 5)?
+```
+
+Instead, we provide explicit constructors:
+- `Wad::from_integer(e, 5)` - Creates 5.0 (scaled)
+- `Wad::from_raw(5)` - Creates raw value 5 (0.000000000000000005)
+
+## 4. Truncation vs Rounding
+
+All operations truncate toward zero rather than rounding:
+
+**Why truncation?**
+- **Predictable**: Same behavior as integer division
+- **Conservative**: In financial calculations, truncation is often safer (e.g., don't over-calculate interest)
+- **Fast**: No additional logic needed
+- **Standard**: Matches Solidity and most fixed-point libraries
+
+## 5. Operator Overloading
+
+We provide operator overloading (`+`, `-`, `*`, `/`, `-`) for convenience:
+
+```rust
+// Readable arithmetic
+let total = price + fee;
+let cost = quantity * price;
+let ratio = numerator / denominator;
+```
+
+Operator overloading is supported across WAD and native i128 types where unambiguous:
+`WAD * i128`, `i128 * WAD`, `WAD / i128`.
+
+**Explicit methods are available for safety:**
+- `checked_add()`, `checked_sub()`, etc. return `Option<Wad>` for overflow handling
+
+:::warning[Overflow Behavior]
+
+**Just like regular Rust**, operator overloading does not include overflow checks:
+
+- **Use `checked_*` methods** (`checked_add()`, `checked_sub()`, `checked_mul()`, etc.) when handling user inputs or when overflow is possible. These return `Option<Wad>` for safe error handling.
+- **Use operator overloads** (`+`, `-`, `*`, `/`) when you want to save gas by skipping overflow checks, or when you're confident the operation cannot overflow.
+
+This design follows Rust's standard library pattern: operators for performance, checked methods for safety.
+
+:::
+
+# How It Works
+
+## Internal Representation
+
+```rust
+pub struct Wad(i128); // Internal representation
+pub const WAD_SCALE: i128 = 1_000_000_000_000_000_000; // 10^18
+```
+
+A `Wad` is simply a wrapper around `i128` that interprets the value as having 18 decimal places.
+
+## Arithmetic Operations
+
+**Addition/Subtraction:** Direct on internal values
+```rust
+impl Add for Wad {
+    fn add(self, rhs: Wad) -> Wad {
+        Wad(self.0 + rhs.0)
+    }
+}
+```
+
+**Multiplication:** Scale down by WAD_SCALE
+```rust
+impl Mul for Wad {
+    fn mul(self, rhs: Wad) -> Wad {
+        // (a * b) / 10^18
+        Wad((self.0 * rhs.0) / WAD_SCALE)
+    }
+}
+```
+
+**Division:** Scale up by WAD_SCALE
+```rust
+impl Div for Wad {
+    fn div(self, rhs: Wad) -> Wad {
+        // (a * 10^18) / b
+        Wad((self.0 * WAD_SCALE) / rhs.0)
+    }
+}
+```
+
+## Token Conversions
+
+Different tokens have different decimal places (USDC: 6, ETH: 18, BTC: 8). WAD handles these conversions:
+
+```rust
+// Convert from USDC (6 decimals) to WAD
+let usdc_amount: i128 = 1_500_000; // 1.5 USDC
+let wad = Wad::from_token_amount(&e, usdc_amount, 6);
+// wad.raw() = 1_500_000_000_000_000_000 (1.5 in WAD)
+
+// Convert back to USDC
+let usdc_back: i128 = wad.to_token_amount(&e, 6);
+// usdc_back = 1_500_000
+```
+
+# Precision Characteristics
+
+## Understanding Fixed-Point Precision
+
+**WAD is a fixed-point math library.** Like all fixed-point arithmetic systems,
+precision loss is inherent and unavoidable. The goal is not to eliminate precision errors
+—that's impossible— but to reduce them to a degree so minimal
+that they become irrelevant in practical applications.
+
+WAD achieves this goal exceptionally well. With precision loss in the range of **10^-16**,
+the errors are so microscopically small that they have zero practical impact on financial calculations.
+To put this in perspective: if you're calculating with millions of dollars, the error would be
+measured in quadrillionths of a cent.
+
+## How Precision Loss Manifests
+
+Due to truncation in each operation, operation order can produce slightly different results:
+
+```rust
+let a = Wad::from_integer(&e, 1000);
+let b = Wad::from_raw(55_000_000_000_000_000);  // 0.055
+let c = Wad::from_raw(8_333_333_333_333_333);   // ~0.00833
+
+let result1 = a * b * c;      // Truncates after first multiplication
+let result2 = a * (b * c);    // Truncates after inner multiplication
+
+// result1 and result2 may differ by ~315 WAD units
+// That's 0.000000000000000315 or (3.15 × 10^-16)
+```
+
+**Why This Doesn't Matter:**
+- Errors are in the **10^-15 to 10^-18** range, far beyond practical significance
+- Token precision (6-8 decimals) completely absorbs these errors when converting back
+- Real-world financial systems round to 2-8 decimal places; WAD's 18 decimals provide a massive safety margin
+- This is **orders of magnitude more precise** than needed for DeFi applications
+
+# Usage Examples
+
+## Basic Arithmetic
+
+```rust
+use soroban_sdk::Env;
+use contract_utils::math::wad::Wad;
+
+fn calculate_interest(e: &Env, principal: i128, rate_bps: u32) -> i128 {
+    // Convert principal (assume 6 decimals like USDC)
+    let principal_wad = Wad::from_token_amount(e, principal, 6);
+
+    // Rate in basis points (e.g., 550 = 5.5%)
+    let rate_wad = Wad::from_ratio(e, rate_bps as i128, 10_000);
+
+    // Calculate interest
+    let interest_wad = principal_wad * rate_wad;
+
+    // Convert back to token amount
+    interest_wad.to_token_amount(e, 6)
+}
+```
+
+## Price Calculations
+
+```rust
+fn calculate_swap_output(
+    e: &Env,
+    amount_in: i128,
+    reserve_in: i128,
+    reserve_out: i128,
+) -> i128 {
+    // Convert to WAD
+    let amount_in_wad = Wad::from_token_amount(e, amount_in, 6);
+    let reserve_in_wad = Wad::from_token_amount(e, reserve_in, 6);
+    let reserve_out_wad = Wad::from_token_amount(e, reserve_out, 6);
+
+    // Constant product formula: amount_out = (amount_in * reserve_out) / (reserve_in + amount_in)
+    let numerator = amount_in_wad * reserve_out_wad;
+    let denominator = reserve_in_wad + amount_in_wad;
+    let amount_out_wad = numerator / denominator;
+
+    // Convert back
+    amount_out_wad.to_token_amount(e, 6)
+}
+```
+
+## Compound Interest
+
+```rust
+fn calculate_compound_interest(
+    e: &Env,
+    principal: i128,
+    annual_rate_bps: u32,
+    days: u32,
+) -> i128 {
+    let principal_wad = Wad::from_token_amount(e, principal, 6);
+    let rate = Wad::from_ratio(e, annual_rate_bps as i128, 10_000);
+    let time_fraction = Wad::from_ratio(e, days as i128, 365);
+
+    // Simple interest: principal * rate * time
+    let interest = principal_wad * rate * time_fraction;
+
+    interest.to_token_amount(e, 6)
+}
+```
+
+## Safe Arithmetic with Overflow Checks
+
+```rust
+fn safe_multiply(e: &Env, a: i128, b: i128) -> Result<i128, Error> {
+    let a_wad = Wad::from_token_amount(e, a, 6);
+    let b_wad = Wad::from_token_amount(e, b, 6);
+
+    // Use checked variant
+    let result_wad = a_wad
+        .checked_mul(b_wad)
+        .ok_or(Error::Overflow)?;
+
+    Ok(result_wad.to_token_amount(e, 6))
+}
+```
+
+# API Reference
+
+## Constructors
+
+| Method | Description | Example |
+|--------|-------------|---------|
+| `from_integer(e, n)` | Create from whole number | `Wad::from_integer(&e, 5)` → 5.0 |
+| `from_ratio(e, num, den)` | Create from fraction | `Wad::from_ratio(&e, 1, 2)` → 0.5 |
+| `from_token_amount(e, amount, decimals)` | Create from token amount | `Wad::from_token_amount(&e, 1_500_000, 6)` → 1.5 |
+| `from_price(e, price, decimals)` | Alias for `from_token_amount` | `Wad::from_price(&e, 100_000, 6)` → 0.1 |
+| `from_raw(raw)` | Create from raw i128 value | `Wad::from_raw(10^18)` → 1.0 |
+
+## Converters
+
+| Method | Description | Example |
+|--------|-------------|---------|
+| `to_integer()` | Convert to whole number (truncates) | `Wad(5.7).to_integer()` → 5 |
+| `to_token_amount(e, decimals)` | Convert to token amount | `Wad(1.5).to_token_amount(&e, 6)` → 1_500_000 |
+| `raw()` | Get raw i128 value | `Wad(1.0).raw()` → 10^18 |
+
+## Arithmetic Operators
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `a + b` | Addition | `Wad(1.5) + Wad(2.3)` → 3.8 |
+| `a - b` | Subtraction | `Wad(5.0) - Wad(3.0)` → 2.0 |
+| `a * b` | Multiplication (WAD × WAD) | `Wad(2.0) * Wad(3.0)` → 6.0 |
+| `a / b` | Division (WAD ÷ WAD) | `Wad(6.0) / Wad(2.0)` → 3.0 |
+| `a * n` | Multiply WAD by integer | `Wad(2.5) * 3` → 7.5 |
+| `n * a` | Multiply integer by WAD | `3 * Wad(2.5)` → 7.5 |
+| `a / n` | Divide WAD by integer | `Wad(7.5) / 3` → 2.5 |
+| `-a` | Negation | `-Wad(5.0)` → -5.0 |
+
+## Checked Arithmetic
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `checked_add(rhs)` | `Option<Wad>` | Addition with overflow check |
+| `checked_sub(rhs)` | `Option<Wad>` | Subtraction with overflow check |
+| `checked_mul(rhs)` | `Option<Wad>` | Multiplication with overflow check |
+| `checked_div(rhs)` | `Option<Wad>` | Division with overflow/zero check |
+| `checked_mul_int(n)` | `Option<Wad>` | Integer multiplication with overflow check |
+| `checked_div_int(n)` | `Option<Wad>` | Integer division with zero check |
+
+## Utility Methods
+
+| Method | Description |
+|--------|-------------|
+| `abs()` | Absolute value |
+| `min(other)` | Minimum of two values |
+| `max(other)` | Maximum of two values |
+
+## Error Handling
+
+WAD uses Soroban's contract error system:
+
+```rust
+#[contracterror]
+pub enum WadError {
+    Overflow = 1600,      // Arithmetic overflow
+    DivisionByZero = 1601, // Division by zero
+    InvalidDecimals = 1602, // Invalid decimal conversion
+}
+```
