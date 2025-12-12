@@ -178,6 +178,32 @@ impl Div for Wad {
 }
 ```
 
+## Exponentiation
+
+WAD supports raising a value to an **unsigned integer exponent** via `pow`.
+
+- `pow(&e, exponent)` is optimized using **exponentiation by squaring** (O(log n) multiplications).
+- Each multiplication keeps WAD semantics (fixed-point multiplication and truncation toward zero).
+- Overflow is reported via Soroban errors.
+
+In addition to `pow`, WAD also provides `checked_pow`, which returns `None` on overflow.
+
+```rust
+// Compound interest multiplier: (1.05)^10
+let rate = Wad::from_ratio(&e, 105, 100); // 1.05
+let multiplier = rate.pow(&e, 10);
+```
+
+### Notes on `pow` and Phantom Overflow
+
+`pow` / `checked_pow` are implemented using exponentiation by squaring and rely
+on Soroban fixed-point helpers that can automatically scale intermediate products
+to `I256` when needed.
+
+This avoids **phantom overflow** cases where an intermediate multiplication would
+overflow `i128`, but the final scaled result would still fit in `i128`.
+
+
 ## Token Conversions
 
 Different tokens have different decimal places (USDC: 6, ETH: 18, BTC: 8). WAD handles these conversions:
@@ -305,7 +331,7 @@ fn safe_multiply(e: &Env, a: i128, b: i128) -> Result<i128, Error> {
 
     // Use checked variant
     let result_wad = a_wad
-        .checked_mul(b_wad)
+        .checked_mul(e, b_wad)
         .ok_or(Error::Overflow)?;
 
     Ok(result_wad.to_token_amount(e, 6))
@@ -351,10 +377,11 @@ fn safe_multiply(e: &Env, a: i128, b: i128) -> Result<i128, Error> {
 |--------|---------|-------------|
 | `checked_add(rhs)` | `Option<Wad>` | Addition with overflow check |
 | `checked_sub(rhs)` | `Option<Wad>` | Subtraction with overflow check |
-| `checked_mul(rhs)` | `Option<Wad>` | Multiplication with overflow check |
+| `checked_mul(e, rhs)` | `Option<Wad>` | Multiplication with overflow check (handles phantom overflow internally) |
 | `checked_div(rhs)` | `Option<Wad>` | Division with overflow/zero check |
 | `checked_mul_int(n)` | `Option<Wad>` | Integer multiplication with overflow check |
 | `checked_div_int(n)` | `Option<Wad>` | Integer division with zero check |
+| `checked_pow(e, exponent)` | `Option<Wad>` | Exponentiation with overflow check |
 
 ## Utility Methods
 
@@ -363,16 +390,15 @@ fn safe_multiply(e: &Env, a: i128, b: i128) -> Result<i128, Error> {
 | `abs()` | Absolute value |
 | `min(other)` | Minimum of two values |
 | `max(other)` | Maximum of two values |
+| `pow(e, exponent)` | Raises WAD to an unsigned integer power (panics with Soroban error on overflow) |
 
 ## Error Handling
 
-WAD uses Soroban's contract error system:
+WAD uses Soroban's contract error system via `SorobanFixedPointError`:
 
 ```rust
-#[contracterror]
-pub enum WadError {
-    Overflow = 1600,      // Arithmetic overflow
-    DivisionByZero = 1601, // Division by zero
-    InvalidDecimals = 1602, // Invalid decimal conversion
+pub enum SorobanFixedPointError {
+    Overflow = 1500,
+    DivisionByZero = 1501,
 }
 ```
