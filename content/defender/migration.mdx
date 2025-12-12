@@ -7,6 +7,7 @@ title: Migrating from Defender to Open Source
 Defender is now in maintenance mode. To continue using monitoring and relaying capabilities with the latest features and updates, we recommend migrating to OpenZeppelin's open source tools.
 
 This guide covers:
+
 - Migrating from **Defender Monitor** to [OpenZeppelin Monitor](/monitor)
 - Migrating from **Defender Relayer** to [OpenZeppelin Relayer](/relayer)
 
@@ -57,8 +58,11 @@ The "OpenZeppelin Monitor Configurations" button will download a .zip file conta
 - Webhook URLs for notifications
 - Service integration credentials (Slack, Telegram, Discord, etc.)
 
-<Callout type='warn'>
-Custom Actions attached to your Defender monitors will not be automatically migrated. You will need to manually recreate any custom action logic following the [OpenZeppelin Monitor documentation](/monitor) for trigger handlers and custom notifications.
+<Callout type="warn">
+  Custom Actions attached to your Defender monitors will not be automatically
+  migrated. You will need to manually recreate any custom action logic following
+  the [OpenZeppelin Monitor documentation](/monitor) for trigger handlers and
+  custom notifications.
 </Callout>
 
 Alternatively, if you don't want to download all the monitors configurations at once, you can navigate to each individual monitor and download its configuration separately. This gives you more control over which monitors to migrate and when.
@@ -99,14 +103,17 @@ Export your Defender Relayer configurations using the "OpenZeppelin Relayer Conf
 
 ![Defender Relayer Migration Button](/defender/relayer-migration-button.png)
 
-<Callout type='info'>
-If you don't want a specific relayer to be migrated, delete that relayer before clicking the download button.
+<Callout type="info">
+  If you don't want a specific relayer to be migrated, delete that relayer
+  before clicking the download button.
 </Callout>
 
 **What you'll download:**
 
-- **ZIP file**: Downloaded if you have relayers on forked or private networks. The ZIP contains a `config.json` file and a `networks/` folder with custom network definitions.
-- **JSON file**: Downloaded if all your relayers are on standard public networks. This is a single `config.json` file.
+A **ZIP file** containing:
+
+- `config.json` - Your relayer configurations
+- `networks/` folder - Custom network definitions (if you have relayers on forked or private networks)
 
 #### Step 2: Set Up OpenZeppelin Relayer
 
@@ -114,18 +121,12 @@ Before importing your configurations, set up the OpenZeppelin Relayer infrastruc
 
 #### Step 3: Place Configuration Files
 
-**If you downloaded a ZIP file:**
-
-1. Extract the ZIP file
+1. Extract the downloaded ZIP file
 2. Copy `config.json` to the `config/` directory in your OpenZeppelin Relayer project
-3. Copy the `networks/` folder contents to `config/networks/`
-
-**If you downloaded a plain JSON file:**
-
-1. Copy the downloaded file to the `config/` directory
-2. Rename it to `config.json`
+3. If you have custom networks, copy the `networks/` folder contents to `config/networks/`
 
 Your directory structure should look like:
+
 ```
 openzeppelin-relayer/
 ├── config/
@@ -139,26 +140,25 @@ openzeppelin-relayer/
 
 After placing the files, you need to update several configuration values:
 
-**For custom networks (if you downloaded a ZIP file):**
+**For custom networks:**
 
-Update the RPC URLs in each network definition file under `config/networks/`. Replace placeholder values with your actual RPC endpoint URLs:
+If you have forked or private networks, update the RPC URLs in each network definition file under `config/networks/`. Replace placeholder values with your actual RPC endpoint URLs:
 
 ```json
 {
   "network": "my-custom-network",
-  "rpc_urls": [
-    "https://your-rpc-endpoint.com"
-  ]
+  "rpc_urls": ["https://your-rpc-endpoint.com"]
 }
 ```
 
-**For all migrations (both ZIP and JSON):**
+**For all relayers:**
 
 Edit `config/config.json` to update:
 
 1. **Signer configuration**: Each relayer needs a signer configured. See [Choosing a Signer Type](#choosing-a-signer-type) below for options and setup instructions.
 
 2. **Notification webhooks**: Update the `notifications` section with your webhook URLs:
+
 ```json
 "notifications": [
   {
@@ -175,8 +175,9 @@ Edit `config/config.json` to update:
 
 3. **Network-specific policies**: Review and adjust policies for each relayer as needed (gas price caps, minimum balance thresholds, whitelist receivers, etc.).
 
-<Callout type='info'>
-For detailed configuration options, see the [OpenZeppelin Relayer Configuration documentation](/relayer/configuration).
+<Callout type="info">
+  For detailed configuration options, see the [OpenZeppelin Relayer
+  Configuration documentation](/relayer/configuration).
 </Callout>
 
 #### Step 5: Verify OpenZeppelin Relayer Works
@@ -219,8 +220,11 @@ Once OpenZeppelin Relayer is running correctly:
 5. **Recommended**: Transfer a small amount first and test with a transaction
 6. If the test transaction succeeds, transfer the remaining funds
 
-<Callout type='warn'>
-Since you're creating new relayer addresses (see [Understanding Signer Migration](#understanding-signer-migration)), make sure to update any smart contract permissions, whitelists, or access control lists to include the new addresses before transferring all funds.
+<Callout type="warn">
+  Since you're creating new relayer addresses (see [Understanding Signer
+  Migration](#understanding-signer-migration)), make sure to update any smart
+  contract permissions, whitelists, or access control lists to include the new
+  addresses before transferring all funds.
 </Callout>
 
 #### Step 7: Gradually Move Traffic
@@ -246,6 +250,7 @@ Defender Relayers use AWS Key Management Service (AWS KMS) to secure private key
 - You **must create new relayers with new addresses** when migrating to OpenZeppelin Relayer
 
 This is a fundamental security feature of AWS KMS that protects your keys from unauthorized access.
+
 </Callout>
 
 ### Choosing a Signer Type
@@ -254,15 +259,15 @@ OpenZeppelin Relayer supports multiple signer types to accommodate different sec
 
 #### Available Signer Options
 
-| Signer Type | Description |
-|------------|-------------|
-| **Local** | Encrypted keystore file stored on the filesystem |
-| **AWS KMS** | Amazon Web Services Key Management Service |
-| **Google Cloud KMS** | Google Cloud Key Management Service |
-| **HashiCorp Vault** | Vault secret engine for private key storage |
-| **HashiCorp Vault Transit** | Vault Transit encryption engine |
-| **Turnkey** | Third-party key management service |
-| **Coinbase Developer Platform (CDP)** | Coinbase's managed key solution |
+| Signer Type                           | Description                                      |
+| ------------------------------------- | ------------------------------------------------ |
+| **Local**                             | Encrypted keystore file stored on the filesystem |
+| **AWS KMS**                           | Amazon Web Services Key Management Service       |
+| **Google Cloud KMS**                  | Google Cloud Key Management Service              |
+| **HashiCorp Vault**                   | Vault secret engine for private key storage      |
+| **HashiCorp Vault Transit**           | Vault Transit encryption engine                  |
+| **Turnkey**                           | Third-party key management service               |
+| **Coinbase Developer Platform (CDP)** | Coinbase's managed key solution                  |
 
 #### Migration Steps for Signers
 
@@ -277,8 +282,10 @@ OpenZeppelin Relayer supports multiple signer types to accommodate different sec
 5. **Transfer funds** from old Defender Relayer addresses to new OpenZeppelin Relayer addresses
 6. **Test thoroughly** before switching production traffic
 
-<Callout type='info'>
-For detailed configuration instructions for each signer type, see the [OpenZeppelin Relayer Signer Configuration documentation](/relayer/configuration/signers).
+<Callout type="info">
+  For detailed configuration instructions for each signer type, see the
+  [OpenZeppelin Relayer Signer Configuration
+  documentation](/relayer/configuration/signers).
 </Callout>
 
 ### SDK Migration
@@ -304,39 +311,39 @@ npm install @openzeppelin/relayer-sdk
 Before (Defender SDK):
 
 ```jsx
-const { Defender } = require('@openzeppelin/defender-sdk');
+const { Defender } = require("@openzeppelin/defender-sdk");
 const client = new Defender({
-  relayerApiKey: 'YOUR_API_KEY',
-  relayerApiSecret: 'YOUR_API_SECRET'
+  relayerApiKey: "YOUR_API_KEY",
+  relayerApiSecret: "YOUR_API_SECRET",
 });
 
 const tx = await client.relaySigner.sendTransaction({
-  to: '0x...',
-  value: '1000000000000000000',
-  data: '0x',
+  to: "0x...",
+  value: "1000000000000000000",
+  data: "0x",
   gasLimit: 21000,
-  speed: 'fast'
+  speed: "fast",
 });
 ```
 
 After (OpenZeppelin Relayer SDK):
 
 ```typescript
-import { RelayerApi, Configuration } from '@openzeppelin/relayer-sdk';
+import { RelayerApi, Configuration } from "@openzeppelin/relayer-sdk";
 
 const config = new Configuration({
-  basePath: 'http://localhost:8080/api/v1',
-  accessToken: 'YOUR_API_KEY'
+  basePath: "http://localhost:8080/api/v1",
+  accessToken: "YOUR_API_KEY",
 });
 
 const relayerApi = new RelayerApi(config);
 
-const tx = await relayerApi.sendTransaction('your-relayer-id', {
-  to: '0x...',
-  value: '1000000000000000000',
-  data: '0x',
+const tx = await relayerApi.sendTransaction("your-relayer-id", {
+  to: "0x...",
+  value: "1000000000000000000",
+  data: "0x",
   gas_limit: 21000,
-  speed: 'fast'
+  speed: "fast",
 });
 ```
 
@@ -345,7 +352,7 @@ const tx = await relayerApi.sendTransaction('your-relayer-id', {
 Before (Defender SDK):
 
 ```jsx
-import { Relayer } from '@openzeppelin/defender-sdk-relay-signer-client';
+import { Relayer } from "@openzeppelin/defender-sdk-relay-signer-client";
 const relayer = new Relayer({ apiKey: API_KEY, apiSecret: API_SECRET });
 const tx = await relayer.getTransaction(transactionId);
 ```
@@ -353,15 +360,18 @@ const tx = await relayer.getTransaction(transactionId);
 After (OpenZeppelin Relayer SDK):
 
 ```typescript
-import { RelayerApi, Configuration } from '@openzeppelin/relayer-sdk';
+import { RelayerApi, Configuration } from "@openzeppelin/relayer-sdk";
 
 const config = new Configuration({
-  basePath: 'http://localhost:8080/api/v1',
-  accessToken: 'YOUR_API_KEY'
+  basePath: "http://localhost:8080/api/v1",
+  accessToken: "YOUR_API_KEY",
 });
 
 const relayerApi = new RelayerApi(config);
-const tx = await relayerApi.getTransactionById('your-relayer-id', transactionId);
+const tx = await relayerApi.getTransactionById(
+  "your-relayer-id",
+  transactionId
+);
 ```
 
 **Listing Relayers**
@@ -369,10 +379,10 @@ const tx = await relayerApi.getTransactionById('your-relayer-id', transactionId)
 Before (Defender SDK):
 
 ```jsx
-const { Defender } = require('@openzeppelin/defender-sdk');
+const { Defender } = require("@openzeppelin/defender-sdk");
 const client = new Defender({
-  apiKey: 'YOUR_API_KEY',
-  apiSecret: 'YOUR_API_SECRET'
+  apiKey: "YOUR_API_KEY",
+  apiSecret: "YOUR_API_SECRET",
 });
 
 const relayers = await client.relay.list();
@@ -381,11 +391,11 @@ const relayers = await client.relay.list();
 After (OpenZeppelin Relayer SDK):
 
 ```typescript
-import { RelayerApi, Configuration } from '@openzeppelin/relayer-sdk';
+import { RelayerApi, Configuration } from "@openzeppelin/relayer-sdk";
 
 const config = new Configuration({
-  basePath: 'http://localhost:8080/api/v1',
-  accessToken: 'YOUR_API_KEY'
+  basePath: "http://localhost:8080/api/v1",
+  accessToken: "YOUR_API_KEY",
 });
 
 const relayerApi = new RelayerApi(config);
@@ -394,17 +404,17 @@ const relayers = await relayerApi.listRelayers();
 
 #### API Method Mapping
 
-| Defender SDK Method | OpenZeppelin Relayer SDK Method |
-|--------------------|--------------------------------|
-| `client.relaySigner.sendTransaction()` | `relayerApi.sendTransaction()` |
-| `relayer.getTransaction()` | `relayerApi.getTransactionById()` |
-| `relayer.list()` | `relayerApi.listTransactions()` |
-| `relayer.replaceTransactionById()` | `relayerApi.replaceTransaction()` |
-| `relayer.cancelTransactionById()` | `relayerApi.cancelTransaction()` |
-| `relayer.sign()` | `relayerApi.sign()` |
-| `relayer.signTypedData()` | `relayerApi.signTypedData()` |
-| `relayer.getRelayer()` | `relayerApi.getRelayer()` |
-| `relayer.getRelayerStatus()` | `relayerApi.getRelayerStatus()` |
+| Defender SDK Method                    | OpenZeppelin Relayer SDK Method   |
+| -------------------------------------- | --------------------------------- |
+| `client.relaySigner.sendTransaction()` | `relayerApi.sendTransaction()`    |
+| `relayer.getTransaction()`             | `relayerApi.getTransactionById()` |
+| `relayer.list()`                       | `relayerApi.listTransactions()`   |
+| `relayer.replaceTransactionById()`     | `relayerApi.replaceTransaction()` |
+| `relayer.cancelTransactionById()`      | `relayerApi.cancelTransaction()`  |
+| `relayer.sign()`                       | `relayerApi.sign()`               |
+| `relayer.signTypedData()`              | `relayerApi.signTypedData()`      |
+| `relayer.getRelayer()`                 | `relayerApi.getRelayer()`         |
+| `relayer.getRelayerStatus()`           | `relayerApi.getRelayerStatus()`   |
 
 For detailed migration instructions and support, visit the [OpenZeppelin Relayer documentation](/relayer).
 
@@ -413,11 +423,14 @@ For detailed migration instructions and support, visit the [OpenZeppelin Relayer
 ## Support and Resources
 
 ### Documentation
+
 - [OpenZeppelin Monitor Documentation](/monitor)
 - [OpenZeppelin Relayer Documentation](/relayer)
 
 ### Getting Help
+
 If you encounter issues during migration or have questions:
+
 - Review the respective documentation for each tool
 - Check GitHub repositories for issues and discussions
 - Reach out to the OpenZeppelin community
@@ -427,6 +440,7 @@ If you encounter issues during migration or have questions:
 Use this checklist to track your migration progress:
 
 #### Monitor Migration
+
 - [ ] Export Monitor configurations from Defender
 - [ ] Review and update placeholder values (API keys, RPC URLs, etc.)
 - [ ] Set up OpenZeppelin Monitor infrastructure
@@ -437,6 +451,7 @@ Use this checklist to track your migration progress:
 - [ ] Switch over and decommission Defender monitors
 
 #### Relayer Migration
+
 - [ ] Export Relayer configurations from Defender
 - [ ] Review and update placeholder values (signers, RPC URLs, policies)
 - [ ] Set up OpenZeppelin Relayer infrastructure
@@ -447,4 +462,3 @@ Use this checklist to track your migration progress:
 - [ ] Transfer funds from Defender Relayers
 - [ ] Gradually move traffic to OpenZeppelin Relayers
 - [ ] Decommission Defender Relayers
-
