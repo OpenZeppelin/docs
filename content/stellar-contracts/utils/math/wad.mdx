@@ -44,7 +44,7 @@ of floating-point arithmetic in smart contracts.
 
 ## 1. Why 18 Decimals?
 
-**18 decimals was chosen for several reasons:**
+18 decimals was chosen for several reasons:
 
 - **Battle-Tested Standard**: Most DeFi protocols on use 18 decimals
 - **Sufficient Precision**: Provides precision down to 10^-18, far exceeding practical financial needs
@@ -83,7 +83,7 @@ pub struct Wad(i128);
 
 ## 3. No `From`/`Into` Traits
 
-We deliberately **do not** implement `From<i128>` or `Into<i128>` because it's ambiguous:
+We deliberately **DID NOT** implement `From<i128>` or `Into<i128>` because it's ambiguous:
 
 ```rust
 // What should this mean?
@@ -127,10 +127,10 @@ Operator overloading is supported across WAD and native i128 types where unambig
 
 **Overflow Behavior**
 
-**Just like regular Rust**, operator overloading does not include overflow checks:
+Just like regular Rust, operator overloading does not include overflow checks:
 
-- **Use `checked_*` methods** (`checked_add()`, `checked_sub()`, `checked_mul()`, etc.) when handling user inputs or when overflow is possible. These return `Option<Wad>` for safe error handling.
-- **Use operator overloads** (`+`, `-`, `*`, `/`) when you want to save gas by skipping overflow checks, or when you're confident the operation cannot overflow.
+- Use `checked_*` methods (`checked_add()`, `checked_sub()`, `checked_mul()`, etc.) when handling user inputs or when overflow is possible. These return `Option<Wad>` for safe error handling.
+- Use operator overloads (`+`, `-`, `*`, `/`) when you want to save gas by skipping overflow checks, or when you're confident the operation cannot overflow.
 
 This design follows Rust's standard library pattern: operators for performance, checked methods for safety.
 
@@ -180,9 +180,9 @@ impl Div for Wad {
 
 ## Exponentiation
 
-WAD supports raising a value to an **unsigned integer exponent** via `pow`.
+WAD supports raising a value to an unsigned integer exponent via `pow`.
 
-- `pow(&e, exponent)` is optimized using **exponentiation by squaring** (O(log n) multiplications).
+- `pow(&e, exponent)` is optimized using exponentiation by squaring (O(log n) multiplications).
 - Each multiplication keeps WAD semantics (fixed-point multiplication and truncation toward zero).
 - Overflow is reported via Soroban errors.
 
@@ -223,7 +223,7 @@ let usdc_back: i128 = wad.to_token_amount(&e, 6);
 
 ## Understanding Fixed-Point Precision
 
-**WAD is a fixed-point math library.** Like all fixed-point arithmetic systems,
+WAD is a fixed-point math library. Like all fixed-point arithmetic systems,
 precision loss is inherent and unavoidable. The goal is not to eliminate precision errors
 —that's impossible— but to reduce them to a degree so minimal
 that they become irrelevant in practical applications.
@@ -253,7 +253,7 @@ let result2 = a * (b * c);    // Truncates after inner multiplication
 - Errors are in the **10^-15 to 10^-18** range, far beyond practical significance
 - Token precision (6-8 decimals) completely absorbs these errors when converting back
 - Real-world financial systems round to 2-8 decimal places; WAD's 18 decimals provide a massive safety margin
-- This is **orders of magnitude more precise** than needed for DeFi applications
+- This is orders of magnitude more precise than needed for DeFi applications
 
 # Usage Examples
 
