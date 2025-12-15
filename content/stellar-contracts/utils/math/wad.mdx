@@ -35,44 +35,22 @@ of floating-point arithmetic in smart contracts.
 
 - **High Precision**: 18 decimals is more than sufficient for financial calculations
 - **Deterministic**: Same inputs always produce same outputs
-- **Gas Efficient**: Uses native `i128` arithmetic under the hood
+- **Efficient**: Uses native `i128` arithmetic under the hood
 - **Battle-Tested**: Used in production by MakerDAO, Uniswap, Aave, and others
 - **Ergonomic**: Operator overloading makes code readable: `a + b * c`
 - **Type Safe**: NewType pattern prevents mixing scaled and unscaled values
 
 # Design Decisions
 
-## 1. Why 18 Decimals?
-
-18 decimals was chosen for several reasons:
-
-- **Battle-Tested Standard**: Most DeFi protocols on use 18 decimals
-- **Sufficient Precision**: Provides precision down to 10^-18, far exceeding practical financial needs
-- **Interoperability**: Makes it easier to port DeFi protocols from other ecosystems to Stellar
-- **Performance**: Fits in `i128` without overflow concerns for typical values
-
-**Example Precision:**
-```rust
-// Interest rate: 5.5% = 0.055
-let rate = Wad::from_ratio(&e, 55, 1000); // 55/1000 = 0.055
-
-// Time fraction: 1 day / 365 days ≈ 0.00274
-let time = Wad::from_ratio(&e, 1, 365); // 1/365 ≈ 0.00274
-
-// Interest = principal * rate * time
-let interest = principal * rate * time;
-// Precise to 18 decimal places!
-```
-
-## 2. NewType Pattern
+## 1. NewType Pattern
 
 We use a NewType `struct Wad(i128)` instead of a type alias:
 
 ```rust
-// ❌ BAD: Type alias
+// Type alias
 type Wad = i128;
 
-// ✅ GOOD: NewType
+// NewType
 pub struct Wad(i128);
 ```
 
@@ -81,7 +59,7 @@ pub struct Wad(i128);
 - **Operator Overloading**: Can implement `+`, `-`, `*`, `/` with correct semantics
 - **Semantic Clarity**: Makes intent explicit in function signatures
 
-## 3. No `From`/`Into` Traits
+## 2. No `From`/`Into` Traits
 
 We deliberately **DID NOT** implement `From<i128>` or `Into<i128>` because it's ambiguous:
 
@@ -96,7 +74,7 @@ Instead, we provide explicit constructors:
 - `Wad::from_integer(e, 5)` - Creates 5.0 (scaled)
 - `Wad::from_raw(5)` - Creates raw value 5 (0.000000000000000005)
 
-## 4. Truncation vs Rounding
+## 3. Truncation vs Rounding
 
 All operations truncate toward zero rather than rounding:
 
@@ -104,9 +82,8 @@ All operations truncate toward zero rather than rounding:
 - **Predictable**: Same behavior as integer division
 - **Conservative**: In financial calculations, truncation is often safer (e.g., don't over-calculate interest)
 - **Fast**: No additional logic needed
-- **Standard**: Matches Solidity and most fixed-point libraries
 
-## 5. Operator Overloading
+## 4. Operator Overloading
 
 We provide operator overloading (`+`, `-`, `*`, `/`, `-`) for convenience:
 
@@ -130,7 +107,7 @@ Operator overloading is supported across WAD and native i128 types where unambig
 Just like regular Rust, operator overloading does not include overflow checks:
 
 - Use `checked_*` methods (`checked_add()`, `checked_sub()`, `checked_mul()`, etc.) when handling user inputs or when overflow is possible. These return `Option<Wad>` for safe error handling.
-- Use operator overloads (`+`, `-`, `*`, `/`) when you want to save gas by skipping overflow checks, or when you're confident the operation cannot overflow.
+- Use operator overloads (`+`, `-`, `*`, `/`) when you want to reduce computational overhead by skipping overflow checks, or when you're confident the operation cannot overflow.
 
 This design follows Rust's standard library pattern: operators for performance, checked methods for safety.
 
@@ -206,7 +183,7 @@ overflow `i128`, but the final scaled result would still fit in `i128`.
 
 ## Token Conversions
 
-Different tokens have different decimal places (USDC: 6, ETH: 18, BTC: 8). WAD handles these conversions:
+Different tokens have different decimal places (USDC: 6, XLM: 7, ETH: 18, BTC: 8). WAD handles these conversions:
 
 ```rust
 // Convert from USDC (6 decimals) to WAD
@@ -261,7 +238,7 @@ let result2 = a * (b * c);    // Truncates after inner multiplication
 
 ```rust
 use soroban_sdk::Env;
-use contract_utils::math::wad::Wad;
+use stellar_contract_utils::math::wad::Wad;
 
 fn calculate_interest(e: &Env, principal: i128, rate_bps: u32) -> i128 {
     // Convert principal (assume 6 decimals like USDC)
