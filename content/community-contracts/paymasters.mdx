@@ -26,15 +26,15 @@ To implement signature-based sponsorship, you’ll first need to deploy the paym
 
 ```typescript
 // Fund the paymaster with ETH
-await eoaClient.sendTransaction(
+await eoaClient.sendTransaction({
   to: paymasterECDSASigner.address,
   value: parseEther("0.01"),
-  data: encodeFunctionData(
+  data: encodeFunctionData({
     abi: paymasterECDSASigner.abi,
     functionName: "deposit",
     args: [],
-  ),
-);
+  }),
+});
 ```
 
 <Callout type='warn'>
@@ -52,30 +52,30 @@ const paymasterVerificationGasLimit = 100_000n;
 const paymasterPostOpGasLimit = 300_000n;
 
 // Sign using EIP-712 typed data
-const paymasterSignature = await signer.signTypedData(
-  domain:
+const paymasterSignature = await signer.signTypedData({
+  domain: {
     chainId: await signerClient.getChainId(),
     name: "MyPaymasterECDSASigner",
     verifyingContract: paymasterECDSASigner.address,
     version: "1",
-  ,
-  types:
+  },
+  types: {
     UserOperationRequest: [
-       name: "sender", type: "address" ,
-       name: "nonce", type: "uint256" ,
-       name: "initCode", type: "bytes" ,
-       name: "callData", type: "bytes" ,
-       name: "accountGasLimits", type: "bytes32" ,
-       name: "preVerificationGas", type: "uint256" ,
-       name: "gasFees", type: "bytes32" ,
-       name: "paymasterVerificationGasLimit", type: "uint256" ,
-       name: "paymasterPostOpGasLimit", type: "uint256" ,
-       name: "validAfter", type: "uint48" ,
-       name: "validUntil", type: "uint48" ,
+      { name: "sender", type: "address" },
+      { name: "nonce", type: "uint256" },
+      { name: "initCode", type: "bytes" },
+      { name: "callData", type: "bytes" },
+      { name: "accountGasLimits", type: "bytes32" },
+      { name: "preVerificationGas", type: "uint256" },
+      { name: "gasFees", type: "bytes32" },
+      { name: "paymasterVerificationGasLimit", type: "uint256" },
+      { name: "paymasterPostOpGasLimit", type: "uint256" },
+      { name: "validAfter", type: "uint48" },
+      { name: "validUntil", type: "uint48" },
     ],
-  ,
+  },
   primaryType: "UserOperationRequest",
-  message:
+  message: {
     sender: userOp.sender,
     nonce: userOp.nonce,
     initCode: userOp.initCode,
@@ -87,8 +87,8 @@ const paymasterSignature = await signer.signTypedData(
     paymasterPostOpGasLimit,
     validAfter,
     validUntil,
-  ,
-);
+  },
+});
 ```
 
 The time window (`validAfter` and `validUntil`) prevents replay attacks and allows you to limit how long the signature remains valid. Once signed, the paymaster data needs to be formatted and attached to the user operation:
@@ -119,12 +119,12 @@ With the paymaster data attached, the user operation can now be signed by the ac
 const signedUserOp = await signUserOp(entrypoint, userOp);
 
 // Submit to the EntryPoint contract
-const userOpReceipt = await eoaClient.writeContract(
+const userOpReceipt = await eoaClient.writeContract({
   abi: EntrypointV08Abi,
   address: entrypoint.address,
   functionName: "handleOps",
   args: [[signedUserOp], beneficiary.address],
-);
+});
 ```
 
 Behind the scenes, the EntryPoint will call the paymaster’s `validatePaymasterUserOp` function, which verifies the signature and time window. If valid, the paymaster commits to paying for the operation’s gas costs, and the EntryPoint executes the operation.
@@ -311,12 +311,12 @@ For the rest, you can sign the user operation as you would normally do once the 
 const signedUserOp = await signUserOp(entrypoint, userOp);
 
 // Submit to the EntryPoint contract
-const userOpReceipt = await eoaClient.writeContract(
+const userOpReceipt = await eoaClient.writeContract({
   abi: EntrypointV08Abi,
   address: entrypoint.address,
   functionName: "handleOps",
   args: [[signedUserOp], beneficiary.address],
-);
+});
 ```
 
 <Callout type='warn'>
@@ -426,27 +426,27 @@ With this implementation, a guarantor would sign a user operation to authorize b
 
 ```typescript
 // Sign the user operation with the guarantor
-const guarantorSignature = await guarantor.signTypedData(
-  domain:
+const guarantorSignature = await guarantor.signTypedData({
+  domain: {
     chainId: await guarantorClient.getChainId(),
     name: "PaymasterUSDCGuaranteed",
     verifyingContract: paymasterUSDC.address,
     version: "1",
-  ,
-  types:
+  },
+  types: {
     GuaranteedUserOperation: [
-       name: "sender", type: "address" ,
-       name: "nonce", type: "uint256" ,
-       name: "initCode", type: "bytes" ,
-       name: "callData", type: "bytes" ,
-       name: "accountGasLimits", type: "bytes32" ,
-       name: "preVerificationGas", type: "uint256" ,
-       name: "gasFees", type: "bytes32" ,
-       name: "paymasterData", type: "bytes"
+      { name: "sender", type: "address" },
+      { name: "nonce", type: "uint256" },
+      { name: "initCode", type: "bytes" },
+      { name: "callData", type: "bytes" },
+      { name: "accountGasLimits", type: "bytes32" },
+      { name: "preVerificationGas", type: "uint256" },
+      { name: "gasFees", type: "bytes32" },
+      { name: "paymasterData", type: "bytes" }
     ]
-  ,
+  },
   primaryType: "GuaranteedUserOperation",
-  message:
+  message: {
     sender: userOp.sender,
     nonce: userOp.nonce,
     initCode: userOp.initCode,
@@ -455,8 +455,8 @@ const guarantorSignature = await guarantor.signTypedData(
     preVerificationGas: userOp.preVerificationGas,
     gasFees: userOp.gasFees,
     paymasterData: guarantorAddress // Just the guarantor address
-  ,
-);
+  },
+});
 ```
 
 Then, we include the guarantor’s address and its signature in the paymaster data:
@@ -474,8 +474,8 @@ userOp.paymasterAndData = encodePacked(
     encodePacked(
       ["address", "bytes2", "bytes"],
       [
-        guarantorAddress,
-        toHex(guarantorSignature.replace("0x", "").length / 2,  size: 2 ),
+        guarantorAddress, 
+        toHex(guarantorSignature.replace("0x", "").length / 2, { size: 2 }),
         guarantorSignature
       ]
     )
