@@ -13,7 +13,7 @@ import {
 	ExternalLinkIcon,
 	FileText,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "../lib/cn";
 import { buttonVariants } from "./ui/button";
 
@@ -81,19 +81,22 @@ export function ViewOptions({
 	 */
 	markdownUrl: string;
 }) {
+	const [origin, setOrigin] = useState<string | null>(null);
+
+	useEffect(() => {
+		setOrigin(window.location.origin);
+	}, []);
+
 	const items = useMemo(() => {
-		const fullMarkdownUrl =
-			typeof window !== "undefined"
-				? new URL(markdownUrl, window.location.origin)
-				: "loading";
+		const fullMarkdownUrl = origin
+			? new URL(markdownUrl, origin).toString()
+			: markdownUrl;
 		const q = `Read ${fullMarkdownUrl}, I want to ask questions about it.`;
 
 		return [
 			{
 				title: "Open in Claude",
-				href: `https://claude.ai/new?${new URLSearchParams({
-					q,
-				})}`,
+				href: `https://claude.ai/new?${new URLSearchParams({ q })}`,
 				icon: (
 					<svg
 						fill="currentColor"
@@ -130,11 +133,16 @@ export function ViewOptions({
 				icon: <FileText />,
 			},
 		];
-	}, [markdownUrl]);
+	}, [markdownUrl, origin]);
 
-	const claudeUrl = `https://claude.ai/new?${new URLSearchParams({
-		q: `Read ${typeof window !== "undefined" ? new URL(markdownUrl, window.location.origin) : "loading"}, I want to ask questions about it.`,
-	})}`;
+	const claudeUrl = useMemo(() => {
+		const fullMarkdownUrl = origin
+			? new URL(markdownUrl, origin).toString()
+			: markdownUrl;
+		return `https://claude.ai/new?${new URLSearchParams({
+			q: `Read ${fullMarkdownUrl}, I want to ask questions about it.`,
+		})}`;
+	}, [markdownUrl, origin]);
 
 	return (
 		<div className="flex">
