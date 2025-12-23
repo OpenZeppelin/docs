@@ -6,14 +6,19 @@ import { UMBRELLA_VERSION } from "../utils/constants.js";
 
 This module provides extensions and utilities that are common to multiple token standards.
 
-## Interfaces
+## [](#interfaces)Interfaces
+
+<Callout type='info'>
+Starting from version `3.x.x`, the interfaces are no longer part of the `openzeppelin_access` package. The references
+documented here are contained in the `openzeppelin_interfaces` package version `{{openzeppelin_interfaces_version}}`.
+</Callout>
 
 ### [](#IERC2981)`IERC2981` [toc] [#IERC2981]
 
-<APIGithubLinkHeader moduleName="IERC2981" link={`https://github.com/OpenZeppelin/cairo-contracts/blob/${UMBRELLA_VERSION}/packages/token/src/common/erc2981/interface.cairo`} />
+<APIGithubLinkHeader moduleName="IERC2981" link={`https://github.com/OpenZeppelin/cairo-contracts/blob/${UMBRELLA_VERSION}/packages/interfaces/src/token/erc2981.cairo`} />
 
 ```rust
-use openzeppelin_token::common::erc2981::interface::IERC2981;
+use openzeppelin_interfaces::erc2981::IERC2981;
 ```
 
 [SRC5 ID](./introspection#ISRC5)
@@ -40,10 +45,10 @@ Returns how much royalty is owed and to whom, based on a sale price that may be 
 
 ### [](#IERC2981Info)`IERC2981Info` [toc] [#IERC2981Info]
 
-<APIGithubLinkHeader moduleName="IERC2981Info" link={`https://github.com/OpenZeppelin/cairo-contracts/blob/${UMBRELLA_VERSION}/packages/token/src/common/erc2981/interface.cairo`} />
+<APIGithubLinkHeader moduleName="IERC2981Info" link={`https://github.com/OpenZeppelin/cairo-contracts/blob/${UMBRELLA_VERSION}/packages/interfaces/src/token/erc2981.cairo`} />
 
 ```rust
-use openzeppelin_token::common::erc2981::interface::IERC2981Info;
+use openzeppelin_interfaces::erc2981::IERC2981Info;
 ```
 
 Interface providing external read functions for discovering the state of ERC2981 component.
@@ -85,10 +90,10 @@ The returned tuple contains:
 
 ### [](#IERC2981Admin)`IERC2981Admin` [toc] [#IERC2981Admin]
 
-<APIGithubLinkHeader moduleName="IERC2981Admin" link={`https://github.com/OpenZeppelin/cairo-contracts/blob/${UMBRELLA_VERSION}/packages/token/src/common/erc2981/interface.cairo`} />
+<APIGithubLinkHeader moduleName="IERC2981Admin" link={`https://github.com/OpenZeppelin/cairo-contracts/blob/${UMBRELLA_VERSION}/packages/interfaces/src/token/erc2981.cairo`} />
 
 ```rust
-use openzeppelin_token::common::erc2981::interface::IERC2981Admin;
+use openzeppelin_interfaces::erc2981::IERC2981Admin;
 ```
 
 Interface providing external admin functions for managing the settings of ERC2981 component.
@@ -180,6 +185,13 @@ ERC2981AdminAccessControlImpl
 - [`delete_default_royalty(self)`](#ERC2981AdminAccessControlImpl-delete_default_royalty)
 - [`set_token_royalty(self, token_id, receiver, fee_numerator)`](#ERC2981AdminAccessControlImpl-set_token_royalty)
 - [`reset_token_royalty(self, token_id)`](#ERC2981AdminAccessControlImpl-reset_token_royalty)
+
+ERC2981AdminAccessControlDefaultAdminRulesImpl
+
+- [`set_default_royalty(self, receiver, fee_numerator)`](#ERC2981AdminAccessControlDefaultAdminRulesImpl-set_default_royalty)
+- [`delete_default_royalty(self)`](#ERC2981AdminAccessControlDefaultAdminRulesImpl-delete_default_royalty)  
+- [`set_token_royalty(self, token_id, receiver, fee_numerator)`](#ERC2981AdminAccessControlDefaultAdminRulesImpl-set_token_royalty)
+- [`reset_token_royalty(self, token_id)`](#ERC2981AdminAccessControlDefaultAdminRulesImpl-reset_token_royalty)
 
 Internal implementations
 
@@ -371,6 +383,64 @@ Requirements:
 <APIItem
   functionSignature="reset_token_royalty(ref self: ContractState, token_id: u256)"
   id="ERC2981AdminAccessControlImpl-reset_token_royalty"
+  kind="external"
+>
+Resets royalty information for the token id back to unset.
+
+Requirements:
+
+- The caller must have `ROYALTY_ADMIN_ROLE` role.
+</APIItem>
+
+#### [](#ERC2981Component-ERC2981AdminAccessControlDefaultAdminRulesImpl)ERC2981AdminAccessControlDefaultAdminRulesImpl [!toc]
+
+An alternative implementation of [IERC2981Admin](#IERC2981Admin). Provides admin functions for managing royalty settings
+that require `ROYALTY_ADMIN_ROLE` to be granted to the caller. Requires the contract to implement [AccessControlDefaultAdminRulesComponent](./access#AccessControlDefaultAdminRulesComponent).
+
+<APIItem
+  functionSignature="set_default_royalty(ref self: ContractState, receiver: ContractAddress, fee_numerator: u128)"
+  id="ERC2981AdminAccessControlDefaultAdminRulesImpl-set_default_royalty"
+  kind="external"
+>
+
+Sets the royalty information that all ids in this contract will default to.
+
+Requirements:
+
+- The caller must have `ROYALTY_ADMIN_ROLE` role.
+- `receiver` cannot be the zero address.
+- `fee_numerator` cannot be greater than the fee denominator.
+</APIItem>
+
+<APIItem
+  functionSignature="delete_default_royalty(ref self: ContractState)"
+  id="ERC2981AdminAccessControlDefaultAdminRulesImpl-delete_default_royalty"
+  kind="external"
+>
+Sets the default royalty percentage and receiver to zero.
+
+Requirements:
+
+- The caller must have `ROYALTY_ADMIN_ROLE` role.
+</APIItem>
+
+<APIItem
+  functionSignature="set_token_royalty(ref self: ContractState, token_id: u256, receiver: ContractAddress, fee_numerator: u128)"
+  id="ERC2981AdminAccessControlDefaultAdminRulesImpl-set_token_royalty"
+  kind="external"
+>
+Sets the royalty information for a specific token id that takes precedence over the global default.
+
+Requirements:
+
+- The caller must have `ROYALTY_ADMIN_ROLE` role.
+- `receiver` cannot be the zero address.
+- `fee_numerator` cannot be greater than the fee denominator.
+</APIItem>
+
+<APIItem
+  functionSignature="reset_token_royalty(ref self: ContractState, token_id: u256)"
+  id="ERC2981AdminAccessControlDefaultAdminRulesImpl-reset_token_royalty"
   kind="external"
 >
 Resets royalty information for the token id back to unset.
