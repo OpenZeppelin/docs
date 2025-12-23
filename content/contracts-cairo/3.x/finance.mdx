@@ -6,8 +6,8 @@ This module includes primitives for financial systems.
 
 ## Vesting component
 
-The [VestingComponent](/contracts-cairo/2.x/api/finance#VestingComponent) manages the gradual release of ERC-20 tokens to a designated beneficiary based on a predefined vesting schedule.
-The implementing contract must implement the [OwnableComponent](/contracts-cairo/2.x/api/access#OwnableComponent), where the contract owner is regarded as the vesting beneficiary.
+The [VestingComponent](/contracts-cairo/3.x/api/finance#VestingComponent) manages the gradual release of ERC-20 tokens to a designated beneficiary based on a predefined vesting schedule.
+The implementing contract must implement the [OwnableComponent](/contracts-cairo/3.x/api/access#OwnableComponent), where the contract owner is regarded as the vesting beneficiary.
 This structure allows ownership rights of both the contract and the vested tokens to be assigned and transferred.
 
 <Callout>
@@ -22,26 +22,26 @@ for a beneficiary until a specified date.
 
 ### Vesting schedule
 
-The [VestingSchedule](/contracts-cairo/2.x/api/finance#VestingComponent-Vesting-Schedule) trait defines the logic for calculating the vested amount based on a given timestamp. This
-logic is not part of the [VestingComponent](/contracts-cairo/2.x/api/finance#VestingComponent), so any contract implementing the [VestingComponent](/contracts-cairo/2.x/api/finance#VestingComponent) must provide its own
-implementation of the [VestingSchedule](/contracts-cairo/2.x/api/finance#VestingComponent-Vesting-Schedule) trait.
+The [VestingSchedule](/contracts-cairo/3.x/api/finance#VestingComponent-Vesting-Schedule) trait defines the logic for calculating the vested amount based on a given timestamp. This
+logic is not part of the [VestingComponent](/contracts-cairo/3.x/api/finance#VestingComponent), so any contract implementing the [VestingComponent](/contracts-cairo/3.x/api/finance#VestingComponent) must provide its own
+implementation of the [VestingSchedule](/contracts-cairo/3.x/api/finance#VestingComponent-Vesting-Schedule) trait.
 
 <Callout>
-There’s a ready-made implementation of the [VestingSchedule](/contracts-cairo/2.x/api/finance#VestingComponent-Vesting-Schedule) trait available named [LinearVestingSchedule](/contracts-cairo/2.x/api/finance#LinearVestingSchedule).
+There’s a ready-made implementation of the [VestingSchedule](/contracts-cairo/3.x/api/finance#VestingComponent-Vesting-Schedule) trait available named [LinearVestingSchedule](/contracts-cairo/3.x/api/finance#LinearVestingSchedule).
 It incorporates a cliff period by returning 0 vested amount until the cliff ends. After the cliff, the vested amount
 is calculated as directly proportional to the time elapsed since the beginning of the vesting schedule.
 </Callout>
 
 ### Usage
 
-The contract must integrate [VestingComponent](/contracts-cairo/2.x/api/finance#VestingComponent) and [OwnableComponent](/contracts-cairo/2.x/api/access#OwnableComponent) as dependencies. The contract’s constructor
+The contract must integrate [VestingComponent](/contracts-cairo/3.x/api/finance#VestingComponent) and [OwnableComponent](/contracts-cairo/3.x/api/access#OwnableComponent) as dependencies. The contract’s constructor
 should initialize both components. Core vesting parameters, such as `beneficiary`, `start`, `duration`
 and `cliff_duration`, are passed as arguments to the constructor and set at the time of deployment.
 
-The implementing contract must provide an implementation of the [VestingSchedule](/contracts-cairo/2.x/api/finance#VestingComponent-Vesting-Schedule) trait. This can be achieved either by importing
-a ready-made [LinearVestingSchedule](/contracts-cairo/2.x/api/finance#LinearVestingSchedule) implementation or by defining a custom one.
+The implementing contract must provide an implementation of the [VestingSchedule](/contracts-cairo/3.x/api/finance#VestingComponent-Vesting-Schedule) trait. This can be achieved either by importing
+a ready-made [LinearVestingSchedule](/contracts-cairo/3.x/api/finance#LinearVestingSchedule) implementation or by defining a custom one.
 
-Here’s an example of a simple vesting wallet contract with a [LinearVestingSchedule](/contracts-cairo/2.x/api/finance#LinearVestingSchedule), where the vested amount
+Here’s an example of a simple vesting wallet contract with a [LinearVestingSchedule](/contracts-cairo/3.x/api/finance#LinearVestingSchedule), where the vested amount
 is calculated as being directly proportional to the time elapsed since the start of the vesting period.
 
 ```rust
@@ -93,19 +93,19 @@ mod LinearVestingWallet {
 }
 ```
 
-A vesting schedule will often follow a custom formula. In such cases, the [VestingSchedule](/contracts-cairo/2.x/api/finance#VestingComponent-Vesting-Schedule) trait is useful.
+A vesting schedule will often follow a custom formula. In such cases, the [VestingSchedule](/contracts-cairo/3.x/api/finance#VestingComponent-Vesting-Schedule) trait is useful.
 To support a custom vesting schedule, the contract must provide an implementation of the
-[calculate_vested_amount](/contracts-cairo/2.x/api/finance#VestingComponent-calculate_vested_amount) function based on the desired formula.
+[calculate_vested_amount](/contracts-cairo/3.x/api/finance#VestingComponent-calculate_vested_amount) function based on the desired formula.
 
 <Callout>
-When using a custom [VestingSchedule](/contracts-cairo/2.x/api/finance#VestingComponent-Vesting-Schedule) implementation, the [LinearVestingSchedule](/contracts-cairo/2.x/api/finance#LinearVestingSchedule) must be excluded from the imports.
+When using a custom [VestingSchedule](/contracts-cairo/3.x/api/finance#VestingComponent-Vesting-Schedule) implementation, the [LinearVestingSchedule](/contracts-cairo/3.x/api/finance#LinearVestingSchedule) must be excluded from the imports.
 </Callout>
 
 <Callout>
 If there are additional parameters required for calculations, which are stored in the contract’s storage, you can access them using `self.get_contract()`.
 </Callout>
 
-Here’s an example of a vesting wallet contract with a custom [VestingSchedule](/contracts-cairo/2.x/api/finance#VestingComponent-Vesting-Schedule) implementation, where tokens
+Here’s an example of a vesting wallet contract with a custom [VestingSchedule](/contracts-cairo/3.x/api/finance#VestingComponent-Vesting-Schedule) implementation, where tokens
 are vested in a number of steps.
 
 ```rust
