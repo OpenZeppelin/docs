@@ -13,13 +13,13 @@ The most common and basic form of access control is the concept of ownership: th
 of a contract and can do administrative tasks on it.
 This approach is perfectly reasonable for contracts that have a single administrative user.
 
-OpenZeppelin Contracts for Cairo provides [OwnableComponent](/contracts-cairo/alpha/api/access#OwnableComponent) for implementing ownership in your contracts.
+OpenZeppelin Contracts for Cairo provides [OwnableComponent](/contracts-cairo/3.x/api/access#OwnableComponent) for implementing ownership in your contracts.
 
 ### Usage
 
 Integrating this component into a contract first requires assigning an owner.
 The implementing contract’s constructor should set the initial owner by passing the owner’s address to Ownable’s
-[`initializer`](/contracts-cairo/alpha/api/access#OwnableComponent-initializer) like this:
+[`initializer`](/contracts-cairo/3.x/api/access#OwnableComponent-initializer) like this:
 
 ```rust
 #[starknet::contract]
@@ -106,7 +106,7 @@ will no longer be callable!
 ### Two step transfer
 
 The component also offers a more robust way of transferring ownership via the
-[OwnableTwoStepImpl](/contracts-cairo/alpha/api/access#OwnableComponent-Embeddable-Impls-OwnableTwoStepImpl) implementation. A two step transfer mechanism helps
+[OwnableTwoStepImpl](/contracts-cairo/3.x/api/access#OwnableComponent-Embeddable-Impls-OwnableTwoStepImpl) implementation. A two step transfer mechanism helps
 to prevent unintended and irreversible owner transfers. Simply replace the `OwnableMixinImpl`
 with its respective two step variant:
 
@@ -146,7 +146,7 @@ flexibility in this regard.
 
 In essence, we will be defining multiple roles, each allowed to perform different sets of actions.
 An account may have, for example, 'moderator', 'minter' or 'admin' roles, which you will then check for
-instead of simply using [`assert_only_owner`](/contracts-cairo/alpha/api/access#OwnableComponent-assert_only_owner). This check can be enforced through [`assert_only_role`](/contracts-cairo/alpha/api/access#AccessControlComponent-assert_only_role).
+instead of simply using [`assert_only_owner`](/contracts-cairo/3.x/api/access#OwnableComponent-assert_only_owner). This check can be enforced through [`assert_only_role`](/contracts-cairo/3.x/api/access#AccessControlComponent-assert_only_role).
 Separately, you will be able to define rules for how accounts can be granted a role, have it revoked, and more.
 
 Most software uses access control systems that are role-based: some users are regular users, some may be supervisors
@@ -158,7 +158,7 @@ For each role that you want to define, you will create a new _role identifier_ t
 check if an account has that role. See [Creating role identifiers](#creating-role-identifiers) for information
 on creating identifiers.
 
-Here’s a simple example of implementing [AccessControl](/contracts-cairo/alpha/api/access#AccessControlComponent) on a portion of an ERC20 token contract which defines
+Here’s a simple example of implementing [AccessControl](/contracts-cairo/3.x/api/access#AccessControlComponent) on a portion of an ERC20 token contract which defines
 and sets a 'minter' role:
 
 ```rust
@@ -242,12 +242,12 @@ mod MyContract {
 ```
 
 <Callout type='warn'>
-Make sure you fully understand how [AccessControl](/contracts-cairo/alpha/api/access#AccessControlComponent) works before
+Make sure you fully understand how [AccessControl](/contracts-cairo/3.x/api/access#AccessControlComponent) works before
 using it on your system, or copy-pasting the examples from this guide.
 </Callout>
 
 While clear and explicit, this isn’t anything we wouldn’t have been able to achieve with
-[Ownable](/contracts-cairo/alpha/api/access#OwnableComponent). Where [AccessControl](/contracts-cairo/alpha/api/access#AccessControlComponent) shines the most is in scenarios where granular
+[Ownable](/contracts-cairo/3.x/api/access#OwnableComponent). Where [AccessControl](/contracts-cairo/3.x/api/access#AccessControlComponent) shines the most is in scenarios where granular
 permissions are required, which can be implemented by defining _multiple_ roles.
 
 Let’s augment our ERC20 token example by also defining a 'burner' role, which lets accounts destroy tokens:
@@ -350,16 +350,16 @@ security practice. Note that each account may still have more than one role, if 
 
 ### Granting and revoking roles
 
-The ERC20 token example above uses [`_grant_role`](/contracts-cairo/alpha/api/access#AccessControlComponent-_grant_role),
+The ERC20 token example above uses [`_grant_role`](/contracts-cairo/3.x/api/access#AccessControlComponent-_grant_role),
 an `internal` function that is useful when programmatically assigning
 roles (such as during construction). But what if we later want to grant the 'minter' role to additional accounts?
 
 By default, **accounts with a role cannot grant it or revoke it from other accounts**: all having a role does is making
-the [`assert_only_role`](/contracts-cairo/alpha/api/access#AccessControlComponent-assert_only_role) check pass. To grant and revoke roles dynamically, you will need help from the role’s _admin_.
+the [`assert_only_role`](/contracts-cairo/3.x/api/access#AccessControlComponent-assert_only_role) check pass. To grant and revoke roles dynamically, you will need help from the role’s _admin_.
 
 Every role has an associated admin role, which grants permission to call the
-[`grant_role`](/contracts-cairo/alpha/api/access#AccessControlComponent-grant_role) and
-[`revoke_role`](/contracts-cairo/alpha/api/access#AccessControlComponent-revoke_role) functions.
+[`grant_role`](/contracts-cairo/3.x/api/access#AccessControlComponent-grant_role) and
+[`revoke_role`](/contracts-cairo/3.x/api/access#AccessControlComponent-revoke_role) functions.
 A role can be granted or revoked by using these if the calling account has the corresponding admin role.
 Multiple roles may have the same admin role to make management easier.
 A role’s admin can even be the same role itself, which would cause accounts with that role to be able
@@ -369,9 +369,9 @@ This mechanism can be used to create complex permissioning structures resembling
 provides an easy way to manage simpler applications. `AccessControl` includes a special role with the role identifier
 of `0`, called `DEFAULT_ADMIN_ROLE`, which acts as the **default admin role for all roles**.
 An account with this role will be able to manage any other role, unless
-[`set_role_admin`](/contracts-cairo/alpha/api/access#AccessControlComponent-set_role_admin) is used to select a new admin role.
+[`set_role_admin`](/contracts-cairo/3.x/api/access#AccessControlComponent-set_role_admin) is used to select a new admin role.
 
-Since it is the admin for all roles by default, and in fact it is also its own admin, this role carries significant risk. To mitigate this risk we provide [AccessControlDefaultAdminRules](/contracts-cairo/alpha/api/access#AccessControlDefaultAdminRulesComponent), a recommended extension of AccessControl that adds a number of enforced security measures for this role: the admin is restricted to a single account, with a 2-step transfer procedure with a delay in between steps.
+Since it is the admin for all roles by default, and in fact it is also its own admin, this role carries significant risk. To mitigate this risk we provide [AccessControlDefaultAdminRules](/contracts-cairo/3.x/api/access#AccessControlDefaultAdminRulesComponent), a recommended extension of AccessControl that adds a number of enforced security measures for this role: the admin is restricted to a single account, with a 2-step transfer procedure with a delay in between steps.
 
 Let’s take a look at the ERC20 token example, this time taking advantage of the default admin role:
 
