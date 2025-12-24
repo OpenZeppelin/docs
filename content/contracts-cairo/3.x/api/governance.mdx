@@ -185,6 +185,8 @@ Whether a proposal needs to be queued before execution. This indicates if the pr
 Delay between when a proposal is created and when the vote starts. The unit this duration is expressed in depends on the clock (see [ERC-6372](https://eips.ethereum.org/EIPS/eip-6372)) this contract uses.
 
 This can be increased to leave time for users to buy voting power, or delegate it, before the voting of a proposal starts.
+
+While this function returns a u64 value, timepoints must fit into u48 according to the EIP-6372 specification. Consequently this value must fit in a u48 (when added to the current clock).
 </APIItem>
 
 <APIItem
@@ -1674,6 +1676,7 @@ Cast a vote.
 Requirements:
 
 - The proposal must be active.
+- The current timepoint must be greater than the proposal's snapshot timepoint.
 
 Emits a [VoteCast](#GovernorComponent-VoteCast) event.
 </APIItem>
@@ -1688,6 +1691,7 @@ Cast a vote with a `reason`.
 Requirements:
 
 - The proposal must be active.
+- The current timepoint must be greater than the proposal's snapshot timepoint.
 
 Emits a [VoteCast](#GovernorComponent-VoteCast) event.
 </APIItem>
@@ -1702,6 +1706,7 @@ Cast a vote with a `reason` and additional serialized `params`.
 Requirements:
 
 - The proposal must be active.
+- The current timepoint must be greater than the proposal's snapshot timepoint.
 
 Emits either:
 
@@ -1719,6 +1724,7 @@ Cast a vote using the `voter`'s signature.
 Requirements:
 
 - The proposal must be active.
+- The current timepoint must be greater than the proposal's snapshot timepoint.
 - The nonce in the signed message must match the account's current nonce.
 - `voter` must implement `SRC6::is_valid_signature`.
 - `signature` must be valid for the message hash.
@@ -1736,6 +1742,7 @@ Cast a vote with a `reason` and additional serialized `params` using the `voter`
 Requirements:
 
 - The proposal must be active.
+- The current timepoint must be greater than the proposal's snapshot timepoint.
 - The nonce in the signed message must match the account's current nonce.
 - `voter` must implement `SRC6::is_valid_signature`.
 - `signature` must be valid for the message hash.
