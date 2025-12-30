@@ -37,8 +37,8 @@ export function AlphaBanner() {
 	return (
 		<Link href={stableUrl} className="hover:underline transition-all">
 			<Callout title="Alpha Version" type="warn">
-				You're viewing an unaudited alpha version.
-				Click here to visit the latest stable release.
+				You're viewing an unaudited alpha version. Click here to visit the
+				latest stable release.
 			</Callout>
 		</Link>
 	);
