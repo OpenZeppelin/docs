@@ -241,6 +241,7 @@ Functions
 - [`change_default_admin_delay(new_delay)`](#IAccessControlDefaultAdminRules-change_default_admin_delay)
 - [`rollback_default_admin_delay()`](#IAccessControlDefaultAdminRules-rollback_default_admin_delay)
 - [`default_admin_delay_increase_wait()`](#IAccessControlDefaultAdminRules-default_admin_delay_increase_wait)
+- [`maximum_default_admin_transfer_delay()`](#IAccessControlDefaultAdminRules-maximum_default_admin_transfer_delay)
 
 Events
 
@@ -401,11 +402,25 @@ May emit a [DefaultAdminDelayChangeCanceled](#IAccessControlDefaultAdminRules-De
     id="IAccessControlDefaultAdminRules-default_admin_delay_increase_wait"
     kind="external"
 >
-Maximum time in seconds for an increase to [default\_admin\_delay](#IAccessControlDefaultAdminRules-default_admin_delay) (that is scheduled using [change\_default\_admin\_delay](#IAccessControlDefaultAdminRules-change_default_admin_delay)) to take effect. Defaults to 5 days.
+Maximum time in seconds for an increase to [default\_admin\_delay](#IAccessControlDefaultAdminRules-default_admin_delay) (that is scheduled using [change\_default\_admin\_delay](#IAccessControlDefaultAdminRules-change_default_admin_delay)) to take effect.
 
-When the [default\_admin\_delay](#IAccessControlDefaultAdminRules-default_admin_delay) is scheduled to be increased, it goes into effect after the new delay has passed with the purpose of giving enough time for reverting any accidental change (i.e. using milliseconds instead of seconds) that may lock the contract. However, to avoid excessive schedules, the wait is capped by this function and it can be overridden for a custom [default\_admin\_delay](#IAccessControlDefaultAdminRules-default_admin_delay) increase scheduling.
-
+<Callout type='warn'>
 Make sure to add a reasonable amount of time while overriding this value, otherwise, there’s a risk of setting a high new delay that goes into effect almost immediately without the possibility of human intervention in the case of an input error (e.g. set milliseconds instead of seconds).
+</Callout>
+
+Consider carefully the value set for `MAXIMUM_DEFAULT_ADMIN_TRANSFER_DELAY` too, since it will affect how fast you can recover from an accidental delay increase.
+</APIItem>
+
+<APIItem
+    functionSignature="maximum_default_admin_transfer_delay() → u64"
+    id="IAccessControlDefaultAdminRules-maximum_default_admin_transfer_delay"
+    kind="external"
+>
+Maximum time in seconds for a `default_admin` transfer delay.
+
+<Callout type='warn'>
+If `MAXIMUM_DEFAULT_ADMIN_TRANSFER_DELAY` is set too high, you might be unable to recover from an accidental delay increase for an extended period. Too low, and it unnecessarily restricts how much security delay you can impose for `default_admin` transfers. As a best practice, consider setting it in the 30-60 day range for a good balance between security and recoverability.
+</Callout>
 </APIItem>
 
 #### Events [!toc] [#IAccessControlDefaultAdminRules-Events]
@@ -1148,6 +1163,7 @@ Embeddable Implementations
 - [`change_default_admin_delay(self, new_delay)`](#IAccessControlDefaultAdminRules-change_default_admin_delay)
 - [`rollback_default_admin_delay(self)`](#IAccessControlDefaultAdminRules-rollback_default_admin_delay)
 - [`default_admin_delay_increase_wait(self)`](#IAccessControlDefaultAdminRules-default_admin_delay_increase_wait)
+- [`maximum_default_admin_transfer_delay(self)`](#IAccessControlDefaultAdminRules-maximum_default_admin_transfer_delay)
 
 #### AccessControlImpl [!toc] [#AccessControlDefaultAdminRulesComponent-Embeddable-Impls-AccessControlImpl]
 
@@ -1365,6 +1381,18 @@ When the [default\_admin\_delay](#AccessControlDefaultAdminRulesComponent-defaul
 
 <Callout type='warn'>
 Make sure to add a reasonable amount of time while overriding this value, otherwise, there’s a risk of setting a high new delay that goes into effect almost immediately without the possibility of human intervention in the case of an input error (eg. set milliseconds instead of seconds).
+</Callout>
+</APIItem>
+
+<APIItem
+    functionSignature="maximum_default_admin_transfer_delay(self: @ContractState) → u64"
+    id="AccessControlDefaultAdminRulesComponent-maximum_default_admin_transfer_delay"
+    kind="external"
+>
+Maximum time in seconds for a `default_admin` transfer delay.
+
+<Callout type='warn'>
+If `MAXIMUM_DEFAULT_ADMIN_TRANSFER_DELAY` is set too high, you might be unable to recover from an accidental delay increase for an extended period. Too low, and it unnecessarily restricts how much security delay you can impose for `default_admin` transfers. As a best practice, consider setting it in the 30-60 day range for a good balance between security and recoverability.
 </Callout>
 </APIItem>
 

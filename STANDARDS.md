@@ -49,7 +49,7 @@ The OpenZeppelin approach to achieve this goal will include the following sectio
 
 ⊞ Quadrants: Information-Oriented/Reference
 
-📖 [Reference Example](https://docs.openzeppelin.com/contracts-cairo/alpha/api/access)
+📖 [Reference Example](https://docs.openzeppelin.com/contracts-cairo/3.x/api/access)
 
 
 It should be noted that not every library or tool may have every section, and that’s ok. This is purely a guide to help kickstart helpful documentation, not a strict pattern to follow.

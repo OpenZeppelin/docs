@@ -1,9 +1,6 @@
 "use client";
 
-import {
-	latestAlpha,
-	latestStable,
-} from "content/contracts-cairo/latest-versions";
+import { latestStable } from "content/contracts-cairo/latest-versions";
 import { Callout } from "fumadocs-ui/components/callout";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -40,8 +37,8 @@ export function AlphaBanner() {
 	return (
 		<Link href={stableUrl} className="hover:underline transition-all">
 			<Callout title="Alpha Version" type="warn">
-				You're viewing an unaudited alpha version <code>v{latestAlpha}</code>.
-				Click here to visit the latest stable release.
+				You're viewing an unaudited alpha version. Click here to visit the
+				latest stable release.
 			</Callout>
 		</Link>
 	);

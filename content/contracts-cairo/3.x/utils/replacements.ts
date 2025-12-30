@@ -1,7 +1,7 @@
 import { CLASS_HASHES, CLASS_HASH_SCARB_VERSION, OPENZEPPELIN_INTERFACES_VERSION, OPENZEPPELIN_UTILS_VERSION, UMBRELLA_VERSION } from "./constants";
 
 export const REPLACEMENTS = {
-  include: ['**/content/contracts-cairo/alpha/**/*.mdx'],
+  include: ['**/content/contracts-cairo/3.x/**/*.mdx'],
   replacements: {
     umbrella_version: UMBRELLA_VERSION,
     openzeppelin_interfaces_version: OPENZEPPELIN_INTERFACES_VERSION,
