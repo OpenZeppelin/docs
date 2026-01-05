@@ -8,7 +8,7 @@ title: Timelock Controller
 
 The Timelock Controller provides a means of enforcing time delays on the execution of transactions. This is considered good practice regarding governance systems because it allows users the opportunity to exit the system if they disagree with a decision before it is executed.
 
-The Timelock contract itself executes transactions, not the user. The Timelock should, therefore, hold associated funds, ownership, and access control roles.
+The benefits of a timelock are best seen in an ownership-based system. Typically, the owner is a G-account or another contract. To delay the execution of privileged functions, one can designate a Timelock Controller as the owner of the system.
 
 ## Operation Lifecycle
 
@@ -32,11 +32,6 @@ The identifier of an operation is a `BytesN<32>` value, computed as the Keccak25
 Timelocked operations follow a specific lifecycle:
 
 **Unset → Waiting → Ready → Done**
-
-- **Unset**: The operation has not been scheduled or has been canceled.
-- **Waiting**: The operation has been scheduled and is pending the scheduled delay.
-- **Ready**: The timer has expired, and the operation is eligible for execution.
-- **Done**: The operation has been executed.
 
 ## Timelock Flow
 
@@ -91,7 +86,7 @@ The minimum delay of a contract is accessible through `get_min_delay`.
 
 ## Usage Example
 
-A complete timelock controller implementation with role-based access control.
+We are providing below a complete timelock controller implementation with role-based access control.
 
 ### Roles
 
@@ -116,7 +111,7 @@ For self-administration operations (e.g., updating the minimum delay, granting a
 
 **Why not use `execute_op` for self-administration?** Soroban does not allow re-entrancy: a contract cannot call its own public functions during execution. For example, `execute_op` cannot internally call `update_delay` on the same contract. To work around this, the `CustomAccountInterface` implementation validates and marks operations as executed without performing the cross-contract call, allowing admin functions to be called directly.
 
-The `__check_auth` implementation validates that:
+The custom `__check_auth` implementation validates that:
 - The operation targets the timelock contract itself
 - The operation was properly scheduled and is ready for execution
 - The predecessor and salt match the scheduled operation
