@@ -1,5 +1,5 @@
-export const OPENZEPPELIN_INTERFACES_VERSION = "3.0.0";
-export const OPENZEPPELIN_UTILS_VERSION = "3.0.0";
+export const OPENZEPPELIN_INTERFACES_VERSION = "2.1.0";
+export const OPENZEPPELIN_UTILS_VERSION = "2.1.0";
 export const UMBRELLA_VERSION = "3.0.0";
 export const CLASS_HASH_SCARB_VERSION = "2.13.1";
 
@@ -15,7 +15,7 @@ export const CLASS_HASHES = {
 	EthAccountUpgradeableClassHash:
 		"0x000b5bcc16b8b0d86c24996e22206f6071bb8d7307837a02720f0ce2fa1b3d7c",
 	UniversalDeployerClassHash:
-		"0x01b2df6d8861670d4a8ca4670433b2418d78169c2947f46dc614e69f333745c8",
+		"0x01724ff2f76fcddb8f4079d35783655e6d61935a281425721e98607cc480ef56",
 	VestingWalletClassHash:
 		"0x00540c7f907539e1a283318fb3da16f1bf9d9e60ad10c20d0557a0185043b08f",
 };
