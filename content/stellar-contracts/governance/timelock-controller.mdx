@@ -1,0 +1,316 @@
+---
+title: Timelock Controller
+---
+
+[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/governance/src/timelock)
+
+## Overview
+
+The Timelock Controller provides a means of enforcing time delays on the execution of transactions. This is considered good practice regarding governance systems because it allows users the opportunity to exit the system if they disagree with a decision before it is executed.
+
+The benefits of a timelock are best seen in an ownership-based system. Typically, the owner is a G-account or another contract. To delay the execution of privileged functions, one can designate a Timelock Controller as the owner of the system.
+
+## Operation Lifecycle
+
+The state of an operation is represented by the `OperationState` enum and can be retrieved by calling the `get_operation_state` function with the operation's identifier.
+
+```rust
+pub enum OperationState {
+    /// Operation has not been scheduled
+    Unset,
+    /// Operation is scheduled but the delay period has not passed
+    Waiting,
+    /// Operation is ready to be executed (delay has passed)
+    Ready,
+    /// Operation has been executed
+    Done,
+}
+```
+
+The identifier of an operation is a `BytesN<32>` value, computed as the Keccak256 hash of the operation's target, function, arguments, predecessor, and salt. It can be computed by invoking the `hash_operation` function. Submitting an operation with identical parameters and the same salt value a second time will fail, as operation identifiers must be unique. To resolve this, use a different salt value to generate a unique identifier.
+
+Timelocked operations follow a specific lifecycle:
+
+**Unset → Waiting → Ready → Done**
+
+## Timelock Flow
+
+### Schedule
+
+When a proposer calls `schedule_operation`, the `OperationState` moves from `Unset` to `Waiting`. This starts a timer that must be greater than or equal to the minimum delay. The timer expires at a timestamp accessible through `get_timestamp`. Once the timer expires, the `OperationState` automatically moves to the `Ready` state. At this point, it can be executed.
+
+### Execute
+
+By calling `execute_operation`, an executor triggers the operation's underlying transaction and moves it to the `Done` state. If the operation has a predecessor, the predecessor's operation must be in the `Done` state for this transaction to succeed.
+
+### Cancel
+
+The `cancel_operation` function allows cancellers to cancel any pending operations. This resets the operation to the `Unset` state. It is therefore possible for a proposer to re-schedule an operation that has been cancelled. In this case, the timer restarts when the operation is re-scheduled.
+
+## Operation Structure
+
+An operation encapsulates all the information needed to invoke a function on a target contract after the timelock delay has passed:
+
+```rust
+pub struct Operation {
+    /// The contract address to call
+    pub target: Address,
+    /// The function name to invoke on the target contract
+    pub function: Symbol,
+    /// The serialized arguments to pass to the function
+    pub args: Vec<Val>,
+    /// Hash of a predecessor operation that must be executed first.
+    /// Use BytesN::<32>::from_array(&[0u8; 32]) for no predecessor.
+    pub predecessor: BytesN<32>,
+    /// A salt value for operation uniqueness.
+    /// Allows scheduling the same operation multiple times with different IDs.
+    pub salt: BytesN<32>,
+}
+```
+
+### Predecessor Operations
+
+The `predecessor` field allows you to create dependencies between operations. An operation with a predecessor can only be executed after the predecessor operation has been completed (in `Done` state). Use `BytesN::<32>::from_array(&[0u8; 32])` to indicate no predecessor dependency.
+
+### Salt for Uniqueness
+
+The `salt` field ensures operation uniqueness. If you need to schedule the same operation (same target, function, args, and predecessor) multiple times, use different salt values to generate unique operation IDs.
+
+## Minimum Delay
+
+The minimum delay of the timelock acts as a buffer from when a proposer schedules an operation to the earliest point at which an executor may execute that operation. The idea is for users, should they disagree with a scheduled proposal, to have options such as exiting the system or making their case for cancellers to cancel the operation.
+
+After initialization, the only way to change the timelock's minimum delay is to schedule it and execute it with the same flow as any other operation.
+
+The minimum delay of a contract is accessible through `get_min_delay`.
+
+## Usage Example
+
+We are providing below a complete timelock controller implementation with role-based access control.
+
+### Roles
+
+The timelock controller leverages an [Access Control](/stellar-contracts/access/access-control) setup with the following roles:
+
+- **PROPOSER_ROLE**: Can schedule operations. Proposers are automatically granted the Canceller role during initialization.
+- **CANCELLER_ROLE**: Can cancel pending operations.
+- **EXECUTOR_ROLE**: Can execute operations that are ready. If no executors are configured, anyone can execute ready operations.
+- **Admin**: Can manage all roles and update the minimum delay. By default, the contract itself is the admin, meaning admin operations must go through the timelock process.
+
+An optional external admin can be provided during deployment to aid with initial configuration of roles without being subject to delay. However, this role should be subsequently renounced in favor of administration through timelocked proposals to ensure all administrative actions have proper oversight and transparency.
+
+### Self-Administration
+
+When the contract is deployed with `admin` set to `None`, the contract address itself becomes the admin (self-administration). This ensures that administrative changes like updating the minimum delay or managing roles must go through the timelock process.
+
+For self-administration operations (e.g., updating the minimum delay, granting and revoking roles), the proposal lifecycle is:
+
+1. Proposer schedules the operation targeting the timelock contract itself
+2. After the delay passes, call the admin function directly (not via `execute_op`)
+3. The `CustomAccountInterface` implementation validates the operation is ready and marks it as executed
+
+**Why not use `execute_op` for self-administration?** Soroban does not allow re-entrancy: a contract cannot call its own public functions during execution. For example, `execute_op` cannot internally call `update_delay` on the same contract. To work around this, the `CustomAccountInterface` implementation validates and marks operations as executed without performing the cross-contract call, allowing admin functions to be called directly.
+
+The custom `__check_auth` implementation validates that:
+- The operation targets the timelock contract itself
+- The operation was properly scheduled and is ready for execution
+- The predecessor and salt match the scheduled operation
+- The executor (if any) has the required role and has authorized the invocation
+
+```rust
+use soroban_sdk::{
+    auth::{Context, ContractContext, CustomAccountInterface},
+    contract, contractimpl, contracttype,
+    crypto::Hash,
+    panic_with_error, symbol_short, Address, BytesN, Env, IntoVal, Symbol, Val, Vec,
+};
+use stellar_access::access_control::{
+    ensure_role, get_role_member_count, grant_role_no_auth, set_admin, AccessControl,
+};
+use stellar_governance::timelock::{
+    cancel_operation, execute_operation, get_min_delay as timelock_get_min_delay,
+    get_operation_state, hash_operation as timelock_hash_operation,
+    is_operation_done, is_operation_pending, is_operation_ready, operation_exists,
+    schedule_operation, set_execute_operation, set_min_delay as timelock_set_min_delay,
+    Operation, OperationState, TimelockError,
+};
+use stellar_macros::{only_admin, only_role};
+
+const PROPOSER_ROLE: Symbol = symbol_short!("proposer");
+const EXECUTOR_ROLE: Symbol = symbol_short!("executor");
+const CANCELLER_ROLE: Symbol = symbol_short!("canceller");
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct OperationMeta {
+    pub predecessor: BytesN<32>,
+    pub salt: BytesN<32>,
+    pub executor: Option<Address>,
+}
+
+#[contract]
+pub struct TimelockController;
+
+#[contractimpl]
+impl CustomAccountInterface for TimelockController {
+    type Error = TimelockError;
+    type Signature = Vec<OperationMeta>;
+
+    fn __check_auth(
+        e: Env,
+        _signature_payload: Hash<32>,
+        context_meta: Vec<OperationMeta>,
+        auth_contexts: Vec<Context>,
+    ) -> Result<(), Self::Error> {
+        for (context, meta) in auth_contexts.iter().zip(context_meta) {
+            match context.clone() {
+                Context::Contract(ContractContext { contract, fn_name, args }) => {
+                    if contract != e.current_contract_address() {
+                        panic_with_error!(&e, TimelockError::Unauthorized)
+                    }
+
+                    if get_role_member_count(&e, &EXECUTOR_ROLE) != 0 {
+                        let args_for_auth = (
+                            Symbol::new(&e, "execute_op"),
+                            contract.clone(),
+                            fn_name.clone(),
+                            args.clone(),
+                            meta.predecessor.clone(),
+                            meta.salt.clone(),
+                        )
+                            .into_val(&e);
+
+                        let executor = meta.executor.expect("Executor must be present");
+                        ensure_role(&e, &EXECUTOR_ROLE, &executor);
+                        executor.require_auth_for_args(args_for_auth);
+                    }
+
+                    let op = Operation {
+                        target: contract,
+                        function: fn_name,
+                        args,
+                        predecessor: meta.predecessor,
+                        salt: meta.salt,
+                    };
+                    set_execute_operation(&e, &op);
+                }
+                _ => panic_with_error!(&e, TimelockError::Unauthorized),
+            }
+        }
+        Ok(())
+    }
+}
+
+#[contractimpl]
+impl TimelockController {
+    pub fn __constructor(
+        e: &Env,
+        min_delay: u32,
+        proposers: Vec<Address>,
+        executors: Vec<Address>,
+        admin: Option<Address>,
+    ) {
+        let admin_addr = match admin {
+            Some(admin_addr) => admin_addr,
+            _ => e.current_contract_address(),
+        };
+        set_admin(e, &admin_addr);
+
+        for proposer in proposers.iter() {
+            grant_role_no_auth(e, &proposer, &PROPOSER_ROLE, &admin_addr);
+            grant_role_no_auth(e, &proposer, &CANCELLER_ROLE, &admin_addr);
+        }
+
+        for executor in executors.iter() {
+            grant_role_no_auth(e, &executor, &EXECUTOR_ROLE, &admin_addr);
+        }
+
+        timelock_set_min_delay(e, min_delay);
+    }
+
+    #[only_role(proposer, "proposer")]
+    pub fn schedule_op(
+        e: &Env,
+        target: Address,
+        function: Symbol,
+        args: Vec<Val>,
+        predecessor: BytesN<32>,
+        salt: BytesN<32>,
+        delay: u32,
+        proposer: Address,
+    ) -> BytesN<32> {
+        let operation = Operation { target, function, args, predecessor, salt };
+        schedule_operation(e, &operation, delay)
+    }
+
+    pub fn execute_op(
+        e: &Env,
+        target: Address,
+        function: Symbol,
+        args: Vec<Val>,
+        predecessor: BytesN<32>,
+        salt: BytesN<32>,
+        executor: Option<Address>,
+    ) -> Val {
+        if get_role_member_count(e, &EXECUTOR_ROLE) != 0 {
+            let executor = executor.expect("Executor must be present");
+            ensure_role(e, &EXECUTOR_ROLE, &executor);
+            executor.require_auth();
+        }
+
+        let operation = Operation { target, function, args, predecessor, salt };
+        execute_operation(e, &operation)
+    }
+
+    #[only_role(canceller, "canceller")]
+    pub fn cancel_op(e: &Env, operation_id: BytesN<32>, canceller: Address) {
+        cancel_operation(e, &operation_id);
+    }
+
+    #[only_admin]
+    pub fn update_delay(e: &Env, new_delay: u32) {
+        timelock_set_min_delay(e, new_delay);
+    }
+
+    pub fn get_min_delay(e: &Env) -> u32 {
+        timelock_get_min_delay(e)
+    }
+
+    pub fn hash_operation(
+        e: &Env,
+        target: Address,
+        function: Symbol,
+        args: Vec<Val>,
+        predecessor: BytesN<32>,
+        salt: BytesN<32>,
+    ) -> BytesN<32> {
+        let operation = Operation { target, function, args, predecessor, salt };
+        timelock_hash_operation(e, &operation)
+    }
+
+    pub fn get_operation_state(e: &Env, operation_id: BytesN<32>) -> OperationState {
+        get_operation_state(e, &operation_id)
+    }
+
+    pub fn is_operation_pending(e: &Env, operation_id: BytesN<32>) -> bool {
+        is_operation_pending(e, &operation_id)
+    }
+
+    pub fn is_operation_ready(e: &Env, operation_id: BytesN<32>) -> bool {
+        is_operation_ready(e, &operation_id)
+    }
+
+    pub fn is_operation_done(e: &Env, operation_id: BytesN<32>) -> bool {
+        is_operation_done(e, &operation_id)
+    }
+}
+
+#[contractimpl(contracttrait)]
+impl AccessControl for TimelockController {}
+```
+
+The `OperationMeta` struct is used as the signature type for `CustomAccountInterface`. When calling a self-administration function, the caller must provide the `predecessor` and `salt` values that were used when scheduling the operation, allowing `__check_auth` to validate and mark the operation as executed.
+
+## See Also
+
+* [Access Control](/stellar-contracts/access/access-control)
