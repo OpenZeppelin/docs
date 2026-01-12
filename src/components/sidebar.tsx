@@ -236,7 +236,7 @@ export function SidebarFooter(props: ComponentProps<"div">) {
 
 export function SidebarViewport(props: ScrollAreaProps) {
 	return (
-		<ScrollArea {...props} className={cn("h-full", props.className)}>
+		<ScrollArea {...props} className={cn("flex-1 min-h-0", props.className)}>
 			<ScrollViewport
 				className="p-4 overscroll-contain"
 				style={

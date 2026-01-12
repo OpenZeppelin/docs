@@ -137,7 +137,7 @@ export default function HomePage() {
 					{/* Dual Heroes: Monitor and Relayer */}
 					<div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
 						<FeatureCard
-							href="/relayer"
+							href="/relayer/1.3.x"
 							icon={<RelayersIcon className="h-6 w-6 sm:h-8 sm:w-8" />}
 							title="Relayer"
 							description="Automate onchain transactions to schedule jobs, batch calls, and relay gasless meta transactions within your self-hosted infrastructure."
