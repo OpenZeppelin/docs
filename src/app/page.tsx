@@ -28,9 +28,9 @@ import {
 	ZamaIcon,
 } from "@/components/icons";
 import { DefenderIcon } from "@/components/icons/defender-icon";
-import { baseOptions } from "./layout.config";
-import { latestStable as relayerLatestStable } from "../../content/relayer/latest-versions";
 import { latestStable as monitorLatestStable } from "../../content/monitor/latest-versions";
+import { latestStable as relayerLatestStable } from "../../content/relayer/latest-versions";
+import { baseOptions } from "./layout.config";
 
 export default function HomePage() {
 	return (
