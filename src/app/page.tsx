@@ -29,6 +29,8 @@ import {
 } from "@/components/icons";
 import { DefenderIcon } from "@/components/icons/defender-icon";
 import { baseOptions } from "./layout.config";
+import { latestStable as relayerLatestStable } from "../../content/relayer/latest-versions";
+import { latestStable as monitorLatestStable } from "../../content/monitor/latest-versions";
 
 export default function HomePage() {
 	return (
@@ -137,7 +139,7 @@ export default function HomePage() {
 					{/* Dual Heroes: Monitor and Relayer */}
 					<div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
 						<FeatureCard
-							href="/relayer/1.3.x"
+							href={`/relayer/${relayerLatestStable}`}
 							icon={<RelayersIcon className="h-6 w-6 sm:h-8 sm:w-8" />}
 							title="Relayer"
 							description="Automate onchain transactions to schedule jobs, batch calls, and relay gasless meta transactions within your self-hosted infrastructure."
@@ -145,7 +147,7 @@ export default function HomePage() {
 						/>
 
 						<FeatureCard
-							href="/monitor/1.1.x"
+							href={`/monitor/${monitorLatestStable}`}
 							icon={<MonitorIcon className="h-6 w-6 sm:h-8 sm:w-8" />}
 							title="Monitor"
 							description="Monitor onchain activity in real time to watch critical events, detect anomalies, trigger alerts on your preferred channels, and set automated responses with Relayer."
