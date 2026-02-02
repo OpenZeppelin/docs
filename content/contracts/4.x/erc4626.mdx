@@ -47,7 +47,7 @@ The idea of an inflation attack is that an attacker can donate assets to the vau
 
 ![Inflation attack without protection](/erc4626-attack.png)
 
-Figure 6 shows how an attacker can manipulate the rate of an empty vault. First the attacker must deposit a small amount of tokens (1 token) and follow up with a donation of 1e5 tokens directly to the vault to move the exchange rate "right". This puts the vault in a state where any deposit smaller than 1e5 would be completely lost to the vault. Given that the attacker is the only share holder (from their donation), the attacker would steal all the tokens deposited.
+Figure 6 shows how an attacker can manipulate the rate of an empty vault. First the attacker must deposit a small amount of tokens (1 token) and follow up with a donation of 1e5 tokens directly to the vault to move the exchange rate "right". This puts the vault in a state where any deposit smaller than 1e5 would be completely lost to the vault. Given that the attacker is the only shareholder (from their donation), the attacker would steal all the tokens deposited.
 
 An attacker would typically wait for a user to do the first deposit into the vault, and would frontrun that operation with the attack described above. The risk is low, and the size of the "donation" required to manipulate the vault is equivalent to the size of the deposit that is being attacked.
 
@@ -57,18 +57,18 @@ In math that gives:
 * $a_1$ the attacker donation
 * $u$ the user deposit
 
-|  |
+|  | Assets | Shares | Rate |
 | --- | --- | --- | --- |
-| Assets | Shares | Rate | initial |
-| $0$ | $0$ | - | after attacker’s deposit |
-| $a_0$ | $a_0$ | $1$ | after attacker’s donation |
+| initial | $0$ | $0$ | - |
+| after attacker's deposit | $a_0$ | $a_0$ | $1$ |
+| after attacker's donation | $a_0 + a_1$ | $a_0$ | $\fraca_0 + a_1a_0$ |
 
 This means a deposit of $u$ will give $\fracu \times a_0a_0 + a_1$ shares.
 
 For the attacker to dilute that deposit to 0 shares, causing the user to lose all its deposit, it must ensure that
 
 ```math
-\fracu \times a_0a_0+a_1 < 1 \iff u < 1 + \fraca_1a_0
+\frac{u \times a_0}{a_0+a_1} < 1 \iff u < 1 + \frac{a_1}{a_0}
 ```
 
 Using $a_0 = 1$ and $a_1 = u$ is enough. So the attacker only needs $u+1$ assets to perform a successful attack.
@@ -76,7 +76,7 @@ Using $a_0 = 1$ and $a_1 = u$ is enough. So the attacker only needs $u+1$ assets
 It is easy to generalize the above results to scenarios where the attacker is going after a smaller fraction of the user’s deposit. In order to target $\fracun$, the user needs to suffer rounding of a similar fraction, which means the user must receive at most $n$ shares. This results in:
 
 ```math
-\fracu \times a_0a_0+a_1 < n \iff \fracun < 1 + \fraca_1a_0
+\frac{u \times a_0}{a_0+a_1} < n \iff \frac{u}{n} < 1 + \frac{a_1}{a_0}
 ```
 
 In this scenario, the attack is $n$ times less powerful (in how much it is stealing) and costs $n$ times less to execute. In both cases, the amount of funds the attacker needs to commit is equivalent to its potential earnings.
@@ -97,40 +97,40 @@ Following the previous math definitions, we have:
 * $a_1$ the attacker donation
 * $u$ the user deposit
 
-|  |
+|  | Assets | Shares | Rate |
 | --- | --- | --- | --- |
-| Assets | Shares | Rate | initial |
-| $1$ | $10^\delta$ | $10^\delta$ | after attacker’s deposit |
-| $1+a_0$ | $10^\delta \times (1+a_0)$ | $10^\delta$ | after attacker’s donation |
+| initial | $1$ | $10^\delta$ | $10^\delta$ |
+| after attacker's deposit | $1+a_0$ | $10^\delta \times (1+a_0)$ | $10^\delta$ |
+| after attacker's donation | $1+a_0+a_1$ | $10^\delta \times (1+a_0)$ | $10^\delta$ |
 
 One important thing to note is that the attacker only owns a fraction $\fraca_01 + a_0$ of the shares, so when doing the donation, he will only be able to recover that fraction $\fraca_1 \times a_01 + a_0$ of the donation. The remaining $\fraca_11+a_0$ are captured by the vault.
 
 ```math
-\mathitloss = \fraca_11+a_0
+\mathit{loss} = \frac{a_1}{1+a_0}
 ```
 
 When the user deposits $u$, he receives
 
 ```math
-10^\delta \times u \times \frac1+a_01+a_0+a_1
+10^\delta \times u \times \frac{1+a_0}{1+a_0+a_1}
 ```
 
 For the attacker to dilute that deposit to 0 shares, causing the user to lose all its deposit, it must ensure that
 
 ```math
-10^\delta \times u \times \frac1+a_01+a_0+a_1 < 1
+10^\delta \times u \times \frac{1+a_0}{1+a_0+a_1} < 1
 ```
 
 ```math
-\iff 10^\delta \times u < \frac1+a_0+a_11+a_0
+\iff 10^\delta \times u < \frac{1+a_0+a_1}{1+a_0}
 ```
 
 ```math
-\iff 10^\delta \times u < 1 + \fraca_11+a_0
+\iff 10^\delta \times u < 1 + \frac{a_1}{1+a_0}
 ```
 
 ```math
-\iff 10^\delta \times u \le \mathitloss
+\iff 10^\delta \times u \le \mathit{loss}
 ```
 
 * If the offset is 0, the attacker loss is at least equal to the user’s deposit.
