@@ -15,6 +15,8 @@ Stellar Sponsored Transactions (also known as gasless transactions) allow users 
 
 The relayer handles the complexity of fee conversion, token swaps, and XLM fee payment, while users simply pay in their preferred token.
 
+For additional context on fee abstraction in Soroban smart contracts, see [fee abstraction on stellar contracts](/stellar-contracts/fee-abstraction)
+
 ## Prerequisites
 
 - A running OpenZeppelin Relayer instance
@@ -352,24 +354,7 @@ Supported operation types:
 
 Soroban Gas Abstraction extends the sponsored transaction concept to Soroban smart contracts. Instead of requiring users to hold XLM for contract invocation fees, users can pay in any Soroban token (e.g., a USDC Soroban token contract). This is powered by a **FeeForwarder smart contract** that wraps the user's contract call with fee collection logic.
 
-**How it differs from Classic Stellar Sponsored Transactions:**
-
-| Aspect               | Classic Stellar                                 | Soroban Gas Abstraction                                  |
-| -------------------- | ----------------------------------------------- | -------------------------------------------------------- |
-| **Transaction type** | Classic operations (payments, trustlines, etc.) | Soroban `InvokeHostFunction` operations                  |
-| **Fee mechanism**    | Fee-bump transaction wrapper                    | FeeForwarder smart contract                              |
-| **Fee token format** | Credit assets (`CODE:ISSUER`)                   | Soroban token contracts (`C...` address)                 |
-| **Authorization**    | Standard transaction signing                    | User signs a `SorobanAuthorizationEntry`                 |
-| **Submission**       | Relayer wraps in fee-bump envelope              | Relayer injects signed auth entries and submits directly |
-
-### Prerequisites
-
-- A running OpenZeppelin Relayer instance
-- A Stellar relayer configured with `"fee_payment_strategy": "user"`
-- A deployed **FeeForwarder contract** on the target network. [Check the OpenZeppelin contract here](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/fee-abstraction)
-- The `STELLAR_TESTNET_FEE_FORWARDER_ADDRESS` or `STELLAR_MAINNET_FEE_FORWARDER_ADDRESS` environment variable set to the FeeForwarder contract address
-- Allowed tokens configured with Soroban token contract addresses (`C...` format)
-- Sufficient XLM balance in the relayer account for network fees
+For additional context on the FeeForwarder contract and fee abstraction in Soroban smart contracts, see the [fee abstraction documentation](/stellar-contracts/fee-abstraction).
 
 ### Configuration
 
@@ -411,6 +396,31 @@ Configure the relayer with Soroban token contracts in the `allowed_tokens` list.
 }
 ```
 
+**How it differs from Classic Stellar Sponsored Transactions:**
+
+| Aspect               | Classic Stellar                                 | Soroban Gas Abstraction                                  |
+| -------------------- | ----------------------------------------------- | -------------------------------------------------------- |
+| **Transaction type** | Classic operations (payments, trustlines, etc.) | Soroban `InvokeHostFunction` operations                  |
+| **Fee mechanism**    | Fee-bump transaction wrapper                    | FeeForwarder smart contract                              |
+| **Fee token format** | Credit assets (`CODE:ISSUER`)                   | Soroban token contracts (`C...` address)                 |
+| **Authorization**    | Standard transaction signing                    | User signs a `SorobanAuthorizationEntry`                 |
+| **Submission**       | Relayer wraps in fee-bump envelope              | Relayer injects signed auth entries and submits directly |
+
+### Prerequisites
+
+- A running OpenZeppelin Relayer instance
+- A Stellar relayer configured with `"fee_payment_strategy": "user"`
+- A deployed **FeeForwarder contract** on the target network. [Check the OpenZeppelin contract here](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/fee-abstraction)
+- The `STELLAR_TESTNET_FEE_FORWARDER_ADDRESS` or `STELLAR_MAINNET_FEE_FORWARDER_ADDRESS` environment variable set to the FeeForwarder contract address
+- **Soroswap contract addresses configured** via environment variables (Router, Factory, and Native Wrapper). These are required for the relayer to get quotes and perform token swaps. See [Soroswap documentation](https://docs.soroswap.finance/) for how to find contract addresses
+- Allowed tokens configured with Soroban token contract addresses (`C...` format). **The fee tokens you use must have liquidity pools on [Soroswap](https://app.soroswap.finance/)**, as the relayer uses Soroswap to get quotes and convert tokens to XLM
+- **Trustlines** established for fee tokens:
+  - The **relayer account** must have a trustline to each fee token it accepts
+  - If testing with a **SAC (Stellar Asset Contract) token**, the **user account** must also have a trustline to the token. See the [Relayer SDK trustline example](https://github.com/OpenZeppelin/openzeppelin-relayer-sdk/tree/main/examples/relayers/stellar/src/sponsored/createTrustline.ts) for how to create trustlines
+- Sufficient XLM balance in the relayer account for network fees
+
+### Environment Variables
+
 Set the required environment variables:
 
 <Callout>
@@ -421,18 +431,20 @@ Set the required environment variables:
 
 ```bash
 # Stellar FeeForwarder Contract Addresses
+# Deploy your own or find the address from the OpenZeppelin stellar-contracts repository:
+# https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/fee-abstraction
 # STELLAR_MAINNET_FEE_FORWARDER_ADDRESS=
 STELLAR_TESTNET_FEE_FORWARDER_ADDRESS=
 
-# Stellar Soroswap Router Contract Addresses
+# Stellar Soroswap Contract Addresses
+# Find these addresses in the Soroswap documentation:
+# https://docs.soroswap.finance/
 STELLAR_MAINNET_SOROSWAP_ROUTER_ADDRESS=
 STELLAR_TESTNET_SOROSWAP_ROUTER_ADDRESS=
 
-# Stellar Soroswap Factory Contract Addresses
 STELLAR_MAINNET_SOROSWAP_FACTORY_ADDRESS=
 STELLAR_TESTNET_SOROSWAP_FACTORY_ADDRESS=
 
-# Stellar Soroswap Native Wrapper (XLM) Contract Addresses
 STELLAR_MAINNET_SOROSWAP_NATIVE_WRAPPER_ADDRESS=
 STELLAR_TESTNET_SOROSWAP_NATIVE_WRAPPER_ADDRESS=
 ```
@@ -441,9 +453,9 @@ STELLAR_TESTNET_SOROSWAP_NATIVE_WRAPPER_ADDRESS=
 
 The Soroban gas abstraction flow uses the same endpoints as classic sponsored transactions but with key differences in the request/response payloads and an additional authorization signing step.
 
-#### Step 1: Get Fee Quote
+#### Step 1: Get Fee Quote (Optional)
 
-Estimate the fee for a Soroban contract invocation in your preferred token.
+This step is **optional and informational**. It allows you to estimate the fee cost before building the transaction, which is useful for displaying the expected cost to users. You can skip directly to Step 2 (Build) if you don't need a fee estimate upfront.
 
 **Endpoint:** `POST /api/v1/relayers/{relayer_id}/transactions/sponsored/quote`
 
@@ -489,6 +501,10 @@ Prepare a Soroban transaction that wraps your contract call with the FeeForwarde
   "fee_token": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
 }
 ```
+
+<Callout type="warn">
+  The authorization entry has a **2-minute expiration window** (~24 ledgers at ~5 seconds each). This means you must sign and submit the transaction promptly after building it. If you are testing manually or your flow involves back-and-forth steps, be aware that the authorization may expire before submission. If your transaction fails with an expiration error, rebuild and re-sign the transaction.
+</Callout>
 
 **Response:**
 
@@ -621,11 +637,11 @@ The contract's `forward()` function takes these parameters:
 ### Best Practices for Soroban Gas Abstraction
 
 1. **Use the Quote endpoint first**: Always get a fee estimate before building to show users the expected cost, including the max fee with slippage
-2. **Handle authorization expiration**: Authorization entries expire at a specific ledger. Rebuild if the authorization has expired
-3. **Validate token contract addresses**: Ensure fee tokens use valid Soroban contract addresses (`C...` format, 56 characters)
-4. **Monitor resource fees**: Soroban transactions have dynamic resource fees based on CPU instructions, storage reads/writes, and ledger entry access. The relayer applies a 15% buffer, but complex contract calls may need higher limits
-5. **Set appropriate max fees**: Configure `max_allowed_fee` per token to prevent excessive fees during network congestion
-6. **Configure the FeeForwarder address**: Ensure the correct FeeForwarder contract address is set via environment variables for each network
+2. **Handle authorization expiration**: Authorization entries have a **2-minute expiration window**. Sign and submit promptly after building. If the authorization expires, rebuild and re-sign the transaction
+4. **Validate token contract addresses**: Ensure fee tokens use valid Soroban contract addresses (`C...` format, 56 characters)
+5. **Monitor resource fees**: Soroban transactions have dynamic resource fees based on CPU instructions, storage reads/writes, and ledger entry access. The relayer applies a 15% buffer, but complex contract calls may need higher limits
+6. **Set appropriate max fees**: Configure `max_allowed_fee` per token to prevent excessive fees during network congestion
+7. **Configure the FeeForwarder address**: Ensure the correct FeeForwarder contract address is set via environment variables for each network
 
 ## Additional Resources
 
