@@ -6,7 +6,7 @@
  * @property {boolean} isStable - Whether this is a stable release
  */
 
-export const latestStable = "1.3.x";
+export const latestStable = "1.4.x";
 
 /** @type {VersionConfig[]} */
 
