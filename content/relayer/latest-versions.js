@@ -11,7 +11,8 @@ export const latestStable = "1.3.x";
 /** @type {VersionConfig[]} */
 
 export const allVersions = [
-  { label: "v1.3.x (latest stable)", value: "1.3.x", path: "/relayer/1.3.x", isStable: true },
+  { label: "v1.4.x (latest stable)", value: "1.4.x", path: "/relayer/1.4.x", isStable: true },
+  { label: "v1.3.x", value: "1.3.x", path: "/relayer/1.3.x", isStable: true },
   { label: "v1.2.x", value: "1.2.x", path: "/relayer/1.2.x", isStable: true },
   { label: "v1.1.x", value: "1.1.x", path: "/relayer/1.1.x", isStable: true },
   { label: "v1.0.x", value: "1.0.x", path: "/relayer/1.0.x", isStable: true },
