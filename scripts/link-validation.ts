@@ -4,6 +4,7 @@ import {
 	scanURLs,
 	validateFiles,
 } from "next-validate-link";
+import remarkMath from "remark-math";
 import type { InferPageType } from "fumadocs-core/source";
 import { source } from "@/lib/source";
 import { writeFileSync } from "fs";
@@ -60,6 +61,7 @@ async function checkLinks() {
 			components: {
 				Card: { attributes: ["href"] },
 			},
+			remarkPlugins: [remarkMath],
 		},
 		ignoreFragment: ignoreFragments,
 		// check relative paths
