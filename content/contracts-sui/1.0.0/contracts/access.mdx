@@ -1,0 +1,96 @@
+---
+title: openzeppelin_access
+---
+
+The `openzeppelin_access` package provides transfer policies for privileged Sui objects (`T: key + store`), especially capabilities like admin and treasury caps.
+
+## Modules
+
+- `two_step_transfer`: owner-initiated handoff that requires explicit acceptance by the new owner.
+- `delayed_transfer`: scheduled handoff/unwrap with a minimum time delay.
+
+## `two_step_transfer`
+
+### Core Objects
+
+- `TwoStepTransferWrapper<T>`: wrapper that owns the underlying object.
+- `PendingOwnershipTransfer<T>`: shared object created during transfer initiation.
+- `Borrow` and `RequestBorrow`: hot-potato guards for safe borrow/return flows.
+
+### Core Functions
+
+- `wrap<T>(obj, ctx)`
+- `borrow`, `borrow_mut`, `borrow_val`, `return_val`
+- `initiate_transfer(wrapper, new_owner, ctx)`
+- `accept_transfer(request, wrapper_ticket, ctx)`
+- `cancel_transfer(request, wrapper_ticket, ctx)`
+- `request_borrow_val(request, wrapper_ticket, ctx)` and `request_return_val(request, wrapper, borrow)`
+- `unwrap(wrapper, ctx)`
+
+### Events
+
+- `WrapExecuted`
+- `TransferInitiated`
+- `TransferAccepted`
+- `TransferCancelled`
+- `UnwrapExecuted`
+
+### Security Note
+
+`initiate_transfer` stores `ctx.sender()` as `from` in the pending request, and `cancel_transfer` is authorized by that `from`. This module should not be used in shared-object custody flows where arbitrary executors can initiate transfers.
+
+## `delayed_transfer`
+
+### Core Objects
+
+- `DelayedTransferWrapper<T>` with:
+  - `min_delay_ms`
+  - optional `PendingTransfer { recipient: Option<address>, execute_after_ms }`
+
+### Core Functions
+
+- `wrap<T>(obj, min_delay_ms, ctx)`
+- `borrow`, `borrow_mut`, `borrow_val`, `return_val`
+- `schedule_transfer(wrapper, new_owner, clock, ctx)`
+- `schedule_unwrap(wrapper, clock, ctx)`
+- `execute_transfer(wrapper, clock, ctx)`
+- `unwrap(wrapper, clock, ctx)`
+- `cancel_schedule(wrapper)`
+
+### Events
+
+- `WrapExecuted`
+- `TransferScheduled`
+- `UnwrapScheduled`
+- `OwnershipTransferred`
+- `PendingTransferCancelled`
+- `UnwrapExecuted`
+
+## Minimal Example
+
+```move
+module my_sui_app::access_examples;
+
+use openzeppelin_access::two_step_transfer;
+use sui::object;
+use sui::tx_context::TxContext;
+
+public struct AdminCap has key, store {
+    id: object::UID,
+}
+
+public fun setup_admin_cap(
+    cap: AdminCap,
+    ctx: &mut TxContext,
+): two_step_transfer::TwoStepTransferWrapper<AdminCap> {
+    two_step_transfer::wrap(cap, ctx)
+}
+```
+
+## Expected Failure Conditions
+
+Examples of guarded failures you should handle in tests and integration logic:
+
+- `ENotOwner` / `ENotNewOwner` in `two_step_transfer`.
+- `EInvalidTransferRequest` for mismatched request-wrapper flows.
+- `ETransferAlreadyScheduled`, `ENoPendingTransfer`, `EDelayNotElapsed`, `EWrongPendingAction` in `delayed_transfer`.

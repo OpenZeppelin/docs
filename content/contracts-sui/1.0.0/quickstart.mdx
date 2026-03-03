@@ -1,0 +1,79 @@
+---
+title: Quickstart
+---
+
+This quickstart sets up `openzeppelin_access` and `openzeppelin_math` in a fresh Sui Move package.
+
+## Prerequisites
+
+- Sui CLI installed (the library README targets `1.59.1`).
+- A new or existing Move package.
+
+## 1. Create a Move Package
+
+```bash
+sui move new my_sui_app
+cd my_sui_app
+```
+
+## 2. Add OpenZeppelin Dependencies
+
+Update `Move.toml`:
+
+```toml
+[dependencies]
+openzeppelin_access = { git = "https://github.com/OpenZeppelin/contracts-sui.git", subdir = "contracts/access", rev = "<release-tag>" }
+openzeppelin_math = { git = "https://github.com/OpenZeppelin/contracts-sui.git", subdir = "math/core", rev = "<release-tag>" }
+
+[addresses]
+openzeppelin_access = "0x0"
+openzeppelin_math = "0x0"
+```
+
+Use the latest published release tag from `OpenZeppelin/contracts-sui` (for example `v1.0.0` when available).
+
+## 3. Add a Minimal Integration Module
+
+Create `sources/quickstart.move`:
+
+```move
+module my_sui_app::quickstart;
+
+use openzeppelin_access::two_step_transfer;
+use openzeppelin_math::rounding;
+use openzeppelin_math::u256;
+use std::option;
+use sui::object;
+use sui::tx_context::TxContext;
+
+public struct AdminCap has key, store {
+    id: object::UID,
+}
+
+/// Computes a rounded quote using `mul_div`.
+public fun quote(amount: u256): u256 {
+    let q = u256::mul_div(amount, 1025, 1000, rounding::nearest());
+    option::destroy_some(q)
+}
+
+/// Wraps a capability into a two-step ownership wrapper.
+public fun wrap_admin_cap(
+    cap: AdminCap,
+    ctx: &mut TxContext,
+): two_step_transfer::TwoStepTransferWrapper<AdminCap> {
+    two_step_transfer::wrap(cap, ctx)
+}
+```
+
+## 4. Build and Test
+
+```bash
+sui move build
+sui move test
+```
+
+## 5. Generate API Docs (Optional)
+
+```bash
+sui move build --doc
+```

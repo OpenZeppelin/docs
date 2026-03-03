@@ -115,6 +115,7 @@ function FeatureCard({
 			"before:bg-gradient-to-r before:from-[#8b5cf6] before:to-[#a78bfa]",
 		polkadot:
 			"before:bg-gradient-to-r before:from-[#e6007a] before:to-[#ff4081]",
+		sui: "before:bg-gradient-to-r before:from-[#7dd3fc] before:to-[#0284c7]",
 	};
 
 	return (
@@ -158,6 +159,7 @@ function EcosystemCard({
 			"before:bg-gradient-to-r before:from-[#2600FE] before:to-[#2600FE]",
 		polkadot:
 			"before:bg-gradient-to-r before:from-[#e6007a] before:to-[#ff4081]",
+		sui: "before:bg-gradient-to-r before:from-[#7dd3fc] before:to-[#0284c7]",
 		uniswap:
 			"before:bg-gradient-to-r before:from-[#e6007a] before:to-[#FC75FE]",
 		zama: "before:bg-gradient-to-r before:from-[#FFD205] before:to-[#FFD205]",

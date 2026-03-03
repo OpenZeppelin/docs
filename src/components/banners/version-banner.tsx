@@ -21,6 +21,7 @@ export function VersionBanner() {
 	const currentVersions: Record<string, { version: string; path: string }> = {
 		contracts: { version: "5.x", path: "/contracts/5.x" },
 		"cairo-contracts": { version: latestStable, path: "/cairo-contracts" },
+		"contracts-sui": { version: "1.0.0", path: "/contracts-sui/1.0.0" },
 		"contracts-stylus": { version: "latest", path: "/contracts-stylus" },
 		"stellar-contracts": { version: "latest", path: "/stellar-contracts" },
 		"substrate-runtimes": { version: "latest", path: "/substrate-runtimes" },
