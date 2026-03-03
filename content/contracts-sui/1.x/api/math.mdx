@@ -1,0 +1,415 @@
+---
+title: openzeppelin_math API Reference
+---
+
+This page documents the public API of `openzeppelin_math` for OpenZeppelin Contracts for Sui `v1.x`.
+
+### `rounding` [toc] [#rounding]
+
+<APIGithubLinkHeader
+  moduleName="rounding"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/math/core/sources/rounding.move"
+/>
+
+```move
+use openzeppelin_math::rounding;
+```
+
+Rounding strategy helpers shared by arithmetic operations across width-specific modules.
+
+Types
+
+- [`RoundingMode`](#rounding-RoundingMode)
+
+Functions
+
+- [`down()`](#rounding-down)
+- [`up()`](#rounding-up)
+- [`nearest()`](#rounding-nearest)
+
+#### Types [!toc] [#rounding-Types]
+
+<APIItem
+  functionSignature="enum RoundingMode { Down, Up, Nearest }"
+  id="rounding-RoundingMode"
+  kind="enum"
+>
+`Down` always rounds toward zero, `Up` rounds toward ceiling, and `Nearest` rounds to the closest integer with ties rounded up.
+</APIItem>
+
+#### Functions [!toc] [#rounding-Functions]
+
+<APIItem
+  functionSignature="down() -> RoundingMode"
+  id="rounding-down"
+  kind="public"
+>
+Returns `RoundingMode::Down`.
+</APIItem>
+
+<APIItem
+  functionSignature="up() -> RoundingMode"
+  id="rounding-up"
+  kind="public"
+>
+Returns `RoundingMode::Up`.
+</APIItem>
+
+<APIItem
+  functionSignature="nearest() -> RoundingMode"
+  id="rounding-nearest"
+  kind="public"
+>
+Returns `RoundingMode::Nearest` (round-half-up behavior).
+</APIItem>
+
+### `decimal_scaling` [toc] [#decimal_scaling]
+
+<APIGithubLinkHeader
+  moduleName="decimal_scaling"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/math/core/sources/decimal_scaling.move"
+/>
+
+```move
+use openzeppelin_math::decimal_scaling;
+```
+
+Helpers for converting balances between decimal precisions while enforcing safe casts and explicit truncation semantics.
+
+Functions
+
+- [`safe_downcast_balance(raw_amount, source_decimals, target_decimals)`](#decimal_scaling-safe_downcast_balance)
+- [`safe_upcast_balance(amount, source_decimals, target_decimals)`](#decimal_scaling-safe_upcast_balance)
+
+Errors
+
+- [`ESafeDowncastOverflowedInt`](#decimal_scaling-ESafeDowncastOverflowedInt)
+- [`EInvalidDecimals`](#decimal_scaling-EInvalidDecimals)
+
+#### Functions [!toc] [#decimal_scaling-Functions]
+
+<APIItem
+  functionSignature="safe_downcast_balance(raw_amount: u256, source_decimals: u8, target_decimals: u8) -> u64"
+  id="decimal_scaling-safe_downcast_balance"
+  kind="public"
+>
+Converts a `u256` amount to `u64` across decimal domains. When scaling down (`source_decimals > target_decimals`), fractional residue is truncated, not rounded.
+
+Aborts when decimals exceed 24 or when the scaled value cannot fit in `u64`.
+</APIItem>
+
+<APIItem
+  functionSignature="safe_upcast_balance(amount: u64, source_decimals: u8, target_decimals: u8) -> u256"
+  id="decimal_scaling-safe_upcast_balance"
+  kind="public"
+>
+Converts a `u64` amount to `u256` across decimal domains. Follows the same truncation policy when scaling down and validates decimals against the allowed range.
+</APIItem>
+
+#### Errors [!toc] [#decimal_scaling-Errors]
+
+<APIItem
+  functionSignature="ESafeDowncastOverflowedInt"
+  id="decimal_scaling-ESafeDowncastOverflowedInt"
+  kind="error"
+>
+Raised when a downcast path would require representing a value larger than `u64::MAX`.
+</APIItem>
+
+<APIItem
+  functionSignature="EInvalidDecimals"
+  id="decimal_scaling-EInvalidDecimals"
+  kind="error"
+>
+Raised when either decimal argument is greater than the package limit (`24`).
+</APIItem>
+
+### `u8`, `u16`, `u32`, `u64`, `u128`, `u256` [toc] [#unsigned-width-modules]
+
+These modules expose a consistent API surface across unsigned widths.
+
+Source modules:
+
+- [`u8.move`](https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/math/core/sources/u8.move)
+- [`u16.move`](https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/math/core/sources/u16.move)
+- [`u32.move`](https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/math/core/sources/u32.move)
+- [`u64.move`](https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/math/core/sources/u64.move)
+- [`u128.move`](https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/math/core/sources/u128.move)
+- [`u256.move`](https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/math/core/sources/u256.move)
+
+Functions
+
+- [`average(a, b, rounding_mode)`](#width-average)
+- [`checked_shl(value, shift)`](#width-checked_shl)
+- [`checked_shr(value, shift)`](#width-checked_shr)
+- [`mul_div(a, b, denominator, rounding_mode)`](#width-mul_div)
+- [`mul_shr(a, b, shift, rounding_mode)`](#width-mul_shr)
+- [`clz(value)`](#width-clz)
+- [`msb(value)`](#width-msb)
+- [`log2(value, rounding_mode)`](#width-log2)
+- [`log256(value, rounding_mode)`](#width-log256)
+- [`log10(value, rounding_mode)`](#width-log10)
+- [`sqrt(value, rounding_mode)`](#width-sqrt)
+- [`inv_mod(value, modulus)`](#width-inv_mod)
+- [`mul_mod(a, b, modulus)`](#width-mul_mod)
+
+#### Functions [!toc] [#width-Functions]
+
+<APIItem
+  functionSignature="average(a: Int, b: Int, rounding_mode: RoundingMode) -> Int"
+  id="width-average"
+  kind="public"
+>
+Returns the arithmetic mean of `a` and `b` for `Int in {u8, u16, u32, u64, u128, u256}`, rounded according to `rounding_mode`.
+</APIItem>
+
+<APIItem
+  functionSignature="checked_shl(value: Int, shift: u8) -> Option<Int>"
+  id="width-checked_shl"
+  kind="public"
+>
+Performs a lossless left shift. Returns `none()` when shifting would consume non-zero bits.
+</APIItem>
+
+<APIItem
+  functionSignature="checked_shr(value: Int, shift: u8) -> Option<Int>"
+  id="width-checked_shr"
+  kind="public"
+>
+Performs a lossless right shift. Returns `none()` when shifting would consume non-zero bits.
+</APIItem>
+
+<APIItem
+  functionSignature="mul_div(a: Int, b: Int, denominator: Int, rounding_mode: RoundingMode) -> Option<Int>"
+  id="width-mul_div"
+  kind="public"
+>
+Computes `(a * b) / denominator` with configured rounding. Returns `none()` when the rounded value is not representable in the target width.
+
+Aborts when `denominator` is zero.
+</APIItem>
+
+<APIItem
+  functionSignature="mul_shr(a: Int, b: Int, shift: u8, rounding_mode: RoundingMode) -> Option<Int>"
+  id="width-mul_shr"
+  kind="public"
+>
+Computes `(a * b) >> shift` with configured rounding and returns `none()` when the rounded result overflows the target width.
+</APIItem>
+
+<APIItem
+  functionSignature="clz(value: Int) -> u8 | u16"
+  id="width-clz"
+  kind="public"
+>
+Counts leading zero bits. For `u256`, the return type is `u16`; for other widths it is `u8`.
+</APIItem>
+
+<APIItem
+  functionSignature="msb(value: Int) -> u8"
+  id="width-msb"
+  kind="public"
+>
+Returns the zero-based index of the most significant set bit. By convention returns `0` for `value = 0`.
+</APIItem>
+
+<APIItem
+  functionSignature="log2(value: Int, rounding_mode: RoundingMode) -> u8 | u16"
+  id="width-log2"
+  kind="public"
+>
+Computes base-2 logarithm with configured rounding. For `u256`, the return type is `u16`; for other widths it is `u8`.
+</APIItem>
+
+<APIItem
+  functionSignature="log256(value: Int, rounding_mode: RoundingMode) -> u8"
+  id="width-log256"
+  kind="public"
+>
+Computes base-256 logarithm with configured rounding.
+</APIItem>
+
+<APIItem
+  functionSignature="log10(value: Int, rounding_mode: RoundingMode) -> u8"
+  id="width-log10"
+  kind="public"
+>
+Computes base-10 logarithm with configured rounding.
+</APIItem>
+
+<APIItem
+  functionSignature="sqrt(value: Int, rounding_mode: RoundingMode) -> Int"
+  id="width-sqrt"
+  kind="public"
+>
+Computes square root with configured rounding.
+</APIItem>
+
+<APIItem
+  functionSignature="inv_mod(value: Int, modulus: Int) -> Option<Int>"
+  id="width-inv_mod"
+  kind="public"
+>
+Computes modular multiplicative inverse. Returns `none()` when inverse does not exist.
+
+Aborts when `modulus` is zero.
+</APIItem>
+
+<APIItem
+  functionSignature="mul_mod(a: Int, b: Int, modulus: Int) -> Int"
+  id="width-mul_mod"
+  kind="public"
+>
+Computes `(a * b) mod modulus`.
+
+Aborts when `modulus` is zero.
+</APIItem>
+
+### `u512` [toc] [#u512]
+
+<APIGithubLinkHeader
+  moduleName="u512"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/math/core/sources/u512.move"
+/>
+
+```move
+use openzeppelin_math::u512;
+```
+
+Wide-integer helper module used by high-precision arithmetic paths where `u256` intermediates may overflow.
+
+Types
+
+- [`U512`](#u512-U512)
+
+Functions
+
+- [`new(hi, lo)`](#u512-new)
+- [`zero()`](#u512-zero)
+- [`from_u256(value)`](#u512-from_u256)
+- [`hi(value)`](#u512-hi)
+- [`lo(value)`](#u512-lo)
+- [`ge(value, other)`](#u512-ge)
+- [`mul_u256(a, b)`](#u512-mul_u256)
+- [`div_rem_u256(numerator, divisor)`](#u512-div_rem_u256)
+
+Errors
+
+- [`ECarryOverflow`](#u512-ECarryOverflow)
+- [`EUnderflow`](#u512-EUnderflow)
+- [`EDivideByZero`](#u512-EDivideByZero)
+- [`EInvalidRemainder`](#u512-EInvalidRemainder)
+
+#### Types [!toc] [#u512-Types]
+
+<APIItem
+  functionSignature="struct U512 { hi: u256, lo: u256 }"
+  id="u512-U512"
+  kind="struct"
+>
+Represents a 512-bit unsigned integer as two `u256` limbs.
+</APIItem>
+
+#### Functions [!toc] [#u512-Functions]
+
+<APIItem
+  functionSignature="new(hi: u256, lo: u256) -> U512"
+  id="u512-new"
+  kind="public"
+>
+Builds a `U512` value from explicit high and low limbs.
+</APIItem>
+
+<APIItem
+  functionSignature="zero() -> U512"
+  id="u512-zero"
+  kind="public"
+>
+Returns the all-zero `U512` value.
+</APIItem>
+
+<APIItem
+  functionSignature="from_u256(value: u256) -> U512"
+  id="u512-from_u256"
+  kind="public"
+>
+Embeds a `u256` value as `U512 { hi: 0, lo: value }`.
+</APIItem>
+
+<APIItem
+  functionSignature="hi(value: &U512) -> u256"
+  id="u512-hi"
+  kind="public"
+>
+Returns the upper 256-bit limb.
+</APIItem>
+
+<APIItem
+  functionSignature="lo(value: &U512) -> u256"
+  id="u512-lo"
+  kind="public"
+>
+Returns the lower 256-bit limb.
+</APIItem>
+
+<APIItem
+  functionSignature="ge(value: &U512, other: &U512) -> bool"
+  id="u512-ge"
+  kind="public"
+>
+Lexicographic greater-or-equal comparison between two wide integers.
+</APIItem>
+
+<APIItem
+  functionSignature="mul_u256(a: u256, b: u256) -> U512"
+  id="u512-mul_u256"
+  kind="public"
+>
+Computes full-width product `a * b` as a 512-bit result.
+
+Aborts with `ECarryOverflow` if an internal carry invariant is violated.
+</APIItem>
+
+<APIItem
+  functionSignature="div_rem_u256(numerator: U512, divisor: u256) -> (bool, u256, u256)"
+  id="u512-div_rem_u256"
+  kind="public"
+>
+Divides a 512-bit numerator by a non-zero `u256` divisor.
+
+Returns `(overflow, quotient, remainder)`, where `overflow = true` indicates the exact quotient does not fit in `u256`.
+</APIItem>
+
+#### Errors [!toc] [#u512-Errors]
+
+<APIItem
+  functionSignature="ECarryOverflow"
+  id="u512-ECarryOverflow"
+  kind="error"
+>
+Raised when cross-limb accumulation produces an out-of-range final carry.
+</APIItem>
+
+<APIItem
+  functionSignature="EUnderflow"
+  id="u512-EUnderflow"
+  kind="error"
+>
+Raised when an internal borrow operation would underflow the high limb.
+</APIItem>
+
+<APIItem
+  functionSignature="EDivideByZero"
+  id="u512-EDivideByZero"
+  kind="error"
+>
+Raised when `div_rem_u256` is called with `divisor = 0`.
+</APIItem>
+
+<APIItem
+  functionSignature="EInvalidRemainder"
+  id="u512-EInvalidRemainder"
+  kind="error"
+>
+Raised when internal division remainder invariants are violated.
+</APIItem>

@@ -1,22 +1,27 @@
 ---
-title: Quickstart
+title: Contracts for Sui 1.x
 ---
 
-This quickstart sets up `openzeppelin_access` and `openzeppelin_math` in a fresh Sui Move package.
+**OpenZeppelin Contracts for Sui v1.x** ships two core packages:
 
-## Prerequisites
+- `openzeppelin_math` for deterministic arithmetic, configurable rounding, and decimal scaling.
+- `openzeppelin_access` for ownership-transfer wrappers around privileged `key + store` objects.
 
-- Sui CLI installed (the library README targets `1.59.1`).
+## Quickstart
+
+### Prerequisites
+
+- Sui CLI installed.
 - A new or existing Move package.
 
-## 1. Create a Move Package
+### 1. Create a Move Package
 
 ```bash
 sui move new my_sui_app
 cd my_sui_app
 ```
 
-## 2. Add OpenZeppelin Dependencies
+### 2. Add OpenZeppelin Dependencies
 
 Update `Move.toml`:
 
@@ -30,9 +35,7 @@ openzeppelin_access = "0x0"
 openzeppelin_math = "0x0"
 ```
 
-Use the latest published release tag from `OpenZeppelin/contracts-sui` (for example `v1.0.0` when available).
-
-## 3. Add a Minimal Integration Module
+### 3. Add a Minimal Integration Module
 
 Create `sources/quickstart.move`:
 
@@ -50,13 +53,11 @@ public struct AdminCap has key, store {
     id: object::UID,
 }
 
-/// Computes a rounded quote using `mul_div`.
 public fun quote(amount: u256): u256 {
     let q = u256::mul_div(amount, 1025, 1000, rounding::nearest());
     option::destroy_some(q)
 }
 
-/// Wraps a capability into a two-step ownership wrapper.
 public fun wrap_admin_cap(
     cap: AdminCap,
     ctx: &mut TxContext,
@@ -65,15 +66,14 @@ public fun wrap_admin_cap(
 }
 ```
 
-## 4. Build and Test
+### 4. Build and Test
 
 ```bash
 sui move build
 sui move test
 ```
 
-## 5. Generate API Docs (Optional)
+## Next Steps
 
-```bash
-sui move build --doc
-```
+- Read package guides: [Math](/contracts-sui/1.x/math), [Access](/contracts-sui/1.x/access).
+- Use API docs: [openzeppelin_math API](/contracts-sui/1.x/api/math), [openzeppelin_access API](/contracts-sui/1.x/api/access).

@@ -1,0 +1,38 @@
+---
+title: Math
+---
+
+The `openzeppelin_math` package provides deterministic arithmetic primitives for unsigned integers, with explicit rounding and overflow-aware behavior.
+
+## Package Intent
+
+Use `openzeppelin_math` when your protocol needs reproducible numeric behavior across transactions and environments, especially for:
+
+- percentage math (`mul_div`, `mul_shr`) with explicit rounding.
+- decimal normalization between systems with different precisions.
+- modular arithmetic and logarithms on fixed-width integers.
+- safe wide intermediates through `U512` in high-precision paths.
+
+## Module Overview
+
+- `rounding`: shared `RoundingMode` enum (`Down`, `Up`, `Nearest`) and constructors.
+- `decimal_scaling`: safe conversion between `u64` and `u256` with enforced decimal bounds.
+- `u8`, `u16`, `u32`, `u64`, `u128`, `u256`: same arithmetic API surface across widths.
+- `u512`: 512-bit helper for operations that require wider intermediates than `u256`.
+
+## Behavior Guarantees
+
+- Decimal conversions enforce `decimals <= 24`.
+- Scaling down in `decimal_scaling` truncates fractional residue.
+- `mul_div` and `mul_mod` abort on zero divisors/modulus.
+- Many width-module operations return `Option<T>` when a result cannot be represented safely.
+
+## Recommended Usage
+
+1. Choose `rounding::down()`, `rounding::up()`, or `rounding::nearest()` explicitly in every user-value path.
+2. Treat `safe_downcast_balance` truncation as a business rule and test it directly.
+3. Handle `Option<T>` returns without implicit unwraps in production logic.
+
+## API Reference
+
+Use the full function-level reference here: [openzeppelin_math API](/contracts-sui/1.x/api/math).

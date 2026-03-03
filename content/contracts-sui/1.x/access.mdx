@@ -1,0 +1,48 @@
+---
+title: Access
+---
+
+The `openzeppelin_access` package provides ownership-transfer wrappers for privileged Sui objects (`T: key + store`), such as admin and treasury capabilities.
+
+## Package Intent
+
+Use `openzeppelin_access` when you need safer custody transitions than direct object transfer.
+
+It offers two policies:
+
+- `two_step_transfer`: explicit initiate/accept flow to reduce accidental handoffs.
+- `delayed_transfer`: scheduled transfer/unwrap with mandatory delay windows.
+
+## Choosing a Transfer Policy
+
+- Use `two_step_transfer` when the signer triggering transfer initiation is the same principal that should retain cancel authority.
+- Use `delayed_transfer` when protocol safety requires on-chain lead time before transfer or unwrap execution.
+
+<Callout type="warn">
+`two_step_transfer` stores `ctx.sender()` as the owner-of-record in pending requests. Avoid using it directly in shared-object executor flows unless your design explicitly maps signer identity to cancel authority.
+</Callout>
+
+## Module Overview
+
+### `two_step_transfer`
+
+- Wrapper: `TwoStepTransferWrapper<T>`
+- Pending object: `PendingOwnershipTransfer<T>`
+- Borrow guards: `Borrow`, `RequestBorrow`
+- Core flow: `wrap` -> `initiate_transfer` -> `accept_transfer` or `cancel_transfer`
+
+### `delayed_transfer`
+
+- Wrapper: `DelayedTransferWrapper<T>` with `min_delay_ms`
+- Pending state: `PendingTransfer { recipient, execute_after_ms }`
+- Core flow: `wrap` -> `schedule_transfer`/`schedule_unwrap` -> `execute_transfer`/`unwrap`
+
+## Integration Checklist
+
+1. Treat wrapper ownership as part of your protocol state machine.
+2. Test all abort paths (`ENotOwner`, `ETransferAlreadyScheduled`, `EDelayNotElapsed`, etc.).
+3. Emit and monitor transfer events for operational observability.
+
+## API Reference
+
+Use the full function-level reference here: [openzeppelin_access API](/contracts-sui/1.x/api/access).
