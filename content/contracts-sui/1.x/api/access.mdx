@@ -1,0 +1,599 @@
+---
+title: Access API Reference
+---
+
+This page documents the public API of `openzeppelin_access` for OpenZeppelin Contracts for Sui `v1.x`.
+
+### `two_step_transfer` [toc] [#two_step_transfer]
+
+<APIGithubLinkHeader
+  moduleName="two_step_transfer"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/contracts/access/sources/ownership_transfer/two_step.move"
+/>
+
+```move
+use openzeppelin_access::two_step_transfer;
+```
+
+Two-step ownership wrapper for `T: key + store` objects. Transfers require explicit initiation and acceptance, with cancellation authority bound to the recorded initiator (`ctx.sender()` at initiation time).
+
+This module is designed for flows with a single logical owner. Avoid using it directly in shared-object custody flows where arbitrary executors can trigger `initiate_transfer`, because the initiator becomes the recorded cancel authority.
+
+Types
+
+- [`WrappedKey`](#two_step_transfer-WrappedKey)
+- [`TwoStepTransferWrapper<T>`](#two_step_transfer-TwoStepTransferWrapper)
+- [`PendingOwnershipTransfer<T>`](#two_step_transfer-PendingOwnershipTransfer)
+- [`Borrow`](#two_step_transfer-Borrow)
+- [`RequestBorrow`](#two_step_transfer-RequestBorrow)
+
+Functions
+
+- [`wrap(obj, ctx)`](#two_step_transfer-wrap)
+- [`borrow(self)`](#two_step_transfer-borrow)
+- [`borrow_mut(self)`](#two_step_transfer-borrow_mut)
+- [`borrow_val(self)`](#two_step_transfer-borrow_val)
+- [`return_val(self, obj, borrow)`](#two_step_transfer-return_val)
+- [`unwrap(self, ctx)`](#two_step_transfer-unwrap)
+- [`initiate_transfer(self, new_owner, ctx)`](#two_step_transfer-initiate_transfer)
+- [`accept_transfer(request, wrapper_ticket, ctx)`](#two_step_transfer-accept_transfer)
+- [`cancel_transfer(request, wrapper_ticket, ctx)`](#two_step_transfer-cancel_transfer)
+- [`request_borrow_val(request, wrapper_ticket, ctx)`](#two_step_transfer-request_borrow_val)
+- [`request_return_val(request, wrapper, borrow)`](#two_step_transfer-request_return_val)
+
+Events
+
+- [`WrapExecuted`](#two_step_transfer-WrapExecuted)
+- [`UnwrapExecuted`](#two_step_transfer-UnwrapExecuted)
+- [`TransferInitiated`](#two_step_transfer-TransferInitiated)
+- [`TransferAccepted`](#two_step_transfer-TransferAccepted)
+- [`TransferCancelled`](#two_step_transfer-TransferCancelled)
+
+Errors
+
+- [`EInvalidTransferRequest`](#two_step_transfer-EInvalidTransferRequest)
+- [`EWrongTwoStepTransferWrapper`](#two_step_transfer-EWrongTwoStepTransferWrapper)
+- [`EWrongTwoStepTransferObject`](#two_step_transfer-EWrongTwoStepTransferObject)
+- [`ENotOwner`](#two_step_transfer-ENotOwner)
+- [`ENotNewOwner`](#two_step_transfer-ENotNewOwner)
+
+#### Types [!toc] [#two_step_transfer-Types]
+
+<APIItem
+  functionSignature="struct WrappedKey()"
+  id="two_step_transfer-WrappedKey"
+  kind="struct"
+>
+Dynamic object-field key used to store the wrapped object under the wrapper.
+</APIItem>
+
+<APIItem
+  functionSignature="struct TwoStepTransferWrapper<T: key + store>"
+  id="two_step_transfer-TwoStepTransferWrapper"
+  kind="struct"
+>
+Wrapper object that custody-locks an underlying object and controls transfer flow.
+
+The wrapper intentionally omits `store` so transfer paths stay constrained to this module's logic.
+</APIItem>
+
+<APIItem
+  functionSignature="struct PendingOwnershipTransfer<T: key + store>"
+  id="two_step_transfer-PendingOwnershipTransfer"
+  kind="struct"
+>
+Shared pending-transfer object storing wrapper identity, current owner (`from`), and prospective owner (`to`).
+
+Wrapper custody is held by this request object through transfer-to-object (TTO) until accept/cancel resolution.
+</APIItem>
+
+<APIItem
+  functionSignature="struct Borrow"
+  id="two_step_transfer-Borrow"
+  kind="struct"
+>
+Hot-potato guard proving that a value taken via `borrow_val` is returned to the same wrapper.
+</APIItem>
+
+<APIItem
+  functionSignature="struct RequestBorrow"
+  id="two_step_transfer-RequestBorrow"
+  kind="struct"
+>
+Hot-potato guard proving a wrapper borrowed through a pending request is returned to that request.
+</APIItem>
+
+#### Functions [!toc] [#two_step_transfer-Functions]
+
+<APIItem
+  functionSignature="wrap<T: key + store>(obj: T, ctx: &mut TxContext) -> TwoStepTransferWrapper<T>"
+  id="two_step_transfer-wrap"
+  kind="public"
+>
+Wraps `obj` in a new transfer wrapper.
+The wrapped object is stored as a dynamic object field so off-chain indexers can still discover the underlying object ID.
+
+Emits a `WrapExecuted` event.
+</APIItem>
+
+<APIItem
+  functionSignature="borrow<T: key + store>(self: &TwoStepTransferWrapper<T>) -> &T"
+  id="two_step_transfer-borrow"
+  kind="public"
+>
+Returns immutable access to the wrapped object.
+</APIItem>
+
+<APIItem
+  functionSignature="borrow_mut<T: key + store>(self: &mut TwoStepTransferWrapper<T>) -> &mut T"
+  id="two_step_transfer-borrow_mut"
+  kind="public"
+>
+Returns mutable access to the wrapped object without changing ownership state.
+</APIItem>
+
+<APIItem
+  functionSignature="borrow_val<T: key + store>(self: &mut TwoStepTransferWrapper<T>) -> (T, Borrow)"
+  id="two_step_transfer-borrow_val"
+  kind="public"
+>
+Temporarily extracts the wrapped object and returns a `Borrow` guard that must be consumed by `return_val`.
+</APIItem>
+
+<APIItem
+  functionSignature="return_val<T: key + store>(self: &mut TwoStepTransferWrapper<T>, obj: T, borrow: Borrow)"
+  id="two_step_transfer-return_val"
+  kind="public"
+>
+Returns a previously borrowed object to the wrapper.
+
+Aborts when wrapper/object identity checks fail.
+</APIItem>
+
+<APIItem
+  functionSignature="unwrap<T: key + store>(self: TwoStepTransferWrapper<T>, ctx: &mut TxContext) -> T"
+  id="two_step_transfer-unwrap"
+  kind="public"
+>
+Destroys the wrapper and returns the underlying object directly to the caller.
+
+This bypasses pending-request flow and recovers direct ownership of the wrapped object.
+
+Emits an `UnwrapExecuted` event.
+</APIItem>
+
+<APIItem
+  functionSignature="initiate_transfer<T: key + store>(self: TwoStepTransferWrapper<T>, new_owner: address, ctx: &mut TxContext)"
+  id="two_step_transfer-initiate_transfer"
+  kind="public"
+>
+Starts a transfer by creating a shared request and transferring wrapper custody to that request.
+
+Security note: cancellation authority is tied to the initiating signer recorded as `from`.
+Only use this flow when the signer executing initiation is intentionally the logical owner/cancel authority.
+
+Emits a `TransferInitiated` event.
+</APIItem>
+
+<APIItem
+  functionSignature="accept_transfer<T: key + store>(request: PendingOwnershipTransfer<T>, wrapper_ticket: Receiving<TwoStepTransferWrapper<T>>, ctx: &mut TxContext)"
+  id="two_step_transfer-accept_transfer"
+  kind="public"
+>
+Completes a pending transfer and sends the wrapper to the designated new owner.
+
+Aborts if caller is not `request.to` or wrapper identity does not match.
+
+Emits a `TransferAccepted` event.
+</APIItem>
+
+<APIItem
+  functionSignature="cancel_transfer<T: key + store>(request: PendingOwnershipTransfer<T>, wrapper_ticket: Receiving<TwoStepTransferWrapper<T>>, ctx: &mut TxContext)"
+  id="two_step_transfer-cancel_transfer"
+  kind="public"
+>
+Cancels a pending transfer and returns the wrapper to `request.from`.
+
+Aborts if caller is not `request.from` or wrapper identity does not match.
+
+Emits a `TransferCancelled` event.
+</APIItem>
+
+<APIItem
+  functionSignature="request_borrow_val<T: key + store>(request: &mut PendingOwnershipTransfer<T>, wrapper_ticket: Receiving<TwoStepTransferWrapper<T>>, ctx: &mut TxContext) -> (TwoStepTransferWrapper<T>, RequestBorrow)"
+  id="two_step_transfer-request_borrow_val"
+  kind="public"
+>
+Receives wrapper custody from a shared request so the recorded owner can operate on the wrapped object during a pending transfer.
+
+Aborts if caller is not `request.from` or if request/wrapper identity checks fail.
+</APIItem>
+
+<APIItem
+  functionSignature="request_return_val<T: key + store>(request: &PendingOwnershipTransfer<T>, wrapper: TwoStepTransferWrapper<T>, borrow: RequestBorrow)"
+  id="two_step_transfer-request_return_val"
+  kind="public"
+>
+Returns a wrapper borrowed via `request_borrow_val` back to the pending request.
+
+Aborts if either `wrapper` or `borrow` does not match the target request.
+</APIItem>
+
+#### Events [!toc] [#two_step_transfer-Events]
+
+<APIItem
+  functionSignature="WrapExecuted<T>(wrapper_id: ID, object_id: ID, owner: address)"
+  id="two_step_transfer-WrapExecuted"
+  kind="event"
+>
+Emitted when an object is wrapped.
+</APIItem>
+
+<APIItem
+  functionSignature="UnwrapExecuted<T>(wrapper_id: ID, object_id: ID, owner: address)"
+  id="two_step_transfer-UnwrapExecuted"
+  kind="event"
+>
+Emitted when an object is unwrapped.
+</APIItem>
+
+<APIItem
+  functionSignature="TransferInitiated<T>(wrapper_id: ID, current_owner: address, new_owner: address)"
+  id="two_step_transfer-TransferInitiated"
+  kind="event"
+>
+Emitted when a two-step transfer request is created.
+</APIItem>
+
+<APIItem
+  functionSignature="TransferAccepted<T>(wrapper_id: ID, previous_owner: address, new_owner: address)"
+  id="two_step_transfer-TransferAccepted"
+  kind="event"
+>
+Emitted when a pending transfer is accepted and ownership moves to the new owner.
+</APIItem>
+
+<APIItem
+  functionSignature="TransferCancelled<T>(wrapper_id: ID, current_owner: address, new_owner: address)"
+  id="two_step_transfer-TransferCancelled"
+  kind="event"
+>
+Emitted when a pending transfer is cancelled.
+</APIItem>
+
+#### Errors [!toc] [#two_step_transfer-Errors]
+
+<APIItem
+  functionSignature="EInvalidTransferRequest"
+  id="two_step_transfer-EInvalidTransferRequest"
+  kind="error"
+>
+Raised when request and wrapper identities do not match.
+</APIItem>
+
+<APIItem
+  functionSignature="EWrongTwoStepTransferWrapper"
+  id="two_step_transfer-EWrongTwoStepTransferWrapper"
+  kind="error"
+>
+Raised when a `Borrow` guard is used against a different wrapper.
+</APIItem>
+
+<APIItem
+  functionSignature="EWrongTwoStepTransferObject"
+  id="two_step_transfer-EWrongTwoStepTransferObject"
+  kind="error"
+>
+Raised when returning an object different from the one originally borrowed.
+</APIItem>
+
+<APIItem
+  functionSignature="ENotOwner"
+  id="two_step_transfer-ENotOwner"
+  kind="error"
+>
+Raised when caller is not authorized as the current owner for the requested operation.
+</APIItem>
+
+<APIItem
+  functionSignature="ENotNewOwner"
+  id="two_step_transfer-ENotNewOwner"
+  kind="error"
+>
+Raised when caller is not the designated prospective owner in `accept_transfer`.
+</APIItem>
+
+### `delayed_transfer` [toc] [#delayed_transfer]
+
+<APIGithubLinkHeader
+  moduleName="delayed_transfer"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/contracts/access/sources/ownership_transfer/delayed.move"
+/>
+
+```move
+use openzeppelin_access::delayed_transfer;
+```
+
+Time-locked ownership wrapper for `T: key + store`. Transfers and unwraps must be scheduled and can only execute after `min_delay_ms` elapses.
+
+Types
+
+- [`WrappedKey`](#delayed_transfer-WrappedKey)
+- [`DelayedTransferWrapper<T>`](#delayed_transfer-DelayedTransferWrapper)
+- [`PendingTransfer`](#delayed_transfer-PendingTransfer)
+- [`Borrow`](#delayed_transfer-Borrow)
+
+Functions
+
+- [`wrap(obj, min_delay_ms, ctx)`](#delayed_transfer-wrap)
+- [`borrow(self)`](#delayed_transfer-borrow)
+- [`borrow_mut(self)`](#delayed_transfer-borrow_mut)
+- [`borrow_val(self)`](#delayed_transfer-borrow_val)
+- [`return_val(self, obj, borrow)`](#delayed_transfer-return_val)
+- [`schedule_transfer(self, new_owner, clock, ctx)`](#delayed_transfer-schedule_transfer)
+- [`schedule_unwrap(self, clock, ctx)`](#delayed_transfer-schedule_unwrap)
+- [`execute_transfer(self, clock, ctx)`](#delayed_transfer-execute_transfer)
+- [`unwrap(self, clock, ctx)`](#delayed_transfer-unwrap)
+- [`cancel_schedule(self)`](#delayed_transfer-cancel_schedule)
+
+Events
+
+- [`WrapExecuted`](#delayed_transfer-WrapExecuted)
+- [`TransferScheduled`](#delayed_transfer-TransferScheduled)
+- [`UnwrapScheduled`](#delayed_transfer-UnwrapScheduled)
+- [`OwnershipTransferred`](#delayed_transfer-OwnershipTransferred)
+- [`PendingTransferCancelled`](#delayed_transfer-PendingTransferCancelled)
+- [`UnwrapExecuted`](#delayed_transfer-UnwrapExecuted)
+
+Errors
+
+- [`ETransferAlreadyScheduled`](#delayed_transfer-ETransferAlreadyScheduled)
+- [`ENoPendingTransfer`](#delayed_transfer-ENoPendingTransfer)
+- [`EDelayNotElapsed`](#delayed_transfer-EDelayNotElapsed)
+- [`EWrongPendingAction`](#delayed_transfer-EWrongPendingAction)
+- [`EWrongDelayedTransferWrapper`](#delayed_transfer-EWrongDelayedTransferWrapper)
+- [`EWrongDelayedTransferObject`](#delayed_transfer-EWrongDelayedTransferObject)
+
+#### Types [!toc] [#delayed_transfer-Types]
+
+<APIItem
+  functionSignature="struct WrappedKey()"
+  id="delayed_transfer-WrappedKey"
+  kind="struct"
+>
+Dynamic object-field key used to store the wrapped object under the wrapper.
+</APIItem>
+
+<APIItem
+  functionSignature="struct DelayedTransferWrapper<T: key + store>"
+  id="delayed_transfer-DelayedTransferWrapper"
+  kind="struct"
+>
+Wrapper object storing `min_delay_ms` and optional pending schedule state.
+</APIItem>
+
+<APIItem
+  functionSignature="struct PendingTransfer { recipient: Option<address>, execute_after_ms: u64 }"
+  id="delayed_transfer-PendingTransfer"
+  kind="struct"
+>
+Represents a scheduled transfer (`recipient = some`) or scheduled unwrap (`recipient = none`).
+</APIItem>
+
+<APIItem
+  functionSignature="struct Borrow"
+  id="delayed_transfer-Borrow"
+  kind="struct"
+>
+Hot-potato guard proving a value extracted with `borrow_val` is returned to the same wrapper.
+</APIItem>
+
+#### Functions [!toc] [#delayed_transfer-Functions]
+
+<APIItem
+  functionSignature="wrap<T: key + store>(obj: T, min_delay_ms: u64, ctx: &mut TxContext) -> DelayedTransferWrapper<T>"
+  id="delayed_transfer-wrap"
+  kind="public"
+>
+Wraps `obj` in a delayed-transfer wrapper and records minimum execution delay.
+
+The wrapped object is stored under a dynamic object field so object ID discovery remains straightforward for indexers.
+
+Emits a `WrapExecuted` event.
+</APIItem>
+
+<APIItem
+  functionSignature="borrow<T: key + store>(self: &DelayedTransferWrapper<T>) -> &T"
+  id="delayed_transfer-borrow"
+  kind="public"
+>
+Returns immutable access to the wrapped object.
+</APIItem>
+
+<APIItem
+  functionSignature="borrow_mut<T: key + store>(self: &mut DelayedTransferWrapper<T>) -> &mut T"
+  id="delayed_transfer-borrow_mut"
+  kind="public"
+>
+Returns mutable access to the wrapped object.
+</APIItem>
+
+<APIItem
+  functionSignature="borrow_val<T: key + store>(self: &mut DelayedTransferWrapper<T>) -> (T, Borrow)"
+  id="delayed_transfer-borrow_val"
+  kind="public"
+>
+Temporarily extracts the wrapped object and returns a guard that must be consumed by `return_val`.
+</APIItem>
+
+<APIItem
+  functionSignature="return_val<T: key + store>(self: &mut DelayedTransferWrapper<T>, obj: T, borrow: Borrow)"
+  id="delayed_transfer-return_val"
+  kind="public"
+>
+Returns a previously borrowed object to its wrapper.
+
+Aborts when wrapper/object identity checks fail.
+</APIItem>
+
+<APIItem
+  functionSignature="schedule_transfer<T: key + store>(self: &mut DelayedTransferWrapper<T>, new_owner: address, clock: &Clock, ctx: &mut TxContext)"
+  id="delayed_transfer-schedule_transfer"
+  kind="public"
+>
+Schedules a transfer to `new_owner` at `clock.timestamp_ms() + min_delay_ms`.
+
+Aborts when another action is already scheduled.
+
+Emits a `TransferScheduled` event.
+</APIItem>
+
+<APIItem
+  functionSignature="schedule_unwrap<T: key + store>(self: &mut DelayedTransferWrapper<T>, clock: &Clock, ctx: &mut TxContext)"
+  id="delayed_transfer-schedule_unwrap"
+  kind="public"
+>
+Schedules delayed self-recovery (unwrap) of the wrapped object.
+
+Aborts when another action is already scheduled.
+
+Emits an `UnwrapScheduled` event.
+</APIItem>
+
+<APIItem
+  functionSignature="execute_transfer<T: key + store>(self: DelayedTransferWrapper<T>, clock: &Clock, ctx: &mut TxContext)"
+  id="delayed_transfer-execute_transfer"
+  kind="public"
+>
+Executes a scheduled transfer once delay has elapsed.
+
+Consumes the wrapper.
+
+Aborts when no transfer is scheduled, wrong action type is scheduled, or delay has not elapsed.
+
+Emits an `OwnershipTransferred` event on success.
+</APIItem>
+
+<APIItem
+  functionSignature="unwrap<T: key + store>(self: DelayedTransferWrapper<T>, clock: &Clock, ctx: &mut TxContext) -> T"
+  id="delayed_transfer-unwrap"
+  kind="public"
+>
+Executes a scheduled unwrap once delay has elapsed and returns the wrapped object.
+
+Aborts when no unwrap is scheduled, wrong action type is scheduled, or delay has not elapsed.
+
+Emits an `UnwrapExecuted` event.
+</APIItem>
+
+<APIItem
+  functionSignature="cancel_schedule<T: key + store>(self: &mut DelayedTransferWrapper<T>)"
+  id="delayed_transfer-cancel_schedule"
+  kind="public"
+>
+Cancels the currently scheduled transfer or unwrap action.
+
+Aborts when no action is pending.
+
+Emits a `PendingTransferCancelled` event.
+</APIItem>
+
+#### Events [!toc] [#delayed_transfer-Events]
+
+<APIItem
+  functionSignature="WrapExecuted<T>(wrapper_id: ID, object_id: ID, owner: address)"
+  id="delayed_transfer-WrapExecuted"
+  kind="event"
+>
+Emitted when an object is wrapped.
+</APIItem>
+
+<APIItem
+  functionSignature="TransferScheduled<T>(wrapper_id: ID, current_owner: address, new_owner: address, execute_after_ms: u64)"
+  id="delayed_transfer-TransferScheduled"
+  kind="event"
+>
+Emitted when a delayed transfer is scheduled.
+</APIItem>
+
+<APIItem
+  functionSignature="UnwrapScheduled<T>(wrapper_id: ID, current_owner: address, execute_after_ms: u64)"
+  id="delayed_transfer-UnwrapScheduled"
+  kind="event"
+>
+Emitted when delayed unwrap is scheduled.
+</APIItem>
+
+<APIItem
+  functionSignature="OwnershipTransferred<T>(wrapper_id: ID, previous_owner: address, new_owner: address)"
+  id="delayed_transfer-OwnershipTransferred"
+  kind="event"
+>
+Emitted when scheduled transfer execution completes.
+</APIItem>
+
+<APIItem
+  functionSignature="PendingTransferCancelled<T>(wrapper_id: ID)"
+  id="delayed_transfer-PendingTransferCancelled"
+  kind="event"
+>
+Emitted when pending schedule is cancelled.
+</APIItem>
+
+<APIItem
+  functionSignature="UnwrapExecuted<T>(wrapper_id: ID, object_id: ID, owner: address)"
+  id="delayed_transfer-UnwrapExecuted"
+  kind="event"
+>
+Emitted when delayed unwrap execution completes.
+</APIItem>
+
+#### Errors [!toc] [#delayed_transfer-Errors]
+
+<APIItem
+  functionSignature="ETransferAlreadyScheduled"
+  id="delayed_transfer-ETransferAlreadyScheduled"
+  kind="error"
+>
+Raised when trying to schedule while another action is already pending.
+</APIItem>
+
+<APIItem
+  functionSignature="ENoPendingTransfer"
+  id="delayed_transfer-ENoPendingTransfer"
+  kind="error"
+>
+Raised when execution/cancellation is requested without pending state.
+</APIItem>
+
+<APIItem
+  functionSignature="EDelayNotElapsed"
+  id="delayed_transfer-EDelayNotElapsed"
+  kind="error"
+>
+Raised when execution occurs before `execute_after_ms`.
+</APIItem>
+
+<APIItem
+  functionSignature="EWrongPendingAction"
+  id="delayed_transfer-EWrongPendingAction"
+  kind="error"
+>
+Raised when calling transfer execution on unwrap state (or vice versa).
+</APIItem>
+
+<APIItem
+  functionSignature="EWrongDelayedTransferWrapper"
+  id="delayed_transfer-EWrongDelayedTransferWrapper"
+  kind="error"
+>
+Raised when a `Borrow` guard is used against a different wrapper.
+</APIItem>
+
+<APIItem
+  functionSignature="EWrongDelayedTransferObject"
+  id="delayed_transfer-EWrongDelayedTransferObject"
+  kind="error"
+>
+Raised when returning an object different from the one originally borrowed.
+</APIItem>

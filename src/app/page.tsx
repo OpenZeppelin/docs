@@ -23,6 +23,7 @@ import {
 	RelayersIcon,
 	StarknetIcon,
 	StellarIcon,
+	SuiIcon,
 	TransactionProposalIcon,
 	UniswapIcon,
 	ZamaIcon,
@@ -103,6 +104,9 @@ export default function HomePage() {
 										<StarknetIcon color className="w-3 h-3 sm:w-4 sm:h-4" />
 									</div>
 									<div className="w-6 h-6 sm:w-8 sm:h-8 bg-muted/50 rounded-lg flex items-center justify-center transition-all duration-300 group-hover:bg-muted/70">
+										<SuiIcon color className="w-3 h-3 sm:w-4 sm:h-4" />
+									</div>
+									<div className="w-6 h-6 sm:w-8 sm:h-8 bg-muted/50 rounded-lg flex items-center justify-center transition-all duration-300 group-hover:bg-muted/70">
 										<StellarIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
 									</div>
 									<div className="w-6 h-6 sm:w-8 sm:h-8 bg-muted/50 rounded-lg flex items-center justify-center transition-all duration-300 group-hover:bg-muted/70">
@@ -113,8 +117,8 @@ export default function HomePage() {
 									</div>
 								</div>
 								<div className="text-xs sm:text-sm text-muted-foreground transition-colors duration-300 group-hover:text-foreground/80">
-									Contracts libraries are also available for Starknet, Stellar,
-									Zama FHEVM, and more blockchains
+									Contracts libraries are also available for Starknet, Sui,
+									Stellar, Zama FHEVM, and more blockchains
 								</div>
 							</div>
 							<div className="px-3 py-2 rounded-lg text-xs sm:text-sm bg-fd-muted text-fd-muted-foreground font-medium transition-all duration-300 flex items-center gap-2 self-start sm:self-auto">
@@ -208,6 +212,14 @@ export default function HomePage() {
 							title="Starknet"
 							description="Develop Cairo smart contracts to build apps on Starknet zero-knowledge Layer 2"
 							glowColor="starknet"
+						/>
+
+						<EcosystemCard
+							href="/contracts-sui"
+							icon={<SuiIcon color className="w-7 h-7" />}
+							title="Sui"
+							description="Build Move smart contracts on Sui with secure and efficient primitives"
+							glowColor="sui"
 						/>
 
 						<EcosystemCard

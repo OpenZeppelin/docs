@@ -5,6 +5,7 @@ import midnightData from "./midnight.json";
 import polkadotData from "./polkadot.json";
 import starknetData from "./starknet";
 import stellarData from "./stellar.json";
+import suiData from "./sui";
 import type { NavigationNode, NavigationTree } from "./types";
 import uniswapData from "./uniswap.json";
 import zamaData from "./zama.json";
@@ -15,6 +16,7 @@ const arbitrumStylus = arbitrumStylusData as NavigationNode[];
 const stellar = stellarData as NavigationNode[];
 const midnight = midnightData as NavigationNode[];
 const starknet = starknetData as NavigationNode[];
+const sui = suiData as NavigationNode[];
 const zama = zamaData as NavigationNode[];
 const uniswap = uniswapData as NavigationNode[];
 const polkadot = polkadotData as NavigationNode[];
@@ -44,6 +46,11 @@ export const midnightTree: NavigationTree = {
 export const starknetTree: NavigationTree = {
 	name: "Starknet",
 	children: starknet,
+};
+
+export const suiTree: NavigationTree = {
+	name: "Sui",
+	children: sui,
 };
 
 export const zamaTree: NavigationTree = {

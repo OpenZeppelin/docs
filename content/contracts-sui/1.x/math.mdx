@@ -1,0 +1,80 @@
+---
+title: Integer Math
+---
+
+The `openzeppelin_math` package is the numeric foundation for OpenZeppelin Contracts for Sui. It provides deterministic arithmetic across unsigned integer widths, explicit rounding controls, and helpers for decimal normalization.
+
+Use this package when your app needs arithmetic behavior that is predictable, auditable, and safe around overflow and precision boundaries. Instead of hiding rounding and truncation inside implementation details, `openzeppelin_math` makes those decisions explicit so they can be part of your protocol rules.
+
+## Usage
+
+Add the dependency in `Move.toml`:
+
+```toml
+[dependencies]
+openzeppelin_math = { r.mvr = "@pkg/openzeppelin_math" }
+```
+
+Import the modules you need:
+
+```move
+use openzeppelin_math::{rounding, u64};
+```
+
+## Examples
+
+### Fee quote with explicit rounding
+
+```move
+module my_sui_app::pricing;
+
+use openzeppelin_math::{rounding, u64};
+
+const EMathOverflow: u64 = 0;
+
+public fun quote_with_fee(amount: u64): u64 {
+    u64::mul_div(amount, 1025u64, 1000u64, rounding::nearest())
+        .destroy_or!(abort EMathOverflow)
+}
+```
+
+### Square root with deterministic rounding
+
+```move
+module my_sui_app::analytics;
+
+use openzeppelin_math::{rounding, u64};
+
+public fun sqrt_floor(value: u64): u64 {
+    u64::sqrt(value, rounding::down())
+}
+```
+
+### Decimal normalization between precisions
+
+```move
+module my_sui_app::scaling;
+
+use openzeppelin_math::decimal_scaling;
+
+// === Functions ===
+
+public fun scale_up_6_to_9(amount: u64): u256 {
+    decimal_scaling::safe_upcast_balance(amount, 6u8, 9u8)
+}
+
+public fun scale_down_9_to_6(amount: u256): u64 {
+    decimal_scaling::safe_downcast_balance(amount, 9u8, 6u8)
+}
+```
+
+## Picking the right primitives
+
+- `rounding`: shared rounding policy (`Down`, `Up`, `Nearest`) for value-sensitive paths.
+- `u8`, `u16`, `u32`, `u64`, `u128`, `u256`: same API surface across widths for portability.
+- `decimal_scaling`: decimal conversion between systems using different precision.
+- `u512`: wide intermediate support for high-precision arithmetic paths.
+
+## API Reference
+
+Use the full function-level reference here: [Integer Math API](/contracts-sui/1.x/api/math).
