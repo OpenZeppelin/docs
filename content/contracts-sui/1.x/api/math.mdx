@@ -1,5 +1,5 @@
 ---
-title: openzeppelin_math API Reference
+title: Integer Math API Reference
 ---
 
 This page documents the public API of `openzeppelin_math` for OpenZeppelin Contracts for Sui `v1.x`.
@@ -103,7 +103,9 @@ Aborts when decimals exceed 24 or when the scaled value cannot fit in `u64`.
   id="decimal_scaling-safe_upcast_balance"
   kind="public"
 >
-Converts a `u64` amount to `u256` across decimal domains. Follows the same truncation policy when scaling down and validates decimals against the allowed range.
+Converts a `u64` amount to `u256` across decimal domains.
+
+Scaling up preserves precision. Scaling down truncates fractional residue (no rounding). Aborts when decimal values exceed the supported range.
 </APIItem>
 
 #### Errors [!toc] [#decimal_scaling-Errors]
@@ -124,9 +126,11 @@ Raised when a downcast path would require representing a value larger than `u64:
 Raised when either decimal argument is greater than the package limit (`24`).
 </APIItem>
 
-### `u8`, `u16`, `u32`, `u64`, `u128`, `u256` [toc] [#unsigned-width-modules]
+### Unsigned width modules [toc] [#unsigned-width-modules]
 
 These modules expose a consistent API surface across unsigned widths.
+
+Each module wraps shared arithmetic helpers with width-specific bit limits and representability checks.
 
 Source modules:
 
@@ -250,7 +254,9 @@ Computes square root with configured rounding.
   id="width-inv_mod"
   kind="public"
 >
-Computes modular multiplicative inverse. Returns `none()` when inverse does not exist.
+Computes modular multiplicative inverse.
+
+Returns `none()` when inverse does not exist (including `modulus = 1`).
 
 Aborts when `modulus` is zero.
 </APIItem>
@@ -378,6 +384,7 @@ Aborts with `ECarryOverflow` if an internal carry invariant is violated.
 Divides a 512-bit numerator by a non-zero `u256` divisor.
 
 Returns `(overflow, quotient, remainder)`, where `overflow = true` indicates the exact quotient does not fit in `u256`.
+In overflow cases, `quotient` is returned as `0` while `remainder` remains correct.
 </APIItem>
 
 #### Errors [!toc] [#u512-Errors]

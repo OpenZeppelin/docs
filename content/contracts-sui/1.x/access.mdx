@@ -4,45 +4,52 @@ title: Access
 
 The `openzeppelin_access` package provides ownership-transfer wrappers for privileged Sui objects (`T: key + store`), such as admin and treasury capabilities.
 
-## Package Intent
+Use this package when direct object transfer is too permissive for your protocol. It gives you explicit transfer workflows that are easier to review, monitor, and constrain with policy.
 
-Use `openzeppelin_access` when you need safer custody transitions than direct object transfer.
+<Callout type="warn">
+This package is designed for single-owned objects. In `two_step_transfer`, `ctx.sender()` is stored as the owner-of-record for pending requests. Avoid using this policy directly in shared-object executor flows unless your design explicitly maps signer identity to cancel authority.
+</Callout>
 
-It offers two policies:
+## Usage
 
-- `two_step_transfer`: explicit initiate/accept flow to reduce accidental handoffs.
-- `delayed_transfer`: scheduled transfer/unwrap with mandatory delay windows.
+Add the dependency in `Move.toml`:
 
-## Choosing a Transfer Policy
+```toml
+[dependencies]
+openzeppelin_access = { r.mvr = "@pkg/openzeppelin_access" }
+```
+
+Import the transfer policy module you want to use:
+
+```move
+use openzeppelin_access::two_step_transfer;
+```
+
+## Examples
+
+```move
+module my_sui_app::admin;
+
+use openzeppelin_access::two_step_transfer;
+
+public struct AdminCap has key, store {
+    id: object::UID,
+}
+
+public fun wrap_admin_cap(
+    cap: AdminCap,
+    ctx: &mut TxContext,
+): two_step_transfer::TwoStepTransferWrapper<AdminCap> {
+    // Wrap the capability object to force a two-step transfer policy.
+    two_step_transfer::wrap(cap, ctx)
+}
+```
+
+## Choosing a transfer policy
 
 - Use `two_step_transfer` when the signer triggering transfer initiation is the same principal that should retain cancel authority.
 - Use `delayed_transfer` when protocol safety requires on-chain lead time before transfer or unwrap execution.
 
-<Callout type="warn">
-`two_step_transfer` stores `ctx.sender()` as the owner-of-record in pending requests. Avoid using it directly in shared-object executor flows unless your design explicitly maps signer identity to cancel authority.
-</Callout>
-
-## Module Overview
-
-### `two_step_transfer`
-
-- Wrapper: `TwoStepTransferWrapper<T>`
-- Pending object: `PendingOwnershipTransfer<T>`
-- Borrow guards: `Borrow`, `RequestBorrow`
-- Core flow: `wrap` -> `initiate_transfer` -> `accept_transfer` or `cancel_transfer`
-
-### `delayed_transfer`
-
-- Wrapper: `DelayedTransferWrapper<T>` with `min_delay_ms`
-- Pending state: `PendingTransfer { recipient, execute_after_ms }`
-- Core flow: `wrap` -> `schedule_transfer`/`schedule_unwrap` -> `execute_transfer`/`unwrap`
-
-## Integration Checklist
-
-1. Treat wrapper ownership as part of your protocol state machine.
-2. Test all abort paths (`ENotOwner`, `ETransferAlreadyScheduled`, `EDelayNotElapsed`, etc.).
-3. Emit and monitor transfer events for operational observability.
-
 ## API Reference
 
-Use the full function-level reference here: [openzeppelin_access API](/contracts-sui/1.x/api/access).
+Use the full function-level reference here: [Access API](/contracts-sui/1.x/api/access).

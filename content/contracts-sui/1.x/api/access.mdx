@@ -1,5 +1,5 @@
 ---
-title: openzeppelin_access API Reference
+title: Access API Reference
 ---
 
 This page documents the public API of `openzeppelin_access` for OpenZeppelin Contracts for Sui `v1.x`.
@@ -17,8 +17,11 @@ use openzeppelin_access::two_step_transfer;
 
 Two-step ownership wrapper for `T: key + store` objects. Transfers require explicit initiation and acceptance, with cancellation authority bound to the recorded initiator (`ctx.sender()` at initiation time).
 
+This module is designed for flows with a single logical owner. Avoid using it directly in shared-object custody flows where arbitrary executors can trigger `initiate_transfer`, because the initiator becomes the recorded cancel authority.
+
 Types
 
+- [`WrappedKey`](#two_step_transfer-WrappedKey)
 - [`TwoStepTransferWrapper<T>`](#two_step_transfer-TwoStepTransferWrapper)
 - [`PendingOwnershipTransfer<T>`](#two_step_transfer-PendingOwnershipTransfer)
 - [`Borrow`](#two_step_transfer-Borrow)
@@ -57,11 +60,21 @@ Errors
 #### Types [!toc] [#two_step_transfer-Types]
 
 <APIItem
+  functionSignature="struct WrappedKey()"
+  id="two_step_transfer-WrappedKey"
+  kind="struct"
+>
+Dynamic object-field key used to store the wrapped object under the wrapper.
+</APIItem>
+
+<APIItem
   functionSignature="struct TwoStepTransferWrapper<T: key + store>"
   id="two_step_transfer-TwoStepTransferWrapper"
   kind="struct"
 >
 Wrapper object that custody-locks an underlying object and controls transfer flow.
+
+The wrapper intentionally omits `store` so transfer paths stay constrained to this module's logic.
 </APIItem>
 
 <APIItem
@@ -70,6 +83,8 @@ Wrapper object that custody-locks an underlying object and controls transfer flo
   kind="struct"
 >
 Shared pending-transfer object storing wrapper identity, current owner (`from`), and prospective owner (`to`).
+
+Wrapper custody is held by this request object through transfer-to-object (TTO) until accept/cancel resolution.
 </APIItem>
 
 <APIItem
@@ -95,7 +110,10 @@ Hot-potato guard proving a wrapper borrowed through a pending request is returne
   id="two_step_transfer-wrap"
   kind="public"
 >
-Wraps `obj` in a new transfer wrapper and emits `WrapExecuted`.
+Wraps `obj` in a new transfer wrapper.
+The wrapped object is stored as a dynamic object field so off-chain indexers can still discover the underlying object ID.
+
+Emits a `WrapExecuted` event.
 </APIItem>
 
 <APIItem
@@ -138,6 +156,10 @@ Aborts when wrapper/object identity checks fail.
   kind="public"
 >
 Destroys the wrapper and returns the underlying object directly to the caller.
+
+This bypasses pending-request flow and recovers direct ownership of the wrapped object.
+
+Emits an `UnwrapExecuted` event.
 </APIItem>
 
 <APIItem
@@ -148,6 +170,9 @@ Destroys the wrapper and returns the underlying object directly to the caller.
 Starts a transfer by creating a shared request and transferring wrapper custody to that request.
 
 Security note: cancellation authority is tied to the initiating signer recorded as `from`.
+Only use this flow when the signer executing initiation is intentionally the logical owner/cancel authority.
+
+Emits a `TransferInitiated` event.
 </APIItem>
 
 <APIItem
@@ -158,6 +183,8 @@ Security note: cancellation authority is tied to the initiating signer recorded 
 Completes a pending transfer and sends the wrapper to the designated new owner.
 
 Aborts if caller is not `request.to` or wrapper identity does not match.
+
+Emits a `TransferAccepted` event.
 </APIItem>
 
 <APIItem
@@ -168,6 +195,8 @@ Aborts if caller is not `request.to` or wrapper identity does not match.
 Cancels a pending transfer and returns the wrapper to `request.from`.
 
 Aborts if caller is not `request.from` or wrapper identity does not match.
+
+Emits a `TransferCancelled` event.
 </APIItem>
 
 <APIItem
@@ -176,6 +205,8 @@ Aborts if caller is not `request.from` or wrapper identity does not match.
   kind="public"
 >
 Receives wrapper custody from a shared request so the recorded owner can operate on the wrapped object during a pending transfer.
+
+Aborts if caller is not `request.from` or if request/wrapper identity checks fail.
 </APIItem>
 
 <APIItem
@@ -184,6 +215,8 @@ Receives wrapper custody from a shared request so the recorded owner can operate
   kind="public"
 >
 Returns a wrapper borrowed via `request_borrow_val` back to the pending request.
+
+Aborts if either `wrapper` or `borrow` does not match the target request.
 </APIItem>
 
 #### Events [!toc] [#two_step_transfer-Events]
@@ -285,6 +318,7 @@ Time-locked ownership wrapper for `T: key + store`. Transfers and unwraps must b
 
 Types
 
+- [`WrappedKey`](#delayed_transfer-WrappedKey)
 - [`DelayedTransferWrapper<T>`](#delayed_transfer-DelayedTransferWrapper)
 - [`PendingTransfer`](#delayed_transfer-PendingTransfer)
 - [`Borrow`](#delayed_transfer-Borrow)
@@ -323,6 +357,14 @@ Errors
 #### Types [!toc] [#delayed_transfer-Types]
 
 <APIItem
+  functionSignature="struct WrappedKey()"
+  id="delayed_transfer-WrappedKey"
+  kind="struct"
+>
+Dynamic object-field key used to store the wrapped object under the wrapper.
+</APIItem>
+
+<APIItem
   functionSignature="struct DelayedTransferWrapper<T: key + store>"
   id="delayed_transfer-DelayedTransferWrapper"
   kind="struct"
@@ -354,6 +396,10 @@ Hot-potato guard proving a value extracted with `borrow_val` is returned to the 
   kind="public"
 >
 Wraps `obj` in a delayed-transfer wrapper and records minimum execution delay.
+
+The wrapped object is stored under a dynamic object field so object ID discovery remains straightforward for indexers.
+
+Emits a `WrapExecuted` event.
 </APIItem>
 
 <APIItem
@@ -398,6 +444,8 @@ Aborts when wrapper/object identity checks fail.
 Schedules a transfer to `new_owner` at `clock.timestamp_ms() + min_delay_ms`.
 
 Aborts when another action is already scheduled.
+
+Emits a `TransferScheduled` event.
 </APIItem>
 
 <APIItem
@@ -408,6 +456,8 @@ Aborts when another action is already scheduled.
 Schedules delayed self-recovery (unwrap) of the wrapped object.
 
 Aborts when another action is already scheduled.
+
+Emits an `UnwrapScheduled` event.
 </APIItem>
 
 <APIItem
@@ -417,7 +467,11 @@ Aborts when another action is already scheduled.
 >
 Executes a scheduled transfer once delay has elapsed.
 
+Consumes the wrapper.
+
 Aborts when no transfer is scheduled, wrong action type is scheduled, or delay has not elapsed.
+
+Emits an `OwnershipTransferred` event on success.
 </APIItem>
 
 <APIItem
@@ -428,6 +482,8 @@ Aborts when no transfer is scheduled, wrong action type is scheduled, or delay h
 Executes a scheduled unwrap once delay has elapsed and returns the wrapped object.
 
 Aborts when no unwrap is scheduled, wrong action type is scheduled, or delay has not elapsed.
+
+Emits an `UnwrapExecuted` event.
 </APIItem>
 
 <APIItem
@@ -438,6 +494,8 @@ Aborts when no unwrap is scheduled, wrong action type is scheduled, or delay has
 Cancels the currently scheduled transfer or unwrap action.
 
 Aborts when no action is pending.
+
+Emits a `PendingTransferCancelled` event.
 </APIItem>
 
 #### Events [!toc] [#delayed_transfer-Events]

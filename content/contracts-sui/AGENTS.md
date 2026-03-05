@@ -67,7 +67,15 @@ use openzeppelin_math::{decimal_scaling, u256};
   - Use field-based names (`name`), not `get_name`.
   - Mutable getters end in `_mut` (`details_mut`).
 
+## API Reference entry order
+- In API Reference function entries, place behavior description paragraphs first.
+- Place `Aborts ...` text after the description.
+- Place `Emits ...` text after `Aborts ...`.
+- If both are present, the order is always: description, then `Aborts`, then `Emits`.
+- After `Aborts`/`Emits`, only `NOTE`, `INFO`, or `WARNING` blocks can appear.
+
 ## Function body idioms
+- Prefer dot notation (`x.y(...)`) over function-call notation (`y(x, ...)`) whenever Move supports method syntax for the first argument.
 - Prefer method-style calls when available (for example `id.delete()`, `ctx.sender()`, `payment.split(...).into_balance()`).
 - Do not import `std::string::utf8`; use `b"...".to_string()` or `b"...".to_ascii_string()`.
 - Prefer vector literal/index/method style over legacy `vector::empty/push_back/borrow/length`.
