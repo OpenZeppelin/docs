@@ -12,6 +12,7 @@ title: Contracts for Sui 1.x
 ### Prerequisites
 
 - Sui CLI installed.
+- MVR CLI installed.
 - A new or existing Move package.
 
 ### 1. Create a Move Package
@@ -21,52 +22,46 @@ sui move new my_sui_app
 cd my_sui_app
 ```
 
-### 2. Add OpenZeppelin Dependencies
+### 2. Add OpenZeppelin Dependencies from MVR
 
-Update `Move.toml`:
+```bash
+mvr add @pkg/openzeppelin_access
+mvr add @pkg/openzeppelin_math
+```
+
+### 3. Verify `Move.toml`
+
+`mvr add` updates `Move.toml` automatically. It should include:
 
 ```toml
 [dependencies]
-openzeppelin_access = { git = "https://github.com/OpenZeppelin/contracts-sui.git", subdir = "contracts/access", rev = "<release-tag>" }
-openzeppelin_math = { git = "https://github.com/OpenZeppelin/contracts-sui.git", subdir = "math/core", rev = "<release-tag>" }
-
-[addresses]
-openzeppelin_access = "0x0"
-openzeppelin_math = "0x0"
+openzeppelin_access = { r.mvr = "@pkg/openzeppelin_access" }
+openzeppelin_math = { r.mvr = "@pkg/openzeppelin_math" }
 ```
 
-### 3. Add a Minimal Integration Module
+### 4. Add a Minimal Module
 
 Create `sources/quickstart.move`:
 
 ```move
 module my_sui_app::quickstart;
 
-use openzeppelin_access::two_step_transfer;
-use openzeppelin_math::rounding;
-use openzeppelin_math::u256;
-use std::option;
-use sui::object;
-use sui::tx_context::TxContext;
+use openzeppelin_math::{rounding, u64};
 
-public struct AdminCap has key, store {
-    id: object::UID,
+// === Functions ===
+
+public fun quote_with_fee(amount: u64): u64 {
+    // 2.5% fee, rounded to nearest.
+    let quoted = u64::mul_div(amount, 1025u64, 1000u64, rounding::nearest());
+    option::destroy_some(quoted)
 }
 
-public fun quote(amount: u256): u256 {
-    let q = u256::mul_div(amount, 1025, 1000, rounding::nearest());
-    option::destroy_some(q)
-}
-
-public fun wrap_admin_cap(
-    cap: AdminCap,
-    ctx: &mut TxContext,
-): two_step_transfer::TwoStepTransferWrapper<AdminCap> {
-    two_step_transfer::wrap(cap, ctx)
+public fun sqrt_floor(value: u64): u64 {
+    u64::sqrt(value, rounding::down())
 }
 ```
 
-### 4. Build and Test
+### 5. Build and Test
 
 ```bash
 sui move build

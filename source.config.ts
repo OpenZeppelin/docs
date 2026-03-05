@@ -13,6 +13,8 @@ export const docs = defineDocs({
 	// Async mode - enables runtime compilation for faster dev server startup
 	docs: {
 		async: true,
+		// Restrict docs pages to MDX content files.
+		files: ["**/*.mdx"],
 	},
 	// To switch back to sync mode (pre-compilation), comment out the docs config above and uncomment below:
 	// (sync mode - pre-compiles all content at build time)
