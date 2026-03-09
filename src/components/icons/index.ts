@@ -13,6 +13,7 @@ export { PolkadotIcon } from "./polkadot-icon";
 export { RelayersIcon } from "./relayers-icon";
 export { StarknetIcon } from "./starknet-icon";
 export { StellarIcon } from "./stellar-icon";
+export { SuiIcon } from "./sui-icon";
 export { TransactionProposalIcon } from "./transaction-proposal-icon";
 export { UniswapIcon } from "./uniswap-icon";
 export { ZamaIcon } from "./zama-icon";

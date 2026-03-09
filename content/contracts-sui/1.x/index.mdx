@@ -1,0 +1,75 @@
+---
+title: Contracts for Sui 1.x
+---
+
+**OpenZeppelin Contracts for Sui v1.x** ships two core packages:
+
+- `openzeppelin_math` for deterministic arithmetic, configurable rounding, and decimal scaling.
+- `openzeppelin_access` for ownership-transfer wrappers around privileged `key + store` objects.
+
+## Quickstart
+
+### Prerequisites
+
+- Sui CLI installed.
+- MVR CLI installed.
+- A new or existing Move package.
+
+### 1. Create a Move Package
+
+```bash
+sui move new my_sui_app
+cd my_sui_app
+```
+
+### 2. Add OpenZeppelin Dependencies from MVR
+
+```bash
+mvr add @openzeppelin-move/access
+mvr add @openzeppelin-move/integer-math
+```
+
+### 3. Verify `Move.toml`
+
+`mvr add` updates `Move.toml` automatically. It should include:
+
+```toml
+[dependencies]
+openzeppelin_access = { r.mvr = "@openzeppelin-move/access" }
+openzeppelin_math = { r.mvr = "@openzeppelin-move/integer-math" }
+```
+
+### 4. Add a Minimal Module
+
+Create `sources/quickstart.move`:
+
+```move
+module my_sui_app::quickstart;
+
+use openzeppelin_math::{rounding, u64};
+use std::option;
+
+// === Functions ===
+
+public fun quote_with_fee(amount: u64): u64 {
+    // 2.5% fee, rounded to nearest.
+    let quoted = amount.mul_div(1025u64, 1000u64, rounding::nearest());
+    quoted.destroy_some()
+}
+
+public fun sqrt_floor(value: u64): u64 {
+    value.sqrt(rounding::down())
+}
+```
+
+### 5. Build and Test
+
+```bash
+sui move build
+sui move test
+```
+
+## Next Steps
+
+- Read package guides: [Integer Math](/contracts-sui/1.x/math), [Access](/contracts-sui/1.x/access).
+- Use API docs: [Integer Math](/contracts-sui/1.x/api/math), [Access](/contracts-sui/1.x/api/access).

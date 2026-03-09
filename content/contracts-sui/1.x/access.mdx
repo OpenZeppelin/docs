@@ -1,0 +1,55 @@
+---
+title: Access
+---
+
+The `openzeppelin_access` package provides ownership-transfer wrappers for privileged Sui objects (`T: key + store`), such as admin and treasury capabilities.
+
+Use this package when direct object transfer is too permissive for your protocol. It gives you explicit transfer workflows that are easier to review, monitor, and constrain with policy.
+
+<Callout type="warn">
+This package is designed for single-owned objects. In `two_step_transfer`, `ctx.sender()` is stored as the owner-of-record for pending requests. Avoid using this policy directly in shared-object executor flows unless your design explicitly maps signer identity to cancel authority.
+</Callout>
+
+## Usage
+
+Add the dependency in `Move.toml`:
+
+```toml
+[dependencies]
+openzeppelin_access = { r.mvr = "@openzeppelin-move/access" }
+```
+
+Import the transfer policy module you want to use:
+
+```move
+use openzeppelin_access::two_step_transfer;
+```
+
+## Examples
+
+```move
+module my_sui_app::admin;
+
+use openzeppelin_access::two_step_transfer;
+
+public struct AdminCap has key, store {
+    id: object::UID,
+}
+
+public fun wrap_admin_cap(
+    cap: AdminCap,
+    ctx: &mut TxContext,
+): two_step_transfer::TwoStepTransferWrapper<AdminCap> {
+    // Wrap the capability object to force a two-step transfer policy.
+    two_step_transfer::wrap(cap, ctx)
+}
+```
+
+## Choosing a transfer policy
+
+- Use `two_step_transfer` when the signer triggering transfer initiation is the same principal that should retain cancel authority.
+- Use `delayed_transfer` when protocol safety requires on-chain lead time before transfer or unwrap execution, and when initial wrapper custody should be assigned explicitly at wrap time.
+
+## API Reference
+
+Use the full function-level reference here: [Access API](/contracts-sui/1.x/api/access).
