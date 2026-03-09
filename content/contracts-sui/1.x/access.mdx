@@ -2,6 +2,8 @@
 title: Access
 ---
 
+On Sui, `sui::transfer::transfer` is instant and irreversible. There is no built-in way to require the recipient to confirm, to enforce a waiting period, or to cancel a transfer in progress. For privileged capability objects, such as admin caps, treasury caps, upgrade authorities, this is a meaningful risk. A single mistaken or malicious transaction can permanently transfer control with no recourse. The `openzeppelin_access` package provides two wrapper policies that add those guardrails.
+
 The `openzeppelin_access` package provides ownership-transfer wrappers for privileged Sui objects (`T: key + store`), such as admin and treasury capabilities.
 
 Use this package when direct object transfer is too permissive for your protocol. It gives you explicit transfer workflows that are easier to review, monitor, and constrain with policy.
@@ -16,7 +18,7 @@ Add the dependency in `Move.toml`:
 
 ```toml
 [dependencies]
-openzeppelin_access = { r.mvr = "@openzeppelin-move/access" }
+openzeppelin_access = { r.mvr = "@pkg/openzeppelin_access" }
 ```
 
 Import the transfer policy module you want to use:
@@ -25,17 +27,27 @@ Import the transfer policy module you want to use:
 use openzeppelin_access::two_step_transfer;
 ```
 
+## What's included
+
+- **`two_step_transfer`**: Requires the designated recipient to explicitly accept before the wrapper completes the transfer. The initiator retains cancel authority until acceptance. No time delay, so execution happens immediately once the recipient accepts.
+- **`delayed_transfer`**: Requires all transfers and unwraps to be scheduled and enforces a configurable minimum delay before execution. Gives monitoring systems and governance processes time to detect and respond before a transfer is finalized.
+
+## How wrapping works
+
+Wrapping a capability gives up direct transfer access to it. The wrapper becomes the custody object: you hold the wrapper, not the capability directly. The underlying capability is still discoverable by off-chain indexers via dynamic object field, but it cannot be transferred or used until it is extracted through the wrapper's policy. To move or recover the capability, you must go through the wrapper. This means satisfying the policy's conditions: either the recipient's explicit acceptance or the enforced time delay.
+
 ## Examples
+
+### Two-step transfer
+
+Wrapping an `AdminCap` creates a `TwoStepTransferWrapper<AdminCap>` owned by the caller. The original cap is stored inside it as a dynamic object field. The caller holds the wrapper, not the cap directly. A `WrapExecuted` event is emitted.
 
 ```move
 module my_sui_app::admin;
-
 use openzeppelin_access::two_step_transfer;
-
 public struct AdminCap has key, store {
     id: object::UID,
 }
-
 public fun wrap_admin_cap(
     cap: AdminCap,
     ctx: &mut TxContext,
@@ -45,10 +57,85 @@ public fun wrap_admin_cap(
 }
 ```
 
+Calling `initiate_transfer` consumes the wrapper by value and creates a shared `PendingOwnershipTransfer<AdminCap>` object. Wrapper custody moves to that request via transfer-to-object. The sender's address is recorded as `from`, the cancel authority, and the recipient's address is recorded as `to`. A `TransferInitiated` event is emitted.
+
+```move
+// Called by the current wrapper owner. Consumes the wrapper.
+wrapper.initiate_transfer(new_admin_address, ctx);
+```
+
+When the designated recipient calls `accept_transfer`, the wrapper is delivered to their address and a `TransferAccepted` event is emitted. Only the address recorded as `to` can complete this step.
+
+```move
+// Called by new_admin_address.
+// request: shared PendingOwnershipTransfer<AdminCap>
+// wrapper_ticket: Receiving<TwoStepTransferWrapper<AdminCap>>
+two_step_transfer::accept_transfer(request, wrapper_ticket, ctx);
+```
+
+### Delayed transfer
+
+Wrapping a `TreasuryCap` with `delayed_transfer` embeds a minimum delay at construction time. The delay is enforced on every subsequent transfer and unwrap and cannot be changed after wrapping. A `WrapExecuted` event is emitted.
+
+```move
+module my_sui_app::treasury;
+
+use openzeppelin_access::delayed_transfer::{Self, DelayedTransferWrapper};
+
+public struct TreasuryCap has key, store { id: UID }
+
+const MIN_DELAY_MS: u64 = 86_400_000; // 24 hours
+
+public fun wrap_treasury_cap(cap: TreasuryCap, ctx: &mut TxContext): DelayedTransferWrapper<TreasuryCap> {
+    delayed_transfer::wrap(cap, MIN_DELAY_MS, ctx)
+}
+```
+
+`DelayedTransferWrapper` has only the `key` ability, so it cannot be transferred with `transfer::transfer` from outside its defining module. This restriction is intentional and enforces that all ownership changes go through the delay mechanism. Return the wrapper from your function and transfer it to the sender in the PTB instead:
+
+```typescript
+const [wrapper] = tx.moveCall({
+  target: `${PKG}::treasury::wrap_treasury_cap`,
+  arguments: [treasuryCapArg],
+});
+tx.transferObjects([wrapper], tx.pure.address(sender));
+```
+
+`schedule_transfer` records the recipient's address and computes `execute_after_ms` as `clock.timestamp_ms() + min_delay_ms`. The wrapper must not have an action already pending. A `TransferScheduled` event is emitted.
+
+```move
+// Called by the current wrapper owner.
+wrapper.schedule_transfer(new_owner_address, &clock, ctx);
+```
+
+Once the delay has elapsed, `execute_transfer` consumes the wrapper and delivers it to the scheduled recipient. Calling it before `execute_after_ms` aborts with `EDelayNotElapsed`. An `OwnershipTransferred` event is emitted on success.
+
+```move
+// Callable after the delay window has passed.
+wrapper.execute_transfer(&clock, ctx);
+```
+
 ## Choosing a transfer policy
 
-- Use `two_step_transfer` when the signer triggering transfer initiation is the same principal that should retain cancel authority.
-- Use `delayed_transfer` when protocol safety requires on-chain lead time before transfer or unwrap execution, and when initial wrapper custody should be assigned explicitly at wrap time.
+If your protocol needs confirmation from the new owner but can execute the transfer immediately upon that confirmation, use `two_step_transfer`. This is the right choice when the principal initiating the transfer is a known, controlled key. For example, a multisig or a hot wallet operated by the same team that holds the capability.
+
+If your protocol requires on-chain lead time before a capability changes hands, such as scenarios where stakeholders such as a monitoring system, or an incident response team need processing time to detect and respond accordingly, then use `delayed_transfer`. The delay is set at wrap time and cannot be shortened afterward, making it a reliable commitment visible to anyone inspecting the wrapper object.
+
+If you are wrapping a capability in a shared-object flow where arbitrary signers can call `initiate_transfer`, read the security note below before choosing either policy.
+
+<Callout>
+For a deeper walkthrough of both policies with background on why controlled capability transfers matter on Sui, see the Access walkthrough coming soon.
+</Callout>
+
+## Security note
+
+<Callout type="warn">
+`two_step_transfer` records `ctx.sender()` as the cancel authority (`from`) when `initiate_transfer` is called. In normal single-owner usage, `ctx.sender()` is the wallet that holds the wrapper, the correct principal to hold cancel authority.
+
+However, if `initiate_transfer` is invoked inside a shared-object executor, a module where any user can be the transaction sender, then the cancel authority becomes that arbitrary user's address, not the protocol's. A malicious user could call `initiate_transfer` targeting their own address as the recipient. They would become both the pending recipient and the only party with cancel authority, locking out the legitimate owner: no one but the attacker can cancel the transfer, and the attacker can choose to accept it at any time.
+
+This failure mode applies specifically to `two_step_transfer`, because its cancel authority is established at initiation time from the transaction signer. Avoid using it directly in shared-object executor flows unless your design explicitly maps signer identity to cancel authority.
+</Callout>
 
 ## API Reference
 

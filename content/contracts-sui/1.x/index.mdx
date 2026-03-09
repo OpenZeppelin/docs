@@ -1,11 +1,31 @@
 ---
-title: Contracts for Sui 1.x
+title: Contracts for Sui v1.0.0
 ---
 
-**OpenZeppelin Contracts for Sui v1.x** ships two core packages:
+**OpenZeppelin Contracts for Sui v1.0.0** is the first release of OpenZeppelin's library for the Sui ecosystem. It ships two core packages:
 
 - `openzeppelin_math` for deterministic arithmetic, configurable rounding, and decimal scaling.
 - `openzeppelin_access` for ownership-transfer wrappers around privileged `key + store` objects.
+
+More packages and features are actively being developed and released.
+
+## Packages
+
+### `openzeppelin_math`
+
+Deterministic integer arithmetic with explicit rounding, overflow-safe operations, and decimal precision conversion across multiple unsigned widths.
+
+- [Package guide](/contracts-sui/1.x/math)
+- [Learn walkthrough](TODO-AddLink)
+- [API reference](/contracts-sui/1.x/api/math)
+
+### `openzeppelin_access`
+
+Ownership-transfer wrappers that enforce two-step confirmation or mandatory time delays before privileged capability objects change hands.
+
+- [Package guide](/contracts-sui/1.x/access)
+- [Learn walkthrough](TODO-AddLink)
+- [API reference](/contracts-sui/1.x/api/access)
 
 ## Quickstart
 
@@ -22,26 +42,30 @@ sui move new my_sui_app
 cd my_sui_app
 ```
 
+This creates a standard Move package directory structure with a `Move.toml` manifest and a `sources/` directory.
+
 ### 2. Add OpenZeppelin Dependencies from MVR
+
+MVR (Move Registry) is the on-chain package registry for the Sui ecosystem. Using an MVR dependency instead of a git dependency means your builds resolve against published, immutable bytecode. This gives you a reproducible and verifiable dependency chain.
 
 ```bash
 mvr add @openzeppelin-move/access
-mvr add @openzeppelin-move/integer-math
+mvr add openzeppelin-move/integer-math
 ```
 
 ### 3. Verify `Move.toml`
 
-`mvr add` updates `Move.toml` automatically. It should include:
+`mvr add` updates `Move.toml` automatically. The `r.mvr` key is the MVR resolver. It tells the Sui CLI to look up the package by its registry name and resolve the correct on-chain address, so you do not need to hardcode a package address.
 
 ```toml
 [dependencies]
 openzeppelin_access = { r.mvr = "@openzeppelin-move/access" }
-openzeppelin_math = { r.mvr = "@openzeppelin-move/integer-math" }
+openzeppelin_math = { r.mvr = "openzeppelin-move/integer-math" }
 ```
 
 ### 4. Add a Minimal Module
 
-Create `sources/quickstart.move`:
+Create `sources/quickstart.move`. This module calls `mul_div` with an explicit rounding policy. The result is wrapped in `Option`. If the intermediate product overflows, `mul_div` returns `None` and you decide how to handle it at the call site.
 
 ```move
 module my_sui_app::quickstart;
@@ -71,5 +95,8 @@ sui move test
 
 ## Next Steps
 
-- Read package guides: [Integer Math](/contracts-sui/1.x/math), [Access](/contracts-sui/1.x/access).
-- Use API docs: [Integer Math](/contracts-sui/1.x/api/math), [Access](/contracts-sui/1.x/api/access).
+If your protocol performs fee calculations, token amount arithmetic, or any precision-sensitive computation, start with the [Integer Math](/contracts-sui/1.x/math) package. It makes rounding policy, overflow behavior, and decimal precision explicit rather than implicit. 
+
+If you need to transfer a privileged capability object, such as an admin cap, treasury cap, or upgrade authority, without giving the recipient instant, irreversible control, start with the [Access](/contracts-sui/1.x/access) package instead. 
+
+Both packages can be used independently or together. Full function-level references are available in the [Integer Math API](/contracts-sui/1.x/api/math) and [Access API](/contracts-sui/1.x/api/access).
