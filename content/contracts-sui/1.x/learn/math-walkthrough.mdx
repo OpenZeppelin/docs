@@ -1,0 +1,342 @@
+---
+title: Math Walkthrough
+---
+
+<Callout type="warn">
+The example code snippets used within this walkthrough are experimental and have not been audited. They simply help exemplify the OpenZeppelin Sui Package usage.
+</Callout>
+
+This walkthrough provides a detailed walkthrough of the `openzeppelin_math` package. It is intended for developers who want to understand not just *what* each function does, but *when* and *why* to use it. For a quick overview and getting-started examples, see the [Integer Math package guide](https://docs.openzeppelin.com/contracts-sui/1.x/math). For function-level signatures and parameters, see the [Integer Math API reference](https://docs.openzeppelin.com/contracts-sui/1.x/api/math).
+
+[Source Code](https://github.com/OpenZeppelin/contracts-sui/tree/main/math/core)
+
+---
+
+## Why explicit math matters on-chain
+
+Move's native integer arithmetic aborts on overflow and truncates on division. Both behaviors are silent protocol decisions. An abort at an unexpected boundary can lock a transaction. A truncation that always rounds against your users creates a systematic value leak.
+
+In May 2025, a single flawed overflow check in a shared math library led to the Cetus exploit, where approximately $223 million was drained from the largest DEX on Sui. The bug was not in novel math. It was in a `checked_shl`-type function that silently passed a value it should have rejected, corrupting a fixed-point intermediate that multiple protocols depended on.
+
+`openzeppelin_math` addresses these problems by making every boundary decision explicit: rounding is a named parameter you pass in, overflow returns `Option<T>` that you then handle, and intermediate products are computed in wider types so they don't silently overflow before the final result is computed.
+
+---
+
+## Rounding as a protocol decision
+
+The package guide introduces the three rounding modes (`Down`, `Up`, `Nearest`). Here we'll dig deeper into *why* this matters and how to think about rounding in practice.
+
+Every function that divides, shifts, or roots a value requires a `RoundingMode` argument. There is no default, and the choice is not cosmetic. Rounding direction determines which side of a transaction absorbs fractional remainders, and in modern day blockchain applications, that determines where value leaks.
+
+### The vault example
+
+Consider a vault that issues shares for deposits:
+
+```move
+use openzeppelin_math::{rounding, u64 as math_u64};
+
+const EMathOverflow: u64 = 0;
+
+/// Deposit: convert tokens to shares, rounding DOWN.
+/// The depositor receives slightly fewer shares than the exact ratio.
+/// The vault keeps the fractional remainder.
+public fun deposit_shares(amount: u64, total_assets: u64, total_supply: u64): u64 {
+    math_u64::mul_div(amount, total_supply, total_assets, rounding::down())
+		    .destroy_or!(abort EMathOverflow)
+}
+
+/// Withdrawal: convert shares to tokens, rounding DOWN.
+/// The withdrawer receives slightly fewer tokens than the exact ratio.
+/// The vault keeps the fractional remainder.
+public fun withdraw_assets(shares: u64, total_assets: u64, total_supply: u64): u64 {
+    math_u64::mul_div(shares, total_assets, total_supply, rounding::down())
+		    .destroy_or!(abort EMathOverflow)
+}
+```
+
+Both directions round down so the vault never gives away more than it holds. If you rounded up on deposits (giving the depositor extra shares) or up on withdrawals (giving the withdrawer extra tokens), an attacker could repeatedly deposit and withdraw small amounts, extracting the rounding remainder each time. Making rounding explicit in every call forces you to make this decision consciously and makes it visible in code review.
+
+### When to use each mode
+
+- **`rounding::down()`** rounds toward zero (truncation). Use when the caller should absorb the remainder. This is the safe default for most protocol-to-user calculations.
+- **`rounding::up()`** rounds away from zero (ceiling). Use when the protocol should absorb the remainder, or when you need a conservative upper bound.
+- **`rounding::nearest()`** rounds to the nearest integer, with ties rounded up (round-half-up). Use for fee quotes and display calculations where rounding against either party on non-tie values is undesirable.
+
+---
+
+## Handling `Option<T>` at the boundary
+
+The package guide shows `Option<T>` returns briefly. Here we'll cover the patterns you'll use in practice.
+
+Every function whose result could exceed the type range returns `Option<T>`. This includes `mul_div`, `mul_shr`, `checked_shl`, `checked_shr`, and `inv_mod`. Functions that cannot overflow (`average`, `sqrt`, logarithms) return the value directly.
+
+### Pattern: abort with a domain-specific error
+
+The most common pattern. Define an error constant in your module and abort if the math overflows:
+
+```move
+use openzeppelin_math::rounding;
+use openzeppelin_math::u64::{mul_div};
+
+const EMathOverflow: u64 = 0;
+
+public fun compute_fee(amount: u64, fee_bps: u64): u64 {
+    mul_div(amount, fee_bps, 10_000u64, rounding::up())
+        .destroy_or!(abort EMathOverflow)
+}
+```
+
+### Pattern: fallback to a safe value
+
+Useful when overflow means "cap at maximum" rather than "this is an error":
+
+```move
+use openzeppelin_math::{rounding};
+use openzeppelin_math::u64::{mul_div};
+
+public fun capped_scale(value: u64, multiplier: u64): u64 {
+    let result = mul_div(value, multiplier, 1_000u64, rounding::down());
+    if (result.is_some()) {
+        result.destroy_some()
+    } else {
+        18_446_744_073_709_551_615u64 // u64::MAX
+    }
+}
+```
+
+### Pattern: propagate to the caller
+
+When your function is itself a building block, return `Option<T>` and let the caller decide:
+
+```move
+use openzeppelin_math::{rounding};
+use openzeppelin_math::u64::{mul_div};
+
+public fun try_compute_shares(amount: u64, total_assets: u64, total_supply: u64): Option<u64> {
+    mul_div(amount, total_supply, total_assets, rounding::down())
+}
+```
+
+---
+
+## Core arithmetic: `mul_div`, `mul_shr`, `average`
+
+These three functions cover the fundamental operations behind swap pricing, fee calculations, interest accrual, and share-based accounting.
+
+<Callout>
+The functions shown in this walkthrough are simplified to illustrate their usage. In a real implementation, they must be defined within proper Move function syntax.
+</Callout>
+
+### `mul_div`
+
+Computes `(a * b) / denominator` with explicit rounding. The intermediate product is computed in a wider type (up to `u512` for `u256` inputs) so it never silently overflows. Returns `Option<T>`.
+
+```move
+use openzeppelin_math::{rounding, u256};
+use openzeppelin_math::u256::{mul_div};
+
+// Price calculation: (reserve_out * amount_in) / (reserve_in + amount_in)
+let output = mul_div(reserve_out, amount_in, reserve_in + amount_in, rounding::down());
+```
+
+Instead of carrying out any multiply-then-divide operation manually (e.g., `(a * b) / c`), you can simply use `mul_div` instead. The manual version overflows when `a * b` exceeds the type range, even if the final result after division would have been safe.
+
+### `mul_shr`
+
+Computes `(a * b) >> shift` with rounding. Equivalent to `mul_div` with a power-of-two denominator, but faster. Returns `Option<T>`.
+
+```move
+use openzeppelin_math::{rounding, u128};
+use openzeppelin_math::u128::{mul_shr};
+
+// Fixed-point multiplication: (price * quantity) / 2^64
+let result = mul_shr(price, quantity, 64u8, rounding::down());
+```
+
+Use `mul_shr` instead of `mul_div` when your denominator is a power of two. This is common in Q-notation fixed-point math (Q64.64, Q96, etc.) and the tick-math used in concentrated liquidity AMMs. The Cetus exploit involved exactly this class of operation.
+
+### `average`
+
+Computes the arithmetic mean of two values without overflow. Does not return `Option` since the result always fits in the input type.
+
+```move
+use openzeppelin_math::{rounding, u64};
+use openzeppelin_math::u64::{average};
+
+let midpoint = average(price_a, price_b, rounding::nearest());
+```
+
+A simple operation of `(a + b) / 2` overflows when both values are near the type maximum. `average` uses bit manipulation to avoid the intermediate sum entirely, making it safe regardless of input size. Use it for TWAP midpoints, interpolation, and any pairwise averaging.
+
+---
+
+## Safe bit operations: `checked_shl`, `checked_shr`
+
+Move's standard shift operators silently discard bits. `checked_shl` and `checked_shr` return `None` if any non-zero bit would be lost.
+
+```move
+use openzeppelin_math::u64::{checked_shl};
+
+let scaled = checked_shl(1u64, 63u8);   // Some(9223372036854775808)
+let overflow = checked_shl(1u64, 64u8);  // None: bit pushed out
+```
+
+This is the exact vulnerability class behind the Cetus exploit: a function that checked for overflow on a left shift had an off-by-one in its threshold comparison, allowing a corrupted value through. `checked_shl` catches this by shifting left and then shifting back; if the round-trip doesn't preserve the original value, it returns `None`.
+
+Use these anywhere you are scaling values via bit shifts and need a guarantee that no data is silently discarded.
+
+---
+
+## Introspection and logarithms
+
+These functions tell you about the structure of a number. They are used internally by the library and are useful in your own code for tick-math, encoding, and storage optimization.
+
+### `clz` and `msb`
+
+`clz` counts leading zero bits. `msb` returns the position of the most significant bit. Both return 0 for input 0.
+
+```move
+use openzeppelin_math::u64::{clz, msb};
+
+let leading_zeros = clz(256u64);  // 55 (bit 8 is set)
+let highest_bit = msb(256u64);    // 8
+```
+
+Use these when you need to know the minimum bit width required to represent a value: packing, encoding, or choosing a type width for further computation. Return types vary by module width (`u16` for `u256::clz`, `u8` for narrower types).
+
+### `log2`, `log10`, `log256`
+
+Integer logarithms with configurable rounding. All return 0 for input 0.
+
+```move
+use openzeppelin_math::{rounding};
+use openzeppelin_math::u256::{log2, log10, log256};
+
+let bits_needed = log2(1000u256, rounding::up());       // 10
+let decimal_digits = log10(1000u256, rounding::down());  // 3
+let bytes_needed = log256(1000u256, rounding::up());     // 2
+```
+
+**`log2`** is used in tick-math for concentrated liquidity AMMs, where price ranges map to integer ticks via a logarithmic function. Return type is `u16` for `u256`, `u8` for narrower types.
+
+**`log10`** appears in decimal-aware scaling and display formatting. Returns `u8` across all types.
+
+**`log256`** determines byte-length for encoding and serialization. Returns `u8` across all types.
+
+### `sqrt`
+
+Integer square root with configurable rounding. Returns 0 for input 0.
+
+```move
+use openzeppelin_math::{rounding};
+use openzeppelin_math::u256::{sqrt};
+
+let root_down = sqrt(10u256, rounding::down()); // 3
+let root_up =  sqrt(10u256, rounding::up());     // 4
+```
+
+Square roots appear in concentrated liquidity pricing (`sqrtPriceX96`), geometric mean oracles, and volatility calculations. Rounding direction matters: rounding the wrong way in a price calculation creates an exploitable discrepancy.
+
+---
+
+## Modular arithmetic: `inv_mod`, `mul_mod`
+
+These functions operate in modular arithmetic, where values wrap around a modulus. They are essential for cryptographic verification, on-chain randomness schemes, and certain pricing algorithms.
+
+### `inv_mod`
+
+Returns the unique `x` where `value * x = 1 (mod modulus)` when the inputs are coprime. Returns `None` otherwise. Aborts if `modulus` is zero.
+
+```move
+use openzeppelin_math::u256::{inv_mod};
+
+let inv = inv_mod(19u256, 1_000_000_007u256);  // Some(157_894_738)
+let none = inv_mod(50u256, 100u256);            // None: not coprime
+```
+
+### `mul_mod`
+
+Multiplies two values modulo a modulus without intermediate overflow. Uses `u512` internally when both operands exceed `u128::MAX`.
+
+```move
+use openzeppelin_math::u256::{mul_mod};
+
+let product = mul_mod(a, b, 1_000_000_007u256);
+```
+
+---
+
+## Decimal scaling
+
+When bridging between tokens with different decimal precisions, `decimal_scaling` handles the multiplier arithmetic safely: overflow-checked on upcasts, explicitly truncating on downcasts.
+
+```move
+use openzeppelin_math::decimal_scaling;
+
+// Convert a 6-decimal token amount to 9-decimal internal representation
+let scaled_up = decimal_scaling::safe_upcast_balance(amount, 6, 9);
+
+// Convert back, truncating any fractional remainder
+let scaled_down = decimal_scaling::safe_downcast_balance(amount_9, 9, 6);
+```
+
+`safe_downcast_balance` discards any fractional remainder in the lower digits. If your protocol must account for that remainder rather than silently dropping it, capture it before the downcast.
+
+---
+
+## A note on `u512` and integer width
+
+The `openzeppelin_math` package includes a `u512` module that provides 512-bit unsigned integer operations. This module exists to make `u256` arithmetic consistent and overflow-safe. The per-width modules (`u64`, `u128`, `u256`) use `u512` internally for operations like `mul_div`, `mul_shr`, and `mul_mod` where intermediate products can exceed `u256`.
+
+For most protocol development on Sui, `u64` is the standard and recommended integer width. It is what the Sui framework uses for coin balances, timestamps, and gas accounting. Reach for `u128` or `u256` only when your domain genuinely requires wider values (e.g., high-precision fixed-point representations or cross-chain interoperability with systems that use 256-bit integers).
+
+`u512` is not intended for direct use in application code. If you find yourself reaching for it, consider whether the computation can be restructured to use `mul_div` or `mul_shr` on a narrower type instead, which handle the widening internally.
+
+---
+
+## Putting it together
+
+Here is a pricing module example that combines several functions from the library:
+
+```move
+use openzeppelin_math::{rounding};
+use openzeppelin_math::u64::{mul_div, sqrt};
+
+const EMathOverflow: u64 = 0;
+
+/// Quote a swap output with a 0.25% fee, rounded to nearest.
+public fun quote_with_fee(amount_in: u64, reserve_in: u64, reserve_out: u64): u64 {
+    // Apply fee: amount_in * 997.5 / 1000 (approximated as 9975 / 10000)
+    let effective_in = mul_div(amount_in, 9975u64, 10000u64, rounding::down())
+        .destroy_or!(abort EMathOverflow);
+
+    // Constant-product swap output
+    mul_div(reserve_out, effective_in, reserve_in + effective_in, rounding::down())
+        .destroy_or!(abort EMathOverflow)
+}
+
+/// Geometric mean of two prices, rounded down.
+public fun geometric_mean(price_a: u64, price_b: u64): u64 {
+    let product = mul_div(price_a, price_b, 1u64, rounding::down())
+        .destroy_or!(abort EMathOverflow);
+    sqrt(product, rounding::down())
+}
+```
+
+Build and test:
+
+```bash
+sui move build
+sui move test
+```
+
+---
+
+## Next steps
+
+- [Integer Math package guide](https://docs.openzeppelin.com/contracts-sui/1.x/math) for a quick overview and examples
+- [Integer Math API reference](https://docs.openzeppelin.com/contracts-sui/1.x/api/math) for full function signatures
+- [Access Walkthrough](/contracts-sui/1.x/learn/access-walkthrough) for the Access package walkthrough
+- [Source code](https://github.com/OpenZeppelin/contracts-sui/tree/main/math/core) for inline documentation and implementation details
+- [GitHub issue tracker](https://github.com/OpenZeppelin/contracts-sui/issues) to report bugs or request features
+- [Sui Discord](https://discord.gg/sui) and [Sui Developer Forum](https://forums.sui.io/) to connect with other builders
