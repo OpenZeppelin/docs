@@ -1,0 +1,331 @@
+---
+title: Access Walkthrough
+---
+
+<Callout type="warn">
+The example code snippets used within this walkthrough are experimental and have not been audited. They simply help exemplify the OpenZeppelin Sui package usage.
+</Callout>
+
+This guide provides a detailed walkthrough of the `openzeppelin_access` package. It explains the design behind each transfer policy, walks through the full lifecycle of wrapping and transferring capabilities, and covers the borrow patterns, events, and error handling you need to integrate these modules into a protocol. For a quick overview and getting-started examples, see the [Access package guide](https://docs.openzeppelin.com/contracts-sui/1.x/access). For function-level signatures, see the [Access API reference](https://docs.openzeppelin.com/contracts-sui/1.x/api/access).
+
+[Source Code](https://github.com/OpenZeppelin/contracts-sui/tree/main/contracts/access)
+
+---
+
+## Why controlled transfers matter
+
+On Sui, `sui::transfer::transfer` is instant and irreversible. There is no confirmation step, no waiting period, and no cancel mechanism. For everyday objects this is fine. For privileged capability objects, such as admin caps, treasury caps, or upgrade authorities, a single mistaken or malicious transfer permanently moves control with no recourse.
+
+The `openzeppelin_access` package adds two transfer policies that sit between you and that irreversible `transfer` call:
+
+| Module | What it enforces | Analogy from Solidity |
+| --- | --- | --- |
+| `two_step_transfer` | Recipient must explicitly accept before the transfer completes | `Ownable2Step` |
+| `delayed_transfer` | Mandatory time delay before execution; anyone can observe the pending action | `TimelockController` on ownership |
+
+If you already know which policy you need, skip to [Choosing a transfer policy](#choosing-a-transfer-policy) or jump directly to [two\_step\_transfer](#two_step_transfer) or [delayed\_transfer](#delayed_transfer).
+
+---
+
+## Wrapping and transfer policies
+
+Both modules use the same underlying mechanism: wrapping a capability inside a new object that enforces a transfer policy on it.
+
+When you call `wrap`, the capability is stored as a dynamic object field inside the wrapper. This means:
+
+- **The wrapper becomes the custody object.** You hold the wrapper, not the capability directly. To transfer or recover the capability, you go through the wrapper's policy.
+- **The underlying capability retains its on-chain ID.** Off-chain indexers and explorers can still discover and track it via the dynamic object field. Wrapping does not make the capability invisible.
+- **The wrapper intentionally omits the `store` ability.** Without `store`, the wrapper cannot be moved via `transfer::public_transfer`. Only the module's own functions (which use the privileged `transfer::transfer` internally) can move it. This is a deliberate design choice that prevents accidental transfers outside the policy.
+
+A `WrapExecuted` event is emitted when a capability is wrapped, creating an on-chain record of when the policy was applied.
+
+### Borrowing without unwrapping
+
+Both modules provide three ways to use the wrapped capability without changing ownership:
+
+**Immutable borrow** for read-only access:
+
+```move
+let cap_ref = wrapper.borrow(); // &AdminCap
+```
+
+**Mutable borrow** for updating the capability's internal state:
+
+```move
+let cap_mut = wrapper.borrow_mut(); // &mut AdminCap
+```
+
+**Temporary move** for functions that require the capability by value. This uses the hot potato pattern: `borrow_val` returns a `Borrow` struct with no abilities (`copy`, `drop`, `store`, `key` are all absent). The Move compiler enforces that it must be consumed by `return_val` before the transaction ends.
+
+```move
+let (cap, borrow_token) = wrapper.borrow_val();
+
+/// Use cap in functions that require it by value.
+wrapper.return_val(cap, borrow_token); // compiler enforces this call
+```
+
+If you try to drop the borrow token, return a different capability, or return it to the wrong wrapper, the transaction either won't compile or will abort at runtime.
+
+---
+
+## `two_step_transfer`
+
+[Source Code](https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/contracts/access/sources/ownership_transfer/two_step.move)
+
+A transfer policy that requires the designated recipient to explicitly accept before the wrapper changes hands. The initiator retains cancel authority until acceptance. There is no time delay, thus the transfer executes immediately once the recipient accepts.
+
+This is the right choice when the principal initiating the transfer is a known, controlled key (a multisig, a hot wallet operated by the same team) and the risk you are guarding against is sending the capability to a wrong or non-existent address, which would permanently lock the capability with no way to recover it.
+
+### Step 1: Wrap the capability
+
+```move
+module my_sui_app::admin;
+
+use openzeppelin_access::two_step_transfer;
+
+public struct AdminCap has key, store { id: UID }
+
+/// Wrap and immediately initiate a transfer to `new_admin`.
+/// The wrapper is consumed by `initiate_transfer` and held
+/// inside the shared `PendingOwnershipTransfer` until the
+/// recipient accepts or the initiator cancels.
+public fun wrap_and_transfer(cap: AdminCap, new_admin: address, ctx: &mut TxContext) {
+    let wrapper = two_step_transfer::wrap(cap, ctx);
+    // Emits WrapExecuted
+
+    wrapper.initiate_transfer(new_admin, ctx);
+    // Emits TransferInitiated
+}
+```
+
+`wrap` stores the `AdminCap` inside a `TwoStepTransferWrapper<AdminCap>` and emits a `WrapExecuted` event. Because the wrapper lacks the `store` ability, it cannot be sent via `transfer::public_transfer`. The intended next step is to call `initiate_transfer`, which consumes the wrapper and creates a shared `PendingOwnershipTransfer<AdminCap>` object that both parties can interact with.
+
+### Step 2: Initiate a transfer
+
+`initiate_transfer` consumes the wrapper by value and creates a shared `PendingOwnershipTransfer<AdminCap>` object. The sender's address is recorded as `from` (the cancel authority), and the recipient's address is recorded as `to`.
+
+```move
+/// Called by the current wrapper owner. Consumes the wrapper.
+wrapper.initiate_transfer(new_admin_address, ctx);
+/// Emits TransferInitiated { wrapper_id, from, to }
+```
+
+After this call, the wrapper is held inside the pending request via transfer-to-object. The original owner no longer has it in their scope, but they retain the ability to cancel because their address is recorded as `from`.
+
+The `TransferInitiated` event contains the pending request's ID and the wrapper ID, allowing off-chain indexers to discover the shared `PendingOwnershipTransfer` object for the next step.
+
+### Step 3: Recipient accepts (or initiator cancels)
+
+The designated recipient calls `accept_transfer` to complete the handoff. This step uses Sui's [transfer-to-object (TTO)](https://docs.sui.io/guides/developer/objects/transfers/transfer-to-object) pattern: the wrapper was transferred to the `PendingOwnershipTransfer` object in Step 2, so the recipient must provide a `Receiving<TwoStepTransferWrapper<AdminCap>>` ticket to claim it. The `Receiving` type is Sui's mechanism for retrieving objects that were sent to another object rather than to a wallet.
+
+```move
+/// Called by the address recorded as `to` (new_admin_address).
+/// `request` is the shared PendingOwnershipTransfer<AdminCap> object.
+/// `wrapper_ticket` is the Receiving<TwoStepTransferWrapper<AdminCap>> for the wrapper
+/// that was transferred to the request object.
+two_step_transfer::accept_transfer(request, wrapper_ticket, ctx);
+// Emits TransferAccepted { wrapper_id, from, to }
+```
+
+If the initiator changes their mind before the recipient accepts, they can cancel. The cancel call also requires the `Receiving` ticket for the wrapper:
+
+```move
+/// Called by the address recorded as `from` (the original initiator).
+two_step_transfer::cancel_transfer(request, wrapper_ticket, ctx);
+/// Wrapper is returned to the `from` address.
+```
+
+### Unwrapping
+
+To permanently reclaim the raw capability and destroy the wrapper:
+
+```move
+let admin_cap = wrapper.unwrap(ctx);
+```
+
+This bypasses the transfer flow entirely. Only the current wrapper owner can call it.
+
+### Security note on shared-object flows
+
+`initiate_transfer` records `ctx.sender()` as the cancel authority. In normal single-owner usage, this is the wallet holding the wrapper. However, if `initiate_transfer` is called inside a shared-object executor where any user can be the transaction sender, a malicious user could call `initiate_transfer` targeting their own address as recipient. They would become both the pending recipient and the sole cancel authority, locking out the legitimate owner.
+
+Avoid using `two_step_transfer` in shared-object executor flows unless your design explicitly maps signer identity to cancel authority.
+
+---
+
+## `delayed_transfer`
+
+[Source Code](https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/contracts/access/sources/ownership_transfer/delayed.move)
+
+A transfer policy that enforces a configurable minimum delay between scheduling and executing a transfer. The delay is set at wrap time and cannot be changed afterward. This creates a publicly visible window before any authority change takes effect, giving monitoring systems, DAOs, and individual users time to detect and respond.
+
+This is the right choice when your protocol requires on-chain lead time before a capability changes hands, for example, to allow an incident response process to detect a compromised key, or to give depositors time to exit before governance parameters change.
+
+### Step 1: Wrap with a delay
+
+```move
+module my_sui_app::treasury;
+
+use openzeppelin_access::delayed_transfer;
+
+public struct TreasuryCap has key, store { id: UID }
+
+const MIN_DELAY_MS: u64 = 86_400_000; // 24 hours
+
+/// Creates the wrapper and transfers it to ctx.sender() internally
+public fun wrap_treasury_cap(cap: TreasuryCap, ctx: &mut TxContext) {
+    delayed_transfer::wrap(cap, MIN_DELAY_MS, ctx.sender(), ctx);
+}
+```
+
+`wrap` creates a `DelayedTransferWrapper<TreasuryCap>`, stores the capability inside it as a dynamic object field, and transfers the wrapper to the specified `recipient` (here, the caller). A `WrapExecuted` event is emitted. Unlike `two_step_transfer::wrap` which returns the wrapper, `delayed_transfer::wrap` handles the transfer internally and has no return value.
+
+### Step 2: Schedule a transfer
+
+```move
+/// Called by the current wrapper owner.
+wrapper.schedule_transfer(new_owner_address, &clock, ctx);
+/// Emits TransferScheduled with execute_after_ms = clock.timestamp_ms() + min_delay_ms
+```
+
+The `Clock` object is Sui's shared on-chain clock. The deadline is computed as `clock.timestamp_ms() + min_delay_ms` and stored in the wrapper. Only one action can be pending at a time; scheduling a second without canceling the first aborts with `ETransferAlreadyScheduled`.
+
+During the delay window, the `TransferScheduled` event is visible on-chain. Monitoring systems, governance dashboards, or individual users watching the chain can detect the pending transfer and take action (e.g., withdrawing funds from the protocol) before it executes.
+
+<Callout type="warn">
+The `recipient` in `schedule_transfer` must be a wallet address, not an object ID. If the wrapper is transferred to an object via transfer-to-object (TTO), both the wrapper and the capability inside it become permanently locked. The `delayed_transfer` module does not implement a `Receiving`-based retrieval mechanism, so there is no way to borrow, unwrap, or further transfer a wrapper that has been sent to an object. Always verify that the scheduled recipient is an address controlled by a keypair.
+</Callout>
+
+### Step 3: Wait, then execute
+
+```move
+/// Callable after the delay window has passed.
+wrapper.execute_transfer(&clock, ctx);
+/// Emits OwnershipTransferred. Consumes the wrapper and delivers it to the recipient.
+```
+
+`execute_transfer` consumes the wrapper by value. After this call, the wrapper has been transferred to the scheduled recipient and no longer exists in the caller's scope. Calling it before `execute_after_ms` aborts with `EDelayNotElapsed`.
+
+### Scheduling an unwrap
+
+The same delay enforcement applies to recovering the raw capability:
+
+```move
+/// Schedule the unwrap
+wrapper.schedule_unwrap(&clock, ctx);
+/// Emits UnwrapScheduled
+
+/// After the delay has elapsed, executes the unwrap: Emits UnwrapExecuted, wrapper is consumed, and capability is returned.
+let treasury_cap = wrapper.unwrap(&clock, ctx);
+```
+
+### Canceling
+
+The owner can cancel a pending action at any time before execution:
+
+```move
+wrapper.cancel_schedule();
+```
+
+This clears the pending slot immediately, allowing a new action to be scheduled.
+
+---
+
+## Choosing a transfer policy
+
+**Use `two_step_transfer` when:**
+
+- The transfer can execute immediately once confirmed.
+- The principal initiating the transfer is a known, controlled key.
+- The risk you are guarding against is human error (wrong or non-existent address), not timing.
+
+**Use `delayed_transfer` when:**
+
+- Your protocol requires on-chain lead time before authority changes.
+- Users, DAOs, or monitoring systems need a window to detect and respond.
+- The delay should be a reliable, inspectable commitment visible to anyone.
+
+**Combining both:** The modules accept any `T: key + store`, so they compose. You could wrap a capability in `delayed_transfer` for the timing guarantee and use a `two_step_transfer` flow at the scheduling step for address-confirmation safety.
+
+---
+
+## Putting it together
+
+Here is a protocol example that uses `delayed_transfer` to wrap its admin capability, ensuring any ownership change is visible on-chain for 24 hours before it takes effect:
+
+```move
+module my_sui_app::governed_protocol;
+
+use openzeppelin_access::delayed_transfer::{Self, DelayedTransferWrapper};
+use openzeppelin_math::rounding;
+use openzeppelin_math::u64 as math_u64;
+use sui::clock::Clock;
+
+const MIN_DELAY_MS: u64 = 86_400_000; // 24 hours
+const EMathOverflow: u64 = 0;
+
+public struct ProtocolAdmin has key, store {
+    id: UID,
+    fee_bps: u64,
+}
+
+/// Initialize: create the admin cap and wrap it with a 24-hour transfer delay.
+/// `delayed_transfer::wrap` transfers the wrapper to the deployer internally.
+fun init(ctx: &mut TxContext) {
+    let admin = ProtocolAdmin {
+        id: object::new(ctx),
+        fee_bps: 30, // 0.3%
+    };
+    delayed_transfer::wrap(admin, MIN_DELAY_MS, ctx.sender(), ctx);
+}
+
+/// Update the fee rate. Borrows the admin cap mutably without changing ownership.
+public fun update_fee(
+    wrapper: &mut DelayedTransferWrapper<ProtocolAdmin>,
+    new_fee_bps: u64,
+) {
+    let admin = delayed_transfer::borrow_mut(wrapper);
+    admin.fee_bps = new_fee_bps;
+}
+
+/// Compute a fee using the admin-configured rate and safe math.
+public fun compute_fee(
+    wrapper: &DelayedTransferWrapper<ProtocolAdmin>,
+    amount: u64,
+): u64 {
+    let admin = delayed_transfer::borrow(wrapper);
+    math_u64::mul_div(amount, admin.fee_bps, 10_000, rounding::up())
+        .destroy_or!(abort EMathOverflow)
+}
+
+/// Schedule a transfer to a new admin. Visible on-chain for 24 hours.
+public fun schedule_admin_transfer(
+    wrapper: &mut DelayedTransferWrapper<ProtocolAdmin>,
+    new_admin: address,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    wrapper.schedule_transfer(new_admin, clock, ctx);
+}
+```
+
+This module combines both packages: `openzeppelin_math` for the fee calculation (explicit rounding, overflow handling) and `openzeppelin_access` for the ownership policy (24-hour delay, on-chain observability). Users monitoring the chain see the `TransferScheduled` event and can exit before a new admin takes over.
+
+Build and test:
+
+```bash
+sui move build
+sui move test
+```
+
+---
+
+## Next steps
+
+- [Access package guide](https://docs.openzeppelin.com/contracts-sui/1.x/access) for a quick overview and examples
+- [Integer Math package guide](/contracts-sui/1.x/math) for a quick overview and examples
+- [Access API reference](https://docs.openzeppelin.com/contracts-sui/1.x/api/access) for full function signatures and error codes
+- [Math Walkthrough](/contracts-sui/1.x/learn/math-walkthrough) for a detailed walkthrough of the math library
+- [Source code](https://github.com/OpenZeppelin/contracts-sui/tree/main/contracts/access) for inline documentation and implementation details
+- [GitHub issue tracker](https://github.com/OpenZeppelin/contracts-sui/issues) to report bugs or request features
+- [Sui Discord](https://discord.gg/sui) and [Sui Developer Forum](https://forums.sui.io/) to connect with other builders
