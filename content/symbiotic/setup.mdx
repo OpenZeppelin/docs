@@ -1,0 +1,183 @@
+---
+title: Setup
+---
+
+Getting the stack running locally.
+
+## Prerequisites
+
+- Docker and Docker Compose v2+
+- [Foundry](https://book.getfoundry.sh/getting-started/installation) (`forge`, `cast`, `anvil`)
+- [Rust/Cargo](https://rustup.rs/) (for `make dev-operator`)
+- `jq`
+
+## Config Structure
+
+```
+config/
+├── environments/           # Per-network config (local.json, testnet.json)
+├── templates/              # Service config templates (oz-monitor, oz-relayer)
+├── oz-monitor/             # Static monitor config
+└── oz-relayer/             # Static relayer config and keystores
+
+deployments/
+└── <env>.json              # Canonical deployment addresses
+
+generated/
+└── <env>/                  # Generated runtime config and message cache
+```
+
+**How it works:**
+1. `make deploy` deploys contracts and updates `deployments/<env>.json`
+2. `make deploy` and `make start` generate provider-specific runtime config under `generated/<env>/`
+3. Docker containers mount from `generated/<env>/`
+
+**To customize configs:** Edit templates in `config/templates/`, then rerun `make deploy` or `make start`.
+
+## Environment Setup
+
+Bootstrap local `.env` and operator keys:
+
+```bash
+make setup
+```
+
+This generates `.env` from `.env.example` and creates BLS keys and relayer keystores.
+
+<Callout>
+
+`make start` also auto-bootstraps `.env` and keystores if missing, so `make setup` is only needed for explicit regeneration.
+
+</Callout>
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `PRIVATE_KEY` | Deployer key (default: Anvil account 0) |
+| `LOG_LEVEL` | Logging level (debug, info, warn, error) |
+| `WEBHOOK_SECRET` | HMAC secret for webhook auth (min 32 chars) |
+| `OZ_RELAYER_WEBHOOK_SECRET` | Secret for OZ Relayer webhook auth (min 32 chars) |
+| `OZ_RELAYER_API_KEY` | **Required.** Relayer API authentication |
+| `SIDECAR_*_SECRET_KEYS` | BLS keys per operator (generated) |
+
+Generate secrets with:
+
+```bash
+openssl rand -hex 32
+```
+
+<Callout type="warn">
+
+The operator will fail to start if `WEBHOOK_SECRET`, `OZ_RELAYER_WEBHOOK_SECRET`, or `OZ_RELAYER_API_KEY` are missing. Secrets must be at least 32 characters.
+
+</Callout>
+
+## Provider Selection
+
+Provider is set in `config/environments/<env>.json`:
+
+```json
+{
+  "activeProvider": "layerzero"
+}
+```
+
+All `make` commands (`start`, `send`, `watch`, `e2e`) are provider-aware based on this field.
+
+See provider-specific config in [LayerZero](/symbiotic/layerzero#configuration) or [Chainlink CCV](/symbiotic/chainlink-ccv#configuration).
+
+## Running Locally
+
+```bash
+# Start the full stack (auto-bootstrap + deploy + start services)
+make start
+
+# Check service health
+make status
+
+# Send a test message and watch it complete
+make e2e
+```
+
+### Common Commands
+
+```
+make start              Start the full local stack
+make deploy             Deploy contracts and generate service config
+make stop               Stop all containers (preserve state)
+make clean              Full reset (stop + remove volumes + markers)
+
+make restart-operators  Rebuild and restart all 3 operators
+make restart-monitor    Restart oz-monitor (config reload)
+make restart-relayer    Restart oz-relayer
+make restart-relays     Restart symbiotic-relay-1/2/3
+
+make dev-operator       Run operator-1 locally (cargo run)
+make rebuild-operators  Docker rebuild + restart all operators
+make shell              Interactive shell with addresses loaded
+
+make test               Run unit tests (forge + cargo)
+make test-contracts     Run contract tests only
+
+make logs-operators     Follow all 3 operator logs
+make logs-operator-N    Follow operator-N logs (N=1,2,3)
+make logs-monitor       Follow oz-monitor logs
+make logs-relayer       Follow oz-relayer logs
+make logs-relays        Follow symbiotic-relay-1/2/3 logs
+
+make status             Show running containers and health
+make help               Show all available commands
+```
+
+### Local Operator Development
+
+Run operator-1 outside Docker for fast iteration:
+
+```bash
+# Start the full stack first
+make start
+
+# Run operator-1 locally (replaces the Docker container)
+make dev-operator
+```
+
+This runs `cargo run` with the generated config and `RUST_LOG=debug`. The local operator connects to the same Docker services and receives the same webhooks.
+
+## Operator Configuration
+
+Runtime configs are generated at `generated/<env>/operator-{n}/config.json`.
+
+Key settings:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `signer.event_poll_interval` | 15s | How often to check for new pending messages |
+| `signer.sign_job_interval` | 1s | How often to retry pending Merkle roots |
+| `signer.sign_worker_count` | 5 | Concurrent signing workers |
+| `signer.min_batch_size` | 1 | Minimum messages before creating a tree |
+| `oz_relayer.poll_interval` | 5s | How often to check for signed trees to submit |
+| `oz_relayer.status_poll_interval` | 30s | How often to poll OZ Relayer for tx status |
+| `symbiotic_relay.key_tag` | 15 | BLS key identifier in the sidecar |
+
+## Contract Addresses
+
+After deployment, canonical addresses are in `deployments/<env>.json`.
+
+For manual testing, `make shell` opens an interactive shell with `.env` sourced and `ENV_CONFIG` / `DEPLOYMENTS_FILE` exported:
+
+```bash
+make shell
+# Then use jq to extract addresses:
+jq '.source.layerzero.dvn' $DEPLOYMENTS_FILE
+```
+
+## Service Ports
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| anvil (source) | 8545 | Source chain RPC |
+| anvil (dest) | 8546 | Destination chain RPC |
+| operator-1/2/3 | 3001-3003 | Operator debug APIs |
+| symbiotic-relay-1/2/3 | 8081-8083 | BLS sidecars |
+| oz-relayer | 8080 | Transaction relayer |
