@@ -20,6 +20,7 @@ function parseArgs() {
 		apiOutputDir: "content/contracts/5.x/api",
 		examplesOutputDir: "examples",
 		skipTemplateInject: false,
+		preGenerated: null,
 	};
 
 	for (let i = 0; i < args.length; i++) {
@@ -53,6 +54,10 @@ function parseArgs() {
 			case "--skip-template-inject":
 				options.skipTemplateInject = true;
 				break;
+			case "--pre-generated":
+			case "-p":
+				options.preGenerated = args[++i];
+				break;
 			default:
 				console.error(`Unknown option: ${arg}`);
 				showHelp();
@@ -75,12 +80,20 @@ Options:
   -t, --temp-dir <dir>       Temporary directory for cloning (default: temp-contracts)
   -a, --api-output <dir>     API documentation output directory (default: content/contracts/5.x/api)
   -e, --examples-output <dir> Examples output directory (default: examples)
+  -p, --pre-generated <path> Path within repo containing pre-generated MDX files (skips docgen)
   --skip-template-inject     Skip injecting canonical templates (use source repo's own)
   -h, --help                 Show this help message
 
+Modes:
+  Default (Solidity repos):  Injects canonical templates, runs hardhat docgen, copies output
+  --pre-generated (other):   Skips docgen entirely, copies pre-generated MDX from source repo
+
 Examples:
-  node generate-api-docs.js --repo https://github.com/OpenZeppelin/openzeppelin-contracts.git --branch master
-  node generate-api-docs.js --repo /path/to/local/repo --api-output content/community-contracts/api
+  # Solidity repo (injects templates, runs docgen):
+  node generate-api-docs.js --repo https://github.com/OpenZeppelin/openzeppelin-contracts.git --api-output content/contracts/5.x/api
+
+  # Non-Solidity repo (copies pre-generated MDX):
+  node generate-api-docs.js --repo https://github.com/OpenZeppelin/cairo-contracts.git --api-output content/contracts-cairo/3.x/api --pre-generated docs/api
 `);
 }
 
@@ -206,13 +219,18 @@ async function generateApiDocs(options) {
 		apiOutputDir,
 		examplesOutputDir,
 		skipTemplateInject,
+		preGenerated,
 	} = options;
 
-	console.log("🔄 Generating OpenZeppelin Contracts API documentation...");
+	console.log("🔄 Generating OpenZeppelin API documentation...");
 	console.log(`📦 Repository: ${contractsRepo}`);
 	console.log(`🌿 Branch: ${contractsBranch}`);
 	console.log(`📂 API Output: ${apiOutputDir}`);
-	console.log(`📂 Examples Output: ${examplesOutputDir}`);
+	if (preGenerated) {
+		console.log(`📋 Mode: pre-generated (source path: ${preGenerated})`);
+	} else {
+		console.log(`📂 Examples Output: ${examplesOutputDir}`);
+	}
 
 	try {
 		// Back up index.mdx if it exists
@@ -233,8 +251,8 @@ async function generateApiDocs(options) {
 		// Create output directory
 		await fs.mkdir(apiOutputDir, { recursive: true });
 
-		// Clone the contracts repository (works for both URLs and local paths)
-		console.log("📦 Cloning contracts repository...");
+		// Clone the repository (works for both URLs and local paths)
+		console.log("📦 Cloning repository...");
 		execSync(
 			`git clone --depth 1 --branch "${contractsBranch}" --recurse-submodules "${contractsRepo}" "${tempDir}"`,
 			{
@@ -242,7 +260,36 @@ async function generateApiDocs(options) {
 			},
 		);
 
-		// Inject canonical templates if not skipped
+		// Pre-generated mode: just copy MDX files from source repo, skip docgen
+		if (preGenerated) {
+			const sourcePath = path.join(tempDir, preGenerated);
+			try {
+				await fs.access(sourcePath);
+				await copyDirRecursive(sourcePath, apiOutputDir);
+				console.log(`✅ Pre-generated docs copied from ${preGenerated}`);
+			} catch (error) {
+				console.log(
+					`❌ Error: Pre-generated docs not found at ${preGenerated}`,
+				);
+				process.exit(1);
+			}
+
+			// Restore index.mdx if backed up
+			if (indexBackup) {
+				console.log("♻️  Restoring index.mdx...");
+				await fs.writeFile(indexPath, indexBackup, "utf8");
+			}
+
+			// Clean up
+			console.log("🧹 Cleaning up...");
+			await fs.rm(tempDir, { recursive: true, force: true });
+
+			console.log("🎉 API documentation generation complete!");
+			console.log(`📂 Documentation available in: ${apiOutputDir}`);
+			return;
+		}
+
+		// Solidity docgen mode: inject templates and run generation
 		if (!skipTemplateInject) {
 			await injectTemplates(tempDir, options);
 		}
