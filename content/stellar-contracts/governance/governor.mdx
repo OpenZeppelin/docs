@@ -168,6 +168,28 @@ Integrates the Governor with a [Timelock Controller](/stellar-contracts/governan
 - `execute()` requires proposals to be in `Queued` state
 - The timelock contract enforces the delay before execution
 
+## Design Rationale
+
+### Voting Power Lives on the Token
+
+The `Governor` trait does not include vote-querying methods like `get_votes`. Instead, voting power is managed entirely by a separate token contract implementing the [Votes](/stellar-contracts/governance/votes) trait. The Governor references this token via `get_token_contract()` and queries it for voting power at specific ledgers. This keeps the Governor focused on proposal lifecycle and counting, while the token handles delegation and checkpointing.
+
+### Counting is Pluggable
+
+The default counting mode uses three vote types — Against (0), For (1), Abstain (2) — with simple majority. However, the counting-related methods (`count_vote`, `tally_succeeded`, `quorum_reached`) can all be overridden to implement alternative strategies such as fractional voting, weighted quorum based on total supply, or NFT-based voting schemes. The `counting_mode()` method returns a symbol identifying the active strategy for UI consumption.
+
+### Queue Logic is Built-In but Disabled by Default
+
+Queuing is integrated into the base `Governor` trait rather than being a loosely coupled external module. This is a deliberate choice: queue state transitions are tightly coupled with the proposal lifecycle — `execute` must know whether to expect a `Succeeded` or `Queued` state, and `proposal_state` must be able to return `Queued` and `Expired` variants. Extracting this into a separate module would force implementers to manually wire these interactions.
+
+By default, `proposals_need_queuing()` returns `false`, making queue logic inert. Extensions like `TimelockControl` simply override this to return `true`, which activates the full queuing flow — `queue()` transitions proposals from `Succeeded` to `Queued`, and `execute()` then requires the `Queued` state. This approach means enabling queuing is a single-line override, with no need to modify proposal creation, voting, or execution logic.
+
+### Execution and Cancellation Require Implementation
+
+The `execute` and `cancel` functions have no default implementation. This is intentional: access control for these operations varies significantly between deployments. An open governance system may allow anyone to trigger execution of a succeeded proposal, while a guarded system may restrict it to a timelock contract or admin role. Forcing an explicit implementation ensures that the developer consciously decides their authorization model rather than inheriting a default that may not fit.
+
+Note that the `executor` parameter in `execute` represents the account *triggering* execution, not the entity performing the underlying calls — the Governor contract itself is the caller of the target contracts.
+
 ## Security Considerations
 
 ### Flash Loan Voting Attack
