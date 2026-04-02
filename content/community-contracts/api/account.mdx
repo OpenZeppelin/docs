@@ -5,20 +5,20 @@ description: "Smart contract account utilities and implementations"
 
 This directory includes contracts to build accounts for ERC-4337. These include:
 
-* [`ERC7579Executor`](#ERC7579Executor): An executor module that enables executing calls from accounts where the it’s installed.
-* [`ERC7579DelayedExecutor`](#ERC7579DelayedExecutor): An executor module that adds a delay before executing an account operation.
-* [`ERC7579SelectorExecutor`](#ERC7579SelectorExecutor): An executor module that restricts execution to specific function selectors.
-* [`ERC7579Validator`](#ERC7579Validator): Abstract validator module for ERC-7579 accounts that provides base implementation for signature validation.
-* [`ERC7579Signature`](#ERC7579Signature): Implementation of [`ERC7579Validator`](#ERC7579Validator) using ERC-7913 signature verification for address-less cryptographic keys and account signatures.
-* [`ERC7579Multisig`](#ERC7579Multisig): An extension of [`ERC7579Validator`](#ERC7579Validator) that enables validation using ERC-7913 signer keys.
-* [`ERC7579MultisigWeighted`](#ERC7579MultisigWeighted): An extension of [`ERC7579Multisig`](#ERC7579Multisig) that allows different weights to be assigned to signers.
-* [`ERC7579MultisigConfirmation`](#ERC7579MultisigConfirmation): An extension of [`ERC7579Multisig`](#ERC7579Multisig) that requires each signer to provide a confirmation signature.
-* [`ERC7579MultisigStorage`](#ERC7579MultisigStorage): An extension of [`ERC7579Multisig`](#ERC7579Multisig) that allows storing presigned approvals in storage.
-* [`PaymasterCore`](#PaymasterCore): An ERC-4337 paymaster implementation that includes the core logic to validate and pay for user operations.
-* [`PaymasterERC20`](#PaymasterERC20): A paymaster that allows users to pay for user operations using ERC-20 tokens.
-* [`PaymasterERC20Guarantor`](#PaymasterERC20Guarantor): A paymaster that enables third parties to guarantee user operations by pre-funding gas costs, with the option for users to repay or for guarantors to absorb the cost.
-* [`PaymasterERC721Owner`](#PaymasterERC721Owner): A paymaster that allows users to pay for user operations based on ERC-721 ownership.
-* [`PaymasterSigner`](#PaymasterSigner): A paymaster that allows users to pay for user operations using an authorized signature.
+- [`ERC7579Executor`](#ERC7579Executor): An executor module that enables executing calls from accounts where the it's installed.
+- [`ERC7579DelayedExecutor`](#ERC7579DelayedExecutor): An executor module that adds a delay before executing an account operation.
+- [`ERC7579SelectorExecutor`](#ERC7579SelectorExecutor): An executor module that restricts execution to specific function selectors.
+- [`ERC7579Validator`](#ERC7579Validator): Abstract validator module for ERC-7579 accounts that provides base implementation for signature validation.
+- [`ERC7579Signature`](#ERC7579Signature): Implementation of [`ERC7579Validator`](#ERC7579Validator) using ERC-7913 signature verification for address-less cryptographic keys and account signatures.
+- [`ERC7579Multisig`](#ERC7579Multisig): An extension of [`ERC7579Validator`](#ERC7579Validator) that enables validation using ERC-7913 signer keys.
+- [`ERC7579MultisigWeighted`](#ERC7579MultisigWeighted): An extension of [`ERC7579Multisig`](#ERC7579Multisig) that allows different weights to be assigned to signers.
+- [`ERC7579MultisigConfirmation`](#ERC7579MultisigConfirmation): An extension of [`ERC7579Multisig`](#ERC7579Multisig) that requires each signer to provide a confirmation signature.
+- [`ERC7579MultisigStorage`](#ERC7579MultisigStorage): An extension of [`ERC7579Multisig`](#ERC7579Multisig) that allows storing presigned approvals in storage.
+- [`PaymasterCore`](#PaymasterCore): An ERC-4337 paymaster implementation that includes the core logic to validate and pay for user operations.
+- [`PaymasterERC20`](#PaymasterERC20): A paymaster that allows users to pay for user operations using ERC-20 tokens.
+- [`PaymasterERC20Guarantor`](#PaymasterERC20Guarantor): A paymaster that enables third parties to guarantee user operations by pre-funding gas costs, with the option for users to repay or for guarantors to absorb the cost.
+- [`PaymasterERC721Owner`](#PaymasterERC721Owner): A paymaster that allows users to pay for user operations based on ERC-721 ownership.
+- [`PaymasterSigner`](#PaymasterSigner): A paymaster that allows users to pay for user operations using an authorized signature.
 
 ## Modules
 
@@ -69,13 +69,13 @@ This directory includes contracts to build accounts for ERC-4337. These include:
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/account/modules/ERC7579DelayedExecutor.sol";
+import "@openzeppelin/community-contracts/contracts/account/modules/ERC7579DelayedExecutor.sol";
 ```
 
 Extension of [`ERC7579Executor`](#ERC7579Executor) that allows scheduling and executing delayed operations
 with expiration. This module enables time-delayed execution patterns for smart accounts.
 
-==== Operation Lifecycle
+#### Operation Lifecycle
 
 1. Scheduling: Operations are scheduled via [`ERC7579DelayedExecutor.schedule`](#ERC7579DelayedExecutor-schedule-address-bytes32-bytes32-bytes-) with a specified delay period.
 The delay period is set during [`ERC7579DelayedExecutor.onInstall`](#ERC7579DelayedExecutor-onInstall-bytes-) and can be customized via [`ERC7579DelayedExecutor.setDelay`](#ERC7579DelayedExecutor-setDelay-uint32-). Each
@@ -90,7 +90,7 @@ Operations can be executed via [`ERC7579Executor.execute`](#ERC7579Executor-exec
 executable. If an operation is not executed within the expiration period, it becomes `Expired`
 and can't be executed. Expired operations must be rescheduled with a different salt.
 
-==== Delay Management
+#### Delay Management
 
 Accounts can set their own delay periods during installation or via [`ERC7579DelayedExecutor.setDelay`](#ERC7579DelayedExecutor-setDelay-uint32-).
 The delay period is enforced even between installas and uninstalls to prevent
@@ -98,7 +98,7 @@ immediate downgrades. When setting a new delay period, the new delay takes effec
 after a transition period defined by the current delay or [`ERC7579DelayedExecutor.minSetback`](#ERC7579DelayedExecutor-minSetback--), whichever
 is longer.
 
-==== Authorization
+#### Authorization
 
 Authorization for scheduling and canceling operations is controlled through the [`ERC7579DelayedExecutor._validateSchedule`](#ERC7579DelayedExecutor-_validateSchedule-address-bytes32-bytes32-bytes-)
 and [`ERC7579DelayedExecutor._validateCancel`](#ERC7579DelayedExecutor-_validateCancel-address-bytes32-bytes32-bytes-) functions. These functions can be overridden to implement custom
@@ -106,8 +106,8 @@ authorization logic, such as requiring specific signers or roles.
 
 <Callout>
 Use [`ERC7579DelayedExecutor._scheduleAt`](#ERC7579DelayedExecutor-_scheduleAt-address-bytes32-bytes32-bytes-uint48-uint32-) to schedule operations at a specific points in time. This is
-useful to pre-schedule operations for non-deployed accounts (e.g. subscriptions).
 </Callout>
+useful to pre-schedule operations for non-deployed accounts (e.g. subscriptions).
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Functions</h3>
@@ -442,16 +442,16 @@ and respecting the previous delay and expiration values.
 
 <Callout type="warn">
 This function does not clean up scheduled operations. This means operations
+</Callout>
 could potentially be re-executed if the module is reinstalled later. This is a deliberate
 design choice for efficiency, but module implementations may want to override this behavior
 to clear scheduled operations during uninstallation for their specific use cases.
-</Callout>
 
 <Callout>
 Calling this function directly will remove the expiration ([`ERC7579DelayedExecutor.getExpiration`](#ERC7579DelayedExecutor-getExpiration-address-)) value and
+</Callout>
 will schedule a reset of the delay ([`ERC7579DelayedExecutor.getDelay`](#ERC7579DelayedExecutor-getDelay-address-)) to `0` for the account. Reinstalling the
 module will not immediately reset the delay if the delay reset hasn't taken effect yet.
-</Callout>
 
 </div>
 </div>
@@ -472,9 +472,9 @@ Returns `data` as the execution calldata. See [`ERC7579Executor._execute`](#ERC7
 
 <Callout>
 This function relies on the operation state validation in [`ERC7579DelayedExecutor._execute`](#ERC7579DelayedExecutor-_execute-address-bytes32-bytes32-bytes-) for
+</Callout>
 authorization. Extensions of this module should override this function to implement
 additional validation logic if needed.
-</Callout>
 
 </div>
 </div>
@@ -804,7 +804,7 @@ The module is not installed on the account.
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/account/modules/ERC7579Executor.sol";
+import "@openzeppelin/community-contracts/contracts/account/modules/ERC7579Executor.sol";
 ```
 
 Basic implementation for ERC-7579 executor modules that provides execution functionality
@@ -817,9 +817,9 @@ derived contracts.
 
 <Callout>
 This is a simplified executor that directly executes operations without delay or expiration
+</Callout>
 mechanisms. For a more advanced implementation with time-delayed execution patterns and
 security features, see [`ERC7579DelayedExecutor`](#ERC7579DelayedExecutor).
-</Callout>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Functions</h3>
@@ -908,9 +908,9 @@ Example extension:
 
 <Callout>
 Pack extra data in the `data` arguments (e.g. a signature) to be used in the
+</Callout>
 validation process. Calldata can be sliced to extract it and return only the
 execution calldata.
-</Callout>
 
 </div>
 </div>
@@ -967,7 +967,7 @@ Emitted when an operation is executed.
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/account/modules/ERC7579Multisig.sol";
+import "@openzeppelin/community-contracts/contracts/account/modules/ERC7579Multisig.sol";
 ```
 
 Implementation of an [`ERC7579Validator`](#ERC7579Validator) that uses ERC-7913 signers for multisignature
@@ -1060,8 +1060,8 @@ disabled until they are added later.
 
 <Callout>
 An account can only call onInstall once. If called directly by the account,
-the signer will be set to the provided data. Future installations will behave as a no-op.
 </Callout>
+the signer will be set to the provided data. Future installations will behave as a no-op.
 
 </div>
 </div>
@@ -1085,8 +1085,8 @@ See [`ERC7579DelayedExecutor.onUninstall`](#ERC7579DelayedExecutor-onUninstall-b
 
 <Callout type="warn">
 This function has unbounded gas costs and may become uncallable if the set grows too large.
-See `EnumerableSet-clear`.
 </Callout>
+See `EnumerableSet-clear`.
 
 </div>
 </div>
@@ -1109,9 +1109,9 @@ Using `start = 0` and `end = type(uint64).max` will return the entire set of sig
 
 <Callout type="warn">
 Depending on the `start` and `end`, this operation can copy a large amount of data to memory, which
+</Callout>
 can be expensive. This is designed for view accessors queried without gas fees. Using it in state-changing
 functions may become uncallable if the slice grows too large.
-</Callout>
 
 </div>
 </div>
@@ -1338,7 +1338,7 @@ Requirements:
 </div>
 <div className="px-4">
 
-Validates the current threshold is reachable with the number of [`ERC7579Multisig._signersSetByAccount`](#ERC7579Multisig-_signersSetByAccount-mapping-address----struct-EnumerableSet-BytesSet-).
+Validates the current threshold is reachable with the number of `signers`.
 
 Requirements:
 
@@ -1541,7 +1541,7 @@ The `threshold` is unreachable given the number of `signers`.
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/account/modules/ERC7579MultisigConfirmation.sol";
+import "@openzeppelin/community-contracts/contracts/account/modules/ERC7579MultisigConfirmation.sol";
 ```
 
 Extension of [`ERC7579Multisig`](#ERC7579Multisig) that requires explicit confirmation signatures
@@ -1553,8 +1553,8 @@ consent to be added. Each signer must sign an EIP-712 message to confirm their a
 
 <Callout>
 Use this module to ensure that all guardians in a social recovery or multisig setup have
-explicitly agreed to their roles.
 </Callout>
+explicitly agreed to their roles.
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Functions</h3>
@@ -1720,7 +1720,7 @@ Error thrown when a confirmation signature has expired
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/account/modules/ERC7579MultisigStorage.sol";
+import "@openzeppelin/community-contracts/contracts/account/modules/ERC7579MultisigStorage.sol";
 ```
 
 Extension of [`ERC7579Multisig`](#ERC7579Multisig) that allows storing presigned approvals in storage.
@@ -1830,8 +1830,8 @@ signed, otherwise acts as a no-op.
 
 <Callout>
 Does not check if the signer is authorized for the account. Valid signatures from
-invalid signers won't be executable. See [`ERC7579Multisig._validateSignatures`](#ERC7579Multisig-_validateSignatures-address-bytes32-bytes---bytes---) for more details.
 </Callout>
+invalid signers won't be executable. See [`ERC7579Multisig._validateSignatures`](#ERC7579Multisig-_validateSignatures-address-bytes32-bytes---bytes---) for more details.
 
 </div>
 </div>
@@ -1851,7 +1851,7 @@ invalid signers won't be executable. See [`ERC7579Multisig._validateSignatures`]
 See [`ERC7579Multisig._validateSignatures`](#ERC7579Multisig-_validateSignatures-address-bytes32-bytes---bytes---).
 
 If a signature is empty, it indicates a presignature and the validation will check the storage mapping
-instead of cryptographic verification. See [`ERC7579Multisig._signersSetByAccount`](#ERC7579Multisig-_signersSetByAccount-mapping-address----struct-EnumerableSet-BytesSet-) for more details.
+instead of cryptographic verification. See `sign` for more details.
 
 </div>
 </div>
@@ -1887,7 +1887,7 @@ Emitted when a signer signs a hash
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/account/modules/ERC7579MultisigWeighted.sol";
+import "@openzeppelin/community-contracts/contracts/account/modules/ERC7579MultisigWeighted.sol";
 ```
 
 Extension of [`ERC7579Multisig`](#ERC7579Multisig) that supports weighted signatures.
@@ -1905,9 +1905,9 @@ after the time delay has passed.
 
 <Callout type="warn">
 When setting a threshold value, ensure it matches the scale used for signer weights.
+</Callout>
 For example, if signers have weights like 1, 2, or 3, then a threshold of 4 would require
 signatures with a total weight of at least 4 (e.g., one with weight 1 and one with weight 3).
-</Callout>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Functions</h3>
@@ -1996,8 +1996,8 @@ If weights are not provided but signers are, all signers default to weight 1.
 
 <Callout>
 An account can only call onInstall once. If called directly by the account,
-the signer will be set to the provided data. Future installations will behave as a no-op.
 </Callout>
+the signer will be set to the provided data. Future installations will behave as a no-op.
 
 </div>
 </div>
@@ -2158,10 +2158,10 @@ Override to validate threshold against total weight instead of signer count.
 
 <Callout>
 This function intentionally does not call `super._validateReachableThreshold` because the base implementation
+</Callout>
 assumes each signer has a weight of 1, which is a subset of this weighted implementation. Consider that multiple
 implementations of this function may exist in the contract, so important side effects may be missed
 depending on the linearization order.
-</Callout>
 
 </div>
 </div>
@@ -2183,8 +2183,8 @@ Overrides the base implementation to use weights instead of count.
 
 <Callout>
 This function intentionally does not call `super._validateThreshold` because the base implementation
-assumes each signer has a weight of 1, which is incompatible with this weighted implementation.
 </Callout>
+assumes each signer has a weight of 1, which is incompatible with this weighted implementation.
 
 </div>
 </div>
@@ -2206,8 +2206,8 @@ Emitted when a signer's weight is changed.
 
 <Callout>
 Not emitted in [`ERC7579Multisig._addSigners`](#ERC7579Multisig-_addSigners-address-bytes---) or [`ERC7579Multisig._removeSigners`](#ERC7579Multisig-_removeSigners-address-bytes---). Indexers must rely on [`ERC7579Multisig.ERC7913SignerAdded`](#ERC7579Multisig-ERC7913SignerAdded-address-bytes-)
-and [`ERC7579Multisig.ERC7913SignerRemoved`](#ERC7579Multisig-ERC7913SignerRemoved-address-bytes-) to index a default weight of 1. See [`ERC7579MultisigWeighted.signerWeight`](#ERC7579MultisigWeighted-signerWeight-address-bytes-).
 </Callout>
+and [`ERC7579Multisig.ERC7913SignerRemoved`](#ERC7579Multisig-ERC7913SignerRemoved-address-bytes-) to index a default weight of 1. See [`ERC7579MultisigWeighted.signerWeight`](#ERC7579MultisigWeighted-signerWeight-address-bytes-).
 
 </div>
 </div>
@@ -2259,7 +2259,7 @@ Thrown when the arrays lengths don't match.
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/account/modules/ERC7579SelectorExecutor.sol";
+import "@openzeppelin/community-contracts/contracts/account/modules/ERC7579SelectorExecutor.sol";
 ```
 
 Implementation of an [`ERC7579Executor`](#ERC7579Executor) that allows authorizing specific function selectors
@@ -2340,8 +2340,8 @@ Returns the set of authorized selectors for the specified account.
 
 <Callout type="warn">
 This operation copies the entire selectors set to memory, which
-can be expensive or may result in unbounded computation.
 </Callout>
+can be expensive or may result in unbounded computation.
 
 </div>
 </div>
@@ -2381,8 +2381,8 @@ Clears all selectors.
 
 <Callout type="warn">
 This function has unbounded gas costs and may become uncallable if the set grows too large.
-See [`EnumerableSetExtended.clear`](./utils#EnumerableSetExtended-clear-struct-EnumerableSetExtended-Bytes32x2Set-).
 </Callout>
+See [`EnumerableSetExtended.clear`](/community-contracts/api/utils#EnumerableSetExtended-clear-struct-EnumerableSetExtended-Bytes32x2Set-).
 
 </div>
 </div>
@@ -2538,7 +2538,7 @@ Error thrown when attempting to execute a non-authorized selector
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/account/modules/ERC7579Signature.sol";
+import "@openzeppelin/community-contracts/contracts/account/modules/ERC7579Signature.sol";
 ```
 
 Implementation of [`ERC7579Validator`](#ERC7579Validator) module using ERC-7913 signature verification.
@@ -2623,8 +2623,8 @@ See `IERC7579Module-onInstall`.
 
 <Callout>
 An account can only call onInstall once. If called directly by the account,
-the signer will be set to the provided data. Future installations will behave as a no-op.
 </Callout>
+the signer will be set to the provided data. Future installations will behave as a no-op.
 
 </div>
 </div>
@@ -2645,9 +2645,9 @@ See `IERC7579Module-onUninstall`.
 
 <Callout type="warn">
 The signer's key will be removed if the account calls this function, potentially
+</Callout>
 making the account unusable. As an account operator, make sure to uninstall to a predefined path
 in your account that properly handles side effects of uninstallation.  See `AccountERC7579-uninstallModule`.
-</Callout>
 
 </div>
 </div>
@@ -2757,7 +2757,7 @@ Thrown when the signer length is less than 20 bytes.
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/account/modules/ERC7579Validator.sol";
+import "@openzeppelin/community-contracts/contracts/account/modules/ERC7579Validator.sol";
 ```
 
 Abstract validator module for ERC-7579 accounts.
@@ -2889,8 +2889,8 @@ Validation algorithm.
 
 <Callout type="warn">
 Validation is a critical security function. Implementations must carefully
-handle cryptographic verification to prevent unauthorized access.
 </Callout>
+handle cryptographic verification to prevent unauthorized access.
 
 </div>
 </div>
@@ -2908,7 +2908,7 @@ handle cryptographic verification to prevent unauthorized access.
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/account/paymaster/PaymasterCore.sol";
+import "@openzeppelin/community-contracts/contracts/account/paymaster/PaymasterCore.sol";
 ```
 
 A simple ERC4337 paymaster implementation. This base implementation only includes the minimal logic to validate
@@ -2925,8 +2925,8 @@ through the internal functions [`PaymasterCore.deposit`](#PaymasterCore-deposit-
 
 <Callout>
 See [Paymaster's unstaked reputation rules](https://eips.ethereum.org/EIPS/eip-7562#unstaked-paymasters-reputation-rules)
- for more details on the paymaster's storage access limitations.
 </Callout>
+ for more details on the paymaster's storage access limitations.
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Modifiers</h3>
@@ -3094,8 +3094,8 @@ is returned by [`PaymasterCore.validatePaymasterUserOp`](#PaymasterCore-validate
 
 <Callout>
 The `actualUserOpFeePerGas` is not `tx.gasprice`. A user operation can be bundled with other transactions
-making the gas price of the user operation to differ.
 </Callout>
+making the gas price of the user operation to differ.
 
 </div>
 </div>
@@ -3256,7 +3256,7 @@ Unauthorized call to the paymaster.
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/account/paymaster/PaymasterERC20.sol";
+import "@openzeppelin/community-contracts/contracts/account/paymaster/PaymasterERC20.sol";
 ```
 
 Extension of [`PaymasterCore`](#PaymasterCore) that enables users to pay gas with ERC-20 tokens.
@@ -3366,9 +3366,9 @@ Returns a `prefundContext` that's passed to the [`PaymasterCore._postOp`](#Payma
 
 <Callout>
 Consider not reverting if the prefund fails when overriding this function. This is to avoid reverting
+</Callout>
 during the validation phase of the user operation, which may penalize the paymaster's reputation according
 to ERC-7562 validation rules.
-</Callout>
 
 </div>
 </div>
@@ -3391,9 +3391,9 @@ Reverts with [`PaymasterERC20.PaymasterERC20FailedRefund`](#PaymasterERC20-Payma
 
 <Callout type="warn">
 This function may revert after the user operation has been executed without
+</Callout>
 reverting the user operation itself. Consider implementing a mechanism to handle
 this case gracefully.
-</Callout>
 
 </div>
 </div>
@@ -3438,7 +3438,7 @@ The values returned by this internal function are:
 * `token`: Address of the ERC-20 token used for payment to the paymaster.
 * `tokenPrice`: Price of the token in native currency, scaled by `_tokenPriceDenominator()`.
 
-==== Calculating the token price
+#### Calculating the token price
 
 Given gas fees are paid in native currency, developers can use the `ERC20 price unit / native price unit` ratio to
 calculate the price of an ERC20 token price in native currency. However, the token may have a different number of decimals
@@ -3572,7 +3572,7 @@ and the `actualAmount` of `token`.
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/account/paymaster/PaymasterERC20Guarantor.sol";
+import "@openzeppelin/community-contracts/contracts/account/paymaster/PaymasterERC20Guarantor.sol";
 ```
 
 Extension of [`PaymasterERC20`](#PaymasterERC20) that enables third parties to guarantee user operations.
@@ -3685,8 +3685,8 @@ Otherwise, fallback to [`PaymasterERC20._refund`](#PaymasterERC20-_refund-contra
 
 <Callout>
 For guaranteed user operations where the user paid the `actualGasCost` back, this function
-doesn't call `super._refund`. Consider whether there are side effects in the parent contract that need to be executed.
 </Callout>
+doesn't call `super._refund`. Consider whether there are side effects in the parent contract that need to be executed.
 
 </div>
 </div>
@@ -3707,8 +3707,8 @@ Fetches the guarantor address and validation data from the user operation.
 
 <Callout>
 Return `address(0)` to disable the guarantor feature. If supported, ensure
-explicit consent (e.g., signature verification) to prevent unauthorized use.
 </Callout>
+explicit consent (e.g., signature verification) to prevent unauthorized use.
 
 </div>
 </div>
@@ -3761,7 +3761,7 @@ Emitted when a user operation identified by `userOpHash` is guaranteed by a `gua
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/account/paymaster/PaymasterERC721Owner.sol";
+import "@openzeppelin/community-contracts/contracts/account/paymaster/PaymasterERC721Owner.sol";
 ```
 
 Extension of [`PaymasterCore`](#PaymasterCore) that supports account based on ownership of an ERC-721 token.
@@ -3876,8 +3876,8 @@ Returns the context to be passed to postOp and the validation data.
 
 <Callout>
 The default `context` is `bytes(0)`. Developers that add a context when overriding this function MUST
-also override [`PaymasterCore._postOp`](#PaymasterCore-_postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-) to process the context passed along.
 </Callout>
+also override [`PaymasterCore._postOp`](#PaymasterCore-_postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-) to process the context passed along.
 
 </div>
 </div>
@@ -3913,7 +3913,7 @@ Emitted when the paymaster token is set.
 </div>
 
 ```solidity
-import "@openzeppelin/community-contracts/account/paymaster/PaymasterSigner.sol";
+import "@openzeppelin/community-contracts/contracts/account/paymaster/PaymasterSigner.sol";
 ```
 
 Extension of [`PaymasterCore`](#PaymasterCore) that adds signature validation. See `SignerECDSA`, `SignerP256` or `SignerRSA`.
@@ -4017,8 +4017,8 @@ Returns the context to be passed to postOp and the validation data.
 
 <Callout>
 The `context` returned is `bytes(0)`. Developers overriding this function MUST
-override [`PaymasterCore._postOp`](#PaymasterCore-_postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-) to process the context passed along.
 </Callout>
+override [`PaymasterCore._postOp`](#PaymasterCore-_postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-) to process the context passed along.
 
 </div>
 </div>
@@ -4039,3 +4039,4 @@ Decodes the user operation's data from `paymasterAndData`.
 
 </div>
 </div>
+

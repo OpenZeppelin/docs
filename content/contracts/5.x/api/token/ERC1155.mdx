@@ -13,6 +13,7 @@ Additionally there are multiple custom extensions, including:
 
 * designation of addresses that can pause token transfers for all users ([`ERC1155Pausable`](#ERC1155Pausable)).
 * destruction of own tokens ([`ERC1155Burnable`](#ERC1155Burnable)).
+* crosschain bridging of tokens through ERC-7786 gateways ([`ERC1155Crosschain`](#ERC1155Crosschain)).
 
 <Callout>
 This core set of contracts is designed to be unopinionated, allowing developers to access the internal functions in ERC-1155 (such as [`_mint`](#ERC1155-_mint-address-uint256-uint256-bytes-)) and expose them as external functions in the way they prefer.
@@ -30,9 +31,11 @@ This core set of contracts is designed to be unopinionated, allowing developers 
 
 ## Extensions
 
-[`ERC1155Pausable`](#ERC1155Pausable)
-
 [`ERC1155Burnable`](#ERC1155Burnable)
+
+[`ERC1155Crosschain`](#ERC1155Crosschain)
+
+[`ERC1155Pausable`](#ERC1155Pausable)
 
 [`ERC1155Supply`](#ERC1155Supply)
 
@@ -48,9 +51,9 @@ This core set of contracts is designed to be unopinionated, allowing developers 
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC1155`
+## `ERC1155` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC1155/ERC1155.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC1155/ERC1155.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -76,8 +79,10 @@ Originally based on code by Enjin: https://github.com/enjin/erc-1155
 - [isApprovedForAll(account, operator)](#ERC1155-isApprovedForAll-address-address-)
 - [safeTransferFrom(from, to, id, value, data)](#ERC1155-safeTransferFrom-address-address-uint256-uint256-bytes-)
 - [safeBatchTransferFrom(from, to, ids, values, data)](#ERC1155-safeBatchTransferFrom-address-address-uint256---uint256---bytes-)
+- [_checkAuthorized(operator, owner)](#ERC1155-_checkAuthorized-address-address-)
 - [_update(from, to, ids, values)](#ERC1155-_update-address-address-uint256---uint256---)
 - [_updateWithAcceptanceCheck(from, to, ids, values, data)](#ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-)
+- [_updateWithAcceptanceCheck(from, to, ids, values, data, batch)](#ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-bool-)
 - [_safeTransferFrom(from, to, id, value, data)](#ERC1155-_safeTransferFrom-address-address-uint256-uint256-bytes-)
 - [_safeBatchTransferFrom(from, to, ids, values, data)](#ERC1155-_safeBatchTransferFrom-address-address-uint256---uint256---bytes-)
 - [_setURI(newuri)](#ERC1155-_setURI-string-)
@@ -316,7 +321,7 @@ acceptance magic value.
 </div>
 <div className="px-4">
 
-[Batched](/contracts/5.x/erc1155) version of [`ERC1155.safeTransferFrom`](#ERC1155-safeTransferFrom-address-address-uint256-uint256-bytes-).
+[Batched](/contracts/5.x/erc1155#batch-operations) version of [`ERC1155.safeTransferFrom`](#ERC1155-safeTransferFrom-address-address-uint256-uint256-bytes-).
 
 <Callout type="warn">
 This function can potentially allow a reentrancy attack when transferring tokens
@@ -332,6 +337,23 @@ Requirements:
 - `ids` and `values` must have the same length.
 - If `to` refers to a smart contract, it must implement [`IERC1155Receiver.onERC1155BatchReceived`](#IERC1155Receiver-onERC1155BatchReceived-address-address-uint256---uint256---bytes-) and return the
 acceptance magic value.
+
+</div>
+</div>
+
+<a id="ERC1155-_checkAuthorized-address-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_checkAuthorized(address operator, address owner)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC1155-_checkAuthorized-address-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Checks if `operator` is authorized to transfer tokens owned by `owner`. Reverts with [`IERC1155Errors.ERC1155MissingApprovalForAll`](/contracts/5.x/api/interfaces#IERC1155Errors-ERC1155MissingApprovalForAll-address-address-) if not.
 
 </div>
 </div>
@@ -360,7 +382,7 @@ Requirements:
 - `ids` and `values` must have the same length.
 
 <Callout>
-The ERC-1155 acceptance check is not performed in this function. See [`ERC1155._updateWithAcceptanceCheck`](#ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-) instead.
+The ERC-1155 acceptance check is not performed in this function. See [`ERC1155._updateWithAcceptanceCheck`](#ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-bool-) instead.
 </Callout>
 
 </div>
@@ -374,6 +396,36 @@ The ERC-1155 acceptance check is not performed in this function. See [`ERC1155._
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
 <a className="peer" data-card href="#ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Version of [`ERC1155._update`](#ERC1155-_update-address-address-uint256---uint256---) that performs the token acceptance check by calling
+[`IERC1155Receiver.onERC1155Received`](#IERC1155Receiver-onERC1155Received-address-address-uint256-uint256-bytes-) or [`IERC1155Receiver.onERC1155BatchReceived`](#IERC1155Receiver-onERC1155BatchReceived-address-address-uint256---uint256---bytes-) on the receiver address if it
+contains code (eg. is a smart contract at the moment of execution).
+
+<Callout type="warn">
+Overriding this function is discouraged because it poses a reentrancy risk from the receiver. So any
+update to the contract state after this function would break the check-effect-interaction pattern. Consider
+overriding [`ERC1155._update`](#ERC1155-_update-address-address-uint256---uint256---) instead.
+</Callout>
+
+<Callout>
+This version is kept for backward compatibility. We recommend calling the alternative version with a boolean
+flag in order to achieve better control over which hook to call.
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-bool-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_updateWithAcceptanceCheck(address from, address to, uint256[] ids, uint256[] values, bytes data, bool batch)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-bool-">#</a>
 </div>
 </div>
 <div className="px-4">
@@ -429,7 +481,7 @@ acceptance magic value.
 </div>
 <div className="px-4">
 
-[Batched](/contracts/5.x/erc1155) version of [`ERC1155._safeTransferFrom`](#ERC1155-_safeTransferFrom-address-address-uint256-uint256-bytes-).
+[Batched](/contracts/5.x/erc1155#batch-operations) version of [`ERC1155._safeTransferFrom`](#ERC1155-_safeTransferFrom-address-address-uint256-uint256-bytes-).
 
 Emits a [`IERC1155.TransferBatch`](#IERC1155-TransferBatch-address-address-address-uint256---uint256---) event.
 
@@ -512,7 +564,7 @@ acceptance magic value.
 </div>
 <div className="px-4">
 
-[Batched](/contracts/5.x/erc1155) version of [`ERC1155._mint`](#ERC1155-_mint-address-uint256-uint256-bytes-).
+[Batched](/contracts/5.x/erc1155#batch-operations) version of [`ERC1155._mint`](#ERC1155-_mint-address-uint256-uint256-bytes-).
 
 Emits a [`IERC1155.TransferBatch`](#IERC1155-TransferBatch-address-address-address-uint256---uint256---) event.
 
@@ -562,7 +614,7 @@ Requirements:
 </div>
 <div className="px-4">
 
-[Batched](/contracts/5.x/erc1155) version of [`ERC1155._burn`](#ERC1155-_burn-address-uint256-uint256-).
+[Batched](/contracts/5.x/erc1155#batch-operations) version of [`ERC1155._burn`](#ERC1155-_burn-address-uint256-uint256-).
 
 Emits a [`IERC1155.TransferBatch`](#IERC1155-TransferBatch-address-address-address-uint256---uint256---) event.
 
@@ -593,6 +645,7 @@ Emits an [`IERC1155.ApprovalForAll`](#IERC1155-ApprovalForAll-address-address-bo
 
 Requirements:
 
+- `owner` cannot be the zero address.
 - `operator` cannot be the zero address.
 
 </div>
@@ -602,9 +655,9 @@ Requirements:
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `IERC1155`
+## `IERC1155` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC1155/IERC1155.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC1155/IERC1155.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -671,7 +724,7 @@ Returns the value of tokens of token type `id` owned by `account`.
 </div>
 <div className="px-4">
 
-[Batched](/contracts/5.x/erc1155) version of [`IERC6909.balanceOf`](../interfaces#IERC6909-balanceOf-address-uint256-).
+[Batched](/contracts/5.x/erc1155#batch-operations) version of [`ERC1155.balanceOf`](#ERC1155-balanceOf-address-uint256-).
 
 Requirements:
 
@@ -768,7 +821,7 @@ acceptance magic value.
 </div>
 <div className="px-4">
 
-[Batched](/contracts/5.x/erc1155) version of [`ERC1155.safeTransferFrom`](#ERC1155-safeTransferFrom-address-address-uint256-uint256-bytes-).
+[Batched](/contracts/5.x/erc1155#batch-operations) version of [`ERC1155.safeTransferFrom`](#ERC1155-safeTransferFrom-address-address-uint256-uint256-bytes-).
 
 <Callout type="warn">
 This function can potentially allow a reentrancy attack when transferring tokens
@@ -867,9 +920,9 @@ returned by [`IERC1155MetadataURI.uri`](#IERC1155MetadataURI-uri-uint256-).
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `IERC1155Receiver`
+## `IERC1155Receiver` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC1155/IERC1155Receiver.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC1155/IERC1155Receiver.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -945,9 +998,9 @@ To accept the transfer(s), this must return
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC1155Burnable`
+## `ERC1155Burnable` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC1155/extensions/ERC1155Burnable.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC1155/extensions/ERC1155Burnable.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -974,8 +1027,10 @@ own tokens and those that they have been approved to use.
 - [isApprovedForAll(account, operator)](#ERC1155-isApprovedForAll-address-address-)
 - [safeTransferFrom(from, to, id, value, data)](#ERC1155-safeTransferFrom-address-address-uint256-uint256-bytes-)
 - [safeBatchTransferFrom(from, to, ids, values, data)](#ERC1155-safeBatchTransferFrom-address-address-uint256---uint256---bytes-)
+- [_checkAuthorized(operator, owner)](#ERC1155-_checkAuthorized-address-address-)
 - [_update(from, to, ids, values)](#ERC1155-_update-address-address-uint256---uint256---)
 - [_updateWithAcceptanceCheck(from, to, ids, values, data)](#ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-)
+- [_updateWithAcceptanceCheck(from, to, ids, values, data, batch)](#ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-bool-)
 - [_safeTransferFrom(from, to, id, value, data)](#ERC1155-_safeTransferFrom-address-address-uint256-uint256-bytes-)
 - [_safeBatchTransferFrom(from, to, ids, values, data)](#ERC1155-_safeBatchTransferFrom-address-address-uint256---uint256---bytes-)
 - [_setURI(newuri)](#ERC1155-_setURI-string-)
@@ -1057,13 +1112,198 @@ own tokens and those that they have been approved to use.
 </div>
 </div>
 
+<a id="ERC1155Crosschain"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC1155Crosschain` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC1155/extensions/ERC1155Crosschain.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Crosschain.sol";
+```
+
+Extension of [`ERC1155`](#ERC1155) that makes it natively cross-chain using the ERC-7786 based [`BridgeMultiToken`](/contracts/5.x/api/crosschain#BridgeMultiToken).
+
+This extension makes the token compatible with:
+* [`ERC1155Crosschain`](#ERC1155Crosschain) instances on other chains,
+* [`ERC1155`](#ERC1155) instances on other chains that are bridged using [`BridgeERC1155`](/contracts/5.x/api/crosschain#BridgeERC1155),
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [crosschainTransferFrom(from, to, id, value)](#ERC1155Crosschain-crosschainTransferFrom-address-bytes-uint256-uint256-)
+- [crosschainTransferFrom(from, to, ids, values)](#ERC1155Crosschain-crosschainTransferFrom-address-bytes-uint256---uint256---)
+- [_onSend(from, ids, values)](#ERC1155Crosschain-_onSend-address-uint256---uint256---)
+- [_onReceive(to, ids, values)](#ERC1155Crosschain-_onReceive-address-uint256---uint256---)
+#### BridgeMultiToken [!toc]
+- [_crosschainTransfer(from, to, ids, values)](#BridgeMultiToken-_crosschainTransfer-address-bytes-uint256---uint256---)
+- [_processMessage(, receiveId, , payload)](#BridgeMultiToken-_processMessage-address-bytes32-bytes-bytes-)
+#### CrosschainLinked [!toc]
+- [getLink(chain)](#CrosschainLinked-getLink-bytes-)
+- [_setLink(gateway, counterpart, allowOverride)](#CrosschainLinked-_setLink-address-bytes-bool-)
+- [_sendMessageToCounterpart(chain, payload, attributes)](#CrosschainLinked-_sendMessageToCounterpart-bytes-bytes-bytes---)
+- [_isAuthorizedGateway(instance, sender)](#CrosschainLinked-_isAuthorizedGateway-address-bytes-)
+#### ERC7786Recipient [!toc]
+- [receiveMessage(receiveId, sender, payload)](#ERC7786Recipient-receiveMessage-bytes32-bytes-bytes-)
+#### IERC7786Recipient [!toc]
+#### ERC1155 [!toc]
+- [supportsInterface(interfaceId)](#ERC1155-supportsInterface-bytes4-)
+- [uri()](#ERC1155-uri-uint256-)
+- [balanceOf(account, id)](#ERC1155-balanceOf-address-uint256-)
+- [balanceOfBatch(accounts, ids)](#ERC1155-balanceOfBatch-address---uint256---)
+- [setApprovalForAll(operator, approved)](#ERC1155-setApprovalForAll-address-bool-)
+- [isApprovedForAll(account, operator)](#ERC1155-isApprovedForAll-address-address-)
+- [safeTransferFrom(from, to, id, value, data)](#ERC1155-safeTransferFrom-address-address-uint256-uint256-bytes-)
+- [safeBatchTransferFrom(from, to, ids, values, data)](#ERC1155-safeBatchTransferFrom-address-address-uint256---uint256---bytes-)
+- [_checkAuthorized(operator, owner)](#ERC1155-_checkAuthorized-address-address-)
+- [_update(from, to, ids, values)](#ERC1155-_update-address-address-uint256---uint256---)
+- [_updateWithAcceptanceCheck(from, to, ids, values, data)](#ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-)
+- [_updateWithAcceptanceCheck(from, to, ids, values, data, batch)](#ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-bool-)
+- [_safeTransferFrom(from, to, id, value, data)](#ERC1155-_safeTransferFrom-address-address-uint256-uint256-bytes-)
+- [_safeBatchTransferFrom(from, to, ids, values, data)](#ERC1155-_safeBatchTransferFrom-address-address-uint256---uint256---bytes-)
+- [_setURI(newuri)](#ERC1155-_setURI-string-)
+- [_mint(to, id, value, data)](#ERC1155-_mint-address-uint256-uint256-bytes-)
+- [_mintBatch(to, ids, values, data)](#ERC1155-_mintBatch-address-uint256---uint256---bytes-)
+- [_burn(from, id, value)](#ERC1155-_burn-address-uint256-uint256-)
+- [_burnBatch(from, ids, values)](#ERC1155-_burnBatch-address-uint256---uint256---)
+- [_setApprovalForAll(owner, operator, approved)](#ERC1155-_setApprovalForAll-address-address-bool-)
+#### IERC1155Errors [!toc]
+#### IERC1155MetadataURI [!toc]
+#### IERC1155 [!toc]
+#### ERC165 [!toc]
+#### IERC165 [!toc]
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+#### BridgeMultiToken [!toc]
+- [CrosschainMultiTokenTransferSent(sendId, from, to, ids, values)](#BridgeMultiToken-CrosschainMultiTokenTransferSent-bytes32-address-bytes-uint256---uint256---)
+- [CrosschainMultiTokenTransferReceived(receiveId, from, to, ids, values)](#BridgeMultiToken-CrosschainMultiTokenTransferReceived-bytes32-bytes-address-uint256---uint256---)
+#### CrosschainLinked [!toc]
+- [LinkRegistered(gateway, counterpart)](#CrosschainLinked-LinkRegistered-address-bytes-)
+#### ERC7786Recipient [!toc]
+#### IERC7786Recipient [!toc]
+#### ERC1155 [!toc]
+#### IERC1155Errors [!toc]
+#### IERC1155MetadataURI [!toc]
+#### IERC1155 [!toc]
+- [TransferSingle(operator, from, to, id, value)](#IERC1155-TransferSingle-address-address-address-uint256-uint256-)
+- [TransferBatch(operator, from, to, ids, values)](#IERC1155-TransferBatch-address-address-address-uint256---uint256---)
+- [ApprovalForAll(account, operator, approved)](#IERC1155-ApprovalForAll-address-address-bool-)
+- [URI(value, id)](#IERC1155-URI-string-uint256-)
+#### ERC165 [!toc]
+#### IERC165 [!toc]
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+#### BridgeMultiToken [!toc]
+#### CrosschainLinked [!toc]
+- [LinkAlreadyRegistered(chain)](#CrosschainLinked-LinkAlreadyRegistered-bytes-)
+#### ERC7786Recipient [!toc]
+- [ERC7786RecipientUnauthorizedGateway(gateway, sender)](#ERC7786Recipient-ERC7786RecipientUnauthorizedGateway-address-bytes-)
+#### IERC7786Recipient [!toc]
+#### ERC1155 [!toc]
+#### IERC1155Errors [!toc]
+- [ERC1155InsufficientBalance(sender, balance, needed, tokenId)](#IERC1155Errors-ERC1155InsufficientBalance-address-uint256-uint256-uint256-)
+- [ERC1155InvalidSender(sender)](#IERC1155Errors-ERC1155InvalidSender-address-)
+- [ERC1155InvalidReceiver(receiver)](#IERC1155Errors-ERC1155InvalidReceiver-address-)
+- [ERC1155MissingApprovalForAll(operator, owner)](#IERC1155Errors-ERC1155MissingApprovalForAll-address-address-)
+- [ERC1155InvalidApprover(approver)](#IERC1155Errors-ERC1155InvalidApprover-address-)
+- [ERC1155InvalidOperator(operator)](#IERC1155Errors-ERC1155InvalidOperator-address-)
+- [ERC1155InvalidArrayLength(idsLength, valuesLength)](#IERC1155Errors-ERC1155InvalidArrayLength-uint256-uint256-)
+#### IERC1155MetadataURI [!toc]
+#### IERC1155 [!toc]
+#### ERC165 [!toc]
+#### IERC165 [!toc]
+</div>
+</div>
+
+<a id="ERC1155Crosschain-crosschainTransferFrom-address-bytes-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">crosschainTransferFrom(address from, bytes to, uint256 id, uint256 value) → bytes32</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC1155Crosschain-crosschainTransferFrom-address-bytes-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+TransferFrom variant of [`ERC1155Crosschain.crosschainTransferFrom`](#ERC1155Crosschain-crosschainTransferFrom-address-bytes-uint256---uint256---), using ERC1155 allowance from the sender to the caller.
+
+</div>
+</div>
+
+<a id="ERC1155Crosschain-crosschainTransferFrom-address-bytes-uint256---uint256---"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">crosschainTransferFrom(address from, bytes to, uint256[] ids, uint256[] values) → bytes32</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC1155Crosschain-crosschainTransferFrom-address-bytes-uint256---uint256---">#</a>
+</div>
+</div>
+<div className="px-4">
+
+TransferFrom variant of [`ERC1155Crosschain.crosschainTransferFrom`](#ERC1155Crosschain-crosschainTransferFrom-address-bytes-uint256---uint256---), using ERC1155 allowance from the sender to the caller.
+
+</div>
+</div>
+
+<a id="ERC1155Crosschain-_onSend-address-uint256---uint256---"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_onSend(address from, uint256[] ids, uint256[] values)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC1155Crosschain-_onSend-address-uint256---uint256---">#</a>
+</div>
+</div>
+<div className="px-4">
+
+"Locking" tokens is achieved through burning
+
+</div>
+</div>
+
+<a id="ERC1155Crosschain-_onReceive-address-uint256---uint256---"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_onReceive(address to, uint256[] ids, uint256[] values)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC1155Crosschain-_onReceive-address-uint256---uint256---">#</a>
+</div>
+</div>
+<div className="px-4">
+
+"Unlocking" tokens is achieved through minting
+
+</div>
+</div>
+
 <a id="ERC1155Pausable"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC1155Pausable`
+## `ERC1155Pausable` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC1155/extensions/ERC1155Pausable.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC1155/extensions/ERC1155Pausable.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1082,8 +1322,8 @@ event of a large bug.
 <Callout type="warn">
 This contract does not include public pause and unpause functions. In
 addition to inheriting this contract, you must define both functions, invoking the
-[`Pausable._pause`](../utils#Pausable-_pause--) and [`Pausable._unpause`](../utils#Pausable-_unpause--) internal functions, with appropriate
-access control, e.g. using [`AccessControl`](../access#AccessControl) or [`Ownable`](../access#Ownable). Not doing so will
+[`Pausable._pause`](/contracts/5.x/api/utils#Pausable-_pause--) and [`Pausable._unpause`](/contracts/5.x/api/utils#Pausable-_unpause--) internal functions, with appropriate
+access control, e.g. using [`AccessControl`](/contracts/5.x/api/access#AccessControl) or [`Ownable`](/contracts/5.x/api/access#Ownable). Not doing so will
 make the contract pause mechanism of the contract unreachable, and thus unusable.
 </Callout>
 
@@ -1106,7 +1346,9 @@ make the contract pause mechanism of the contract unreachable, and thus unusable
 - [isApprovedForAll(account, operator)](#ERC1155-isApprovedForAll-address-address-)
 - [safeTransferFrom(from, to, id, value, data)](#ERC1155-safeTransferFrom-address-address-uint256-uint256-bytes-)
 - [safeBatchTransferFrom(from, to, ids, values, data)](#ERC1155-safeBatchTransferFrom-address-address-uint256---uint256---bytes-)
+- [_checkAuthorized(operator, owner)](#ERC1155-_checkAuthorized-address-address-)
 - [_updateWithAcceptanceCheck(from, to, ids, values, data)](#ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-)
+- [_updateWithAcceptanceCheck(from, to, ids, values, data, batch)](#ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-bool-)
 - [_safeTransferFrom(from, to, id, value, data)](#ERC1155-_safeTransferFrom-address-address-uint256-uint256-bytes-)
 - [_safeBatchTransferFrom(from, to, ids, values, data)](#ERC1155-_safeBatchTransferFrom-address-address-uint256---uint256---bytes-)
 - [_setURI(newuri)](#ERC1155-_setURI-string-)
@@ -1189,9 +1431,9 @@ Requirements:
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC1155Supply`
+## `ERC1155Supply` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC1155/extensions/ERC1155Supply.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC1155/extensions/ERC1155Supply.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1204,16 +1446,18 @@ import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
 Extension of ERC-1155 that adds tracking of total supply per id.
 
 Useful for scenarios where Fungible and Non-fungible tokens have to be
-clearly identified. Note: While a totalSupply of 1 might mean the
-corresponding is an NFT, there is no guarantees that no other token with the
-same id are not going to be minted.
+clearly identified. Note: While a `totalSupply` of 1 may mean the
+corresponding token is an NFT, there are no inherent guarantees that
+no more tokens with the same id will be minted in future.
 
 <Callout>
 This contract implies a global limit of 2**256 - 1 to the number of tokens
 that can be minted.
 </Callout>
 
-CAUTION: This extension should not be added in an upgrade to an already deployed contract.
+<Callout type="warn">
+This extension should not be added in an upgrade to an already deployed contract.
+</Callout>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Functions</h3>
@@ -1231,7 +1475,9 @@ CAUTION: This extension should not be added in an upgrade to an already deployed
 - [isApprovedForAll(account, operator)](#ERC1155-isApprovedForAll-address-address-)
 - [safeTransferFrom(from, to, id, value, data)](#ERC1155-safeTransferFrom-address-address-uint256-uint256-bytes-)
 - [safeBatchTransferFrom(from, to, ids, values, data)](#ERC1155-safeBatchTransferFrom-address-address-uint256---uint256---bytes-)
+- [_checkAuthorized(operator, owner)](#ERC1155-_checkAuthorized-address-address-)
 - [_updateWithAcceptanceCheck(from, to, ids, values, data)](#ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-)
+- [_updateWithAcceptanceCheck(from, to, ids, values, data, batch)](#ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-bool-)
 - [_safeTransferFrom(from, to, id, value, data)](#ERC1155-_safeTransferFrom-address-address-uint256-uint256-bytes-)
 - [_safeBatchTransferFrom(from, to, ids, values, data)](#ERC1155-_safeBatchTransferFrom-address-address-uint256---uint256---bytes-)
 - [_setURI(newuri)](#ERC1155-_setURI-string-)
@@ -1295,7 +1541,7 @@ CAUTION: This extension should not be added in an upgrade to an already deployed
 </div>
 <div className="px-4">
 
-Total value of tokens in with a given id.
+Total value of tokens with a given id.
 
 </div>
 </div>
@@ -1329,7 +1575,7 @@ Total value of tokens.
 </div>
 <div className="px-4">
 
-Indicates whether any token exist with a given id, or not.
+Indicates whether any tokens exist with a given id, or not.
 
 </div>
 </div>
@@ -1358,7 +1604,7 @@ Requirements:
 - `ids` and `values` must have the same length.
 
 <Callout>
-The ERC-1155 acceptance check is not performed in this function. See [`ERC1155._updateWithAcceptanceCheck`](#ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-) instead.
+The ERC-1155 acceptance check is not performed in this function. See [`ERC1155._updateWithAcceptanceCheck`](#ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-bool-) instead.
 </Callout>
 
 </div>
@@ -1368,9 +1614,9 @@ The ERC-1155 acceptance check is not performed in this function. See [`ERC1155._
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC1155URIStorage`
+## `ERC1155URIStorage` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC1155/extensions/ERC1155URIStorage.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC1155/extensions/ERC1155URIStorage.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1397,8 +1643,10 @@ Inspired by the [`ERC721URIStorage`](/contracts/5.x/api/token/ERC721#ERC721URISt
 - [isApprovedForAll(account, operator)](#ERC1155-isApprovedForAll-address-address-)
 - [safeTransferFrom(from, to, id, value, data)](#ERC1155-safeTransferFrom-address-address-uint256-uint256-bytes-)
 - [safeBatchTransferFrom(from, to, ids, values, data)](#ERC1155-safeBatchTransferFrom-address-address-uint256---uint256---bytes-)
+- [_checkAuthorized(operator, owner)](#ERC1155-_checkAuthorized-address-address-)
 - [_update(from, to, ids, values)](#ERC1155-_update-address-address-uint256---uint256---)
 - [_updateWithAcceptanceCheck(from, to, ids, values, data)](#ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-)
+- [_updateWithAcceptanceCheck(from, to, ids, values, data, batch)](#ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-bool-)
 - [_safeTransferFrom(from, to, id, value, data)](#ERC1155-_safeTransferFrom-address-address-uint256-uint256-bytes-)
 - [_safeBatchTransferFrom(from, to, ids, values, data)](#ERC1155-_safeBatchTransferFrom-address-address-uint256---uint256---bytes-)
 - [_setURI(newuri)](#ERC1155-_setURI-string-)
@@ -1520,9 +1768,9 @@ Sets `baseURI` as the `_baseURI` for all tokens
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `IERC1155MetadataURI`
+## `IERC1155MetadataURI` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC1155/extensions/IERC1155MetadataURI.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC1155/extensions/IERC1155MetadataURI.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1587,9 +1835,9 @@ clients with the actual token type ID.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC1155Holder`
+## `ERC1155Holder` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC1155/utils/ERC1155Holder.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC1155/utils/ERC1155Holder.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1676,9 +1924,9 @@ This function call must use less than 30 000 gas.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC1155Utils`
+## `ERC1155Utils` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC1155/utils/ERC1155Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC1155/utils/ERC1155Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1745,3 +1993,4 @@ the transfer.
 
 </div>
 </div>
+
