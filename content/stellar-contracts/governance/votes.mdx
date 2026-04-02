@@ -1,0 +1,116 @@
+---
+title: Votes
+---
+
+[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/governance/src/votes)
+
+The Votes module provides utilities for tracking voting power per account with historical checkpoints. It supports delegation and historical vote queries at any past ledger sequence number.
+
+## Core Concepts
+
+### Voting Units
+
+The base unit of voting power, typically mapped 1:1 with token balance. Voting units are tracked independently from token balances — the implementing contract must call `transfer_voting_units` on every balance change (mint, burn, transfer) to keep them in sync.
+
+### Delegation
+
+Only **delegated** voting power counts as votes. Undelegated voting units are not counted. An account must call `delegate` (even to itself) before its votes are counted. There is no explicit "undelegate" operation — to reclaim voting power, an account delegates to itself (self-delegation).
+
+### Checkpoints
+
+Historical snapshots of voting power at specific ledger sequence numbers. These enable querying past voting power for governance proposals, preventing manipulation through flash loans.
+
+## The Votes Trait
+
+```rust
+#[contracttrait]
+pub trait Votes {
+    /// Returns the current voting power (delegated votes) of an account.
+    fn get_votes(e: &Env, account: Address) -> u128;
+
+    /// Returns the voting power at a specific past ledger sequence number.
+    fn get_votes_at_checkpoint(e: &Env, account: Address, ledger: u32) -> u128;
+
+    /// Returns the current total supply of voting units.
+    fn get_total_supply(e: &Env) -> u128;
+
+    /// Returns the total supply at a specific past ledger sequence number.
+    fn get_total_supply_at_checkpoint(e: &Env, ledger: u32) -> u128;
+
+    /// Returns the current delegate for an account (None if never delegated).
+    fn get_delegate(e: &Env, account: Address) -> Option<Address>;
+
+    /// Delegates voting power from `account` to `delegatee`.
+    fn delegate(e: &Env, account: Address, delegatee: Address);
+}
+```
+
+All query methods return `0` if the account has no voting power or does not exist.
+
+## Integration with Token Contracts
+
+The implementing contract must call `transfer_voting_units` on every balance change to keep voting power in sync with token balances:
+
+```rust
+use stellar_governance::votes::{
+    delegate, get_votes, get_votes_at_checkpoint, transfer_voting_units,
+};
+
+// Override the token contract's transfer to update voting units:
+pub fn transfer(e: &Env, from: Address, to: Address, amount: i128) {
+    // ... perform transfer logic ...
+    transfer_voting_units(e, Some(&from), Some(&to), amount as u128);
+}
+
+// For minting (no sender):
+pub fn mint(e: &Env, to: Address, amount: i128) {
+    // ... perform mint logic ...
+    transfer_voting_units(e, None, Some(&to), amount as u128);
+}
+
+// For burning (no receiver):
+pub fn burn(e: &Env, from: Address, amount: i128) {
+    // ... perform burn logic ...
+    transfer_voting_units(e, Some(&from), None, amount as u128);
+}
+
+// Expose delegation:
+pub fn delegate(e: &Env, account: Address, delegatee: Address) {
+    votes::delegate(e, &account, &delegatee);
+}
+```
+
+## Free Functions
+
+In addition to the trait, the module exports free functions for direct use:
+
+| Function | Description |
+|----------|-------------|
+| `transfer_voting_units(e, from, to, amount)` | Updates voting units on balance changes. `from`/`to` are `Option<&Address>` for mint/burn. |
+| `get_voting_units(e, account)` | Returns the raw voting units (not delegated votes) for an account. |
+| `get_checkpoint(e, account, pos)` | Returns a specific checkpoint by position index. |
+| `num_checkpoints(e, account)` | Returns the number of checkpoints for an account. |
+| `delegate(e, account, delegatee)` | Delegates voting power. Requires authorization from `account`. |
+
+## Events
+
+| Event | Topics | Data |
+|-------|--------|------|
+| `DelegateChanged` | `delegator` | `from_delegate: Option<Address>`, `to_delegate: Address` |
+| `DelegateVotesChanged` | `delegate` | `previous_votes: u128`, `new_votes: u128` |
+
+## Errors
+
+| Error | Code | Description |
+|-------|------|-------------|
+| `FutureLookup` | 4100 | The queried ledger is in the future |
+| `MathOverflow` | 4101 | Arithmetic overflow occurred |
+| `InsufficientVotingUnits` | 4102 | Attempting to transfer more voting units than available |
+| `SameDelegate` | 4103 | Attempting to delegate to the already-set delegate |
+| `CheckpointNotFound` | 4104 | A checkpoint that was expected to exist was not found |
+
+## See Also
+
+- [Governor](/stellar-contracts/governance/governor)
+- [Fungible Token](/stellar-contracts/tokens/fungible/fungible) (Votes extension)
+- [Non-Fungible Token](/stellar-contracts/tokens/non-fungible/non-fungible) (Votes extension)

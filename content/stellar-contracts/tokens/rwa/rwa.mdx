@@ -294,6 +294,30 @@ graph TD
 The compliance contract is designed to be shared across multiple RWA tokens, with each hook function accepting a
 `token` parameter to identify the calling token.
 
+### - Compliance Modules
+[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/compliance/modules)
+
+Individual compliance modules implement the `ComplianceModule` trait, which defines hooks that the compliance contract forwards to:
+
+```rust
+pub trait ComplianceModule {
+    fn on_transfer(e: &Env, token: Address, from: Address, to: Address, amount: i128);
+    fn on_created(e: &Env, token: Address, to: Address, amount: i128);
+    fn on_destroyed(e: &Env, token: Address, from: Address, amount: i128);
+    fn can_transfer(e: &Env, token: Address, from: Address, to: Address, amount: i128) -> bool;
+    fn can_create(e: &Env, token: Address, to: Address, amount: i128) -> bool;
+    fn name(e: &Env) -> String;
+    fn get_compliance_address(e: &Env) -> Address;
+    fn set_compliance_address(e: &Env, compliance: Address);
+}
+```
+
+Modules can be registered for specific hooks via the compliance contract. The `ComplianceHook` enum defines which hooks a module handles: `Transferred`, `Created`, `Destroyed`, `CanTransfer`, `CanCreate`.
+
+<Callout type="warning">
+State-modifying hooks (`on_transfer`, `on_created`, `on_destroyed`) should restrict their caller to the compliance contract address. Read-only hooks (`can_transfer`, `can_create`) can be exposed more broadly.
+</Callout>
+
 ### - Identity Verifier
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/identity_verifier)
 

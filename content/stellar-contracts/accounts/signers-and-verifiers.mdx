@@ -60,7 +60,10 @@ When `require_auth_for_args` is called from within `__check_auth` (as with deleg
 
 ```rust
 #[contracttype]
-pub struct Signatures(pub Map<Signer, Bytes>);
+pub struct AuthPayload {
+    pub signers: Map<Signer, Bytes>,
+    pub context_rule_ids: Vec<u32>,
+}
 
 #[contract]
 pub struct MySmartAccount;
@@ -70,10 +73,10 @@ impl CustomAccountInterface for MySmartAccount {
     fn __check_auth(
         e: Env,
         payload: Hash<32>,
-        signatures: Signatures,
+        signatures: AuthPayload,
         auth_contexts: Vec<Context>,
     ) -> Result<(), SmartAccountError> {
-          for (signer, _) in signatures.0.iter() {
+          for (signer, _) in signatures.signers.iter() {
             match signer {
                 // ...
                 Signer::Delegated(addr) => {
@@ -89,7 +92,7 @@ impl CustomAccountInterface for MySmartAccount {
 
 **Example Scenario**
 
-Consider a scenario where a target contract `CAGCDFLG4WKPYG...` requires authorization from a smart account `CBH6XACZFDCJUHX...`. The smart account will grant authorization only if the G-account `GBDZXYMJ3SLYXCY...` has signed, meaning `Map<Signer, Bytes>` has to contain one element that is `Signer::Delegated("GBDZXYMJ3SLYXCY...")`. 
+Consider a scenario where a target contract `CAGCDFLG4WKPYG...` requires authorization from a smart account `CBH6XACZFDCJUHX...`. The smart account will grant authorization only if the G-account `GBDZXYMJ3SLYXCY...` has signed, meaning `AuthPayload.signers` has to contain one element with key `Signer::Delegated("GBDZXYMJ3SLYXCY...")`. 
 
 ```mermaid
 graph LR
@@ -139,7 +142,7 @@ When simulating this transaction, the following authorization entry is returned.
 
 The client implementation requires constructing two authorization entries:
 
-1. Replace `"signature": "void"` with the proper `Signatures(Map<Signer, Bytes>)` structure
+1. Replace `"signature": "void"` with the proper `AuthPayload` structure (containing `signers` map and `context_rule_ids`)
 2. Create the missing authorization entry for the delegated signer's `__check_auth` call
 
 The following typescript code demonstrates this process:
@@ -164,7 +167,7 @@ async function signAndSendTx(
     
     const signedAuths: SorobanAuthorizationEntry[] = [];
 
-    // 1) Construct the 1st auth entry: `Signatures(pub Map<Signer, Bytes>)` with `Signer::Delegated(Address)`
+    // 1) Construct the 1st auth entry: `AuthPayload` with `Signer::Delegated(Address)`
     const sigInnerMap = ScVal.scvMap([
         new xdr.ScMapEntry({
             key: ScVal.scvVec([
@@ -326,7 +329,10 @@ In the case of external signers verification is offloaded to specialized verifie
 
 ```rust
 #[contracttype]
-pub struct Signatures(pub Map<Signer, Bytes>);
+pub struct AuthPayload {
+    pub signers: Map<Signer, Bytes>,
+    pub context_rule_ids: Vec<u32>,
+}
 
 #[contract]
 pub struct MySmartAccount;
@@ -336,10 +342,10 @@ impl CustomAccountInterface for MySmartAccount {
     fn __check_auth(
         e: Env,
         payload: Hash<32>,
-        signatures: Signatures,
+        signatures: AuthPayload,
         auth_contexts: Vec<Context>,
     ) -> Result<(), SmartAccountError> {
-          for (signer, sig_data) in signatures.0.iter() {
+          for (signer, sig_data) in signatures.signers.iter() {
             match signer {
                 Signer::External(verifier, key_data) => {
                     let sig_payload = Bytes::from_array(e, &signature_payload.to_bytes().to_array());
@@ -365,7 +371,7 @@ This separation provides forward compatibility: when new cryptographic curves ar
 
 **Example Scenario**
 
-Consider again a target contract `CAGCDFLG4WKPYG...` that requires authorization from a smart account `CBH6XACZFDCJUHX...`. This time the smart account will grant authorization only if the Ed25519 public key `2b6bad0cfdb3d4b6f2cd...` has signed, meaning `Map<Signer, Bytes>` has to contain one element that is `Signer::External("CDLDYJWEZSM6IAI4...", "2b6bad0cfdb3d4b6f2cd...")` and its signature. 
+Consider again a target contract `CAGCDFLG4WKPYG...` that requires authorization from a smart account `CBH6XACZFDCJUHX...`. This time the smart account will grant authorization only if the Ed25519 public key `2b6bad0cfdb3d4b6f2cd...` has signed, meaning `AuthPayload.signers` has to contain one element with key `Signer::External("CDLDYJWEZSM6IAI4...", "2b6bad0cfdb3d4b6f2cd...")` and its signature as the value. 
 
 ```mermaid
 graph LR
@@ -444,10 +450,22 @@ fn add_signer(
     e: &Env,
     context_rule_id: u32,
     signer: Signer,
+) -> u32;
+```
+
+Adds a signer to an existing context rule and returns the assigned signer ID. The rule must not exceed the maximum of 15 signers.
+
+### Batch Adding Signers
+
+```rust
+fn batch_add_signer(
+    e: &Env,
+    context_rule_id: u32,
+    signers: Vec<Signer>,
 );
 ```
 
-Adds a signer to an existing context rule. The rule must not exceed the maximum of 15 signers.
+Adds multiple signers to an existing context rule at once.
 
 <Callout>
 **Important:** 
@@ -460,11 +478,11 @@ When adding signers to rules with threshold policies, administrators must manual
 fn remove_signer(
     e: &Env,
     context_rule_id: u32,
-    signer: Signer,
+    signer_id: u32,
 );
 ```
 
-Removes a signer from an existing context rule. The rule must maintain at least one signer OR one policy after removal.
+Removes a signer by its ID from an existing context rule. The rule must maintain at least one signer OR one policy after removal.
 
 <Callout>
 **Important:** 

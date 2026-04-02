@@ -32,7 +32,7 @@ List of authorized signers (maximum 15 per rule). Signers can be either delegate
 For detailed documentation on signers, see [Signers](/stellar-contracts/accounts/signers-and-verifiers).
 
 #### Policies
-List of policy contracts (maximum 5 per rule). Policies act as enforcement modules that perform read-only prechecks and state-changing enforcement logic.
+List of policy contracts (maximum 5 per rule). Policies act as enforcement modules that validate and enforce authorization constraints.
 
 For detailed documentation on policies, see [Policies](/stellar-contracts/accounts/policies).
 
@@ -44,28 +44,29 @@ Each rule must contain at least one signer OR one policy. This enables pure poli
 ### Multiple Rules Per Context
 Multiple rules can exist for the same context type with different signer sets and policies. This allows progressive authorization models where different combinations of credentials grant access to the same operations.
 
-### Rule Precedence
-Rules are evaluated in reverse chronological order (newest first). The first matching rule wins. This enables seamless permission updates: adding a new rule with different requirements immediately takes precedence over older rules for the same context.
+### Explicit Rule Selection
+The caller explicitly selects which rule to validate against for each auth context via `AuthPayload::context_rule_ids`. No automatic iteration or rule precedence is applied — the caller chooses the exact rule to use.
 
 ### Automatic Expiration
-Expired rules are automatically filtered out during authorization evaluation.
+Expired rules are rejected during authorization evaluation.
 
 ## Context Rule Limits
 
-The framework enforces limits to keep costs predictable and encourage proactive context rule management (remove expired or non-valid rules):
+The framework enforces per-rule limits to maintain predictability:
 
-- Maximum context rules per smart account: 15
 - Maximum signers per context rule: 15
 - Maximum policies per context rule: 5
 
+There is no upper limit on the total number of context rules per smart account.
+
 ## Authorization Matching
 
-During authorization, the framework:
+During authorization, the caller supplies `context_rule_ids` in the `AuthPayload`, one per auth context. For each (context, rule_id) pair:
 
-1. Gathers all non-expired rules matching the context type plus default rules
-2. Sorts rules by creation time (newest first)
-3. Evaluates rules in order until one matches
-4. Returns the first matching rule or fails if none match
+1. The rule is looked up by its explicit ID
+2. The rule is validated: must not be expired, context type must match
+3. Signers are authenticated and policies enforced
+4. Authorization succeeds if all checks pass, otherwise fails
 
 For detailed documentation on the authorization flow, see [Authorization Flow](/stellar-contracts/accounts/authorization-flow).
 

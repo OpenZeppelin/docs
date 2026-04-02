@@ -1,0 +1,272 @@
+---
+title: Governor
+---
+
+[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/governance/src/governor)
+
+The Governor module implements on-chain governance for Soroban contracts, providing the core primitives for decentralized decision-making: proposal creation, voting, counting, and execution.
+
+## Governance Flow
+
+The standard governance lifecycle follows this sequence:
+
+1. **Propose**: A user with sufficient voting power creates a proposal
+2. **Vote**: Token holders vote during the voting period
+3. **Execute**: Successful proposals (meeting quorum and vote thresholds) can be executed
+4. **Cancel**: Proposals can be canceled by authorized accounts unless already Executed, Expired, or Cancelled
+
+When using the optional **Queue** mechanism (e.g., `TimelockControl`), an additional step is added:
+
+1. **Propose** → 2. **Vote** → 3. **Queue** → 4. **Execute**
+
+To enable queuing, override `proposals_need_queuing` to return `true`.
+
+## The Governor Trait
+
+The `Governor` trait defines the core governance interface:
+
+### Configuration
+
+```rust
+fn name(e: &Env) -> String;
+fn version(e: &Env) -> String;
+fn voting_delay(e: &Env) -> u32;
+fn voting_period(e: &Env) -> u32;
+fn proposal_threshold(e: &Env) -> u128;
+fn get_token_contract(e: &Env) -> Address;
+fn counting_mode(e: &Env) -> Symbol;
+```
+
+- **`voting_delay`**: Number of ledgers between proposal creation and the start of voting.
+- **`voting_period`**: Number of ledgers during which voting is open.
+- **`proposal_threshold`**: Minimum voting power required to create a proposal.
+- **`get_token_contract`**: Address of the token contract that implements the [Votes](/stellar-contracts/governance/votes) trait.
+
+### Query Methods
+
+```rust
+fn has_voted(e: &Env, proposal_id: BytesN<32>, account: Address) -> bool;
+fn quorum(e: &Env, ledger: u32) -> u128;
+fn proposal_state(e: &Env, proposal_id: BytesN<32>) -> ProposalState;
+fn proposal_snapshot(e: &Env, proposal_id: BytesN<32>) -> u32;
+fn proposal_deadline(e: &Env, proposal_id: BytesN<32>) -> u32;
+fn proposal_proposer(e: &Env, proposal_id: BytesN<32>) -> Address;
+fn get_proposal_id(
+    e: &Env,
+    targets: Vec<Address>,
+    functions: Vec<Symbol>,
+    args: Vec<Vec<Val>>,
+    description_hash: BytesN<32>,
+) -> BytesN<32>;
+```
+
+The proposal ID is a deterministic keccak256 hash of the XDR-serialized targets, functions, args, and description hash, allowing anyone to compute the ID without storing the full proposal data.
+
+### Lifecycle Methods
+
+```rust
+fn propose(
+    e: &Env,
+    targets: Vec<Address>,
+    functions: Vec<Symbol>,
+    args: Vec<Vec<Val>>,
+    description: String,
+    proposer: Address,
+) -> BytesN<32>;
+
+fn cast_vote(
+    e: &Env,
+    proposal_id: BytesN<32>,
+    vote_type: u32,
+    reason: String,
+    voter: Address,
+) -> u128;
+
+fn queue(
+    e: &Env,
+    targets: Vec<Address>,
+    functions: Vec<Symbol>,
+    args: Vec<Vec<Val>>,
+    description_hash: BytesN<32>,
+    eta: u32,
+    operator: Address,
+) -> BytesN<32>;
+
+fn execute(
+    e: &Env,
+    targets: Vec<Address>,
+    functions: Vec<Symbol>,
+    args: Vec<Vec<Val>>,
+    description_hash: BytesN<32>,
+    executor: Address,
+) -> BytesN<32>;
+
+fn cancel(
+    e: &Env,
+    targets: Vec<Address>,
+    functions: Vec<Symbol>,
+    args: Vec<Vec<Val>>,
+    description_hash: BytesN<32>,
+    operator: Address,
+) -> BytesN<32>;
+
+fn proposals_need_queuing(e: &Env) -> bool; // defaults to false
+```
+
+<Callout type="warning">
+**`execute` and `cancel` have no default implementation.** The implementer must define who is authorized to call these functions. For example, open execution (anyone can trigger a succeeded proposal) or restricted execution (only a timelock contract or specific role).
+</Callout>
+
+## Proposal States
+
+```rust
+pub enum ProposalState {
+    Pending = 0,    // Voting has not started
+    Active = 1,     // Voting is ongoing
+    Defeated = 2,   // Voting ended without success
+    Canceled = 3,   // Cancelled by authorized account
+    Succeeded = 4,  // Met quorum and vote thresholds
+    Queued = 5,     // Queued for execution (via extension)
+    Expired = 6,    // Expired after queuing (via extension)
+    Executed = 7,   // Successfully executed
+}
+```
+
+States are divided into:
+- **Time-based** (Pending, Active, Defeated): Derived from the current ledger relative to the voting schedule. Never stored explicitly.
+- **Explicit** (Canceled, Succeeded, Queued, Expired, Executed): Persisted in storage. Once set, they take precedence over time-based derivation.
+
+## Default Counting
+
+The default counting implementation provides **simple counting**:
+
+- **Vote types**: Against (0), For (1), Abstain (2)
+- **Vote success**: `for` votes strictly exceed `against` votes
+- **Quorum**: Sum of `for` and `abstain` votes meets or exceeds the quorum value in effect at the proposal's `vote_snapshot` ledger
+
+Quorum values are stored as checkpoints, so updates do not retroactively affect existing proposals.
+
+## Dynamic Quorum
+
+The default `quorum()` implementation uses checkpoint-based fixed quorum. For supply-relative quorum (e.g., "10% of total supply"), override `quorum()` to compute the value dynamically from on-chain state at the requested ledger.
+
+<Callout>
+When overriding `quorum()`, do not use `set_quorum`/`get_quorum` as those are designed for fixed checkpoints. Also ensure that configurable parameters are themselves queried at the historical ledger to avoid retroactively changing the outcome of existing proposals.
+</Callout>
+
+## Extensions
+
+### GovernorSettings
+
+Provides configurable parameters for `voting_delay`, `voting_period`, and `proposal_threshold`. Override the corresponding trait methods to read from storage initialized during construction.
+
+### TimelockControl
+
+Integrates the Governor with a [Timelock Controller](/stellar-contracts/governance/timelock-controller) for delayed execution. When enabled:
+- Override `proposals_need_queuing` to return `true`
+- `queue()` transitions proposals from `Succeeded` to `Queued`
+- `execute()` requires proposals to be in `Queued` state
+- The timelock contract enforces the delay before execution
+
+## Security Considerations
+
+### Flash Loan Voting Attack
+
+An attacker could borrow voting tokens, vote, and return them within the same transaction. This implementation mitigates this with **snapshot-based voting power**:
+
+1. **Proposer snapshot** (`current_ledger - 1`): Prevents flash-loaning tokens and creating a proposal in the same transaction.
+2. **Voter snapshot** (`vote_start`): Voters' power is looked up at the `vote_start` ledger. Since checkpoints record state after all transactions in a ledger are finalized, a flash loan within the same ledger shows a net-zero balance.
+
+### Proposal Spam
+
+The **proposal threshold** requires proposers to hold a minimum amount of voting power, making spam attacks economically costly.
+
+### Governance Capture
+
+- **Quorum requirements** ensure minimum participation
+- **Voting delay** gives token holders time to position themselves before voting starts
+
+## Events
+
+| Event | Topics | Data |
+|-------|--------|------|
+| `ProposalCreated` | `proposal_id`, `proposer` | `targets`, `functions`, `args`, `vote_snapshot`, `vote_end`, `description` |
+| `VoteCast` | `voter`, `proposal_id` | `vote_type`, `weight`, `reason` |
+| `ProposalQueued` | `proposal_id` | `eta` |
+| `ProposalExecuted` | `proposal_id` | — |
+| `ProposalCancelled` | `proposal_id` | — |
+| `QuorumChanged` | — | `old_quorum`, `new_quorum` |
+
+## Errors
+
+| Error | Code | Description |
+|-------|------|-------------|
+| `ProposalNotFound` | 5000 | The proposal was not found |
+| `ProposalAlreadyExists` | 5001 | A proposal with the same parameters already exists |
+| `InsufficientProposerVotes` | 5002 | The proposer lacks sufficient voting power |
+| `EmptyProposal` | 5003 | The proposal contains no actions |
+| `InvalidProposalLength` | 5004 | Mismatched targets/functions/args vector lengths |
+| `ProposalNotActive` | 5005 | Voting is not currently open |
+| `ProposalNotSuccessful` | 5006 | The proposal has not succeeded |
+| `ProposalNotQueued` | 5007 | The proposal has not been queued |
+| `ProposalAlreadyExecuted` | 5008 | The proposal was already executed |
+| `ProposalNotCancellable` | 5009 | The proposal is in a non-cancellable state |
+| `AlreadyVoted` | 5016 | The account has already voted on this proposal |
+| `InvalidVoteType` | 5017 | Invalid vote type (must be 0, 1, or 2) |
+| `QuorumNotSet` | 5018 | Quorum has not been configured |
+| `QueueNotEnabled` | 5022 | Queuing is not enabled for this governor |
+
+## Example
+
+```rust
+use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String, Symbol, Val, Vec};
+use stellar_governance::governor::{self, storage, Governor, hash_proposal, get_proposal_snapshot};
+use stellar_macros::only_role;
+
+#[contract]
+pub struct MyGovernor;
+
+#[contractimpl]
+impl Governor for MyGovernor {
+    // Open execution — anyone can trigger a succeeded proposal
+    fn execute(
+        e: &Env,
+        targets: Vec<Address>,
+        functions: Vec<Symbol>,
+        args: Vec<Vec<Val>>,
+        description_hash: BytesN<32>,
+        _executor: Address,
+    ) -> BytesN<32> {
+        let proposal_id = hash_proposal(e, &targets, &functions, &args, &description_hash);
+        let quorum = Self::quorum(e, get_proposal_snapshot(e, &proposal_id));
+        storage::execute(
+            e, targets, functions, args, &description_hash,
+            Self::proposals_need_queuing(e), quorum,
+        )
+    }
+
+    // Only the original proposer can cancel
+    fn cancel(
+        e: &Env,
+        targets: Vec<Address>,
+        functions: Vec<Symbol>,
+        args: Vec<Vec<Val>>,
+        description_hash: BytesN<32>,
+        operator: Address,
+    ) -> BytesN<32> {
+        let proposal_id = storage::hash_proposal(
+            e, &targets, &functions, &args, &description_hash,
+        );
+        let proposer = storage::get_proposal_proposer(e, &proposal_id);
+        assert!(operator == proposer);
+        operator.require_auth();
+        storage::cancel(e, targets, functions, args, &description_hash)
+    }
+}
+```
+
+## See Also
+
+- [Votes](/stellar-contracts/governance/votes)
+- [Timelock Controller](/stellar-contracts/governance/timelock-controller)
+- [Fungible Token](/stellar-contracts/tokens/fungible/fungible)

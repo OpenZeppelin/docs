@@ -71,7 +71,7 @@ Signers define who can authorize operations. The framework supports both **deleg
 For detailed documentation, see [Signers and Verifiers](/stellar-contracts/accounts/signers-and-verifiers).
 
 ### Policies
-Policies act as enforcement modules attached to context rules. They perform read-only prechecks and can update state to enforce limits or workflows.
+Policies act as enforcement modules attached to context rules. They validate and enforce constraints during authorization, panicking if conditions are not met.
 
 For detailed documentation, see [Policies](/stellar-contracts/accounts/policies).
 
@@ -79,11 +79,11 @@ This separation allows for clean composition of authorization requirements while
 
 ## Authorization Flow
 
-Authorization is determined by matching the current call context against the account's context rules:
+Authorization is determined by explicitly selecting context rules via `AuthPayload::context_rule_ids`:
 
-1. **Rule Collection**: Retrieve all non-expired rules for the specific context type and default rules
-2. **Rule Evaluation**: For each rule (newest first), authenticate signers and validate policies
-3. **Policy Enforcement**: If enough signers are authenticated and policy prechecks succeed, trigger policy state changes
+1. **Rule Selection**: The caller supplies one rule ID per auth context in the `AuthPayload`
+2. **Rule Evaluation**: For each (context, rule_id) pair, verify the rule is not expired and context type matches, then authenticate signers
+3. **Policy Enforcement**: If policies are present, call `enforce()` on each. If no policies, all rule signers must be authenticated.
 4. **Result**: Grant or deny authorization
 
 For detailed documentation, see [Authorization Flow](/stellar-contracts/accounts/authorization-flow).
