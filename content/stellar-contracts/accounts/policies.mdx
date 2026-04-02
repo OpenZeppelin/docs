@@ -6,7 +6,7 @@ title: Policies
 
 Policies are enforcement modules that add constraints to context rules in smart accounts. While signers determine who can authorize actions, policies determine how those authorizations are enforced, enabling sophisticated patterns like multi-signature thresholds, spending limits, and time-based restrictions.
 
-Policies attach to context rules and execute during the authorization flow. A context rule can have up to **5 policies** attached, and policies are executed in the order they were added. If policies are present in a context rule, **all of them must be enforceable** (i.e., `can_enforce` must return `true`) for the rule to be considered matched and authorized.
+Policies attach to context rules and execute during the authorization flow. A context rule can have up to **5 policies** attached, and policies are executed in the order they were added. If policies are present in a context rule, **all of them must succeed** (i.e., `enforce` must not panic) for the rule to be considered matched and authorized.
 
 ## The Policy Trait
 
@@ -16,42 +16,32 @@ All policies must implement the `Policy` trait:
 pub trait Policy {
     type AccountParams: FromVal<Env, Val>;
 
-    /// Read-only pre-check to validate conditions
-    /// Must be idempotent and side-effect free
-    /// Returns true if the policy would allow the action
-    fn can_enforce(
-        e: &Env,
-        context: Context,
-        authenticated_signers: Vec<Signer>,
-        rule: ContextRule,
-        smart_account: Address,
-    ) -> bool;
-    
-    /// State-changing enforcement hook
-    /// Called when a context rule successfully matches and all can_enforce checks pass
-    /// Requires smart account authorization
+    /// Validates authorization conditions and applies state changes.
+    /// Called when a context rule matches during the authorization flow.
+    /// Must panic if policy conditions aren't satisfied.
+    /// Requires smart account authorization.
     fn enforce(
         e: &Env,
         context: Context,
         authenticated_signers: Vec<Signer>,
-        rule: ContextRule,
+        context_rule: ContextRule,
         smart_account: Address,
     );
-    
-    /// Initialize policy-specific storage and configuration
-    /// Called when a new context rule with attached policies is created
+
+    /// Initialize policy-specific storage and configuration.
+    /// Called when a new context rule with attached policies is created.
     fn install(
         e: &Env,
-        param: Self::AccountParams,
-        rule: ContextRule,
+        install_params: Self::AccountParams,
+        context_rule: ContextRule,
         smart_account: Address,
     );
-    
-    /// Clean up policy data when removed
-    /// Called when a context rule is removed
+
+    /// Clean up policy data when removed.
+    /// Called when a context rule is removed.
     fn uninstall(
         e: &Env,
-        rule: ContextRule,
+        context_rule: ContextRule,
         smart_account: Address,
     );
 }
@@ -59,7 +49,7 @@ pub trait Policy {
 
 ## Policy Lifecycle
 
-The four trait methods form a complete lifecycle for policy management:
+The three trait methods form a complete lifecycle for policy management:
 
 ### Installation
 
@@ -71,28 +61,18 @@ This initialization step allows policies to configure their logic. For example:
 
 Installation ensures that each policy has the necessary state and configuration ready before authorization checks begin.
 
-### Pre-check Validation
-
-Pre-check validation happens during authorization. When the matching algorithm iterates over context rules and their associated policies, it calls `can_enforce()` on each policy as a read-only pre-check.
-
-This function examines the current state without modifying it, for instance:
-- Verifying that a spending limit has not been exceeded
-- Checking that enough signers are present
-- Validating that time-based restrictions are met
-
-Policies that fail this check cause the algorithm to move to the next context rule.
-
 ### Enforcement
 
-Enforcement is triggered when a context rule successfully matches. Once all policies in the matched rule pass their `can_enforce()` checks, the smart account calls `enforce()` on each policy.
+Enforcement is triggered when a context rule matches during the authorization flow. The smart account calls `enforce()` on each policy attached to the matched rule. The `enforce()` method both validates conditions and applies state changes in a single call — it must panic if the policy conditions are not satisfied.
 
-This state-changing hook allows policies to:
-- Update counters
-- Emit events
-- Record timestamps
-- Track authorization activity
+This allows policies to:
+- Verify that a spending limit has not been exceeded
+- Check that enough signers are present
+- Validate that time-based restrictions are met
+- Update counters and record timestamps
+- Emit events for auditing
 
-For example, a spending limit policy might deduct from the available balance and emit an event documenting the transaction.
+For example, a spending limit policy checks that the transaction amount is within the allowed limit, deducts from the available balance, and emits an event documenting the transaction. If the limit is exceeded, the policy panics and the authorization flow moves to the next context rule.
 
 ### Uninstallation
 
@@ -138,11 +118,11 @@ fn add_policy(
     e: &Env,
     context_rule_id: u32,
     policy: Address,
-    account_params: Val,
-);
+    install_param: Val,
+) -> u32;
 ```
 
-Adds a policy to an existing context rule and calls its `install()` function. The rule must not exceed the maximum of 5 policies.
+Adds a policy to an existing context rule, calls its `install()` function, and returns the policy's numeric ID. The rule must not exceed the maximum of 5 policies.
 
 ### Removing Policies
 
@@ -150,11 +130,11 @@ Adds a policy to an existing context rule and calls its `install()` function. Th
 fn remove_policy(
     e: &Env,
     context_rule_id: u32,
-    policy: Address,
+    policy_id: u32,
 );
 ```
 
-Removes a policy from an existing context rule and calls its `uninstall()` function. The rule must maintain at least one signer OR one policy after removal.
+Removes a policy (identified by its numeric ID) from an existing context rule and calls its `uninstall()` function. The rule must maintain at least one signer OR one policy after removal.
 
 ### Caveats
 

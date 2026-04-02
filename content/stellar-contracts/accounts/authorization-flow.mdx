@@ -2,7 +2,7 @@
 title: Authorization Flow
 ---
 
-Authorization in smart accounts is determined by matching the current context against the account's context rules. Rules are gathered, ordered by recency, and evaluated until one satisfies the requirements. If a matching rule is found, its policies (if any) are enforced. Otherwise, authorization fails.
+Authorization in smart accounts is determined by matching each auth context against explicitly selected context rules. The off-chain client specifies which rule to use for each operation via `context_rule_ids` in the `AuthPayload`. The selected rule is validated, its signers authenticated, and its policies enforced. If any step fails, authorization is denied.
 
 ## Detailed Flow
 ```mermaid
@@ -14,11 +14,13 @@ sequenceDiagram
     participant Verifier
     participant Policy
 
-    User->>SmartAccount: Signatures
-    SmartAccount->>ContextRule: Match context<br/>(CallContract, Default, ...)
-    ContextRule->>ContextRule: Filter expired rules<br/>Sort newest first
+    User->>SmartAccount: AuthPayload (signers + context_rule_ids)
+    SmartAccount->>SmartAccount: Compute auth_digest<br/>sha256(payload || rule_ids.to_xdr())
 
-    loop Each rule until match
+    loop Each auth context
+        SmartAccount->>ContextRule: Look up rule by ID<br/>from context_rule_ids
+        ContextRule->>ContextRule: Validate not expired<br/>and matches context type
+
         Note over ContextRule,DelegatedSigner: Built-in authorization <br/>for delegated signers
         ContextRule->>DelegatedSigner: require_auth_for_args()
         DelegatedSigner-->>ContextRule: Authorized
@@ -27,37 +29,25 @@ sequenceDiagram
         ContextRule->>Verifier: verify()
         Verifier-->>ContextRule: Valid
 
-        Note over ContextRule,Policy: Policy pre-checks
-        ContextRule->>Policy: can_enforce()
-        Policy-->>ContextRule: True/False
+        Note over ContextRule,Policy: Policy enforcement (panics on failure)
+        ContextRule->>Policy: enforce()
+        Policy->>Policy: Validate + update state
 
-        alt All checks pass
-            ContextRule->>Policy: enforce()
-            Policy->>Policy: Update state
-            ContextRule-->>SmartAccount: ✓ Authorized
-        else Any check fails
-            ContextRule->>ContextRule: Try next rule
-        end
+        ContextRule-->>SmartAccount: ✓ Authorized
     end
 
     SmartAccount-->>User: Success
 ```
 
-### 1. Rule Collection
+### 1. Rule Lookup
 
-The smart account gathers all relevant context rules for evaluation:
+The smart account reads the `context_rule_ids` from the `AuthPayload`. There must be exactly one rule ID per auth context — a mismatch is rejected with `ContextRuleIdsLengthMismatch`.
 
-- Retrieve all non-expired rules for the specific context type
-- Include default rules that apply to any context
-- Sort specific and default rules by creation time (newest first)
+For each auth context, the corresponding rule ID is used to look up the context rule directly. The rule must:
 
-**Context Type Matching:**
-- For a `CallContract(address)` context, both specific `CallContract(address)` rules and `Default` rules are collected
-- For a `CreateContract(wasm_hash)` context, both specific `CreateContract(wasm_hash)` rules and `Default` rules are collected
-- For any other context, only `Default` rules are collected
-
-**Expiration Filtering:**
-Rules with `valid_until` set to a ledger sequence that has passed are automatically filtered out during collection.
+- Exist in the account's storage
+- Not be expired (if `valid_until` is set, it must be ≥ current ledger sequence)
+- Match the context type: a `CallContract(address)` rule matches a `CallContract(address)` context, and `Default` rules match any context
 
 ### 2. Rule Evaluation
 
@@ -72,51 +62,33 @@ Extract authenticated signers from the rule's signer list. A signer is considere
 
 Only authenticated signers proceed to the next step.
 
-#### Step 2.2: Policy Validation
+#### Step 2.2: Policy Enforcement
 
-If the rule has attached policies, verify that all can be enforced:
+If the rule has attached policies, the smart account calls `enforce()` on each policy. The `enforce()` method both validates conditions and applies state changes — it panics if the policy conditions are not satisfied:
 
 ```rust
 for policy in rule.policies {
-    if !policy.can_enforce(e, account, rule_id, signers, auth_context) {
-        // This rule fails, try the next rule
-    }
+    policy.enforce(e, context, authenticated_signers, context_rule, smart_account);
+    // Panics if policy conditions aren't satisfied, causing the rule to fail
 }
 ```
 
-If any policy's `can_enforce()` returns false, the rule fails and evaluation moves to the next rule.
+If any policy panics, authorization fails for that context.
+
+Policy enforcement requires the smart account's authorization, ensuring that policies can only be enforced by the account itself.
 
 #### Step 2.3: Authorization Check
 
 The authorization check depends on whether policies are present:
 
 **With Policies:**
-- Success if all policies passed `can_enforce()`
-- The presence of authenticated signers is verified during policy evaluation
+- Success if all policies' `enforce()` calls completed without panicking
 
 **Without Policies:**
 - Success if all signers in the rule are authenticated
 - At least one signer must be authenticated for the rule to match
 
-#### Step 2.4: Rule Precedence
-
-The first matching rule wins. Newer rules take precedence over older rules for the same context type. This allows overwriting old rules.
-
-### 3. Policy Enforcement
-
-If authorization succeeds, the smart account calls `enforce()` on all matched policies in order:
-
-```rust
-for policy in matched_rule.policies {
-    policy.enforce(e, account, rule_id, signers, auth_context);
-}
-```
-
-This triggers any necessary state changes such as updating spending counters, recording timestamps, emitting audit events, or modifying allowances.
-
-Policy enforcement requires the smart account's authorization, ensuring that policies can only be enforced by the account itself.
-
-### 4. Result
+### 3. Result
 
 **Success:** Authorization is granted and the transaction proceeds. All policy state changes are committed.
 
@@ -151,13 +123,13 @@ ContextRule {
 **Authorization Entries:** `[passkey_signature]`
 
 **Flow:**
-1. Collect: Rules 2 (specific) and 1 (default)
+1. Lookup: Client specifies rule ID 2 in `context_rule_ids`
 2. Evaluate Rule 2:
+   - Rule matches `CallContract(dex_address)` context and is not expired
    - Signer filtering: Passkey authenticated
-   - Policy validation: Spending limit check passes
-   - Authorization check: All policies enforceable → Success
-3. Enforce: Update spending counters, emit events
-4. Result: Authorized
+   - Policy enforcement: Spending limit validates and updates counters
+   - Authorization check: All policies enforced successfully → Success
+3. Result: Authorized
 
 If the spending limit had been exceeded, Rule 2 would fail and evaluation would continue to Rule 1 (which would also fail since the passkey doesn't match Alice or Bob).
 
@@ -188,10 +160,9 @@ ContextRule {
 **Authorization Entries:** `[ed25519_alice_signature, ed25519_bob_signature]`
 
 **Flow:**
-1. Collect: Rule 2 filtered out (expired), only Rule 1 collected
-2. Evaluate Rule 1: Both Alice and Bob authenticated → Success
-3. Enforce: No policies to enforce
-4. Result: Authorized
+1. Lookup: Client specifies rule ID 1 in `context_rule_ids` (rule 2 is known to be expired)
+2. Evaluate Rule 1: Both Alice and Bob authenticated, no policies to enforce → Success
+3. Result: Authorized
 
 The expired session rule is automatically filtered out, and authorization falls back to the default admin rule.
 
@@ -213,12 +184,11 @@ ContextRule {
 **Authorization Entries:** `[alice_signature]`
 
 **Flow:**
-1. Collect: Default rule retrieved
+1. Lookup: Client specifies default rule ID in `context_rule_ids`
 2. Evaluate:
    - Signer filtering: Only Alice authenticated
-   - Policy validation: Threshold policy requires 2 signers, only 1 present → Fail
-3. No more rules to evaluate
-4. Result: Denied (transaction reverts)
+   - Policy enforcement: Threshold policy requires 2 signers, only 1 present → Panics
+3. Result: Denied (transaction reverts)
 
 ## Performance Considerations
 
