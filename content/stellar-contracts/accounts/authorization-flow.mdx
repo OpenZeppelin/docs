@@ -2,7 +2,27 @@
 title: Authorization Flow
 ---
 
-Authorization in smart accounts is determined by matching each auth context against explicitly selected context rules. The off-chain client specifies which rule to use for each operation via `context_rule_ids` in the `AuthPayload`. The selected rule is validated, its signers authenticated, and its policies enforced. If any step fails, authorization is denied.
+Authorization in smart accounts is determined by matching each auth context against explicitly selected context rules. The caller supplies `context_rule_ids` in the `AuthPayload`, specifying exactly one rule per auth context. If the selected rule passes all checks, its policies (if any) are enforced. Otherwise, authorization fails.
+
+## AuthPayload
+
+The `AuthPayload` structure is passed as the signature data in `__check_auth`:
+
+```rust
+#[contracttype]
+pub struct AuthPayload {
+    /// Signature data mapped to each signer.
+    pub signers: Map<Signer, Bytes>,
+    /// Per-context rule IDs, aligned by index with `auth_contexts`.
+    pub context_rule_ids: Vec<u32>,
+}
+```
+
+Each entry in `context_rule_ids` specifies the rule ID to validate against for the corresponding auth context (by index). Its length must equal `auth_contexts.len()`.
+
+<Callout type="warning">
+The `context_rule_ids` are bound into the signed digest: `sha256(signature_payload || context_rule_ids.to_xdr())`. This prevents rule-selection downgrade attacks where an attacker could redirect a signature to a less restrictive rule.
+</Callout>
 
 ## Detailed Flow
 ```mermaid
@@ -51,7 +71,7 @@ For each auth context, the corresponding rule ID is used to look up the context 
 
 ### 2. Rule Evaluation
 
-For each rule in order (newest and most specific first):
+For each (context, rule_id) pair:
 
 #### Step 2.1: Signer Filtering
 
@@ -131,7 +151,6 @@ ContextRule {
    - Authorization check: All policies enforced successfully → Success
 3. Result: Authorized
 
-If the spending limit had been exceeded, Rule 2 would fail and evaluation would continue to Rule 1 (which would also fail since the passkey doesn't match Alice or Bob).
 
 ### Fallback to Default
 
@@ -164,8 +183,6 @@ ContextRule {
 2. Evaluate Rule 1: Both Alice and Bob authenticated, no policies to enforce → Success
 3. Result: Authorized
 
-The client ignores the expired session rule and explicitly selects the default admin rule (ID 1) in `context_rule_ids`.
-
 ### Authorization Failure
 
 **Configuration:**
@@ -196,9 +213,11 @@ Protocol 23 optimizations make the authorization flow efficient:
 - **Marginal storage read costs**: Reading multiple context rules has negligible cost
 - **Cheaper cross-contract calls**: Calling verifiers and policies is substantially cheaper
 
-The framework enforces limits to maintain predictability:
+The framework enforces per-rule limits to maintain predictability:
 - Maximum signers per context rule: 15
 - Maximum policies per context rule: 5
+
+There is no upper limit on the total number of context rules per smart account.
 
 ## See Also
 
