@@ -60,7 +60,10 @@ When `require_auth_for_args` is called from within `__check_auth` (as with deleg
 
 ```rust
 #[contracttype]
-pub struct Signatures(pub Map<Signer, Bytes>);
+pub struct AuthPayload {
+    pub signers: Map<Signer, Bytes>,
+    pub context_rule_ids: Vec<u32>,
+}
 
 #[contract]
 pub struct MySmartAccount;
@@ -70,10 +73,10 @@ impl CustomAccountInterface for MySmartAccount {
     fn __check_auth(
         e: Env,
         payload: Hash<32>,
-        signatures: Signatures,
+        auth_payload: AuthPayload,
         auth_contexts: Vec<Context>,
     ) -> Result<(), SmartAccountError> {
-          for (signer, _) in signatures.0.iter() {
+          for (signer, _) in auth_payload.signers.iter() {
             match signer {
                 // ...
                 Signer::Delegated(addr) => {
@@ -89,7 +92,7 @@ impl CustomAccountInterface for MySmartAccount {
 
 **Example Scenario**
 
-Consider a scenario where a target contract `CAGCDFLG4WKPYG...` requires authorization from a smart account `CBH6XACZFDCJUHX...`. The smart account will grant authorization only if the G-account `GBDZXYMJ3SLYXCY...` has signed, meaning `Map<Signer, Bytes>` has to contain one element that is `Signer::Delegated("GBDZXYMJ3SLYXCY...")`. 
+Consider a scenario where a target contract `CAGCDFLG4WKPYG...` requires authorization from a smart account `CBH6XACZFDCJUHX...`. The smart account will grant authorization only if the G-account `GBDZXYMJ3SLYXCY...` has signed, meaning the `signers` map in `AuthPayload` has to contain one element that is `Signer::Delegated("GBDZXYMJ3SLYXCY...")`. 
 
 ```mermaid
 graph LR
@@ -139,7 +142,7 @@ When simulating this transaction, the following authorization entry is returned.
 
 The client implementation requires constructing two authorization entries:
 
-1. Replace `"signature": "void"` with the proper `Signatures(Map<Signer, Bytes>)` structure
+1. Replace `"signature": "void"` with the proper `AuthPayload` structure (containing the `signers` map and `context_rule_ids`)
 2. Create the missing authorization entry for the delegated signer's `__check_auth` call
 
 The following typescript code demonstrates this process:
@@ -149,7 +152,8 @@ async function signAndSendTx(
     contract: string,
     fnName: string,
     fnArgs: ScVal[],
-    signer: Keypair
+    signer: Keypair,
+    ruleId: number, // ID of the context rule to use for this authorization (e.g., obtained when the rule was created)
 ) {
     const baseTx = new TransactionBuilder(...)
         .addOperation(
@@ -164,7 +168,7 @@ async function signAndSendTx(
     
     const signedAuths: SorobanAuthorizationEntry[] = [];
 
-    // 1) Construct the 1st auth entry: `Signatures(pub Map<Signer, Bytes>)` with `Signer::Delegated(Address)`
+    // 1) Construct the 1st auth entry: `AuthPayload { signers, context_rule_ids }`
     const sigInnerMap = ScVal.scvMap([
         new xdr.ScMapEntry({
             key: ScVal.scvVec([
@@ -175,7 +179,19 @@ async function signAndSendTx(
         }),
     ]);
 
-    simAuth.credentials().address().signature(ScVal.scvVec([sigInnerMap]));
+    // AuthPayload is a named-field struct serialized as ScVal::Map
+    const authPayload = ScVal.scvMap([
+        new xdr.ScMapEntry({
+            key: ScVal.scvSymbol("context_rule_ids"),
+            val: ScVal.scvVec([ScVal.scvU32(ruleId)]), // one rule ID per auth context
+        }),
+        new xdr.ScMapEntry({
+            key: ScVal.scvSymbol("signers"),
+            val: sigInnerMap,
+        }),
+    ]);
+
+    simAuth.credentials().address().signature(authPayload);
     simAuth.credentials().address().signatureExpirationLedger(validUntil);
     signedAuths.push(simAuth);
 
@@ -227,25 +243,28 @@ After including both authorization entries in `signedAuths` and re-simulating th
             "nonce": "7346653005027720525",
             "signature_expiration_ledger": 1256083,
             "signature": {
-              "vec": [
+              "map": [
                 {
-                  "map": [
-                    {
-                      "key": {
-                        "vec": [
-                          {
-                            "symbol": "Delegated"
-                          },
-                          {
-                            "address": "GBDZXYMJ3SLYXCY..." // the delegated signer (G-account)
-                          }
-                        ]
-                      },
-                      "val": {
-                        "bytes": "" // `Bytes` value from `Map<Signer, Bytes>` is empty here (it's used only for the `Signer::External`)
+                  "key": { "symbol": "context_rule_ids" },
+                  "val": { "vec": [{ "u32": 1 }] } // one rule ID per auth context
+                },
+                {
+                  "key": { "symbol": "signers" },
+                  "val": {
+                    "map": [
+                      {
+                        "key": {
+                          "vec": [
+                            { "symbol": "Delegated" },
+                            { "address": "GBDZXYMJ3SLYXCY..." } // the delegated signer (G-account)
+                          ]
+                        },
+                        "val": {
+                          "bytes": "" // `Bytes` value is empty for delegated signers (used only for `Signer::External`)
+                        }
                       }
-                    }
-                  ]
+                    ]
+                  }
                 }
               ]
             }
@@ -326,7 +345,10 @@ In the case of external signers verification is offloaded to specialized verifie
 
 ```rust
 #[contracttype]
-pub struct Signatures(pub Map<Signer, Bytes>);
+pub struct AuthPayload {
+    pub signers: Map<Signer, Bytes>,
+    pub context_rule_ids: Vec<u32>,
+}
 
 #[contract]
 pub struct MySmartAccount;
@@ -336,10 +358,10 @@ impl CustomAccountInterface for MySmartAccount {
     fn __check_auth(
         e: Env,
         payload: Hash<32>,
-        signatures: Signatures,
+        signatures: AuthPayload,
         auth_contexts: Vec<Context>,
     ) -> Result<(), SmartAccountError> {
-          for (signer, sig_data) in signatures.0.iter() {
+          for (signer, sig_data) in signatures.signers.iter() {
             match signer {
                 Signer::External(verifier, key_data) => {
                     let sig_payload = Bytes::from_array(e, &signature_payload.to_bytes().to_array());
@@ -365,7 +387,7 @@ This separation provides forward compatibility: when new cryptographic curves ar
 
 **Example Scenario**
 
-Consider again a target contract `CAGCDFLG4WKPYG...` that requires authorization from a smart account `CBH6XACZFDCJUHX...`. This time the smart account will grant authorization only if the Ed25519 public key `2b6bad0cfdb3d4b6f2cd...` has signed, meaning `Map<Signer, Bytes>` has to contain one element that is `Signer::External("CDLDYJWEZSM6IAI4...", "2b6bad0cfdb3d4b6f2cd...")` and its signature. 
+Consider again a target contract `CAGCDFLG4WKPYG...` that requires authorization from a smart account `CBH6XACZFDCJUHX...`. This time the smart account will grant authorization only if the Ed25519 public key `2b6bad0cfdb3d4b6f2cd...` has signed, meaning the `signers` map in `AuthPayload` has to contain one element that is `Signer::External("CDLDYJWEZSM6IAI4...", "2b6bad0cfdb3d4b6f2cd...")` and its signature. 
 
 ```mermaid
 graph LR
@@ -394,28 +416,29 @@ In contrast to `Delegated` signers, constructing the auth entry for an `External
             "nonce": "7346653005027720525",
             "signature_expiration_ledger": 1256083,
             "signature": {
-              "vec": [
+              "map": [
                 {
-                  "map": [
-                    {
-                      "key": {
-                        "vec": [
-                          {
-                            "symbol": "External"
-                          },
-                          {
-                            "address": "CDLDYJWEZSM6IAI4..." // the Ed25519 Verifier
-                          },
-                          {
-                            "bytes": "2b6bad0cfdb3d4b6f2cd..." // Signer's public key
-                          }
-                        ]
-                      },
-                      "val": {
-                        "bytes": "6ead27ab6e8cab36..." // Signer's signature
+                  "key": { "symbol": "context_rule_ids" },
+                  "val": { "vec": [{ "u32": 2 }] } // one rule ID per auth context
+                },
+                {
+                  "key": { "symbol": "signers" },
+                  "val": {
+                    "map": [
+                      {
+                        "key": {
+                          "vec": [
+                            { "symbol": "External" },
+                            { "address": "CDLDYJWEZSM6IAI4..." }, // the Ed25519 Verifier
+                            { "bytes": "2b6bad0cfdb3d4b6f2cd..." } // Signer's public key
+                          ]
+                        },
+                        "val": {
+                          "bytes": "6ead27ab6e8cab36..." // Signer's signature
+                        }
                       }
-                    }
-                  ]
+                    ]
+                  }
                 }
               ]
             }
@@ -433,6 +456,75 @@ In contrast to `Delegated` signers, constructing the auth entry for an `External
 
 See the [Verifiers](#verifiers) section below for architecture details and the `Verifier` trait that external signers rely on.
 
+## AuthPayload and Off-Chain Clients
+
+The `AuthPayload` struct is the signature type passed to `__check_auth`:
+
+```rust
+#[contracttype]
+pub struct AuthPayload {
+    pub signers: Map<Signer, Bytes>,
+    pub context_rule_ids: Vec<u32>,
+}
+```
+
+The `context_rule_ids` field contains one rule ID per auth context, explicitly selecting which stored context rule applies to each operation. No rule iteration or auto-discovery is performed — clients must know which rule to reference. A mismatch between the length of `context_rule_ids` and the number of auth contexts is rejected with `ContextRuleIdsLengthMismatch`.
+
+### Auth Digest Computation
+
+Signers must sign the **auth digest**, not the raw `signature_payload`. The context rule IDs are bound into the digest to prevent downgrade attacks:
+
+```
+auth_digest = sha256(signature_payload || context_rule_ids.to_xdr())
+```
+
+Steps:
+1. Obtain the 32-byte `signature_payload` from the host
+2. XDR-encode the `Vec<u32>` of rule IDs (one per auth context)
+3. Concatenate both byte sequences
+4. SHA-256 hash the result
+5. Sign the resulting digest
+
+In Rust (Soroban SDK):
+
+```rust
+use soroban_sdk::xdr::ToXdr;
+
+let mut preimage = signature_payload.to_bytes().to_bytes();
+preimage.append(&context_rule_ids.to_xdr(e));
+let auth_digest = e.crypto().sha256(&preimage);
+// Sign auth_digest, not signature_payload
+```
+
+### XDR Encoding
+
+The `AuthPayload` serializes as an `ScVal::Map` with two `Symbol`-keyed entries:
+
+```rust
+ScVal::Map([
+    (Symbol("context_rule_ids"), ScVal::Vec(/* rule IDs, one per auth context */)),
+    (Symbol("signers"),          ScVal::Map(/* signer → signature entries */)),
+])
+```
+
+Using `stellar_xdr`:
+
+```rust
+creds.signature = ScVal::Map(Some(ScMap::sorted_from([
+    (
+        ScVal::Symbol("context_rule_ids".try_into()?),
+        ScVal::Vec(Some(ScVec(VecM::try_from([
+            ScVal::U32(rule_id_for_context_0),
+            ScVal::U32(rule_id_for_context_1),
+        ])?))),
+    ),
+    (
+        ScVal::Symbol("signers".try_into()?),
+        sig_map, // Map<Signer, Bytes> entries
+    ),
+])?));
+```
+
 ## Signer Management
 
 The [`SmartAccount`](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/accounts/src/smart_account/mod.rs) trait provides functions for managing signers within context rules:
@@ -444,13 +536,25 @@ fn add_signer(
     e: &Env,
     context_rule_id: u32,
     signer: Signer,
+) -> u32;
+```
+
+Adds a signer to an existing context rule and returns the assigned signer ID. The rule must not exceed the maximum of 15 signers.
+
+### Batch Adding Signers
+
+```rust
+fn batch_add_signer(
+    e: &Env,
+    context_rule_id: u32,
+    signers: Vec<Signer>,
 );
 ```
 
-Adds a signer to an existing context rule. The rule must not exceed the maximum of 15 signers.
+Adds multiple signers to an existing context rule at once.
 
 <Callout>
-**Important:** 
+**Important:**
 When adding signers to rules with threshold policies, administrators must manually update policy thresholds to maintain security guarantees. See the Policies documentation for details.
 </Callout>
 
@@ -460,11 +564,11 @@ When adding signers to rules with threshold policies, administrators must manual
 fn remove_signer(
     e: &Env,
     context_rule_id: u32,
-    signer: Signer,
+    signer_id: u32,
 );
 ```
 
-Removes a signer from an existing context rule. The rule must maintain at least one signer OR one policy after removal.
+Removes a signer (identified by its numeric ID) from an existing context rule. The rule must maintain at least one signer OR one policy after removal.
 
 <Callout>
 **Important:** 
@@ -485,19 +589,22 @@ The `Verifier` trait defines the interface for verifier contracts:
 
 ```rust
 pub trait Verifier {
-    type KeyData: FromVal;
-    type SigData: FromVal;
+    type KeyData: FromVal<Env, Val>;
+    type SigData: FromVal<Env, Val>;
 
-    /// # Arguments
-    ///
-    /// * `e` - Access to the Soroban environment.
-    /// * `hash` - The hash of the data that was signed (typically 32 bytes).
-    /// * `key_data` - The public key data in the format expected by this verifier.
-    /// * `sig_data` - The signature data in the format expected by this verifier.
+    /// Validates a signature against a hash and public key.
+    /// Must use constant-time operations and validate all inputs.
     fn verify(e: &Env, hash: Bytes, key_data: Self::KeyData, sig_data: Self::SigData) -> bool;
+
+    /// Maps key data to a unique canonical byte representation.
+    /// Used to detect duplicate cryptographic identities across different byte encodings.
+    fn canonicalize_key(e: &Env, key_data: Self::KeyData) -> Bytes;
+
+    /// Batch variant of `canonicalize_key` for processing multiple keys in a single call.
+    fn batch_canonicalize_key(e: &Env, key_data: Vec<Self::KeyData>) -> Vec<Bytes>;
 }
 ```
-The trait uses associated types to allow different verifiers to define their own data structures for keys and signatures.
+The trait uses associated types to allow different verifiers to define their own data structures for keys and signatures. The `canonicalize_key` methods enable the framework to detect duplicate signers even when the same cryptographic identity is represented by different byte sequences.
 
 ### Advantages of the Verifier Pattern
 

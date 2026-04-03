@@ -44,28 +44,29 @@ Each rule must contain at least one signer OR one policy. This enables pure poli
 ### Multiple Rules Per Context
 Multiple rules can exist for the same context type with different signer sets and policies. This allows progressive authorization models where different combinations of credentials grant access to the same operations.
 
-### Rule Precedence
-Rules are evaluated in reverse chronological order (newest first). The first matching rule wins. This enables seamless permission updates: adding a new rule with different requirements immediately takes precedence over older rules for the same context.
+### Explicit Rule Selection
+Rules are not iterated or auto-discovered. Instead, off-chain clients specify exactly which context rule to use for each operation via the `context_rule_ids` field in `AuthPayload`. This explicit selection prevents downgrade attacks where an attacker could force the system to fall back to a weaker rule.
 
 ### Automatic Expiration
-Expired rules are automatically filtered out during authorization evaluation.
+Expired rules are rejected during authorization evaluation.
 
 ## Context Rule Limits
 
-The framework enforces limits to keep costs predictable and encourage proactive context rule management (remove expired or non-valid rules):
-
-- Maximum context rules per smart account: 15
 - Maximum signers per context rule: 15
 - Maximum policies per context rule: 5
+- Maximum context rule name size: 20 bytes
+- Maximum external signer key size: 256 bytes
+
+There is no upper limit on the total number of context rules per smart account.
 
 ## Authorization Matching
 
 During authorization, the framework:
 
-1. Gathers all non-expired rules matching the context type plus default rules
-2. Sorts rules by creation time (newest first)
-3. Evaluates rules in order until one matches
-4. Returns the first matching rule or fails if none match
+1. Reads the `context_rule_ids` from the `AuthPayload` (one rule ID per auth context)
+2. Looks up each rule directly by ID
+3. Validates the rule is not expired and matches the context type
+4. Authenticates signers and enforces policies, or fails if conditions aren't met
 
 For detailed documentation on the authorization flow, see [Authorization Flow](/stellar-contracts/accounts/authorization-flow).
 
@@ -101,6 +102,7 @@ smart_account::add_context_rule(
     e,
     ContextRuleType::Default,
     String::from_str(e, "Sudo"),
+    None, // No expiration
     vec![
         e,
         Signer::External(bls_verifier, alice_key),
@@ -111,7 +113,6 @@ smart_account::add_context_rule(
         e,
         (threshold_policy, threshold_params) // 2-of-3 Threshold
     ],
-    None, // No expiration
 );
 
 // This rule applies only to calls to the USDC contract, expires in 1 year,
@@ -120,6 +121,7 @@ smart_account::add_context_rule(
     e,
     ContextRuleType::CallContract(usdc_addr),
     String::from_str(e, "Dapp1 Subscription"),
+    Some(current_ledger + 1_year),
     vec![
         e,
         Signer::External(ed25519_verifier, dapp1_key)
@@ -128,7 +130,6 @@ smart_account::add_context_rule(
         e,
         (spending_limit_policy, spending_params)
     ],
-    Some(current_ledger + 1_year)
 );
 
 // This rule applies only to calls to the dApp contract, expires in 7 days,
@@ -137,6 +138,7 @@ smart_account::add_context_rule(
     e,
     ContextRuleType::CallContract(dapp_addr),
     String::from_str(e, "Dapp2 Session"),
+    Some(current_ledger + 7_days),
     vec![
         e,
         Signer::External(ed25519_verifier, dapp2_key)
@@ -146,7 +148,6 @@ smart_account::add_context_rule(
         (rate_limit_policy, rate_limit_params),
         (time_window_policy, time_window_params)
     ],
-    Some(current_ledger + 7_days)
 );
 
 // This rule applies only to calls to a specific contract, expires in 12 hours,
@@ -155,6 +156,7 @@ smart_account::add_context_rule(
     e,
     ContextRuleType::CallContract(some_addr),
     String::from_str(e, "AI Agent"),
+    Some(current_ledger + 12_hours),
     vec![
         e,
         Signer::External(secp256r1_verifier, agent_key)
@@ -163,7 +165,6 @@ smart_account::add_context_rule(
         e,
         (volume_cap_policy, volume_cap_params)
     ],
-    Some(current_ledger + 12_hours)
 );
 ```
 
