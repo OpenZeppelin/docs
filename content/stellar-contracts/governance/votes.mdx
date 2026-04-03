@@ -69,6 +69,22 @@ pub fn delegate(e: &Env, account: Address, delegatee: Address) {
 
 <Callout>
 If you are using the Fungible or Non-Fungible token from this library, the **Votes extension** handles all of this automatically. You only need to enable the extension — no manual integration required. See [Fungible Token](/stellar-contracts/tokens/fungible/fungible) or [Non-Fungible Token](/stellar-contracts/tokens/non-fungible/non-fungible).
+
+```rust
+use stellar_governance::votes::Votes;
+use stellar_tokens::fungible::{votes::FungibleVotes, FungibleToken};
+
+// 1. Set ContractType to FungibleVotes — this hooks into all balance
+//    changes (transfers, mints, burns) and updates voting units automatically.
+#[contractimpl(contracttrait)]
+impl FungibleToken for MyToken {
+    type ContractType = FungibleVotes;
+}
+
+// 2. Implement the Votes trait to expose voting queries to the Governor.
+#[contractimpl(contracttrait)]
+impl Votes for MyToken {}
+```
 </Callout>
 
 ## The Votes Trait
@@ -99,18 +115,6 @@ pub trait Votes {
 ```
 
 All query methods return `0` if the account has no voting power or does not exist.
-
-## Free Functions
-
-In addition to the trait, the module exports free functions for lower-level use:
-
-| Function | Description |
-|----------|-------------|
-| `transfer_voting_units(e, from, to, amount)` | Updates voting units on balance changes. `from`/`to` are `Option<&Address>` for mint/burn. |
-| `get_voting_units(e, account)` | Returns the raw voting units (not delegated votes) for an account. |
-| `get_checkpoint(e, account, pos)` | Returns a specific checkpoint by position index. |
-| `num_checkpoints(e, account)` | Returns the number of checkpoints for an account. |
-| `delegate(e, account, delegatee)` | Delegates voting power. Requires authorization from `account`. |
 
 ## See Also
 
