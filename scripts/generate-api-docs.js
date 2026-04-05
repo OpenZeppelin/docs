@@ -2,7 +2,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -253,11 +253,10 @@ async function generateApiDocs(options) {
 
 		// Clone the repository (works for both URLs and local paths)
 		console.log("📦 Cloning repository...");
-		execSync(
-			`git clone --depth 1 --branch "${contractsBranch}" --recurse-submodules "${contractsRepo}" "${tempDir}"`,
-			{
-				stdio: "inherit",
-			},
+		execFileSync(
+			"git",
+			["clone", "--depth", "1", "--branch", contractsBranch, "--recurse-submodules", contractsRepo, tempDir],
+			{ stdio: "inherit" },
 		);
 
 		// Pre-generated mode: just copy MDX files from source repo, skip docgen
