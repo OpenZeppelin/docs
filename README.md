@@ -61,49 +61,88 @@ docs/
 
 For detailed information about the codebase structure, navigation system, and component architecture, see [CONTRIBUTING.md](CONTRIBUTING.md)
 
-## Solidity Docgen
+## API Reference Generation
 
-Any library using Solidity Docgen can utilize the `docgen` templates and config file in their repo to generate markdown API references for the docs. To get started follow the instructions below:
+API reference pages are auto-generated from source contract repositories and placed in the `content/` directory. The generation is handled by `scripts/generate-api-docs.js`, which supports two modes depending on the source repo's language.
 
-### 1. Add the templates to your repo
+### Solidity Repos
 
-Inside this docs repo is the [`docgen`](https://github.com/OpenZeppelin/docs/tree/main/docgen) folder which contains [`templates-md`](https://github.com/OpenZeppelin/docs/tree/main/docgen/templates-md) and [`config-md.js`](https://github.com/OpenZeppelin/docs/blob/main/docgen/config-md.js). Copy both of these items into your `docs` folder in your repo. Once there open the [`templates-md/helpers.js`](https://github.com/OpenZeppelin/docs/blob/main/docgen/templates-md/helpers.js) file and update the `API_DOCS_PATH` constant to match your export path. Also open [`templates-md/contract.hbs`](https://github.com/OpenZeppelin/docs/blob/main/docgen/templates-md/contract.hbs) to modify the solidity import path and the github link. 
+For Solidity repos using [solidity-docgen](https://github.com/OpenZeppelin/solidity-docgen), the script **injects canonical MDX templates** from this repo's [`docgen/templates-md/`](https://github.com/OpenZeppelin/docs/tree/main/docgen/templates-md) into the cloned source repo before running docgen. Source repos do not need MDX templates committed.
 
-```js
-const API_DOCS_PATH = 'contracts/5.x/api';
-// const API_DOCS_PATH = 'community-contracts/api';
-// const API_DOCS_PATH = 'confidential-contracts/api';
-// const API_DOCS_PATH = 'uniswap-hooks/api';
+The script automatically:
+- Copies `docgen/templates-md/` and `docgen/config-md.js` into the source repo
+- Sets `API_DOCS_PATH` based on the output directory
+- Updates the GitHub source link and import path for the source repo
+- Patches `hardhat.config.js` to use the MDX config
+- Runs `npm run prepare-docs` to generate MDX files
+- Copies the output to the specified `content/` directory
+
+**Run locally:**
+
+```bash
+# openzeppelin-contracts
+node scripts/generate-api-docs.js \
+  --repo https://github.com/OpenZeppelin/openzeppelin-contracts.git \
+  --branch v5.6.1 \
+  --api-output content/contracts/5.x/api
+
+# community-contracts
+node scripts/generate-api-docs.js \
+  --repo https://github.com/OpenZeppelin/openzeppelin-community-contracts.git \
+  --branch master \
+  --api-output content/community-contracts/api
+
+# confidential-contracts
+node scripts/generate-api-docs.js \
+  --repo https://github.com/OpenZeppelin/openzeppelin-confidential-contracts.git \
+  --branch v0.4.0 \
+  --api-output content/confidential-contracts/api
 ```
 
-### 2. Update the `hardhat.config.js` file
+### Non-Solidity Repos
 
-With the `config-md.js` file now in the `docs` folder, update your `hardhat.config.js` to use the new config file.
-
-```js
-{
-  // other config options
-  docgen: require('./docs/config-md'),
-}
-```
-
-Once added make sure these are accessible in your branches going forward. If you are generating an API reference for previous branches you will need to repeat steps 1 and 2 for those branches.
-
-### 3. Run the `generate-api-docs.js` script
-
-With your remote repo setup with the new template files you can run the `scripts/generate-api-docs.js` script. Be sure to pass in the correct arguements for your docs
+For repos using other languages (Cairo, Move, Rust, etc.) that generate MDX through their own tooling, use the `--pre-generated` flag to skip docgen and copy pre-built MDX files directly:
 
 ```bash
 node scripts/generate-api-docs.js \
-  --repo https://github.com/OpenZeppelin/openzeppelin-community-contracts.git \
-  --branch release-v5.5 \
-  --api-output content/contracts/5.x/api \
-  --examples-output examples
+  --repo https://github.com/OpenZeppelin/cairo-contracts.git \
+  --branch v3.0.0 \
+  --api-output content/contracts-cairo/3.x/api \
+  --pre-generated docs/api
 ```
 
-### Automated Setup
+### Canonical Templates
 
-In the case you want to setup an automated GitHub workflow to create these API docs visit the [docs-api-generation-workflows](https://github.com/OpenZeppelin/docs-api-generation-workflows) for more info. This repo (`OpenZeppelin/docs`) is the `Docs Receiver` side of the equation.
+The MDX templates that control API reference output live in [`docgen/templates-md/`](https://github.com/OpenZeppelin/docs/tree/main/docgen/templates-md):
+
+- `helpers.js` - Reference resolution, link generation, callout processing, natspec handling
+- `contract.hbs` - Contract page layout (heading, GitHub link, import, function/event/error cards)
+- `page.hbs` - Page wrapper with frontmatter
+- `properties.js` - Solidity AST property helpers (anchors, inheritance, function lists)
+- `config-md.js` - Solidity docgen configuration
+
+Changes to these templates affect all source repos on the next generation run.
+
+### Automated Workflow
+
+The generation runs automatically via GitHub Actions:
+
+1. **Source repo** pushes a release tag (e.g., `v5.6.1`) or commits to a tracked branch
+2. **Source trigger workflow** (`.github/workflows/docs.yml` in the source repo) calls this repo's receiver workflow via `gh workflow run`
+3. **Receiver workflow** (`.github/workflows/generate-api-docs-{name}.yml`) runs `generate-api-docs.js`, validates links, and creates a PR
+
+Receiver workflows in this repo:
+- `generate-api-docs-contracts.yml` - versioned paths (`content/contracts/{major}.x/api`)
+- `generate-api-docs-community-contracts.yml` - non-versioned (`content/community-contracts/api`)
+- `generate-api-docs-confidential-contracts.yml` - non-versioned (`content/confidential-contracts/api`)
+
+Source repos need a `DOCS_REPO_TOKEN` secret (GitHub PAT with `repo` + `workflow` scopes) for the trigger workflow to call this repo.
+
+### Versioning
+
+- Major version changes (e.g., 4.x to 5.x) create a new versioned directory
+- Minor and patch releases within a major version regenerate the same directory
+- Non-versioned repos (community-contracts, confidential-contracts) use a flat `api/` path
 
 ## Content Management
 

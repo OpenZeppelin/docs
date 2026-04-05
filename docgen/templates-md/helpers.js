@@ -56,7 +56,7 @@ module.exports['process-natspec'] = function (natspec, opts) {
   const currentPage = opts.data.root.__item_context?.page || opts.data.root.id;
   const links = getAllLinks(opts.data.site.items, currentPage);
 
-  const processed = processReferences(natspec, links);
+  const processed = processReferences(natspec, links, currentPage);
   return processCallouts(processed); // Add callout processing at the end
 };
 
@@ -89,6 +89,8 @@ function getAllLinks(items, currentPage) {
   }
 
   const res = {};
+  // Track which page each link key belongs to for same-page preference
+  const linkPages = {};
   const currentPagePath = currentPage ? currentPage.replace(/\.mdx$/, '') : '';
 
   for (const item of items) {
@@ -97,6 +99,7 @@ function getAllLinks(items, currentPage) {
 
     // Generate xref keys for legacy compatibility
     res[`xref-${item.anchor}`] = linkPath;
+    linkPages[`xref-${item.anchor}`] = pagePath;
 
     // Generate original case xref keys
     if (item.__item_context && item.__item_context.contract) {
@@ -106,10 +109,17 @@ function getAllLinks(items, currentPage) {
         originalAnchor += slug('(' + signature + ')');
       }
       res[`xref-${originalAnchor}`] = linkPath;
+      linkPages[`xref-${originalAnchor}`] = pagePath;
     }
 
-    res[slug(item.fullName)] = `[\`${item.fullName}\`](${linkPath})`;
+    const key = slug(item.fullName);
+    res[key] = `[\`${item.fullName}\`](${linkPath})`;
+    linkPages[key] = pagePath;
   }
+
+  // Attach page info for same-page preference in findBestMatch
+  res.__linkPages = linkPages;
+  res.__currentPagePath = currentPagePath;
 
   if (currentPage) {
     let cache = linksCache.get(items);
@@ -124,6 +134,7 @@ function getAllLinks(items, currentPage) {
 }
 
 function generateLinkPath(pagePath, currentPagePath, anchor) {
+  // Same page: use fragment-only link
   if (
     currentPagePath &&
     (pagePath === currentPagePath || pagePath.split('/').pop() === currentPagePath.split('/').pop())
@@ -131,30 +142,8 @@ function generateLinkPath(pagePath, currentPagePath, anchor) {
     return `#${anchor}`;
   }
 
-  if (currentPagePath) {
-    const currentParts = currentPagePath.split('/');
-    const targetParts = pagePath.split('/');
-
-    // Find common base
-    let i = 0;
-    while (i < currentParts.length && i < targetParts.length && currentParts[i] === targetParts[i]) {
-      i++;
-    }
-
-    const upLevels = Math.max(0, currentParts.length - 1 - i);
-    const downPath = targetParts.slice(i);
-
-    if (upLevels === 0 && downPath.length === 1) {
-      return `${downPath[0]}#${anchor}`;
-    } else if (upLevels === 0) {
-      return `${downPath.join('/')}#${anchor}`;
-    } else {
-      const relativePath = '../'.repeat(upLevels) + downPath.join('/');
-      return `${relativePath}#${anchor}`;
-    }
-  }
-
-  return `${pagePath}#${anchor}`;
+  // Cross-page: use absolute path with API_DOCS_PATH prefix
+  return `/${API_DOCS_PATH}/${pagePath}#${anchor}`;
 }
 
 // Process {REF} and other references
@@ -219,7 +208,13 @@ function processReferences(content, links) {
     return replacement || `\`${key}\``;
   });
 
-  return cleanupContent(result);
+  result = cleanupContent(result);
+
+  // Escape bare < that aren't HTML/JSX tags (e.g., "< 0x80", "< 128")
+  // Must run after cleanupContent (which decodes &lt; to <) and before processCallouts
+  result = result.replace(/(<)(\s+\w)/g, '&lt;$2');
+
+  return result;
 }
 
 function resolveReference(refId, links) {
@@ -249,39 +244,43 @@ function resolveReference(refId, links) {
 }
 
 function findBestMatch(key, links) {
-  let replacement = links[key];
-
-  if (!replacement) {
-    // Strategy 1: Look for keys that end with this key
-    let matchingKeys = Object.keys(links).filter(linkKey => {
-      const parts = linkKey.split('-');
-      return parts.length >= 2 && parts[parts.length - 1] === key;
-    });
-
-    // Strategy 2: Try with different separators
-    if (matchingKeys.length === 0) {
-      const keyWithDashes = key.replace(/\./g, '-');
-      matchingKeys = Object.keys(links).filter(linkKey => linkKey.includes(keyWithDashes));
-    }
-
-    // Strategy 3: Try partial matches
-    if (matchingKeys.length === 0) {
-      matchingKeys = Object.keys(links).filter(linkKey => {
-        return linkKey === key || linkKey.endsWith('-' + key) || linkKey.includes(key);
-      });
-    }
-
-    if (matchingKeys.length > 0) {
-      const nonXrefMatches = matchingKeys.filter(k => !k.startsWith('xref-'));
-      const bestMatch = nonXrefMatches.length > 0 ? nonXrefMatches[0] : matchingKeys[0];
-      replacement = links[bestMatch];
-    }
+  // Exact match first
+  if (links[key]) {
+    return links[key];
   }
 
-  return replacement;
+  const linkPages = links.__linkPages || {};
+  const currentPagePath = links.__currentPagePath || '';
+
+  // Match by contract function name (e.g., {transfer} matches ERC20-transfer)
+  // Only match if the key is the final segment after the last hyphen
+  const matchingKeys = Object.keys(links).filter(linkKey => {
+    if (linkKey.startsWith('__')) return false; // skip metadata keys
+    const parts = linkKey.split('-');
+    return parts.length >= 2 && parts[parts.length - 1] === key;
+  });
+
+  if (matchingKeys.length > 0) {
+    const nonXrefMatches = matchingKeys.filter(k => !k.startsWith('xref-'));
+    const candidates = nonXrefMatches.length > 0 ? nonXrefMatches : matchingKeys;
+
+    // Prefer matches from the same page (e.g., ERC20.name over Governor.name on the ERC20 page)
+    if (currentPagePath && candidates.length > 1) {
+      const samePageMatch = candidates.find(k => linkPages[k] === currentPagePath);
+      if (samePageMatch) {
+        return links[samePageMatch];
+      }
+    }
+
+    return links[candidates[0]];
+  }
+
+  return undefined;
 }
 
 function cleanupContent(content) {
+  const apiDocsBase = '/' + API_DOCS_PATH;
+  const docsBase = apiDocsBase.replace(/\/api$/, '');
   return content
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
@@ -295,7 +294,26 @@ function cleanupContent(content) {
     .replace(/https?:\/\/[^\s[]+\[[^\]]+\]/g, match => {
       const urlMatch = match.match(/^(https?:\/\/[^[]+)\[([^\]]+)\]$/);
       return urlMatch ? `[${urlMatch[2]}](${urlMatch[1]})` : match;
-    });
+    })
+    // Convert remaining Antora xref patterns in natspec
+    // xref:ROOT:filename.adoc#anchor[text] -> [text](docsBase/filename#anchor)
+    .replace(/xref:ROOT:([^[]+)\.adoc(?:#([^[]*))?\[([^\]]*)\]/g, (_, file, anchor, text) =>
+      `[${text}](${docsBase}/${file}${anchor ? '#' + anchor : ''})`)
+    // xref:api:filename.adoc#anchor[text] -> [text](apiDocsBase/filename#anchor)
+    .replace(/xref:api:([^[]+)\.adoc(?:#([^[]*))?\[([^\]]*)\]/g, (_, file, anchor, text) =>
+      `[${text}](${apiDocsBase}/${file}${anchor ? '#' + anchor : ''})`)
+    // xref:module::filename.adoc[text] -> [text](docsBase/module/filename)
+    // Modules like "learn" are relative to the product docs base, not site root
+    .replace(/xref:([a-z-]+)::([^[]+)\.adoc(?:#([^[]*))?\[([^\]]*)\]/g, (_, mod, file, anchor, text) => {
+      // upgrades-plugins is a separate product at site root
+      const base = mod === 'upgrades-plugins' ? '' : docsBase;
+      return `[${text}](${base}/${mod}/${file}${anchor ? '#' + anchor : ''})`;
+    })
+    // xref:filename.adoc#anchor[text] -> [text](apiDocsBase/filename#anchor) (bare, within API context)
+    .replace(/xref:([^:[\s]+)\.adoc(?:#([^[]*))?\[([^\]]*)\]/g, (_, file, anchor, text) =>
+      `[${text}](${apiDocsBase}/${file}${anchor ? '#' + anchor : ''})`)
+    // Strip /index from links
+    .replace(/\/index([#)])/g, '$1');
 }
 
 function processAdocContent(content) {
@@ -325,8 +343,22 @@ function processAdocContent(content) {
     let mdContent = fs.readFileSync(tempMdFile, 'utf8');
 
     // Clean up and transform markdown, then process callouts once at the end
+    // Convert Antora xref patterns that downdoc turns into markdown links
+    const apiDocsBase = '/' + API_DOCS_PATH;
+    const docsBase = apiDocsBase.replace(/\/api$/, '');
     mdContent = cleanupContent(mdContent)
-      .replace(/\(api:([^)]+)\.adoc([^)]*)\)/g, `(${API_DOCS_PATH}/$1.mdx$2)`)
+      // api:filename.adoc#anchor -> /contracts/5.x/api/filename#anchor
+      .replace(/\(api:([^)]+)\.adoc([^)]*)\)/g, `(${apiDocsBase}/$1$2)`)
+      // ROOT:filename.adoc -> docs base (non-API pages like guides)
+      .replace(/\(ROOT:([^)]+)\.adoc([^)]*)\)/g, `(${docsBase}/$1$2)`)
+      // upgrades-plugins::filename.adoc -> /upgrades-plugins/filename
+      .replace(/\(upgrades-plugins::([^)]+)\.adoc([^)]*)\)/g, '(/upgrades-plugins/$1$2)')
+      // Strip /index from links (Fumadocs routes index.mdx as the directory root)
+      .replace(/\/index([#)])/g, '$1')
+      // governance.adoc#anchor -> /contracts/5.x/api/governance#anchor (within API context)
+      .replace(/\(([a-z0-9-]+)\.adoc(#[^)]*)\)/g, `(${apiDocsBase}/$1$2)`)
+      // Clean up any remaining bare .adoc references
+      .replace(/([a-z0-9-]+)\.adoc/g, '$1')
       .replace(/!\[([^\]]*)\]\(([^/)][^)]*\.(png|jpg|jpeg|gif|svg|webp))\)/g, '![$1](/$2)')
       .replace(/^#+\s+.+$/m, '')
       .replace(/^\n+/, '');
@@ -351,8 +383,14 @@ function processAdocContent(content) {
 }
 
 function processCallouts(content) {
-  // First, normalize whitespace around block delimiters to make patterns more consistent
-  let result = content.replace(/\s*\n====\s*\n/g, '\n====\n').replace(/\n====\s*\n/g, '\n====\n');
+  // Convert AsciiDoc headings in natspec (==== heading -> #### heading)
+  // Must come BEFORE block delimiter normalization
+  let result = content.replace(/^={4}\s+(.+)$/gm, '#### $1');
+  result = result.replace(/^={3}\s+(.+)$/gm, '### $1');
+  result = result.replace(/^={2}\s+(.+)$/gm, '## $1');
+
+  // Normalize whitespace around block delimiters to make patterns more consistent
+  result = result.replace(/\s*\n====\s*\n/g, '\n====\n').replace(/\n====\s*\n/g, '\n====\n');
 
   // Handle AsciiDoc block admonitions (with ====)
   result = result.replace(/^\[(NOTE|TIP)\]\s*\n====\s*\n([\s\S]*?)\n====$/gm, '<Callout>\n$2\n</Callout>');
@@ -361,9 +399,9 @@ function processCallouts(content) {
     '<Callout type="warn">\n$2\n</Callout>',
   );
 
-  // Handle simple single-line admonitions
-  result = result.replace(/^(NOTE|TIP):\s*(.+)$/gm, '<Callout>\n$2\n</Callout>');
-  result = result.replace(/^(IMPORTANT|WARNING):\s*(.+)$/gm, '<Callout type="warn">\n$2\n</Callout>');
+  // Handle single/multi-line admonitions (NOTE: content until blank line)
+  result = result.replace(/^(NOTE|TIP):\s*([\s\S]*?)(?=\n\n|$)/gm, '<Callout>\n$2\n</Callout>');
+  result = result.replace(/^(IMPORTANT|WARNING|CAUTION):\s*([\s\S]*?)(?=\n\n|$)/gm, '<Callout type="warn">\n$2\n</Callout>');
 
   // Handle markdown-style bold admonitions (the ones you're seeing)
   result = result.replace(
@@ -406,6 +444,9 @@ function processCallouts(content) {
 
   // Remove callouts that only contain whitespace/newlines
   result = result.replace(/<Callout[^>]*>\s*\n\s*<\/Callout>/g, '');
+
+  // Remove any remaining standalone ==== block delimiters (orphaned from callout processing)
+  result = result.replace(/^====\s*$/gm, '');
 
   return result;
 }

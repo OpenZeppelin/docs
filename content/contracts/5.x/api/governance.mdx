@@ -37,12 +37,13 @@ Timelock extensions add a delay for governance decisions to be executed. The wor
 
 Other extensions can customize the behavior or interface in multiple ways.
 
-* [`GovernorStorage`](#GovernorStorage): Stores the proposal details onchain and provides enumerability of the proposals. This can be useful for some L2 chains where storage is cheap compared to calldata.
-* [`GovernorSettings`](#GovernorSettings): Manages some of the settings (voting delay, voting period duration, and proposal threshold) in a way that can be updated through a governance proposal, without requiring an upgrade.
+* [`GovernorCrosschain`](#GovernorCrosschain): Helps with the execution of crosschain operation using `CrosschainRemoteExector` and ERC-7786 gateways.
+* [`GovernorNoncesKeyed`](#GovernorNoncesKeyed): An extension of [`Governor`](#Governor) with support for keyed nonces in addition to traditional nonces when voting by signature.
 * [`GovernorPreventLateQuorum`](#GovernorPreventLateQuorum): Ensures there is a minimum voting period after quorum is reached as a security protection against large voters.
 * [`GovernorProposalGuardian`](#GovernorProposalGuardian): Adds a proposal guardian that can cancel proposals at any stage in their lifecycle--this permission is passed on to the proposers if the guardian is not set.
+* [`GovernorSettings`](#GovernorSettings): Manages some of the settings (voting delay, voting period duration, and proposal threshold) in a way that can be updated through a governance proposal, without requiring an upgrade.
+* [`GovernorStorage`](#GovernorStorage): Stores the proposal details onchain and provides enumerability of the proposals. This can be useful for some L2 chains where storage is cheap compared to calldata.
 * [`GovernorSuperQuorum`](#GovernorSuperQuorum): Extension of [`Governor`](#Governor) with a super quorum. Proposals that meet the super quorum (and have a majority of for votes) advance to the `Succeeded` state before the proposal deadline.
-* [`GovernorNoncesKeyed`](#GovernorNoncesKeyed): An extension of [`Governor`](#Governor) with support for keyed nonces in addition to traditional nonces when voting by signature.
 
 In addition to modules and extensions, the core contract requires a few virtual functions to be implemented to your particular specifications:
 
@@ -82,17 +83,19 @@ Functions of the `Governor` contract do not include access control. If you want 
 
 [`GovernorTimelockCompound`](#GovernorTimelockCompound)
 
-[`GovernorSettings`](#GovernorSettings)
+[`GovernorCrosschain`](#GovernorCrosschain)
+
+[`GovernorNoncesKeyed`](#GovernorNoncesKeyed)
 
 [`GovernorPreventLateQuorum`](#GovernorPreventLateQuorum)
 
-[`GovernorStorage`](#GovernorStorage)
-
 [`GovernorProposalGuardian`](#GovernorProposalGuardian)
 
-[`GovernorSuperQuorum`](#GovernorSuperQuorum)
+[`GovernorSettings`](#GovernorSettings)
 
-[`GovernorNoncesKeyed`](#GovernorNoncesKeyed)
+[`GovernorStorage`](#GovernorStorage)
+
+[`GovernorSuperQuorum`](#GovernorSuperQuorum)
 
 ## Utils
 
@@ -123,7 +126,7 @@ In a governance system, the [`TimelockController`](#TimelockController) contract
 
 #### Operation structure
 
-Operation executed by the [`TimelockController`](contracts/5.x/api/governance#TimelockController) can contain one or multiple subsequent calls. Depending on whether you need to multiple calls to be executed atomically, you can either use simple or batched operations.
+Operation executed by the [`TimelockController`](/contracts/5.x/api/governance#TimelockController) can contain one or multiple subsequent calls. Depending on whether you need multiple calls to be executed atomically, you can either use simple or batched operations.
 
 Both operations contain:
 
@@ -146,16 +149,16 @@ Timelocked operations are identified by a unique id (their hash) and follow a sp
 
 `Unset` -> `Pending` -> `Pending` + `Ready` -> `Done`
 
-* By calling [`schedule`](contracts/5.x/api/governance#TimelockController-schedule-address-uint256-bytes-bytes32-bytes32-uint256-) (or [`scheduleBatch`](contracts/5.x/api/governance#TimelockController-scheduleBatch-address---uint256---bytes---bytes32-bytes32-uint256-)), a proposer moves the operation from the `Unset` to the `Pending` state. This starts a timer that must be longer than the minimum delay. The timer expires at a timestamp accessible through the [`getTimestamp`](contracts/5.x/api/governance#TimelockController-getTimestamp-bytes32-) method.
+* By calling [`schedule`](/contracts/5.x/api/governance#TimelockController-schedule-address-uint256-bytes-bytes32-bytes32-uint256-) (or [`scheduleBatch`](/contracts/5.x/api/governance#TimelockController-scheduleBatch-address---uint256---bytes---bytes32-bytes32-uint256-)), a proposer moves the operation from the `Unset` to the `Pending` state. This starts a timer that must be longer than the minimum delay. The timer expires at a timestamp accessible through the [`getTimestamp`](/contracts/5.x/api/governance#TimelockController-getTimestamp-bytes32-) method.
 * Once the timer expires, the operation automatically gets the `Ready` state. At this point, it can be executed.
-* By calling [`execute`](contracts/5.x/api/governance#TimelockController-TimelockController-execute-address-uint256-bytes-bytes32-bytes32-) (or [`executeBatch`](contracts/5.x/api/governance#TimelockController-executeBatch-address---uint256---bytes---bytes32-bytes32-)), an executor triggers the operation’s underlying transactions and moves it to the `Done` state. If the operation has a predecessor, it has to be in the `Done` state for this transition to succeed.
-* [`cancel`](contracts/5.x/api/governance#TimelockController-TimelockController-cancel-bytes32-) allows proposers to cancel any `Pending` operation. This resets the operation to the `Unset` state. It is thus possible for a proposer to re-schedule an operation that has been cancelled. In this case, the timer restarts when the operation is rescheduled.
+* By calling [`execute`](/contracts/5.x/api/governance#TimelockController-TimelockController-execute-address-uint256-bytes-bytes32-bytes32-) (or [`executeBatch`](/contracts/5.x/api/governance#TimelockController-executeBatch-address---uint256---bytes---bytes32-bytes32-)), an executor triggers the operation’s underlying transactions and moves it to the `Done` state. If the operation has a predecessor, it has to be in the `Done` state for this transition to succeed.
+* [`cancel`](/contracts/5.x/api/governance#TimelockController-TimelockController-cancel-bytes32-) allows proposers to cancel any `Pending` operation. This resets the operation to the `Unset` state. It is thus possible for a proposer to re-schedule an operation that has been cancelled. In this case, the timer restarts when the operation is rescheduled.
 
 Operations status can be queried using the functions:
 
-* [`isOperationPending(bytes32)`](contracts/5.x/api/governance#TimelockController-isOperationPending-bytes32-)
-* [`isOperationReady(bytes32)`](contracts/5.x/api/governance#TimelockController-isOperationReady-bytes32-)
-* [`isOperationDone(bytes32)`](contracts/5.x/api/governance#TimelockController-isOperationDone-bytes32-)
+* [`isOperationPending(bytes32)`](/contracts/5.x/api/governance#TimelockController-isOperationPending-bytes32-)
+* [`isOperationReady(bytes32)`](/contracts/5.x/api/governance#TimelockController-isOperationReady-bytes32-)
+* [`isOperationDone(bytes32)`](/contracts/5.x/api/governance#TimelockController-isOperationDone-bytes32-)
 
 #### Roles
 
@@ -168,7 +171,7 @@ The admins are in charge of managing proposers and executors. For the timelock t
 The proposers are in charge of scheduling (and cancelling) operations. This is a critical role, that should be given to governing entities. This could be an EOA, a multisig, or a DAO.
 
 <Callout type="warn">
-**Proposer fight:** Having multiple proposers, while providing redundancy in case one becomes unavailable, can be dangerous. As proposer have their say on all operations, they could cancel operations they disagree with, including operations to remove them for the proposers.
+**Proposer fight:** Having multiple proposers, while providing redundancy in case one becomes unavailable, can be dangerous. Proposers have a say on all operations--they could cancel operations they disagree with, including operations to remove them from the list of proposers.
 </Callout>
 
 This role is identified by the **PROPOSER_ROLE** value: `0xb09aa5aeb3702cfd50b6b62bc4532604938f21248a27a1d5ca736082b6819cc1`
@@ -187,9 +190,9 @@ A live contract without at least one proposer and one executor is locked. Make s
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `Governor`
+## `Governor` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/Governor.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/Governor.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -273,56 +276,63 @@ This contract is abstract and requires several functions to be implemented in va
 - [quorum(timepoint)](#Governor-quorum-uint256-)
 - [BALLOT_TYPEHASH()](#Governor-BALLOT_TYPEHASH-bytes32)
 - [EXTENDED_BALLOT_TYPEHASH()](#Governor-EXTENDED_BALLOT_TYPEHASH-bytes32)
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [COUNTING_MODE()](#IGovernor-COUNTING_MODE--)
 - [hasVoted(proposalId, account)](#IGovernor-hasVoted-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
 - [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
-#### EIP712 [!toc]
+
+</details>
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [ProposalCreated(proposalId, proposer, targets, values, signatures, calldatas, voteStart, voteEnd, description)](#IGovernor-ProposalCreated-uint256-address-address---uint256---string---bytes---uint256-uint256-string-)
 - [ProposalQueued(proposalId, etaSeconds)](#IGovernor-ProposalQueued-uint256-uint256-)
 - [ProposalExecuted(proposalId)](#IGovernor-ProposalExecuted-uint256-)
 - [ProposalCanceled(proposalId)](#IGovernor-ProposalCanceled-uint256-)
 - [VoteCast(voter, proposalId, support, weight, reason)](#IGovernor-VoteCast-address-uint256-uint8-uint256-string-)
 - [VoteCastWithParams(voter, proposalId, support, weight, reason, params)](#IGovernor-VoteCastWithParams-address-uint256-uint8-uint256-string-bytes-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [GovernorInvalidProposalLength(targets, calldatas, values)](#IGovernor-GovernorInvalidProposalLength-uint256-uint256-uint256-)
 - [GovernorAlreadyCastVote(voter)](#IGovernor-GovernorAlreadyCastVote-address-)
 - [GovernorDisabledDeposit()](#IGovernor-GovernorDisabledDeposit--)
@@ -335,17 +345,17 @@ This contract is abstract and requires several functions to be implemented in va
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
 - [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -367,7 +377,7 @@ parameter setters in [`GovernorSettings`](#GovernorSettings) are protected using
 
 The governance executing address may be different from the Governor's own address, for example it could be a
 timelock. This can be customized by modules by overriding [`Governor._executor`](#Governor-_executor--). The executor is only able to invoke these
-functions during the execution of the governor's [`AccessManager.execute`](/contracts/5.x/api/access#AccessManager-execute-address-bytes-) function, and not under any other circumstances. Thus,
+functions during the execution of the governor's [`Governor.execute`](#Governor-execute-address---uint256---bytes---bytes32-) function, and not under any other circumstances. Thus,
 for example, additional timelock proposers are not able to change governance parameters without going through the
 governance protocol (since v4.6).
 
@@ -645,7 +655,7 @@ Whether a proposal needs to be queued before execution.
 <div className="px-4">
 
 Reverts if the `msg.sender` is not the executor. In case the executor is not this contract
-itself, the function reverts if `msg.data` is not whitelisted as a result of an [`AccessManager.execute`](/contracts/5.x/api/access#AccessManager-execute-address-bytes-)
+itself, the function reverts if `msg.data` is not whitelisted as a result of an [`Governor.execute`](#Governor-execute-address---uint256---bytes---bytes32-)
 operation. See [`Governor.onlyGovernance`](#Governor-onlyGovernance--).
 
 </div>
@@ -888,7 +898,7 @@ performed (for example adding a vault/timelock).
 
 <Callout>
 Calling this function directly will NOT check the current state of the proposal, set the executed flag to
-true or emit the `ProposalExecuted` event. Executing a proposal should be done using [`AccessManager.execute`](/contracts/5.x/api/access#AccessManager-execute-address-bytes-).
+true or emit the `ProposalExecuted` event. Executing a proposal should be done using [`Governor.execute`](#Governor-execute-address---uint256---bytes---bytes32-).
 </Callout>
 
 </div>
@@ -1291,6 +1301,23 @@ If requirements are not met, reverts with a [`IGovernor.GovernorUnexpectedPropos
 </div>
 <div className="px-4">
 
+Check if the proposer is authorized to submit a proposal with the given description.
+
+If the proposal description ends with `#proposer=0x???`, where `0x???` is an address written as a hex string
+(case insensitive), then the submission of this proposal will only be authorized to said address.
+
+This is used for frontrunning protection. By adding this pattern at the end of their proposal, one can ensure
+that no other address can submit the same proposal. An attacker would have to either remove or change that part,
+which would result in a different proposal id.
+
+If the description does not match this pattern, it is unrestricted and anyone can submit it. This includes:
+
+- If the `0x???` part is not a valid hex string.
+- If the `0x???` part is a valid hex string, but does not contain exactly 40 hex digits.
+- If it ends with the expected suffix followed by newlines or other whitespace.
+- If it ends with some other similar suffix, e.g. `#other=abc`.
+- If it does not end with any such suffix.
+
 </div>
 </div>
 
@@ -1458,9 +1485,9 @@ quorum depending on values such as the totalSupply of a token at this timepoint 
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `IGovernor`
+## `IGovernor` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/IGovernor.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/IGovernor.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1507,11 +1534,19 @@ Making event parameters `indexed` affects how events are decoded, potentially br
 - [castVoteWithReasonAndParams(proposalId, support, reason, params)](#IGovernor-castVoteWithReasonAndParams-uint256-uint8-string-bytes-)
 - [castVoteBySig(proposalId, support, voter, signature)](#IGovernor-castVoteBySig-uint256-uint8-address-bytes-)
 - [castVoteWithReasonAndParamsBySig(proposalId, support, voter, reason, params, signature)](#IGovernor-castVoteWithReasonAndParamsBySig-uint256-uint8-address-string-bytes-bytes-)
-#### IERC6372 [!toc]
+<details>
+<summary>IERC6372</summary>
+
 - [clock()](#IERC6372-clock--)
 - [CLOCK_MODE()](#IERC6372-CLOCK_MODE--)
-#### IERC165 [!toc]
+
+</details>
+<details>
+<summary>IERC165</summary>
+
 - [supportsInterface(interfaceId)](#IERC165-supportsInterface-bytes4-)
+
+</details>
 </div>
 </div>
 
@@ -1524,8 +1559,6 @@ Making event parameters `indexed` affects how events are decoded, potentially br
 - [ProposalCanceled(proposalId)](#IGovernor-ProposalCanceled-uint256-)
 - [VoteCast(voter, proposalId, support, weight, reason)](#IGovernor-VoteCast-address-uint256-uint8-uint256-string-)
 - [VoteCastWithParams(voter, proposalId, support, weight, reason, params)](#IGovernor-VoteCastWithParams-address-uint256-uint8-uint256-string-bytes-)
-#### IERC6372 [!toc]
-#### IERC165 [!toc]
 </div>
 </div>
 
@@ -1544,12 +1577,9 @@ Making event parameters `indexed` affects how events are decoded, potentially br
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
 - [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
-#### IERC6372 [!toc]
-#### IERC165 [!toc]
 </div>
 </div>
 
@@ -2428,23 +2458,6 @@ Queue operation is not implemented for this governor. Execute should be called d
 </div>
 </div>
 
-<a id="IGovernor-GovernorNotQueuedProposal-uint256-"></a>
-
-<div className="border rounded-md mb-4">
-<div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">GovernorNotQueuedProposal(uint256 proposalId)</p>
-<div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">error</p>
-<a className="peer" data-card href="#IGovernor-GovernorNotQueuedProposal-uint256-">#</a>
-</div>
-</div>
-<div className="px-4">
-
-The proposal hasn't been queued yet.
-
-</div>
-</div>
-
 <a id="IGovernor-GovernorAlreadyQueuedProposal-uint256-"></a>
 
 <div className="border rounded-md mb-4">
@@ -2501,9 +2514,9 @@ The given `account` is unable to cancel the proposal with given `proposalId`.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `TimelockController`
+## `TimelockController` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/TimelockController.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/TimelockController.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2558,14 +2571,22 @@ a multisig or a DAO as the sole proposer.
 - [PROPOSER_ROLE()](#TimelockController-PROPOSER_ROLE-bytes32)
 - [EXECUTOR_ROLE()](#TimelockController-EXECUTOR_ROLE-bytes32)
 - [CANCELLER_ROLE()](#TimelockController-CANCELLER_ROLE-bytes32)
-#### ERC1155Holder [!toc]
+<details>
+<summary>ERC1155Holder</summary>
+
 - [onERC1155Received(, , , , )](#ERC1155Holder-onERC1155Received-address-address-uint256-uint256-bytes-)
 - [onERC1155BatchReceived(, , , , )](#ERC1155Holder-onERC1155BatchReceived-address-address-uint256---uint256---bytes-)
-#### IERC1155Receiver [!toc]
-#### ERC721Holder [!toc]
+
+</details>
+<details>
+<summary>ERC721Holder</summary>
+
 - [onERC721Received(, , , )](#ERC721Holder-onERC721Received-address-address-uint256-bytes-)
-#### IERC721Receiver [!toc]
-#### AccessControl [!toc]
+
+</details>
+<details>
+<summary>AccessControl</summary>
+
 - [hasRole(role, account)](#AccessControl-hasRole-bytes32-address-)
 - [_checkRole(role)](#AccessControl-_checkRole-bytes32-)
 - [_checkRole(role, account)](#AccessControl-_checkRole-bytes32-address-)
@@ -2577,9 +2598,8 @@ a multisig or a DAO as the sole proposer.
 - [_grantRole(role, account)](#AccessControl-_grantRole-bytes32-address-)
 - [_revokeRole(role, account)](#AccessControl-_revokeRole-bytes32-address-)
 - [DEFAULT_ADMIN_ROLE()](#AccessControl-DEFAULT_ADMIN_ROLE-bytes32)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
-#### IAccessControl [!toc]
+
+</details>
 </div>
 </div>
 
@@ -2591,17 +2611,14 @@ a multisig or a DAO as the sole proposer.
 - [CallSalt(id, salt)](#TimelockController-CallSalt-bytes32-bytes32-)
 - [Cancelled(id)](#TimelockController-Cancelled-bytes32-)
 - [MinDelayChange(oldDuration, newDuration)](#TimelockController-MinDelayChange-uint256-uint256-)
-#### ERC1155Holder [!toc]
-#### IERC1155Receiver [!toc]
-#### ERC721Holder [!toc]
-#### IERC721Receiver [!toc]
-#### AccessControl [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
-#### IAccessControl [!toc]
+<details>
+<summary>IAccessControl</summary>
+
 - [RoleAdminChanged(role, previousAdminRole, newAdminRole)](#IAccessControl-RoleAdminChanged-bytes32-bytes32-bytes32-)
 - [RoleGranted(role, account, sender)](#IAccessControl-RoleGranted-bytes32-address-address-)
 - [RoleRevoked(role, account, sender)](#IAccessControl-RoleRevoked-bytes32-address-address-)
+
+</details>
 </div>
 </div>
 
@@ -2613,16 +2630,13 @@ a multisig or a DAO as the sole proposer.
 - [TimelockUnexpectedOperationState(operationId, expectedStates)](#TimelockController-TimelockUnexpectedOperationState-bytes32-bytes32-)
 - [TimelockUnexecutedPredecessor(predecessorId)](#TimelockController-TimelockUnexecutedPredecessor-bytes32-)
 - [TimelockUnauthorizedCaller(caller)](#TimelockController-TimelockUnauthorizedCaller-address-)
-#### ERC1155Holder [!toc]
-#### IERC1155Receiver [!toc]
-#### ERC721Holder [!toc]
-#### IERC721Receiver [!toc]
-#### AccessControl [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
-#### IAccessControl [!toc]
+<details>
+<summary>IAccessControl</summary>
+
 - [AccessControlUnauthorizedAccount(account, neededRole)](#IAccessControl-AccessControlUnauthorizedAccount-address-bytes32-)
 - [AccessControlBadConfirmation()](#IAccessControl-AccessControlBadConfirmation--)
+
+</details>
 </div>
 </div>
 
@@ -2704,6 +2718,13 @@ Contract might receive/hold ETH as part of the maintenance process.
 </div>
 </div>
 <div className="px-4">
+
+Returns true if this contract implements the interface defined by
+`interfaceId`. See the corresponding
+[ERC section](https://eips.ethereum.org/EIPS/eip-165#how-interfaces-are-identified)
+to learn more about how these ids are created.
+
+This function call must use less than 30 000 gas.
 
 </div>
 </div>
@@ -3270,9 +3291,9 @@ The caller account is not authorized.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `GovernorCountingFractional`
+## `GovernorCountingFractional` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorCountingFractional.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorCountingFractional.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3315,7 +3336,9 @@ _Available since v5.1._
 - [_quorumReached(proposalId)](#GovernorCountingFractional-_quorumReached-uint256-)
 - [_voteSucceeded(proposalId)](#GovernorCountingFractional-_voteSucceeded-uint256-)
 - [_countVote(proposalId, account, support, totalWeight, params)](#GovernorCountingFractional-_countVote-uint256-address-uint8-uint256-bytes-)
-#### Governor [!toc]
+<details>
+<summary>Governor</summary>
+
 - [receive()](#Governor-receive--)
 - [supportsInterface(interfaceId)](#Governor-supportsInterface-bytes4-)
 - [name()](#Governor-name--)
@@ -3368,46 +3391,49 @@ _Available since v5.1._
 - [quorum(timepoint)](#Governor-quorum-uint256-)
 - [BALLOT_TYPEHASH()](#Governor-BALLOT_TYPEHASH-bytes32)
 - [EXTENDED_BALLOT_TYPEHASH()](#Governor-EXTENDED_BALLOT_TYPEHASH-bytes32)
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
 - [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
-#### EIP712 [!toc]
+
+</details>
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [ProposalCreated(proposalId, proposer, targets, values, signatures, calldatas, voteStart, voteEnd, description)](#IGovernor-ProposalCreated-uint256-address-address---uint256---string---bytes---uint256-uint256-string-)
 - [ProposalQueued(proposalId, etaSeconds)](#IGovernor-ProposalQueued-uint256-uint256-)
 - [ProposalExecuted(proposalId)](#IGovernor-ProposalExecuted-uint256-)
 - [ProposalCanceled(proposalId)](#IGovernor-ProposalCanceled-uint256-)
 - [VoteCast(voter, proposalId, support, weight, reason)](#IGovernor-VoteCast-address-uint256-uint8-uint256-string-)
 - [VoteCastWithParams(voter, proposalId, support, weight, reason, params)](#IGovernor-VoteCastWithParams-address-uint256-uint8-uint256-string-bytes-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -3415,10 +3441,9 @@ _Available since v5.1._
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
 - [GovernorExceedRemainingWeight(voter, usedVotes, remainingWeight)](#GovernorCountingFractional-GovernorExceedRemainingWeight-address-uint256-uint256-)
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [GovernorInvalidProposalLength(targets, calldatas, values)](#IGovernor-GovernorInvalidProposalLength-uint256-uint256-uint256-)
 - [GovernorAlreadyCastVote(voter)](#IGovernor-GovernorAlreadyCastVote-address-)
 - [GovernorDisabledDeposit()](#IGovernor-GovernorDisabledDeposit--)
@@ -3431,17 +3456,17 @@ _Available since v5.1._
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
 - [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -3634,9 +3659,9 @@ A fractional vote params uses more votes than are available for that user.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `GovernorCountingOverridable`
+## `GovernorCountingOverridable` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorCountingOverridable.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorCountingOverridable.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3664,12 +3689,18 @@ token that inherits [`VotesExtended`](#VotesExtended).
 - [castOverrideVote(proposalId, support, reason)](#GovernorCountingOverridable-castOverrideVote-uint256-uint8-string-)
 - [castOverrideVoteBySig(proposalId, support, voter, reason, signature)](#GovernorCountingOverridable-castOverrideVoteBySig-uint256-uint8-address-string-bytes-)
 - [OVERRIDE_BALLOT_TYPEHASH()](#GovernorCountingOverridable-OVERRIDE_BALLOT_TYPEHASH-bytes32)
-#### GovernorVotes [!toc]
+<details>
+<summary>GovernorVotes</summary>
+
 - [token()](#GovernorVotes-token--)
 - [clock()](#GovernorVotes-clock--)
 - [CLOCK_MODE()](#GovernorVotes-CLOCK_MODE--)
 - [_getVotes(account, timepoint, )](#GovernorVotes-_getVotes-address-uint256-bytes-)
-#### Governor [!toc]
+
+</details>
+<details>
+<summary>Governor</summary>
+
 - [receive()](#Governor-receive--)
 - [supportsInterface(interfaceId)](#Governor-supportsInterface-bytes4-)
 - [name()](#Governor-name--)
@@ -3719,23 +3750,26 @@ token that inherits [`VotesExtended`](#VotesExtended).
 - [quorum(timepoint)](#Governor-quorum-uint256-)
 - [BALLOT_TYPEHASH()](#Governor-BALLOT_TYPEHASH-bytes32)
 - [EXTENDED_BALLOT_TYPEHASH()](#Governor-EXTENDED_BALLOT_TYPEHASH-bytes32)
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
 - [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
-#### EIP712 [!toc]
+
+</details>
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -3744,24 +3778,23 @@ token that inherits [`VotesExtended`](#VotesExtended).
 <div className="font-mono">
 - [VoteReduced(delegate, proposalId, support, weight)](#GovernorCountingOverridable-VoteReduced-address-uint256-uint8-uint256-)
 - [OverrideVoteCast(voter, proposalId, support, weight, reason)](#GovernorCountingOverridable-OverrideVoteCast-address-uint256-uint8-uint256-string-)
-#### GovernorVotes [!toc]
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [ProposalCreated(proposalId, proposer, targets, values, signatures, calldatas, voteStart, voteEnd, description)](#IGovernor-ProposalCreated-uint256-address-address---uint256---string---bytes---uint256-uint256-string-)
 - [ProposalQueued(proposalId, etaSeconds)](#IGovernor-ProposalQueued-uint256-uint256-)
 - [ProposalExecuted(proposalId)](#IGovernor-ProposalExecuted-uint256-)
 - [ProposalCanceled(proposalId)](#IGovernor-ProposalCanceled-uint256-)
 - [VoteCast(voter, proposalId, support, weight, reason)](#IGovernor-VoteCast-address-uint256-uint8-uint256-string-)
 - [VoteCastWithParams(voter, proposalId, support, weight, reason, params)](#IGovernor-VoteCastWithParams-address-uint256-uint8-uint256-string-bytes-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -3769,11 +3802,9 @@ token that inherits [`VotesExtended`](#VotesExtended).
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
 - [GovernorAlreadyOverriddenVote(account)](#GovernorCountingOverridable-GovernorAlreadyOverriddenVote-address-)
-#### GovernorVotes [!toc]
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [GovernorInvalidProposalLength(targets, calldatas, values)](#IGovernor-GovernorInvalidProposalLength-uint256-uint256-uint256-)
 - [GovernorAlreadyCastVote(voter)](#IGovernor-GovernorAlreadyCastVote-address-)
 - [GovernorDisabledDeposit()](#IGovernor-GovernorDisabledDeposit--)
@@ -3786,17 +3817,17 @@ token that inherits [`VotesExtended`](#VotesExtended).
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
 - [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -4092,9 +4123,9 @@ A delegated vote on `proposalId` was overridden by `weight`
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `GovernorCountingSimple`
+## `GovernorCountingSimple` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorCountingSimple.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorCountingSimple.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -4115,7 +4146,9 @@ Extension of [`Governor`](#Governor) for simple, 3 options, vote counting.
 - [_quorumReached(proposalId)](#GovernorCountingSimple-_quorumReached-uint256-)
 - [_voteSucceeded(proposalId)](#GovernorCountingSimple-_voteSucceeded-uint256-)
 - [_countVote(proposalId, account, support, totalWeight, )](#GovernorCountingSimple-_countVote-uint256-address-uint8-uint256-bytes-)
-#### Governor [!toc]
+<details>
+<summary>Governor</summary>
+
 - [receive()](#Governor-receive--)
 - [supportsInterface(interfaceId)](#Governor-supportsInterface-bytes4-)
 - [name()](#Governor-name--)
@@ -4168,56 +4201,58 @@ Extension of [`Governor`](#Governor) for simple, 3 options, vote counting.
 - [quorum(timepoint)](#Governor-quorum-uint256-)
 - [BALLOT_TYPEHASH()](#Governor-BALLOT_TYPEHASH-bytes32)
 - [EXTENDED_BALLOT_TYPEHASH()](#Governor-EXTENDED_BALLOT_TYPEHASH-bytes32)
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
 - [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
-#### EIP712 [!toc]
+
+</details>
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [ProposalCreated(proposalId, proposer, targets, values, signatures, calldatas, voteStart, voteEnd, description)](#IGovernor-ProposalCreated-uint256-address-address---uint256---string---bytes---uint256-uint256-string-)
 - [ProposalQueued(proposalId, etaSeconds)](#IGovernor-ProposalQueued-uint256-uint256-)
 - [ProposalExecuted(proposalId)](#IGovernor-ProposalExecuted-uint256-)
 - [ProposalCanceled(proposalId)](#IGovernor-ProposalCanceled-uint256-)
 - [VoteCast(voter, proposalId, support, weight, reason)](#IGovernor-VoteCast-address-uint256-uint8-uint256-string-)
 - [VoteCastWithParams(voter, proposalId, support, weight, reason, params)](#IGovernor-VoteCastWithParams-address-uint256-uint8-uint256-string-bytes-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [GovernorInvalidProposalLength(targets, calldatas, values)](#IGovernor-GovernorInvalidProposalLength-uint256-uint256-uint256-)
 - [GovernorAlreadyCastVote(voter)](#IGovernor-GovernorAlreadyCastVote-address-)
 - [GovernorDisabledDeposit()](#IGovernor-GovernorDisabledDeposit--)
@@ -4230,17 +4265,17 @@ Extension of [`Governor`](#Governor) for simple, 3 options, vote counting.
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
 - [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -4366,13 +4401,213 @@ See [`Governor._countVote`](#Governor-_countVote-uint256-address-uint8-uint256-b
 </div>
 </div>
 
+<a id="GovernorCrosschain"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `GovernorCrosschain` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorCrosschain.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/contracts/governance/extensions/GovernorCrosschain.sol";
+```
+
+Extension of [`Governor`](#Governor) for cross-chain governance through ERC-7786 gateways and [`CrosschainRemoteExecutor`](/contracts/5.x/api/crosschain#CrosschainRemoteExecutor).
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [relayCrosschain(gateway, executor, mode, executionCalldata)](#GovernorCrosschain-relayCrosschain-address-bytes-Mode-bytes-)
+- [_crosschainExecute(gateway, executor, mode, executionCalldata)](#GovernorCrosschain-_crosschainExecute-address-bytes-Mode-bytes-)
+<details>
+<summary>Governor</summary>
+
+- [receive()](#Governor-receive--)
+- [supportsInterface(interfaceId)](#Governor-supportsInterface-bytes4-)
+- [name()](#Governor-name--)
+- [version()](#Governor-version--)
+- [hashProposal(targets, values, calldatas, descriptionHash)](#Governor-hashProposal-address---uint256---bytes---bytes32-)
+- [getProposalId(targets, values, calldatas, descriptionHash)](#Governor-getProposalId-address---uint256---bytes---bytes32-)
+- [state(proposalId)](#Governor-state-uint256-)
+- [proposalThreshold()](#Governor-proposalThreshold--)
+- [proposalSnapshot(proposalId)](#Governor-proposalSnapshot-uint256-)
+- [proposalDeadline(proposalId)](#Governor-proposalDeadline-uint256-)
+- [proposalProposer(proposalId)](#Governor-proposalProposer-uint256-)
+- [proposalEta(proposalId)](#Governor-proposalEta-uint256-)
+- [proposalNeedsQueuing()](#Governor-proposalNeedsQueuing-uint256-)
+- [_checkGovernance()](#Governor-_checkGovernance--)
+- [_quorumReached(proposalId)](#Governor-_quorumReached-uint256-)
+- [_voteSucceeded(proposalId)](#Governor-_voteSucceeded-uint256-)
+- [_getVotes(account, timepoint, params)](#Governor-_getVotes-address-uint256-bytes-)
+- [_countVote(proposalId, account, support, totalWeight, params)](#Governor-_countVote-uint256-address-uint8-uint256-bytes-)
+- [_tallyUpdated(proposalId)](#Governor-_tallyUpdated-uint256-)
+- [_defaultParams()](#Governor-_defaultParams--)
+- [propose(targets, values, calldatas, description)](#Governor-propose-address---uint256---bytes---string-)
+- [_propose(targets, values, calldatas, description, proposer)](#Governor-_propose-address---uint256---bytes---string-address-)
+- [queue(targets, values, calldatas, descriptionHash)](#Governor-queue-address---uint256---bytes---bytes32-)
+- [_queueOperations(, , , , )](#Governor-_queueOperations-uint256-address---uint256---bytes---bytes32-)
+- [execute(targets, values, calldatas, descriptionHash)](#Governor-execute-address---uint256---bytes---bytes32-)
+- [_executeOperations(, targets, values, calldatas, )](#Governor-_executeOperations-uint256-address---uint256---bytes---bytes32-)
+- [cancel(targets, values, calldatas, descriptionHash)](#Governor-cancel-address---uint256---bytes---bytes32-)
+- [_cancel(targets, values, calldatas, descriptionHash)](#Governor-_cancel-address---uint256---bytes---bytes32-)
+- [getVotes(account, timepoint)](#Governor-getVotes-address-uint256-)
+- [getVotesWithParams(account, timepoint, params)](#Governor-getVotesWithParams-address-uint256-bytes-)
+- [castVote(proposalId, support)](#Governor-castVote-uint256-uint8-)
+- [castVoteWithReason(proposalId, support, reason)](#Governor-castVoteWithReason-uint256-uint8-string-)
+- [castVoteWithReasonAndParams(proposalId, support, reason, params)](#Governor-castVoteWithReasonAndParams-uint256-uint8-string-bytes-)
+- [castVoteBySig(proposalId, support, voter, signature)](#Governor-castVoteBySig-uint256-uint8-address-bytes-)
+- [castVoteWithReasonAndParamsBySig(proposalId, support, voter, reason, params, signature)](#Governor-castVoteWithReasonAndParamsBySig-uint256-uint8-address-string-bytes-bytes-)
+- [_validateVoteSig(proposalId, support, voter, signature)](#Governor-_validateVoteSig-uint256-uint8-address-bytes-)
+- [_validateExtendedVoteSig(proposalId, support, voter, reason, params, signature)](#Governor-_validateExtendedVoteSig-uint256-uint8-address-string-bytes-bytes-)
+- [_castVote(proposalId, account, support, reason)](#Governor-_castVote-uint256-address-uint8-string-)
+- [_castVote(proposalId, account, support, reason, params)](#Governor-_castVote-uint256-address-uint8-string-bytes-)
+- [relay(target, value, data)](#Governor-relay-address-uint256-bytes-)
+- [_executor()](#Governor-_executor--)
+- [onERC721Received(, , , )](#Governor-onERC721Received-address-address-uint256-bytes-)
+- [onERC1155Received(, , , , )](#Governor-onERC1155Received-address-address-uint256-uint256-bytes-)
+- [onERC1155BatchReceived(, , , , )](#Governor-onERC1155BatchReceived-address-address-uint256---uint256---bytes-)
+- [_encodeStateBitmap(proposalState)](#Governor-_encodeStateBitmap-enum-IGovernor-ProposalState-)
+- [_validateStateBitmap(proposalId, allowedStates)](#Governor-_validateStateBitmap-uint256-bytes32-)
+- [_isValidDescriptionForProposer(proposer, description)](#Governor-_isValidDescriptionForProposer-address-string-)
+- [_validateCancel(proposalId, caller)](#Governor-_validateCancel-uint256-address-)
+- [clock()](#Governor-clock--)
+- [CLOCK_MODE()](#Governor-CLOCK_MODE--)
+- [votingDelay()](#Governor-votingDelay--)
+- [votingPeriod()](#Governor-votingPeriod--)
+- [quorum(timepoint)](#Governor-quorum-uint256-)
+- [BALLOT_TYPEHASH()](#Governor-BALLOT_TYPEHASH-bytes32)
+- [EXTENDED_BALLOT_TYPEHASH()](#Governor-EXTENDED_BALLOT_TYPEHASH-bytes32)
+
+</details>
+<details>
+<summary>IGovernor</summary>
+
+- [COUNTING_MODE()](#IGovernor-COUNTING_MODE--)
+- [hasVoted(proposalId, account)](#IGovernor-hasVoted-uint256-address-)
+
+</details>
+<details>
+<summary>Nonces</summary>
+
+- [nonces(owner)](#Nonces-nonces-address-)
+- [_useNonce(owner)](#Nonces-_useNonce-address-)
+- [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
+
+</details>
+<details>
+<summary>EIP712</summary>
+
+- [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
+- [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
+- [eip712Domain()](#EIP712-eip712Domain--)
+- [_EIP712Name()](#EIP712-_EIP712Name--)
+- [_EIP712Version()](#EIP712-_EIP712Version--)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+<details>
+<summary>IGovernor</summary>
+
+- [ProposalCreated(proposalId, proposer, targets, values, signatures, calldatas, voteStart, voteEnd, description)](#IGovernor-ProposalCreated-uint256-address-address---uint256---string---bytes---uint256-uint256-string-)
+- [ProposalQueued(proposalId, etaSeconds)](#IGovernor-ProposalQueued-uint256-uint256-)
+- [ProposalExecuted(proposalId)](#IGovernor-ProposalExecuted-uint256-)
+- [ProposalCanceled(proposalId)](#IGovernor-ProposalCanceled-uint256-)
+- [VoteCast(voter, proposalId, support, weight, reason)](#IGovernor-VoteCast-address-uint256-uint8-uint256-string-)
+- [VoteCastWithParams(voter, proposalId, support, weight, reason, params)](#IGovernor-VoteCastWithParams-address-uint256-uint8-uint256-string-bytes-)
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
+- [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+<details>
+<summary>IGovernor</summary>
+
+- [GovernorInvalidProposalLength(targets, calldatas, values)](#IGovernor-GovernorInvalidProposalLength-uint256-uint256-uint256-)
+- [GovernorAlreadyCastVote(voter)](#IGovernor-GovernorAlreadyCastVote-address-)
+- [GovernorDisabledDeposit()](#IGovernor-GovernorDisabledDeposit--)
+- [GovernorOnlyExecutor(account)](#IGovernor-GovernorOnlyExecutor-address-)
+- [GovernorNonexistentProposal(proposalId)](#IGovernor-GovernorNonexistentProposal-uint256-)
+- [GovernorUnexpectedProposalState(proposalId, current, expectedStates)](#IGovernor-GovernorUnexpectedProposalState-uint256-enum-IGovernor-ProposalState-bytes32-)
+- [GovernorInvalidVotingPeriod(votingPeriod)](#IGovernor-GovernorInvalidVotingPeriod-uint256-)
+- [GovernorInsufficientProposerVotes(proposer, votes, threshold)](#IGovernor-GovernorInsufficientProposerVotes-address-uint256-uint256-)
+- [GovernorRestrictedProposer(proposer)](#IGovernor-GovernorRestrictedProposer-address-)
+- [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
+- [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
+- [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
+- [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
+- [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
+- [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
+
+</details>
+<details>
+<summary>Nonces</summary>
+
+- [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
+
+</details>
+</div>
+</div>
+
+<a id="GovernorCrosschain-relayCrosschain-address-bytes-Mode-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">relayCrosschain(address gateway, bytes executor, Mode mode, bytes executionCalldata)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#GovernorCrosschain-relayCrosschain-address-bytes-Mode-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Send crosschain instruction to an arbitrary remote executor via an arbitrary ERC-7786 gateway.
+
+</div>
+</div>
+
+<a id="GovernorCrosschain-_crosschainExecute-address-bytes-Mode-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_crosschainExecute(address gateway, bytes executor, Mode mode, bytes executionCalldata)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#GovernorCrosschain-_crosschainExecute-address-bytes-Mode-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Send crosschain instruction to an arbitrary remote executor via an arbitrary ERC-7786 gateway.
+
+</div>
+</div>
+
 <a id="GovernorNoncesKeyed"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `GovernorNoncesKeyed`
+## `GovernorNoncesKeyed` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorNoncesKeyed.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorNoncesKeyed.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -4395,11 +4630,17 @@ Traditional (un-keyed) nonces are still supported and can continue to be used as
 - [_useCheckedNonce(owner, nonce)](#GovernorNoncesKeyed-_useCheckedNonce-address-uint256-)
 - [_validateVoteSig(proposalId, support, voter, signature)](#GovernorNoncesKeyed-_validateVoteSig-uint256-uint8-address-bytes-)
 - [_validateExtendedVoteSig(proposalId, support, voter, reason, params, signature)](#GovernorNoncesKeyed-_validateExtendedVoteSig-uint256-uint8-address-string-bytes-bytes-)
-#### NoncesKeyed [!toc]
+<details>
+<summary>NoncesKeyed</summary>
+
 - [nonces(owner, key)](#NoncesKeyed-nonces-address-uint192-)
 - [_useNonce(owner, key)](#NoncesKeyed-_useNonce-address-uint192-)
 - [_useCheckedNonce(owner, key, nonce)](#NoncesKeyed-_useCheckedNonce-address-uint192-uint64-)
-#### Governor [!toc]
+
+</details>
+<details>
+<summary>Governor</summary>
+
 - [receive()](#Governor-receive--)
 - [supportsInterface(interfaceId)](#Governor-supportsInterface-bytes4-)
 - [name()](#Governor-name--)
@@ -4453,59 +4694,64 @@ Traditional (un-keyed) nonces are still supported and can continue to be used as
 - [quorum(timepoint)](#Governor-quorum-uint256-)
 - [BALLOT_TYPEHASH()](#Governor-BALLOT_TYPEHASH-bytes32)
 - [EXTENDED_BALLOT_TYPEHASH()](#Governor-EXTENDED_BALLOT_TYPEHASH-bytes32)
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+
+</details>
+<details>
+<summary>IGovernor</summary>
+
 - [COUNTING_MODE()](#IGovernor-COUNTING_MODE--)
 - [hasVoted(proposalId, account)](#IGovernor-hasVoted-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
-#### EIP712 [!toc]
+
+</details>
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### NoncesKeyed [!toc]
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [ProposalCreated(proposalId, proposer, targets, values, signatures, calldatas, voteStart, voteEnd, description)](#IGovernor-ProposalCreated-uint256-address-address---uint256---string---bytes---uint256-uint256-string-)
 - [ProposalQueued(proposalId, etaSeconds)](#IGovernor-ProposalQueued-uint256-uint256-)
 - [ProposalExecuted(proposalId)](#IGovernor-ProposalExecuted-uint256-)
 - [ProposalCanceled(proposalId)](#IGovernor-ProposalCanceled-uint256-)
 - [VoteCast(voter, proposalId, support, weight, reason)](#IGovernor-VoteCast-address-uint256-uint8-uint256-string-)
 - [VoteCastWithParams(voter, proposalId, support, weight, reason, params)](#IGovernor-VoteCastWithParams-address-uint256-uint8-uint256-string-bytes-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### NoncesKeyed [!toc]
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [GovernorInvalidProposalLength(targets, calldatas, values)](#IGovernor-GovernorInvalidProposalLength-uint256-uint256-uint256-)
 - [GovernorAlreadyCastVote(voter)](#IGovernor-GovernorAlreadyCastVote-address-)
 - [GovernorDisabledDeposit()](#IGovernor-GovernorDisabledDeposit--)
@@ -4518,17 +4764,17 @@ Traditional (un-keyed) nonces are still supported and can continue to be used as
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
 - [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -4595,9 +4841,9 @@ Side effects may be skipped depending on the linearization of the function.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `GovernorPreventLateQuorum`
+## `GovernorPreventLateQuorum` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorPreventLateQuorum.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorPreventLateQuorum.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -4624,7 +4870,9 @@ proposal.
 - [lateQuorumVoteExtension()](#GovernorPreventLateQuorum-lateQuorumVoteExtension--)
 - [setLateQuorumVoteExtension(newVoteExtension)](#GovernorPreventLateQuorum-setLateQuorumVoteExtension-uint48-)
 - [_setLateQuorumVoteExtension(newVoteExtension)](#GovernorPreventLateQuorum-_setLateQuorumVoteExtension-uint48-)
-#### Governor [!toc]
+<details>
+<summary>Governor</summary>
+
 - [receive()](#Governor-receive--)
 - [supportsInterface(interfaceId)](#Governor-supportsInterface-bytes4-)
 - [name()](#Governor-name--)
@@ -4678,25 +4926,33 @@ proposal.
 - [quorum(timepoint)](#Governor-quorum-uint256-)
 - [BALLOT_TYPEHASH()](#Governor-BALLOT_TYPEHASH-bytes32)
 - [EXTENDED_BALLOT_TYPEHASH()](#Governor-EXTENDED_BALLOT_TYPEHASH-bytes32)
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+
+</details>
+<details>
+<summary>IGovernor</summary>
+
 - [COUNTING_MODE()](#IGovernor-COUNTING_MODE--)
 - [hasVoted(proposalId, account)](#IGovernor-hasVoted-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
 - [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
-#### EIP712 [!toc]
+
+</details>
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -4705,33 +4961,32 @@ proposal.
 <div className="font-mono">
 - [ProposalExtended(proposalId, extendedDeadline)](#GovernorPreventLateQuorum-ProposalExtended-uint256-uint64-)
 - [LateQuorumVoteExtensionSet(oldVoteExtension, newVoteExtension)](#GovernorPreventLateQuorum-LateQuorumVoteExtensionSet-uint64-uint64-)
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [ProposalCreated(proposalId, proposer, targets, values, signatures, calldatas, voteStart, voteEnd, description)](#IGovernor-ProposalCreated-uint256-address-address---uint256---string---bytes---uint256-uint256-string-)
 - [ProposalQueued(proposalId, etaSeconds)](#IGovernor-ProposalQueued-uint256-uint256-)
 - [ProposalExecuted(proposalId)](#IGovernor-ProposalExecuted-uint256-)
 - [ProposalCanceled(proposalId)](#IGovernor-ProposalCanceled-uint256-)
 - [VoteCast(voter, proposalId, support, weight, reason)](#IGovernor-VoteCast-address-uint256-uint8-uint256-string-)
 - [VoteCastWithParams(voter, proposalId, support, weight, reason, params)](#IGovernor-VoteCastWithParams-address-uint256-uint8-uint256-string-bytes-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [GovernorInvalidProposalLength(targets, calldatas, values)](#IGovernor-GovernorInvalidProposalLength-uint256-uint256-uint256-)
 - [GovernorAlreadyCastVote(voter)](#IGovernor-GovernorAlreadyCastVote-address-)
 - [GovernorDisabledDeposit()](#IGovernor-GovernorDisabledDeposit--)
@@ -4744,17 +4999,17 @@ proposal.
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
 - [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -4911,9 +5166,9 @@ Emitted when the [`GovernorPreventLateQuorum.lateQuorumVoteExtension`](#Governor
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `GovernorProposalGuardian`
+## `GovernorProposalGuardian` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorProposalGuardian.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorProposalGuardian.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -4936,7 +5191,9 @@ if the proposal guardian is not configured, then proposers take this role for th
 - [setProposalGuardian(newProposalGuardian)](#GovernorProposalGuardian-setProposalGuardian-address-)
 - [_setProposalGuardian(newProposalGuardian)](#GovernorProposalGuardian-_setProposalGuardian-address-)
 - [_validateCancel(proposalId, caller)](#GovernorProposalGuardian-_validateCancel-uint256-address-)
-#### Governor [!toc]
+<details>
+<summary>Governor</summary>
+
 - [receive()](#Governor-receive--)
 - [supportsInterface(interfaceId)](#Governor-supportsInterface-bytes4-)
 - [name()](#Governor-name--)
@@ -4991,25 +5248,33 @@ if the proposal guardian is not configured, then proposers take this role for th
 - [quorum(timepoint)](#Governor-quorum-uint256-)
 - [BALLOT_TYPEHASH()](#Governor-BALLOT_TYPEHASH-bytes32)
 - [EXTENDED_BALLOT_TYPEHASH()](#Governor-EXTENDED_BALLOT_TYPEHASH-bytes32)
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+
+</details>
+<details>
+<summary>IGovernor</summary>
+
 - [COUNTING_MODE()](#IGovernor-COUNTING_MODE--)
 - [hasVoted(proposalId, account)](#IGovernor-hasVoted-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
 - [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
-#### EIP712 [!toc]
+
+</details>
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -5017,33 +5282,32 @@ if the proposal guardian is not configured, then proposers take this role for th
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
 - [ProposalGuardianSet(oldProposalGuardian, newProposalGuardian)](#GovernorProposalGuardian-ProposalGuardianSet-address-address-)
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [ProposalCreated(proposalId, proposer, targets, values, signatures, calldatas, voteStart, voteEnd, description)](#IGovernor-ProposalCreated-uint256-address-address---uint256---string---bytes---uint256-uint256-string-)
 - [ProposalQueued(proposalId, etaSeconds)](#IGovernor-ProposalQueued-uint256-uint256-)
 - [ProposalExecuted(proposalId)](#IGovernor-ProposalExecuted-uint256-)
 - [ProposalCanceled(proposalId)](#IGovernor-ProposalCanceled-uint256-)
 - [VoteCast(voter, proposalId, support, weight, reason)](#IGovernor-VoteCast-address-uint256-uint8-uint256-string-)
 - [VoteCastWithParams(voter, proposalId, support, weight, reason, params)](#IGovernor-VoteCastWithParams-address-uint256-uint8-uint256-string-bytes-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [GovernorInvalidProposalLength(targets, calldatas, values)](#IGovernor-GovernorInvalidProposalLength-uint256-uint256-uint256-)
 - [GovernorAlreadyCastVote(voter)](#IGovernor-GovernorAlreadyCastVote-address-)
 - [GovernorDisabledDeposit()](#IGovernor-GovernorDisabledDeposit--)
@@ -5056,17 +5320,17 @@ if the proposal guardian is not configured, then proposers take this role for th
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
 - [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -5166,9 +5430,9 @@ Override [`Governor._validateCancel`](#Governor-_validateCancel-uint256-address-
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `GovernorSequentialProposalId`
+## `GovernorSequentialProposalId` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorSequentialProposalId.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorSequentialProposalId.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -5188,7 +5452,9 @@ sequential ids.
 - [latestProposalId()](#GovernorSequentialProposalId-latestProposalId--)
 - [_propose(targets, values, calldatas, description, proposer)](#GovernorSequentialProposalId-_propose-address---uint256---bytes---string-address-)
 - [_initializeLatestProposalId(newLatestProposalId)](#GovernorSequentialProposalId-_initializeLatestProposalId-uint256-)
-#### Governor [!toc]
+<details>
+<summary>Governor</summary>
+
 - [receive()](#Governor-receive--)
 - [supportsInterface(interfaceId)](#Governor-supportsInterface-bytes4-)
 - [name()](#Governor-name--)
@@ -5242,48 +5508,56 @@ sequential ids.
 - [quorum(timepoint)](#Governor-quorum-uint256-)
 - [BALLOT_TYPEHASH()](#Governor-BALLOT_TYPEHASH-bytes32)
 - [EXTENDED_BALLOT_TYPEHASH()](#Governor-EXTENDED_BALLOT_TYPEHASH-bytes32)
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+
+</details>
+<details>
+<summary>IGovernor</summary>
+
 - [COUNTING_MODE()](#IGovernor-COUNTING_MODE--)
 - [hasVoted(proposalId, account)](#IGovernor-hasVoted-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
 - [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
-#### EIP712 [!toc]
+
+</details>
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [ProposalCreated(proposalId, proposer, targets, values, signatures, calldatas, voteStart, voteEnd, description)](#IGovernor-ProposalCreated-uint256-address-address---uint256---string---bytes---uint256-uint256-string-)
 - [ProposalQueued(proposalId, etaSeconds)](#IGovernor-ProposalQueued-uint256-uint256-)
 - [ProposalExecuted(proposalId)](#IGovernor-ProposalExecuted-uint256-)
 - [ProposalCanceled(proposalId)](#IGovernor-ProposalCanceled-uint256-)
 - [VoteCast(voter, proposalId, support, weight, reason)](#IGovernor-VoteCast-address-uint256-uint8-uint256-string-)
 - [VoteCastWithParams(voter, proposalId, support, weight, reason, params)](#IGovernor-VoteCastWithParams-address-uint256-uint8-uint256-string-bytes-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -5291,10 +5565,9 @@ sequential ids.
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
 - [GovernorAlreadyInitializedLatestProposalId()](#GovernorSequentialProposalId-GovernorAlreadyInitializedLatestProposalId--)
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [GovernorInvalidProposalLength(targets, calldatas, values)](#IGovernor-GovernorInvalidProposalLength-uint256-uint256-uint256-)
 - [GovernorAlreadyCastVote(voter)](#IGovernor-GovernorAlreadyCastVote-address-)
 - [GovernorDisabledDeposit()](#IGovernor-GovernorDisabledDeposit--)
@@ -5307,17 +5580,17 @@ sequential ids.
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
 - [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -5413,9 +5686,9 @@ The [`GovernorSequentialProposalId.latestProposalId`](#GovernorSequentialProposa
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `GovernorSettings`
+## `GovernorSettings` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorSettings.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorSettings.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -5440,7 +5713,9 @@ Extension of [`Governor`](#Governor) for settings updatable through governance.
 - [_setVotingDelay(newVotingDelay)](#GovernorSettings-_setVotingDelay-uint48-)
 - [_setVotingPeriod(newVotingPeriod)](#GovernorSettings-_setVotingPeriod-uint32-)
 - [_setProposalThreshold(newProposalThreshold)](#GovernorSettings-_setProposalThreshold-uint256-)
-#### Governor [!toc]
+<details>
+<summary>Governor</summary>
+
 - [receive()](#Governor-receive--)
 - [supportsInterface(interfaceId)](#Governor-supportsInterface-bytes4-)
 - [name()](#Governor-name--)
@@ -5493,25 +5768,33 @@ Extension of [`Governor`](#Governor) for settings updatable through governance.
 - [quorum(timepoint)](#Governor-quorum-uint256-)
 - [BALLOT_TYPEHASH()](#Governor-BALLOT_TYPEHASH-bytes32)
 - [EXTENDED_BALLOT_TYPEHASH()](#Governor-EXTENDED_BALLOT_TYPEHASH-bytes32)
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+
+</details>
+<details>
+<summary>IGovernor</summary>
+
 - [COUNTING_MODE()](#IGovernor-COUNTING_MODE--)
 - [hasVoted(proposalId, account)](#IGovernor-hasVoted-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
 - [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
-#### EIP712 [!toc]
+
+</details>
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -5521,33 +5804,32 @@ Extension of [`Governor`](#Governor) for settings updatable through governance.
 - [VotingDelaySet(oldVotingDelay, newVotingDelay)](#GovernorSettings-VotingDelaySet-uint256-uint256-)
 - [VotingPeriodSet(oldVotingPeriod, newVotingPeriod)](#GovernorSettings-VotingPeriodSet-uint256-uint256-)
 - [ProposalThresholdSet(oldProposalThreshold, newProposalThreshold)](#GovernorSettings-ProposalThresholdSet-uint256-uint256-)
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [ProposalCreated(proposalId, proposer, targets, values, signatures, calldatas, voteStart, voteEnd, description)](#IGovernor-ProposalCreated-uint256-address-address---uint256---string---bytes---uint256-uint256-string-)
 - [ProposalQueued(proposalId, etaSeconds)](#IGovernor-ProposalQueued-uint256-uint256-)
 - [ProposalExecuted(proposalId)](#IGovernor-ProposalExecuted-uint256-)
 - [ProposalCanceled(proposalId)](#IGovernor-ProposalCanceled-uint256-)
 - [VoteCast(voter, proposalId, support, weight, reason)](#IGovernor-VoteCast-address-uint256-uint8-uint256-string-)
 - [VoteCastWithParams(voter, proposalId, support, weight, reason, params)](#IGovernor-VoteCastWithParams-address-uint256-uint8-uint256-string-bytes-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [GovernorInvalidProposalLength(targets, calldatas, values)](#IGovernor-GovernorInvalidProposalLength-uint256-uint256-uint256-)
 - [GovernorAlreadyCastVote(voter)](#IGovernor-GovernorAlreadyCastVote-address-)
 - [GovernorDisabledDeposit()](#IGovernor-GovernorDisabledDeposit--)
@@ -5560,17 +5842,17 @@ Extension of [`Governor`](#Governor) for settings updatable through governance.
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
 - [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -5802,9 +6084,9 @@ Emits a [`GovernorSettings.ProposalThresholdSet`](#GovernorSettings-ProposalThre
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `GovernorStorage`
+## `GovernorStorage` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorStorage.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorStorage.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -5832,7 +6114,9 @@ Use cases for this module include:
 - [proposalCount()](#GovernorStorage-proposalCount--)
 - [proposalDetails(proposalId)](#GovernorStorage-proposalDetails-uint256-)
 - [proposalDetailsAt(index)](#GovernorStorage-proposalDetailsAt-uint256-)
-#### Governor [!toc]
+<details>
+<summary>Governor</summary>
+
 - [receive()](#Governor-receive--)
 - [supportsInterface(interfaceId)](#Governor-supportsInterface-bytes4-)
 - [name()](#Governor-name--)
@@ -5887,58 +6171,65 @@ Use cases for this module include:
 - [quorum(timepoint)](#Governor-quorum-uint256-)
 - [BALLOT_TYPEHASH()](#Governor-BALLOT_TYPEHASH-bytes32)
 - [EXTENDED_BALLOT_TYPEHASH()](#Governor-EXTENDED_BALLOT_TYPEHASH-bytes32)
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+
+</details>
+<details>
+<summary>IGovernor</summary>
+
 - [COUNTING_MODE()](#IGovernor-COUNTING_MODE--)
 - [hasVoted(proposalId, account)](#IGovernor-hasVoted-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
 - [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
-#### EIP712 [!toc]
+
+</details>
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [ProposalCreated(proposalId, proposer, targets, values, signatures, calldatas, voteStart, voteEnd, description)](#IGovernor-ProposalCreated-uint256-address-address---uint256---string---bytes---uint256-uint256-string-)
 - [ProposalQueued(proposalId, etaSeconds)](#IGovernor-ProposalQueued-uint256-uint256-)
 - [ProposalExecuted(proposalId)](#IGovernor-ProposalExecuted-uint256-)
 - [ProposalCanceled(proposalId)](#IGovernor-ProposalCanceled-uint256-)
 - [VoteCast(voter, proposalId, support, weight, reason)](#IGovernor-VoteCast-address-uint256-uint8-uint256-string-)
 - [VoteCastWithParams(voter, proposalId, support, weight, reason, params)](#IGovernor-VoteCastWithParams-address-uint256-uint8-uint256-string-bytes-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [GovernorInvalidProposalLength(targets, calldatas, values)](#IGovernor-GovernorInvalidProposalLength-uint256-uint256-uint256-)
 - [GovernorAlreadyCastVote(voter)](#IGovernor-GovernorAlreadyCastVote-address-)
 - [GovernorDisabledDeposit()](#IGovernor-GovernorDisabledDeposit--)
@@ -5951,17 +6242,17 @@ Use cases for this module include:
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
 - [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -6088,9 +6379,9 @@ Returns the details (including the proposalId) of a proposal given its sequentia
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `GovernorSuperQuorum`
+## `GovernorSuperQuorum` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorSuperQuorum.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorSuperQuorum.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -6110,7 +6401,9 @@ extension must implement [`GovernorCountingFractional.proposalVotes`](#GovernorC
 - [superQuorum(timepoint)](#GovernorSuperQuorum-superQuorum-uint256-)
 - [proposalVotes(proposalId)](#GovernorSuperQuorum-proposalVotes-uint256-)
 - [state(proposalId)](#GovernorSuperQuorum-state-uint256-)
-#### Governor [!toc]
+<details>
+<summary>Governor</summary>
+
 - [receive()](#Governor-receive--)
 - [supportsInterface(interfaceId)](#Governor-supportsInterface-bytes4-)
 - [name()](#Governor-name--)
@@ -6165,58 +6458,65 @@ extension must implement [`GovernorCountingFractional.proposalVotes`](#GovernorC
 - [quorum(timepoint)](#Governor-quorum-uint256-)
 - [BALLOT_TYPEHASH()](#Governor-BALLOT_TYPEHASH-bytes32)
 - [EXTENDED_BALLOT_TYPEHASH()](#Governor-EXTENDED_BALLOT_TYPEHASH-bytes32)
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+
+</details>
+<details>
+<summary>IGovernor</summary>
+
 - [COUNTING_MODE()](#IGovernor-COUNTING_MODE--)
 - [hasVoted(proposalId, account)](#IGovernor-hasVoted-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
 - [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
-#### EIP712 [!toc]
+
+</details>
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [ProposalCreated(proposalId, proposer, targets, values, signatures, calldatas, voteStart, voteEnd, description)](#IGovernor-ProposalCreated-uint256-address-address---uint256---string---bytes---uint256-uint256-string-)
 - [ProposalQueued(proposalId, etaSeconds)](#IGovernor-ProposalQueued-uint256-uint256-)
 - [ProposalExecuted(proposalId)](#IGovernor-ProposalExecuted-uint256-)
 - [ProposalCanceled(proposalId)](#IGovernor-ProposalCanceled-uint256-)
 - [VoteCast(voter, proposalId, support, weight, reason)](#IGovernor-VoteCast-address-uint256-uint8-uint256-string-)
 - [VoteCastWithParams(voter, proposalId, support, weight, reason, params)](#IGovernor-VoteCastWithParams-address-uint256-uint8-uint256-string-bytes-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [GovernorInvalidProposalLength(targets, calldatas, values)](#IGovernor-GovernorInvalidProposalLength-uint256-uint256-uint256-)
 - [GovernorAlreadyCastVote(voter)](#IGovernor-GovernorAlreadyCastVote-address-)
 - [GovernorDisabledDeposit()](#IGovernor-GovernorDisabledDeposit--)
@@ -6229,17 +6529,17 @@ extension must implement [`GovernorCountingFractional.proposalVotes`](#GovernorC
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
 - [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -6321,9 +6621,9 @@ types of scenarios.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `GovernorTimelockAccess`
+## `GovernorTimelockAccess` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorTimelockAccess.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorTimelockAccess.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -6343,7 +6643,7 @@ and [`GovernorTimelockCompound`](#GovernorTimelockCompound), where the timelock 
 permissions. Operations that are delay-restricted by the manager, however, will be executed through the
 [`AccessManager.execute`](/contracts/5.x/api/access#AccessManager-execute-address-bytes-) function.
 
-==== Security Considerations
+#### Security Considerations
 
 Some operations may be cancelable in the `AccessManager` by the admin or a set of guardians, depending on the
 restricted function being invoked. Since proposals are atomic, the cancellation by a guardian of a single operation
@@ -6379,7 +6679,9 @@ the same time. See [`AccessManager.schedule`](/contracts/5.x/api/access#AccessMa
 - [_queueOperations(proposalId, targets, , calldatas, )](#GovernorTimelockAccess-_queueOperations-uint256-address---uint256---bytes---bytes32-)
 - [_executeOperations(proposalId, targets, values, calldatas, )](#GovernorTimelockAccess-_executeOperations-uint256-address---uint256---bytes---bytes32-)
 - [_cancel(targets, values, calldatas, descriptionHash)](#GovernorTimelockAccess-_cancel-address---uint256---bytes---bytes32-)
-#### Governor [!toc]
+<details>
+<summary>Governor</summary>
+
 - [receive()](#Governor-receive--)
 - [supportsInterface(interfaceId)](#Governor-supportsInterface-bytes4-)
 - [name()](#Governor-name--)
@@ -6430,25 +6732,33 @@ the same time. See [`AccessManager.schedule`](/contracts/5.x/api/access#AccessMa
 - [quorum(timepoint)](#Governor-quorum-uint256-)
 - [BALLOT_TYPEHASH()](#Governor-BALLOT_TYPEHASH-bytes32)
 - [EXTENDED_BALLOT_TYPEHASH()](#Governor-EXTENDED_BALLOT_TYPEHASH-bytes32)
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+
+</details>
+<details>
+<summary>IGovernor</summary>
+
 - [COUNTING_MODE()](#IGovernor-COUNTING_MODE--)
 - [hasVoted(proposalId, account)](#IGovernor-hasVoted-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
 - [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
-#### EIP712 [!toc]
+
+</details>
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -6457,23 +6767,23 @@ the same time. See [`AccessManager.schedule`](/contracts/5.x/api/access#AccessMa
 <div className="font-mono">
 - [BaseDelaySet(oldBaseDelaySeconds, newBaseDelaySeconds)](#GovernorTimelockAccess-BaseDelaySet-uint32-uint32-)
 - [AccessManagerIgnoredSet(target, selector, ignored)](#GovernorTimelockAccess-AccessManagerIgnoredSet-address-bytes4-bool-)
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [ProposalCreated(proposalId, proposer, targets, values, signatures, calldatas, voteStart, voteEnd, description)](#IGovernor-ProposalCreated-uint256-address-address---uint256---string---bytes---uint256-uint256-string-)
 - [ProposalQueued(proposalId, etaSeconds)](#IGovernor-ProposalQueued-uint256-uint256-)
 - [ProposalExecuted(proposalId)](#IGovernor-ProposalExecuted-uint256-)
 - [ProposalCanceled(proposalId)](#IGovernor-ProposalCanceled-uint256-)
 - [VoteCast(voter, proposalId, support, weight, reason)](#IGovernor-VoteCast-address-uint256-uint8-uint256-string-)
 - [VoteCastWithParams(voter, proposalId, support, weight, reason, params)](#IGovernor-VoteCastWithParams-address-uint256-uint8-uint256-string-bytes-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -6483,10 +6793,9 @@ the same time. See [`AccessManager.schedule`](/contracts/5.x/api/access#AccessMa
 - [GovernorUnmetDelay(proposalId, neededTimestamp)](#GovernorTimelockAccess-GovernorUnmetDelay-uint256-uint256-)
 - [GovernorMismatchedNonce(proposalId, expectedNonce, actualNonce)](#GovernorTimelockAccess-GovernorMismatchedNonce-uint256-uint256-uint256-)
 - [GovernorLockedIgnore()](#GovernorTimelockAccess-GovernorLockedIgnore--)
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [GovernorInvalidProposalLength(targets, calldatas, values)](#IGovernor-GovernorInvalidProposalLength-uint256-uint256-uint256-)
 - [GovernorAlreadyCastVote(voter)](#IGovernor-GovernorAlreadyCastVote-address-)
 - [GovernorDisabledDeposit()](#IGovernor-GovernorDisabledDeposit--)
@@ -6499,17 +6808,17 @@ the same time. See [`AccessManager.schedule`](/contracts/5.x/api/access#AccessMa
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
 - [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -6848,9 +7157,9 @@ Emits a [`IGovernor.ProposalCanceled`](#IGovernor-ProposalCanceled-uint256-) eve
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `GovernorTimelockCompound`
+## `GovernorTimelockCompound` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorTimelockCompound.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorTimelockCompound.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -6882,7 +7191,9 @@ inaccessible from a proposal, unless executed via [`Governor.relay`](#Governor-r
 - [_executor()](#GovernorTimelockCompound-_executor--)
 - [__acceptAdmin()](#GovernorTimelockCompound-__acceptAdmin--)
 - [updateTimelock(newTimelock)](#GovernorTimelockCompound-updateTimelock-contract-ICompoundTimelock-)
-#### Governor [!toc]
+<details>
+<summary>Governor</summary>
+
 - [receive()](#Governor-receive--)
 - [supportsInterface(interfaceId)](#Governor-supportsInterface-bytes4-)
 - [name()](#Governor-name--)
@@ -6932,25 +7243,33 @@ inaccessible from a proposal, unless executed via [`Governor.relay`](#Governor-r
 - [quorum(timepoint)](#Governor-quorum-uint256-)
 - [BALLOT_TYPEHASH()](#Governor-BALLOT_TYPEHASH-bytes32)
 - [EXTENDED_BALLOT_TYPEHASH()](#Governor-EXTENDED_BALLOT_TYPEHASH-bytes32)
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+
+</details>
+<details>
+<summary>IGovernor</summary>
+
 - [COUNTING_MODE()](#IGovernor-COUNTING_MODE--)
 - [hasVoted(proposalId, account)](#IGovernor-hasVoted-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
 - [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
-#### EIP712 [!toc]
+
+</details>
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -6958,33 +7277,32 @@ inaccessible from a proposal, unless executed via [`Governor.relay`](#Governor-r
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
 - [TimelockChange(oldTimelock, newTimelock)](#GovernorTimelockCompound-TimelockChange-address-address-)
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [ProposalCreated(proposalId, proposer, targets, values, signatures, calldatas, voteStart, voteEnd, description)](#IGovernor-ProposalCreated-uint256-address-address---uint256---string---bytes---uint256-uint256-string-)
 - [ProposalQueued(proposalId, etaSeconds)](#IGovernor-ProposalQueued-uint256-uint256-)
 - [ProposalExecuted(proposalId)](#IGovernor-ProposalExecuted-uint256-)
 - [ProposalCanceled(proposalId)](#IGovernor-ProposalCanceled-uint256-)
 - [VoteCast(voter, proposalId, support, weight, reason)](#IGovernor-VoteCast-address-uint256-uint8-uint256-string-)
 - [VoteCastWithParams(voter, proposalId, support, weight, reason, params)](#IGovernor-VoteCastWithParams-address-uint256-uint8-uint256-string-bytes-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [GovernorInvalidProposalLength(targets, calldatas, values)](#IGovernor-GovernorInvalidProposalLength-uint256-uint256-uint256-)
 - [GovernorAlreadyCastVote(voter)](#IGovernor-GovernorAlreadyCastVote-address-)
 - [GovernorDisabledDeposit()](#IGovernor-GovernorDisabledDeposit--)
@@ -6997,17 +7315,17 @@ inaccessible from a proposal, unless executed via [`Governor.relay`](#Governor-r
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
 - [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -7186,7 +7504,9 @@ Note that if the timelock admin has been handed over in a previous operation, we
 timelock if admin of the timelock has already been accepted and the operation is executed outside the scope of
 governance.
 
-CAUTION: It is not recommended to change the timelock while there are other queued governance proposals.
+<Callout type="warn">
+It is not recommended to change the timelock while there are other queued governance proposals.
+</Callout>
 
 </div>
 </div>
@@ -7213,9 +7533,9 @@ Emitted when the timelock controller used for proposal execution is modified.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `GovernorTimelockControl`
+## `GovernorTimelockControl` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorTimelockControl.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorTimelockControl.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -7252,7 +7572,9 @@ proposals that have been approved by the voters, effectively executing a Denial 
 - [_cancel(targets, values, calldatas, descriptionHash)](#GovernorTimelockControl-_cancel-address---uint256---bytes---bytes32-)
 - [_executor()](#GovernorTimelockControl-_executor--)
 - [updateTimelock(newTimelock)](#GovernorTimelockControl-updateTimelock-contract-TimelockController-)
-#### Governor [!toc]
+<details>
+<summary>Governor</summary>
+
 - [receive()](#Governor-receive--)
 - [supportsInterface(interfaceId)](#Governor-supportsInterface-bytes4-)
 - [name()](#Governor-name--)
@@ -7302,25 +7624,33 @@ proposals that have been approved by the voters, effectively executing a Denial 
 - [quorum(timepoint)](#Governor-quorum-uint256-)
 - [BALLOT_TYPEHASH()](#Governor-BALLOT_TYPEHASH-bytes32)
 - [EXTENDED_BALLOT_TYPEHASH()](#Governor-EXTENDED_BALLOT_TYPEHASH-bytes32)
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+
+</details>
+<details>
+<summary>IGovernor</summary>
+
 - [COUNTING_MODE()](#IGovernor-COUNTING_MODE--)
 - [hasVoted(proposalId, account)](#IGovernor-hasVoted-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
 - [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
-#### EIP712 [!toc]
+
+</details>
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -7328,33 +7658,32 @@ proposals that have been approved by the voters, effectively executing a Denial 
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
 - [TimelockChange(oldTimelock, newTimelock)](#GovernorTimelockControl-TimelockChange-address-address-)
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [ProposalCreated(proposalId, proposer, targets, values, signatures, calldatas, voteStart, voteEnd, description)](#IGovernor-ProposalCreated-uint256-address-address---uint256---string---bytes---uint256-uint256-string-)
 - [ProposalQueued(proposalId, etaSeconds)](#IGovernor-ProposalQueued-uint256-uint256-)
 - [ProposalExecuted(proposalId)](#IGovernor-ProposalExecuted-uint256-)
 - [ProposalCanceled(proposalId)](#IGovernor-ProposalCanceled-uint256-)
 - [VoteCast(voter, proposalId, support, weight, reason)](#IGovernor-VoteCast-address-uint256-uint8-uint256-string-)
 - [VoteCastWithParams(voter, proposalId, support, weight, reason, params)](#IGovernor-VoteCastWithParams-address-uint256-uint8-uint256-string-bytes-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [GovernorInvalidProposalLength(targets, calldatas, values)](#IGovernor-GovernorInvalidProposalLength-uint256-uint256-uint256-)
 - [GovernorAlreadyCastVote(voter)](#IGovernor-GovernorAlreadyCastVote-address-)
 - [GovernorDisabledDeposit()](#IGovernor-GovernorDisabledDeposit--)
@@ -7367,17 +7696,17 @@ proposals that have been approved by the voters, effectively executing a Denial 
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
 - [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -7532,7 +7861,9 @@ Address through which the governor executes action. In this case, the timelock.
 Public endpoint to update the underlying timelock instance. Restricted to the timelock itself, so updates
 must be proposed, scheduled, and executed through governance proposals.
 
-CAUTION: It is not recommended to change the timelock while there are other queued governance proposals.
+<Callout type="warn">
+It is not recommended to change the timelock while there are other queued governance proposals.
+</Callout>
 
 </div>
 </div>
@@ -7559,9 +7890,9 @@ Emitted when the timelock controller used for proposal execution is modified.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `GovernorVotes`
+## `GovernorVotes` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorVotes.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorVotes.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -7582,7 +7913,9 @@ token.
 - [clock()](#GovernorVotes-clock--)
 - [CLOCK_MODE()](#GovernorVotes-CLOCK_MODE--)
 - [_getVotes(account, timepoint, )](#GovernorVotes-_getVotes-address-uint256-bytes-)
-#### Governor [!toc]
+<details>
+<summary>Governor</summary>
+
 - [receive()](#Governor-receive--)
 - [supportsInterface(interfaceId)](#Governor-supportsInterface-bytes4-)
 - [name()](#Governor-name--)
@@ -7635,58 +7968,65 @@ token.
 - [quorum(timepoint)](#Governor-quorum-uint256-)
 - [BALLOT_TYPEHASH()](#Governor-BALLOT_TYPEHASH-bytes32)
 - [EXTENDED_BALLOT_TYPEHASH()](#Governor-EXTENDED_BALLOT_TYPEHASH-bytes32)
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+
+</details>
+<details>
+<summary>IGovernor</summary>
+
 - [COUNTING_MODE()](#IGovernor-COUNTING_MODE--)
 - [hasVoted(proposalId, account)](#IGovernor-hasVoted-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
 - [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
-#### EIP712 [!toc]
+
+</details>
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [ProposalCreated(proposalId, proposer, targets, values, signatures, calldatas, voteStart, voteEnd, description)](#IGovernor-ProposalCreated-uint256-address-address---uint256---string---bytes---uint256-uint256-string-)
 - [ProposalQueued(proposalId, etaSeconds)](#IGovernor-ProposalQueued-uint256-uint256-)
 - [ProposalExecuted(proposalId)](#IGovernor-ProposalExecuted-uint256-)
 - [ProposalCanceled(proposalId)](#IGovernor-ProposalCanceled-uint256-)
 - [VoteCast(voter, proposalId, support, weight, reason)](#IGovernor-VoteCast-address-uint256-uint8-uint256-string-)
 - [VoteCastWithParams(voter, proposalId, support, weight, reason, params)](#IGovernor-VoteCastWithParams-address-uint256-uint8-uint256-string-bytes-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [GovernorInvalidProposalLength(targets, calldatas, values)](#IGovernor-GovernorInvalidProposalLength-uint256-uint256-uint256-)
 - [GovernorAlreadyCastVote(voter)](#IGovernor-GovernorAlreadyCastVote-address-)
 - [GovernorDisabledDeposit()](#IGovernor-GovernorDisabledDeposit--)
@@ -7699,17 +8039,17 @@ token.
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
 - [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -7799,9 +8139,9 @@ Machine-readable description of the clock as specified in ERC-6372.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `GovernorVotesQuorumFraction`
+## `GovernorVotesQuorumFraction` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorVotesQuorumFraction.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorVotesQuorumFraction.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -7825,12 +8165,18 @@ fraction of the total supply.
 - [updateQuorumNumerator(newQuorumNumerator)](#GovernorVotesQuorumFraction-updateQuorumNumerator-uint256-)
 - [_updateQuorumNumerator(newQuorumNumerator)](#GovernorVotesQuorumFraction-_updateQuorumNumerator-uint256-)
 - [_optimisticUpperLookupRecent(ckpts, timepoint)](#GovernorVotesQuorumFraction-_optimisticUpperLookupRecent-struct-Checkpoints-Trace208-uint256-)
-#### GovernorVotes [!toc]
+<details>
+<summary>GovernorVotes</summary>
+
 - [token()](#GovernorVotes-token--)
 - [clock()](#GovernorVotes-clock--)
 - [CLOCK_MODE()](#GovernorVotes-CLOCK_MODE--)
 - [_getVotes(account, timepoint, )](#GovernorVotes-_getVotes-address-uint256-bytes-)
-#### Governor [!toc]
+
+</details>
+<details>
+<summary>Governor</summary>
+
 - [receive()](#Governor-receive--)
 - [supportsInterface(interfaceId)](#Governor-supportsInterface-bytes4-)
 - [name()](#Governor-name--)
@@ -7882,25 +8228,33 @@ fraction of the total supply.
 - [votingPeriod()](#Governor-votingPeriod--)
 - [BALLOT_TYPEHASH()](#Governor-BALLOT_TYPEHASH-bytes32)
 - [EXTENDED_BALLOT_TYPEHASH()](#Governor-EXTENDED_BALLOT_TYPEHASH-bytes32)
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+
+</details>
+<details>
+<summary>IGovernor</summary>
+
 - [COUNTING_MODE()](#IGovernor-COUNTING_MODE--)
 - [hasVoted(proposalId, account)](#IGovernor-hasVoted-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
 - [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
-#### EIP712 [!toc]
+
+</details>
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -7908,24 +8262,23 @@ fraction of the total supply.
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
 - [QuorumNumeratorUpdated(oldQuorumNumerator, newQuorumNumerator)](#GovernorVotesQuorumFraction-QuorumNumeratorUpdated-uint256-uint256-)
-#### GovernorVotes [!toc]
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [ProposalCreated(proposalId, proposer, targets, values, signatures, calldatas, voteStart, voteEnd, description)](#IGovernor-ProposalCreated-uint256-address-address---uint256---string---bytes---uint256-uint256-string-)
 - [ProposalQueued(proposalId, etaSeconds)](#IGovernor-ProposalQueued-uint256-uint256-)
 - [ProposalExecuted(proposalId)](#IGovernor-ProposalExecuted-uint256-)
 - [ProposalCanceled(proposalId)](#IGovernor-ProposalCanceled-uint256-)
 - [VoteCast(voter, proposalId, support, weight, reason)](#IGovernor-VoteCast-address-uint256-uint8-uint256-string-)
 - [VoteCastWithParams(voter, proposalId, support, weight, reason, params)](#IGovernor-VoteCastWithParams-address-uint256-uint8-uint256-string-bytes-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -7933,11 +8286,9 @@ fraction of the total supply.
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
 - [GovernorInvalidQuorumFraction(quorumNumerator, quorumDenominator)](#GovernorVotesQuorumFraction-GovernorInvalidQuorumFraction-uint256-uint256-)
-#### GovernorVotes [!toc]
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+<details>
+<summary>IGovernor</summary>
+
 - [GovernorInvalidProposalLength(targets, calldatas, values)](#IGovernor-GovernorInvalidProposalLength-uint256-uint256-uint256-)
 - [GovernorAlreadyCastVote(voter)](#IGovernor-GovernorAlreadyCastVote-address-)
 - [GovernorDisabledDeposit()](#IGovernor-GovernorDisabledDeposit--)
@@ -7950,17 +8301,17 @@ fraction of the total supply.
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
 - [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -8154,9 +8505,9 @@ The quorum set is not a valid fraction.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `GovernorVotesSuperQuorumFraction`
+## `GovernorVotesSuperQuorumFraction` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/extensions/GovernorVotesSuperQuorumFraction.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorVotesSuperQuorumFraction.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -8181,21 +8532,35 @@ the `Succeeded` state before the proposal deadline.
 - [_updateSuperQuorumNumerator(newSuperQuorumNumerator)](#GovernorVotesSuperQuorumFraction-_updateSuperQuorumNumerator-uint256-)
 - [_updateQuorumNumerator(newQuorumNumerator)](#GovernorVotesSuperQuorumFraction-_updateQuorumNumerator-uint256-)
 - [state(proposalId)](#GovernorVotesSuperQuorumFraction-state-uint256-)
-#### GovernorSuperQuorum [!toc]
+<details>
+<summary>GovernorSuperQuorum</summary>
+
 - [proposalVotes(proposalId)](#GovernorSuperQuorum-proposalVotes-uint256-)
-#### GovernorVotesQuorumFraction [!toc]
+
+</details>
+<details>
+<summary>GovernorVotesQuorumFraction</summary>
+
 - [quorumNumerator()](#GovernorVotesQuorumFraction-quorumNumerator--)
 - [quorumNumerator(timepoint)](#GovernorVotesQuorumFraction-quorumNumerator-uint256-)
 - [quorumDenominator()](#GovernorVotesQuorumFraction-quorumDenominator--)
 - [quorum(timepoint)](#GovernorVotesQuorumFraction-quorum-uint256-)
 - [updateQuorumNumerator(newQuorumNumerator)](#GovernorVotesQuorumFraction-updateQuorumNumerator-uint256-)
 - [_optimisticUpperLookupRecent(ckpts, timepoint)](#GovernorVotesQuorumFraction-_optimisticUpperLookupRecent-struct-Checkpoints-Trace208-uint256-)
-#### GovernorVotes [!toc]
+
+</details>
+<details>
+<summary>GovernorVotes</summary>
+
 - [token()](#GovernorVotes-token--)
 - [clock()](#GovernorVotes-clock--)
 - [CLOCK_MODE()](#GovernorVotes-CLOCK_MODE--)
 - [_getVotes(account, timepoint, )](#GovernorVotes-_getVotes-address-uint256-bytes-)
-#### Governor [!toc]
+
+</details>
+<details>
+<summary>Governor</summary>
+
 - [receive()](#Governor-receive--)
 - [supportsInterface(interfaceId)](#Governor-supportsInterface-bytes4-)
 - [name()](#Governor-name--)
@@ -8246,25 +8611,33 @@ the `Succeeded` state before the proposal deadline.
 - [votingPeriod()](#Governor-votingPeriod--)
 - [BALLOT_TYPEHASH()](#Governor-BALLOT_TYPEHASH-bytes32)
 - [EXTENDED_BALLOT_TYPEHASH()](#Governor-EXTENDED_BALLOT_TYPEHASH-bytes32)
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+
+</details>
+<details>
+<summary>IGovernor</summary>
+
 - [COUNTING_MODE()](#IGovernor-COUNTING_MODE--)
 - [hasVoted(proposalId, account)](#IGovernor-hasVoted-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
 - [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
-#### EIP712 [!toc]
+
+</details>
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -8272,27 +8645,29 @@ the `Succeeded` state before the proposal deadline.
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
 - [SuperQuorumNumeratorUpdated(oldSuperQuorumNumerator, newSuperQuorumNumerator)](#GovernorVotesSuperQuorumFraction-SuperQuorumNumeratorUpdated-uint256-uint256-)
-#### GovernorSuperQuorum [!toc]
-#### GovernorVotesQuorumFraction [!toc]
+<details>
+<summary>GovernorVotesQuorumFraction</summary>
+
 - [QuorumNumeratorUpdated(oldQuorumNumerator, newQuorumNumerator)](#GovernorVotesQuorumFraction-QuorumNumeratorUpdated-uint256-uint256-)
-#### GovernorVotes [!toc]
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+
+</details>
+<details>
+<summary>IGovernor</summary>
+
 - [ProposalCreated(proposalId, proposer, targets, values, signatures, calldatas, voteStart, voteEnd, description)](#IGovernor-ProposalCreated-uint256-address-address---uint256---string---bytes---uint256-uint256-string-)
 - [ProposalQueued(proposalId, etaSeconds)](#IGovernor-ProposalQueued-uint256-uint256-)
 - [ProposalExecuted(proposalId)](#IGovernor-ProposalExecuted-uint256-)
 - [ProposalCanceled(proposalId)](#IGovernor-ProposalCanceled-uint256-)
 - [VoteCast(voter, proposalId, support, weight, reason)](#IGovernor-VoteCast-address-uint256-uint8-uint256-string-)
 - [VoteCastWithParams(voter, proposalId, support, weight, reason, params)](#IGovernor-VoteCastWithParams-address-uint256-uint8-uint256-string-bytes-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -8302,14 +8677,15 @@ the `Succeeded` state before the proposal deadline.
 - [GovernorInvalidSuperQuorumFraction(superQuorumNumerator, denominator)](#GovernorVotesSuperQuorumFraction-GovernorInvalidSuperQuorumFraction-uint256-uint256-)
 - [GovernorInvalidSuperQuorumTooSmall(superQuorumNumerator, quorumNumerator)](#GovernorVotesSuperQuorumFraction-GovernorInvalidSuperQuorumTooSmall-uint256-uint256-)
 - [GovernorInvalidQuorumTooLarge(quorumNumerator, superQuorumNumerator)](#GovernorVotesSuperQuorumFraction-GovernorInvalidQuorumTooLarge-uint256-uint256-)
-#### GovernorSuperQuorum [!toc]
-#### GovernorVotesQuorumFraction [!toc]
+<details>
+<summary>GovernorVotesQuorumFraction</summary>
+
 - [GovernorInvalidQuorumFraction(quorumNumerator, quorumDenominator)](#GovernorVotesQuorumFraction-GovernorInvalidQuorumFraction-uint256-uint256-)
-#### GovernorVotes [!toc]
-#### Governor [!toc]
-#### IERC1155Receiver [!toc]
-#### IERC721Receiver [!toc]
-#### IGovernor [!toc]
+
+</details>
+<details>
+<summary>IGovernor</summary>
+
 - [GovernorInvalidProposalLength(targets, calldatas, values)](#IGovernor-GovernorInvalidProposalLength-uint256-uint256-uint256-)
 - [GovernorAlreadyCastVote(voter)](#IGovernor-GovernorAlreadyCastVote-address-)
 - [GovernorDisabledDeposit()](#IGovernor-GovernorDisabledDeposit--)
@@ -8322,17 +8698,17 @@ the `Succeeded` state before the proposal deadline.
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
 - [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -8573,9 +8949,9 @@ The quorum set is not valid as it exceeds the super quorum.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `IVotes`
+## `IVotes` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/utils/IVotes.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/utils/IVotes.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -8780,9 +9156,9 @@ The signature used has expired.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `Votes`
+## `Votes` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/utils/Votes.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/utils/Votes.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -8828,35 +9204,43 @@ previous example, it would be included in [`ERC721._update`](/contracts/5.x/api/
 - [_numCheckpoints(account)](#Votes-_numCheckpoints-address-)
 - [_checkpoints(account, pos)](#Votes-_checkpoints-address-uint32-)
 - [_getVotingUnits()](#Votes-_getVotingUnits-address-)
-#### IERC5805 [!toc]
-#### IVotes [!toc]
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+<details>
+<summary>Nonces</summary>
+
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
 - [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
-#### EIP712 [!toc]
+
+</details>
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### IERC5805 [!toc]
-#### IVotes [!toc]
+<details>
+<summary>IVotes</summary>
+
 - [DelegateChanged(delegator, fromDelegate, toDelegate)](#IVotes-DelegateChanged-address-address-address-)
 - [DelegateVotesChanged(delegate, previousVotes, newVotes)](#IVotes-DelegateVotesChanged-address-uint256-uint256-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
+
+</details>
 </div>
 </div>
 
@@ -8865,14 +9249,18 @@ previous example, it would be included in [`ERC721._update`](/contracts/5.x/api/
 <div className="font-mono">
 - [ERC6372InconsistentClock()](#Votes-ERC6372InconsistentClock--)
 - [ERC5805FutureLookup(timepoint, clock)](#Votes-ERC5805FutureLookup-uint256-uint48-)
-#### IERC5805 [!toc]
-#### IVotes [!toc]
+<details>
+<summary>IVotes</summary>
+
 - [VotesExpiredSignature(expiry)](#IVotes-VotesExpiredSignature-uint256-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -9206,9 +9594,9 @@ Lookup to future votes is not available.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `VotesExtended`
+## `VotesExtended` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/governance/utils/VotesExtended.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/utils/VotesExtended.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -9251,7 +9639,9 @@ contract VotingToken is Token, VotesExtended {
 - [getPastBalanceOf(account, timepoint)](#VotesExtended-getPastBalanceOf-address-uint256-)
 - [_delegate(account, delegatee)](#VotesExtended-_delegate-address-address-)
 - [_transferVotingUnits(from, to, amount)](#VotesExtended-_transferVotingUnits-address-address-uint256-)
-#### Votes [!toc]
+<details>
+<summary>Votes</summary>
+
 - [clock()](#Votes-clock--)
 - [CLOCK_MODE()](#Votes-CLOCK_MODE--)
 - [_validateTimepoint(timepoint)](#Votes-_validateTimepoint-uint256-)
@@ -9266,53 +9656,70 @@ contract VotingToken is Token, VotesExtended {
 - [_numCheckpoints(account)](#Votes-_numCheckpoints-address-)
 - [_checkpoints(account, pos)](#Votes-_checkpoints-address-uint32-)
 - [_getVotingUnits()](#Votes-_getVotingUnits-address-)
-#### IERC5805 [!toc]
-#### IVotes [!toc]
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
 - [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
-#### EIP712 [!toc]
+
+</details>
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### Votes [!toc]
-#### IERC5805 [!toc]
-#### IVotes [!toc]
+<details>
+<summary>IVotes</summary>
+
 - [DelegateChanged(delegator, fromDelegate, toDelegate)](#IVotes-DelegateChanged-address-address-address-)
 - [DelegateVotesChanged(delegate, previousVotes, newVotes)](#IVotes-DelegateVotesChanged-address-uint256-uint256-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### Votes [!toc]
+<details>
+<summary>Votes</summary>
+
 - [ERC6372InconsistentClock()](#Votes-ERC6372InconsistentClock--)
 - [ERC5805FutureLookup(timepoint, clock)](#Votes-ERC5805FutureLookup-uint256-uint48-)
-#### IERC5805 [!toc]
-#### IVotes [!toc]
+
+</details>
+<details>
+<summary>IVotes</summary>
+
 - [VotesExpiredSignature(expiry)](#IVotes-VotesExpiredSignature-uint256-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -9396,3 +9803,4 @@ should be zero. Total supply of voting units will be adjusted with mints and bur
 
 </div>
 </div>
+
