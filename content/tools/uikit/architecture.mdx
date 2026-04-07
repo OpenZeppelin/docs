@@ -9,46 +9,33 @@ OpenZeppelin UIKit is built as a layered stack of independently installable pack
 The packages form a dependency chain where each layer builds on the ones below it. Lower layers are lighter and more generic; higher layers add React-specific and domain-specific behavior.
 
 ```mermaid
-graph TB
-  subgraph "Layer 7 — Persistence"
-    Storage["ui-storage<br/>IndexedDB abstraction"]
-  end
-
-  subgraph "Layer 6 — Rendering"
-    Renderer["ui-renderer<br/>Transaction forms & widgets"]
-  end
-
-  subgraph "Layer 5 — React Orchestration"
-    ReactPkg["ui-react<br/>Providers & hooks"]
-  end
-
-  subgraph "Layer 4 — Components"
-    Components["ui-components<br/>UI primitives & form fields"]
-  end
-
-  subgraph "Layer 3 — Design Tokens"
-    Styles["ui-styles<br/>Tailwind v4 theme"]
-  end
-
-  subgraph "Layer 2 — Utilities"
-    Utils["ui-utils<br/>Config, logging, validation"]
-  end
-
-  subgraph "Layer 1 — Type System"
-    Types["ui-types<br/>Capabilities, schemas, models"]
-  end
+%%{init: {'flowchart': {'nodeSpacing': 20, 'rankSpacing': 40}} }%%
+flowchart TD
+  Storage(["7 · ui-storage"])
+  Renderer(["6 · ui-renderer"])
+  ReactPkg(["5 · ui-react"])
+  Components(["4 · ui-components"])
+  Styles(["3 · ui-styles"])
+  Utils(["2 · ui-utils"])
+  Types(["1 · ui-types"])
 
   Storage --> Utils
-  Storage --> Types
   Renderer --> Components
-  Renderer --> Styles
-  ReactPkg --> Types
-  ReactPkg --> Utils
   ReactPkg --> Components
   Components --> Styles
   Components --> Utils
   Utils --> Types
+
+  style Storage fill:#e8eaf6,stroke:#5c6bc0,color:#1a237e
+  style Renderer fill:#e8eaf6,stroke:#5c6bc0,color:#1a237e
+  style ReactPkg fill:#e8eaf6,stroke:#5c6bc0,color:#1a237e
+  style Components fill:#e0f2f1,stroke:#26a69a,color:#004d40
+  style Styles fill:#e0f2f1,stroke:#26a69a,color:#004d40
+  style Utils fill:#fff3e0,stroke:#ff9800,color:#e65100
+  style Types fill:#fff3e0,stroke:#ff9800,color:#e65100
 ```
+
+**Color key:** <span style={{color: '#5c6bc0'}}>■</span> Application layers (5–7) · <span style={{color: '#26a69a'}}>■</span> UI & design (3–4) · <span style={{color: '#ff9800'}}>■</span> Foundation (1–2)
 
 | Layer | Package | Responsibility |
 | --- | --- | --- |
@@ -68,8 +55,8 @@ The UIKit type system defines 13 **capabilities** — small, focused interfaces 
 Capabilities are organized into three tiers based on their requirements:
 
 ```mermaid
-graph LR
-  subgraph "Tier 1 — Lightweight"
+flowchart LR
+  subgraph t1 ["Tier 1 — Lightweight · No side effects"]
     direction TB
     Addressing["Addressing"]
     Explorer["Explorer"]
@@ -77,7 +64,7 @@ graph LR
     UiLabels["UiLabels"]
   end
 
-  subgraph "Tier 2 — Network-Aware"
+  subgraph t2 ["Tier 2 — Network-Aware · Needs networkConfig"]
     direction TB
     ContractLoading["ContractLoading"]
     Schema["Schema"]
@@ -85,7 +72,7 @@ graph LR
     Query["Query"]
   end
 
-  subgraph "Tier 3 — Stateful / Runtime"
+  subgraph t3 ["Tier 3 — Stateful · Needs wallet + lifecycle"]
     direction TB
     Execution["Execution"]
     Wallet["Wallet"]
@@ -94,13 +81,11 @@ graph LR
     AccessControl["AccessControl"]
   end
 
-  Tier1Style["No side effects<br/>Safe to import anywhere"]
-  Tier2Style["Extends RuntimeCapability<br/>Needs networkConfig"]
-  Tier3Style["Extends RuntimeCapability<br/>Needs wallet + lifecycle"]
+  t1 ~~~ t2 ~~~ t3
 
-  Tier1Style -.-> Addressing
-  Tier2Style -.-> ContractLoading
-  Tier3Style -.-> Execution
+  style t1 fill:#e8eaf6,stroke:#5c6bc0,color:#000
+  style t2 fill:#e0f2f1,stroke:#26a69a,color:#000
+  style t3 fill:#fff3e0,stroke:#ff9800,color:#000
 ```
 
 ### Tier 1: Declarative / Lightweight
@@ -217,13 +202,12 @@ sequenceDiagram
 The execution system supports multiple ways to submit a transaction. The adapter selects the appropriate strategy based on the `ExecutionConfig`:
 
 ```mermaid
-graph TD
+flowchart LR
   Form["TransactionForm"] --> Exec["ExecutionCapability"]
-  Exec --> Strategy{"Execution Method?"}
-  Strategy -->|EOA| EOA["EOA Strategy<br/>Direct wallet signing"]
-  Strategy -->|Relayer| Relay["Relayer Strategy<br/>Gas-sponsored via OpenZeppelin Relayer"]
-  Strategy -->|Multisig| Multi["Multisig Strategy<br/>Multi-signature approval"]
-
+  Exec --> Strategy{"Method?"}
+  Strategy -->|EOA| EOA["Direct wallet signing"]
+  Strategy -->|Relayer| Relay["Gas-sponsored via Relayer"]
+  Strategy -->|Multisig| Multi["Multi-signature approval"]
   EOA --> Chain["Blockchain"]
   Relay --> Chain
   Multi --> Chain
@@ -236,45 +220,33 @@ Each ecosystem adapter defines which execution methods it supports. The EVM adap
 Putting it all together, here is how a typical application uses UIKit with an Ecosystem Adapter:
 
 ```mermaid
-graph TB
-  subgraph "Application Layer"
-    App["Your React App"]
-  end
+%%{init: {'flowchart': {'nodeSpacing': 20, 'rankSpacing': 40}} }%%
+flowchart TD
+  App(["Your React App"])
+  RP(["RuntimeProvider"])
+  WSP(["WalletStateProvider"])
+  TF(["TransactionForm"])
+  CSW(["ContractStateWidget"])
+  AdapterEVM(["adapter-evm"])
+  AdapterStellar(["adapter-stellar"])
+  Ethereum(["Ethereum"])
+  Stellar(["Stellar"])
 
-  subgraph "UIKit — React Layer"
-    RP["RuntimeProvider"]
-    WSP["WalletStateProvider"]
-    TF["TransactionForm"]
-    CSW["ContractStateWidget"]
-  end
-
-  subgraph "UIKit — Component Layer"
-    Fields["Form Fields<br/>(Address, Amount, Bytes...)"]
-    Primitives["UI Primitives<br/>(Button, Dialog, Card...)"]
-  end
-
-  subgraph "Adapter Layer"
-    AdapterEVM["adapter-evm"]
-    AdapterStellar["adapter-stellar"]
-  end
-
-  subgraph "Blockchain Networks"
-    Ethereum["Ethereum"]
-    Stellar["Stellar"]
-  end
-
-  App --> RP
-  App --> WSP
-  WSP --> TF
-  WSP --> CSW
-  TF --> Fields
-  TF --> Primitives
-  CSW --> Fields
-
-  RP -.->|createRuntime| AdapterEVM
-  RP -.->|createRuntime| AdapterStellar
+  App --> RP --> WSP
+  WSP --> TF & CSW
+  RP -.->|createRuntime| AdapterEVM & AdapterStellar
   AdapterEVM --> Ethereum
   AdapterStellar --> Stellar
+
+  style App fill:#e8eaf6,stroke:#5c6bc0,color:#1a237e
+  style RP fill:#e0f2f1,stroke:#26a69a,color:#004d40
+  style WSP fill:#e0f2f1,stroke:#26a69a,color:#004d40
+  style TF fill:#e0f2f1,stroke:#26a69a,color:#004d40
+  style CSW fill:#e0f2f1,stroke:#26a69a,color:#004d40
+  style AdapterEVM fill:#fff3e0,stroke:#ff9800,color:#e65100
+  style AdapterStellar fill:#fff3e0,stroke:#ff9800,color:#e65100
+  style Ethereum fill:#fce4ec,stroke:#e91e63,color:#880e4f
+  style Stellar fill:#fce4ec,stroke:#e91e63,color:#880e4f
 ```
 
 ## Next Steps
