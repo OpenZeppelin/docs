@@ -55,38 +55,20 @@ The UIKit type system defines 13 **capabilities** — small, focused interfaces 
 Capabilities are organized into three tiers based on their requirements:
 
 ```mermaid
-flowchart LR
-  subgraph t1 ["Tier 1 — Lightweight · No side effects"]
-    direction TB
-    Addressing["Addressing"]
-    Explorer["Explorer"]
-    NetworkCatalog["NetworkCatalog"]
-    UiLabels["UiLabels"]
-  end
+%%{init: {'flowchart': {'nodeSpacing': 30, 'rankSpacing': 30}} }%%
+flowchart TD
+  T1["<b>Tier 1 — Lightweight</b><br/>Addressing · Explorer · NetworkCatalog · UiLabels"]
+  T2["<b>Tier 2 — Network-Aware</b><br/>ContractLoading · Schema · TypeMapping · Query"]
+  T3["<b>Tier 3 — Stateful</b><br/>Execution · Wallet · UiKit · Relayer · AccessControl"]
 
-  subgraph t2 ["Tier 2 — Network-Aware · Needs networkConfig"]
-    direction TB
-    ContractLoading["ContractLoading"]
-    Schema["Schema"]
-    TypeMapping["TypeMapping"]
-    Query["Query"]
-  end
+  T1 --"may import"--> T2 --"may import"--> T3
 
-  subgraph t3 ["Tier 3 — Stateful · Needs wallet + lifecycle"]
-    direction TB
-    Execution["Execution"]
-    Wallet["Wallet"]
-    UiKit["UiKit"]
-    Relayer["Relayer"]
-    AccessControl["AccessControl"]
-  end
-
-  t1 ~~~ t2 ~~~ t3
-
-  style t1 fill:#e8eaf6,stroke:#5c6bc0,color:#000
-  style t2 fill:#e0f2f1,stroke:#26a69a,color:#000
-  style t3 fill:#fff3e0,stroke:#ff9800,color:#000
+  style T1 fill:#e8eaf6,stroke:#5c6bc0,color:#000
+  style T2 fill:#e0f2f1,stroke:#26a69a,color:#000
+  style T3 fill:#fff3e0,stroke:#ff9800,color:#000
 ```
+
+**Tier 1** requires no runtime context — safe to import anywhere. **Tier 2** needs a `networkConfig`. **Tier 3** additionally needs wallet state and participates in the `dispose()` lifecycle. Each higher tier may import from lower tiers, but never the reverse.
 
 ### Tier 1: Declarative / Lightweight
 
