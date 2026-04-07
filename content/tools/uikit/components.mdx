@@ -1,0 +1,214 @@
+---
+title: Components
+---
+
+OpenZeppelin UIKit ships two categories of components: **UI primitives** from `@openzeppelin/ui-components` and **renderer widgets** from `@openzeppelin/ui-renderer`. This page catalogs both and shows how to use them.
+
+## UI Primitives
+
+`@openzeppelin/ui-components` provides foundational React components built on [Radix UI](https://www.radix-ui.com/) and [shadcn/ui](https://ui.shadcn.com/) patterns. All components are styled with Tailwind CSS and support dark mode.
+
+### General Components
+
+| Component | Description |
+| --- | --- |
+| `Button` / `LoadingButton` | Action buttons with multiple variants (`default`, `destructive`, `outline`, `secondary`, `ghost`, `link`) |
+| `Input` / `Textarea` | Text input primitives |
+| `Label` | Accessible form labels |
+| `Card` | Container with `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter` |
+| `Dialog` | Modal dialogs with `DialogTrigger`, `DialogContent`, `DialogHeader`, `DialogFooter` |
+| `Alert` | Alert messages with `AlertTitle` and `AlertDescription` |
+| `Checkbox` / `RadioGroup` | Selection inputs |
+| `Select` | Dropdown select with `SelectTrigger`, `SelectContent`, `SelectItem` |
+| `Progress` | Progress bar indicator |
+| `Tabs` | Tab navigation with `TabsList`, `TabsTrigger`, `TabsContent` |
+| `Tooltip` | Hover tooltips |
+| `Accordion` | Collapsible content sections |
+| `Banner` | Full-width notification banners |
+| `Sidebar` | Sidebar navigation layout |
+| `Wizard` | Multi-step wizard flow |
+
+### Blockchain-Specific Components
+
+| Component | Description |
+| --- | --- |
+| `NetworkSelector` | Searchable network dropdown with optional multi-select mode |
+| `EcosystemDropdown` | Ecosystem selection with chain icons |
+| `EcosystemIcon` | Chain-specific icons (Ethereum, Stellar, Polkadot, etc.) |
+| `AddressDisplay` | Formatted address with optional alias labels and edit controls |
+| `OverflowMenu` | Compact "..." dropdown for secondary actions |
+
+### Usage
+
+```tsx
+import { Button, Card, CardContent, CardHeader, CardTitle } from '@openzeppelin/ui-components';
+
+function ContractCard({ name, address }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{name}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground">{address}</p>
+        <Button variant="outline" className="mt-4">
+          View Contract
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+```
+
+## Form Fields
+
+The field components are designed for use with [react-hook-form](https://react-hook-form.com/). Each field handles its own validation, formatting, and blockchain-specific behavior.
+
+| Field | Input Type | Use Case |
+| --- | --- | --- |
+| `AddressField` | Blockchain address | Contract addresses, recipient addresses — validates format per ecosystem |
+| `AmountField` | Token amounts | Token transfers — handles decimals and BigInt formatting |
+| `BigIntField` | Large integers | Raw `uint256` values, timestamps, token IDs |
+| `BytesField` | Hex byte strings | Calldata, hashes, signatures |
+| `TextField` | Free-form text | String parameters, names, URIs |
+| `NumberField` | Numeric values | Counts, percentages, indices |
+| `BooleanField` | True/false | Feature flags, approvals |
+| `EnumField` | Enum selection | Contract enum parameters |
+| `SelectField` | Dropdown | Predefined option lists |
+| `SelectGroupedField` | Grouped dropdown | Categorized options |
+| `RadioField` | Radio buttons | Small option sets |
+| `TextAreaField` | Multi-line text | ABI input, JSON data |
+| `ArrayField` | Dynamic arrays | Array parameters (e.g. `address[]`, `uint256[]`) |
+| `MapField` | Key-value pairs | Mapping-like structures |
+| `ObjectField` | Nested objects | Struct/tuple parameters |
+
+### Field Example
+
+```tsx
+import { useForm } from 'react-hook-form';
+import { AddressField, AmountField, Button } from '@openzeppelin/ui-components';
+
+function TransferForm() {
+  const { control, handleSubmit } = useForm({
+    defaultValues: { to: '', amount: '' },
+  });
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <AddressField
+        name="to"
+        label="Recipient"
+        control={control}
+        placeholder="0x..."
+      />
+      <AmountField
+        name="amount"
+        label="Amount"
+        control={control}
+        placeholder="0.0"
+      />
+      <Button type="submit">Transfer</Button>
+    </form>
+  );
+}
+```
+
+### Address Label & Suggestion Contexts
+
+UIKit provides context-driven address resolution that works automatically with `AddressField` and `AddressDisplay`:
+
+- **`AddressLabelProvider`** — When mounted, all `AddressDisplay` instances in the subtree auto-resolve human-readable labels (e.g. "Treasury Multisig" instead of `0x1234...abcd`).
+- **`AddressSuggestionProvider`** — When mounted, all `AddressField` instances show autocomplete suggestions as the user types.
+- **`useAddressLabel(address, networkId?)`** — Hook to resolve a label from the nearest provider.
+
+## Renderer Widgets
+
+`@openzeppelin/ui-renderer` provides high-level, ready-to-use widgets for common blockchain UI patterns. These compose the lower-level components with adapter capabilities.
+
+### TransactionForm
+
+The primary widget for rendering blockchain transaction forms. Accepts a declarative schema and an adapter capabilities bundle:
+
+```tsx
+import { TransactionForm } from '@openzeppelin/ui-renderer';
+import type { RenderFormSchema, TransactionFormCapabilities } from '@openzeppelin/ui-types';
+
+const schema: RenderFormSchema = {
+  id: 'approve-form',
+  title: 'Approve Spending',
+  fields: [
+    { id: 'spender', name: 'spender', type: 'address', label: 'Spender' },
+    { id: 'amount', name: 'amount', type: 'amount', label: 'Amount' },
+  ],
+  layout: { columns: 1, spacing: 'normal', labelPosition: 'top' },
+  submitButton: { text: 'Approve', loadingText: 'Approving...' },
+};
+
+function ApprovePage({ adapter }: { adapter: TransactionFormCapabilities }) {
+  return (
+    <TransactionForm
+      schema={schema}
+      adapter={adapter}
+      onTransactionSuccess={(result) => console.log('Approved:', result)}
+    />
+  );
+}
+```
+
+**Key props:**
+
+| Prop | Type | Description |
+| --- | --- | --- |
+| `schema` | `RenderFormSchema` | Form layout, fields, and submit button config |
+| `contractSchema` | `ContractSchema` | ABI / function metadata for the target contract |
+| `adapter` | `TransactionFormCapabilities` | Capability bundle from the active runtime |
+| `executionConfig` | `ExecutionConfig` | EOA vs. relayer configuration |
+| `onTransactionSuccess` | callback | Fires after successful transaction |
+| `isWalletConnected` | `boolean` | Whether a wallet session is active |
+
+### DynamicFormField
+
+Renders individual form fields dynamically based on type configuration. Used internally by `TransactionForm` but available for custom form layouts:
+
+```tsx
+import { DynamicFormField } from '@openzeppelin/ui-renderer';
+
+<DynamicFormField
+  field={{ id: 'amount', name: 'amount', type: 'amount', label: 'Amount' }}
+  control={control}
+/>
+```
+
+### ContractStateWidget
+
+Displays read-only contract state by querying view functions. Supports auto-refresh:
+
+```tsx
+import { ContractStateWidget } from '@openzeppelin/ui-renderer';
+
+<ContractStateWidget
+  contractSchema={contractSchema}
+  contractAddress="0x..."
+  query={runtime.query}
+  schema={runtime.schema}
+  isVisible={true}
+/>
+```
+
+### Other Renderer Components
+
+| Component | Description |
+| --- | --- |
+| `ContractActionBar` | Network status display with contract state toggle |
+| `ExecutionConfigDisplay` | Configure execution method (EOA / Relayer) |
+| `TransactionStatusDisplay` | Transaction progress, hash, and explorer links |
+| `NetworkSettingsDialog` | Configure RPC endpoints and indexer URLs |
+| `WalletConnectionWithSettings` | Wallet connection UI with integrated settings |
+| `AddressBookWidget` | Full address book management with CRUD, search, and import/export |
+| `AliasEditPopover` | Inline popover for editing address aliases |
+
+## Next Steps
+
+- [React Integration](/tools/uikit/react-integration) — Connect components to wallet state and runtime capabilities
+- [Theming & Styling](/tools/uikit/theming) — Customize the visual appearance
+- [Getting Started](/tools/uikit/getting-started) — Step-by-step setup guide

@@ -1,0 +1,126 @@
+---
+title: OpenZeppelin UIKit
+---
+
+A modular React component library for building blockchain transaction interfaces — chain-agnostic, capability-driven, and designed for multi-ecosystem applications.
+
+<Cards>
+  <Card href="/tools/uikit/getting-started" title="Getting Started" description="Install packages, set up Tailwind, and render your first transaction form." />
+  <Card href="/tools/uikit/architecture" title="Architecture" description="Understand the layered package system, capability model, and runtime lifecycle." />
+  <Card href="/tools/uikit/components" title="Components" description="Browse UI primitives, blockchain-aware form fields, and renderer widgets." />
+  <Card href="/tools/uikit/react-integration" title="React Integration" description="Wire up providers, hooks, and wallet state management." />
+  <Card href="/tools/uikit/theming" title="Theming & Styling" description="Configure Tailwind v4 tokens, dark mode, and design customization." />
+</Cards>
+
+## What is OpenZeppelin UIKit?
+
+OpenZeppelin UIKit is a set of modular npm packages that provide everything needed to build rich blockchain UIs in React. Instead of a monolithic library, it ships as a **layered stack** — from low-level types and utilities up to high-level form renderers and wallet integration.
+
+Each layer is independently installable. Use only the pieces you need: the type system for a headless integration, the component library for a design system, or the full renderer for turnkey transaction forms.
+
+```mermaid
+graph TB
+  subgraph "Your Application"
+    App["Consumer App"]
+  end
+
+  subgraph "OpenZeppelin UIKit"
+    Storage["@openzeppelin/ui-storage<br/>(IndexedDB persistence)"]
+    Renderer["@openzeppelin/ui-renderer<br/>(Transaction forms & widgets)"]
+    React["@openzeppelin/ui-react<br/>(Providers & hooks)"]
+    Components["@openzeppelin/ui-components<br/>(UI primitives & form fields)"]
+    Styles["@openzeppelin/ui-styles<br/>(Tailwind v4 theme)"]
+    Utils["@openzeppelin/ui-utils<br/>(Shared utilities)"]
+    Types["@openzeppelin/ui-types<br/>(Type definitions)"]
+  end
+
+  subgraph "Ecosystem Adapters"
+    EVM["@openzeppelin/adapter-evm"]
+    Stellar["@openzeppelin/adapter-stellar"]
+    Polkadot["@openzeppelin/adapter-polkadot"]
+    More["..."]
+  end
+
+  App --> Storage
+  App --> Renderer
+  App --> React
+  Storage --> Utils
+  Storage --> Types
+  Renderer --> Components
+  Renderer --> Styles
+  React --> Types
+  React --> Utils
+  React --> Components
+  Components --> Styles
+  Components --> Utils
+  Utils --> Types
+
+  React -.->|consumes| EVM
+  React -.->|consumes| Stellar
+  React -.->|consumes| Polkadot
+  React -.->|consumes| More
+```
+
+## Packages
+
+| Package | Description | Layer |
+| --- | --- | --- |
+| [`@openzeppelin/ui-types`](https://www.npmjs.com/package/@openzeppelin/ui-types) | Shared TypeScript type definitions — capabilities, schemas, form models | 1 |
+| [`@openzeppelin/ui-utils`](https://www.npmjs.com/package/@openzeppelin/ui-utils) | Framework-agnostic utilities — config, logging, validation, routing | 2 |
+| [`@openzeppelin/ui-styles`](https://www.npmjs.com/package/@openzeppelin/ui-styles) | Centralized Tailwind CSS 4 theme with OKLCH tokens and dark mode | 3 |
+| [`@openzeppelin/ui-components`](https://www.npmjs.com/package/@openzeppelin/ui-components) | React UI primitives and blockchain-aware form fields (shadcn/ui based) | 4 |
+| [`@openzeppelin/ui-react`](https://www.npmjs.com/package/@openzeppelin/ui-react) | React context providers, runtime management, and wallet hooks | 5 |
+| [`@openzeppelin/ui-renderer`](https://www.npmjs.com/package/@openzeppelin/ui-renderer) | Transaction form rendering engine and contract state widgets | 6 |
+| [`@openzeppelin/ui-storage`](https://www.npmjs.com/package/@openzeppelin/ui-storage) | IndexedDB storage abstraction with Dexie.js and address book plugin | 7 |
+
+## Key Design Principles
+
+**Chain-agnostic core.** UIKit packages never import chain-specific logic. Blockchain details are handled entirely by [Ecosystem Adapters](/ecosystem-adapters) — separate packages that implement a standardized capability interface.
+
+**Capability-driven, not monolithic.** Instead of one large adapter interface, the system defines small, focused [capabilities](/tools/uikit/architecture#capabilities) (addressing, query, execution, wallet, etc.) organized into tiers. Components request only the capabilities they need.
+
+**Pay for what you use.** Install only the layers your app requires. A simple form builder can use just `ui-types` + `ui-components`. A full transaction dashboard can add `ui-renderer` + `ui-react` + `ui-storage`.
+
+**Multi-ecosystem ready.** A single app can support EVM, Stellar, Polkadot, and more simultaneously. The runtime system manages per-network adapter instances with proper lifecycle and disposal.
+
+## Ecosystem Adapter Integration
+
+UIKit connects to blockchains through [Ecosystem Adapters](/ecosystem-adapters) — standalone packages that translate chain-specific operations into the shared capability model.
+
+```mermaid
+sequenceDiagram
+  participant App as Your App
+  participant React as UIKit React
+  participant Adapter as Ecosystem Adapter
+  participant Chain as Blockchain
+
+  App->>React: RuntimeProvider + WalletStateProvider
+  React->>Adapter: createRuntime(profile, networkConfig)
+  Adapter-->>React: EcosystemRuntime (capabilities)
+  React-->>App: useWalletState() → activeRuntime
+
+  App->>React: TransactionForm adapter={capabilities}
+  React->>Adapter: execution.signAndBroadcast(...)
+  Adapter->>Chain: Submit transaction
+  Chain-->>Adapter: Transaction hash
+  Adapter-->>React: Status updates
+  React-->>App: UI reflects tx status
+```
+
+For a complete guide on how adapters work, their architecture, and the supported ecosystems, see the [Ecosystem Adapters documentation](/ecosystem-adapters).
+
+## Requirements
+
+- **Node.js** >= 20.19.0
+- **React** 19
+- **Tailwind CSS** 4
+
+## Source Code
+
+[GitHub Repository](https://github.com/OpenZeppelin/openzeppelin-ui)
+
+## Next Steps
+
+- [Getting Started](/tools/uikit/getting-started) — Install, configure, and render your first form
+- [Architecture](/tools/uikit/architecture) — Deep dive into the capability model and runtime lifecycle
+- [Ecosystem Adapters](/ecosystem-adapters) — How chain-specific logic is decoupled from the UI
