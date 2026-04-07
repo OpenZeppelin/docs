@@ -184,8 +184,209 @@ try {
 }
 ```
 
+## Using with React
+
+Adapters integrate with React through three layers: a **wallet context provider** that manages wallet SDK state, **`configureUiKit`** that selects and configures the wallet UI kit, and a **hook facade** that exposes a uniform set of React hooks across every ecosystem.
+
+### Wallet Context Provider
+
+Each adapter exports a root React component via `getEcosystemReactUiContextProvider()`. This component wraps your application (or the relevant subtree) and bootstraps the wallet SDK context — for example, EVM adapters render `WagmiProvider` and `QueryClientProvider` internally, while the Stellar adapter renders its own `StellarWalletContext.Provider`.
+
+You don't render these providers yourself. Instead, pass the runtime to a shared `WalletStateProvider` from `@openzeppelin/ui-react`, which delegates to the correct ecosystem provider automatically:
+
+```tsx
+import { WalletStateProvider } from '@openzeppelin/ui-react';
+
+function App() {
+  return (
+    <WalletStateProvider
+      runtime={runtime}
+      loadConfigModule={loadAppConfigModule}
+    >
+      <YourApp />
+    </WalletStateProvider>
+  );
+}
+```
+
+The `loadConfigModule` callback lets the adapter lazily load user-authored wallet configuration files (e.g. `src/config/wallet/rainbowkit.config.ts` for a RainbowKit setup). If you don't use a native config file, pass a function that returns `null`.
+
+### Configuring the UI Kit
+
+Before rendering wallet UI components, configure the UI kit on the runtime's `uiKit` capability. This selects which wallet UI library to use (RainbowKit, a custom theme, or none) and passes kit-specific options:
+
+```ts
+await runtime.uiKit?.configureUiKit(
+  {
+    kitName: 'rainbowkit',  // or 'custom', 'none'
+    kitConfig: {
+      // kit-specific options, e.g., showInjectedConnector: true
+    },
+  },
+  {
+    loadUiKitNativeConfig: loadAppConfigModule,
+  }
+);
+```
+
+After configuration, retrieve the wallet UI components from the runtime:
+
+```ts
+const walletComponents = runtime.uiKit?.getEcosystemWalletComponents?.();
+const ConnectButton = walletComponents?.ConnectButton;
+const AccountDisplay = walletComponents?.AccountDisplay;
+const NetworkSwitcher = walletComponents?.NetworkSwitcher;
+```
+
+### Connecting and Disconnecting Wallets
+
+The `WalletCapability` on the runtime exposes imperative methods for wallet lifecycle management:
+
+```ts
+// List available wallet connectors
+const connectors = runtime.wallet.getAvailableConnectors();
+
+// Connect using a specific connector
+await runtime.wallet.connectWallet(connectors[0].id);
+
+// Check connection status
+const status = runtime.wallet.getWalletConnectionStatus();
+
+// Listen for connection changes
+const unsubscribe = runtime.wallet.onWalletConnectionChange?.((newStatus) => {
+  console.log('Wallet status changed:', newStatus);
+});
+
+// Disconnect
+await runtime.wallet.disconnectWallet();
+```
+
+<Callout type="info">
+`connectWallet` and `disconnectWallet` are imperative calls on the runtime — they are independent of the React rendering layer. You can call them from event handlers, effects, or outside React entirely.
+</Callout>
+
+### Hook Facade Pattern
+
+Every adapter exports a **facade hooks** object that conforms to the `EcosystemSpecificReactHooks` interface. This gives consuming applications a uniform set of React hooks regardless of the underlying wallet library.
+
+The EVM adapter maps its facade to [wagmi](https://wagmi.sh/) hooks, the Stellar adapter provides custom implementations, and other adapters follow the same pattern:
+
+```ts
+// EVM facade (wraps wagmi)
+import { evmFacadeHooks } from '@openzeppelin/adapter-evm';
+
+// Stellar facade (custom hooks)
+import { stellarFacadeHooks } from '@openzeppelin/adapter-stellar';
+```
+
+Each facade object includes these hooks:
+
+| Hook | Purpose |
+| --- | --- |
+| `useAccount` | Returns the connected account address, connection status, and chain info |
+| `useConnect` | Provides a `connect` function and available connectors |
+| `useDisconnect` | Provides a `disconnect` function |
+| `useSwitchChain` | Returns a `switchChain` function (EVM-only; stubs on other ecosystems) |
+| `useChainId` | Returns the currently active chain ID |
+| `useChains` | Returns the list of configured chains |
+| `useBalance` | Returns the native token balance for the connected account |
+
+In practice, you access facade hooks through the runtime rather than importing them directly — the runtime's `uiKit.getEcosystemReactHooks()` method returns the correct facade for the active ecosystem:
+
+```tsx
+import { useWalletState } from '@openzeppelin/ui-react';
+
+function AccountInfo() {
+  const { walletFacadeHooks } = useWalletState();
+
+  const { address, isConnected } = walletFacadeHooks.useAccount();
+  const { switchChain } = walletFacadeHooks.useSwitchChain();
+
+  if (!isConnected) return <p>Not connected</p>;
+
+  return (
+    <div>
+      <p>Connected: {address}</p>
+      <button onClick={() => switchChain?.({ chainId: 11155111 })}>
+        Switch to Sepolia
+      </button>
+    </div>
+  );
+}
+```
+
+<Callout type="info">
+Hooks that don't apply to a given ecosystem return safe stubs. For example, the Stellar facade's `useSwitchChain` returns `{ switchChain: undefined }` — your components can feature-detect this without conditional imports.
+</Callout>
+
+## Multi-Ecosystem Apps
+
+Applications that interact with multiple blockchains create one runtime per ecosystem. Each runtime is independent — it manages its own wallet session, RPC connections, and lifecycle.
+
+### Setup
+
+Install the adapters you need and the shared Vite plugin:
+
+```bash
+pnpm add @openzeppelin/adapter-evm @openzeppelin/adapter-stellar @openzeppelin/ui-types
+pnpm add -D @openzeppelin/adapters-vite
+```
+
+Merge adapter build requirements with `defineOpenZeppelinAdapterViteConfig`:
+
+```ts
+// vite.config.ts
+import { defineOpenZeppelinAdapterViteConfig } from '@openzeppelin/adapters-vite';
+import react from '@vitejs/plugin-react';
+
+export default defineOpenZeppelinAdapterViteConfig({
+  ecosystems: ['evm', 'stellar'],
+  config: {
+    plugins: [react()],
+  },
+});
+```
+
+### Creating Runtimes
+
+Instantiate a runtime from each adapter's `ecosystemDefinition`:
+
+```ts
+import { ecosystemDefinition as evmDefinition } from '@openzeppelin/adapter-evm';
+import { ecosystemDefinition as stellarDefinition } from '@openzeppelin/adapter-stellar';
+
+// EVM runtime — e.g., Ethereum Mainnet
+const evmNetwork = evmDefinition.networks[0];
+const evmRuntime = evmDefinition.createRuntime('composer', evmNetwork);
+
+// Stellar runtime — e.g., Stellar Mainnet
+const stellarNetwork = stellarDefinition.networks[0];
+const stellarRuntime = stellarDefinition.createRuntime('viewer', stellarNetwork);
+```
+
+Each runtime is fully isolated. The EVM runtime connects to Ethereum via wagmi, the Stellar runtime connects to Horizon/Soroban — they share no state and can be disposed independently:
+
+```ts
+// Use both runtimes side by side
+const evmValid = evmRuntime.addressing.isValidAddress('0x1234...');
+const stellarValid = stellarRuntime.addressing.isValidAddress('G...');
+
+const evmBalance = await evmRuntime.query.queryViewFunction(
+  '0xToken', 'balanceOf', ['0xOwner']
+);
+
+// Dispose one without affecting the other
+evmRuntime.dispose();
+// stellarRuntime continues working
+```
+
+<Callout type="info">
+Wallet sessions are ecosystem-scoped, not runtime-scoped. Disposing an EVM runtime to switch from Mainnet to Sepolia does not disconnect the user's MetaMask — the wallet session persists across runtime recreation within the same ecosystem.
+</Callout>
+
 ## Next Steps
 
 - Read the [Architecture](/ecosystem-adapters/architecture) page for a deep dive into tiers, profiles, and lifecycle management
 - Explore [Supported Ecosystems](/ecosystem-adapters/supported-ecosystems) to see what each adapter provides
 - Follow the [Building an Adapter](/ecosystem-adapters/building-an-adapter) guide to add support for a new chain
+- Browse the [adapter source code on GitHub](https://github.com/OpenZeppelin/openzeppelin-adapters) for implementation details
