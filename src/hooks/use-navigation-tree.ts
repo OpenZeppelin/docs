@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import {
 	arbitrumStylusTree,
+	ecosystemAdaptersTree,
 	ethereumEvmTree,
 	impactTree,
 	midnightTree,
@@ -64,6 +65,8 @@ export function useNavigationTree() {
 		return uniswapTree;
 	} else if (pathname.startsWith("/substrate-runtimes")) {
 		return polkadotTree;
+	} else if (pathname.startsWith("/ecosystem-adapters")) {
+		return ecosystemAdaptersTree;
 	} else if (pathname.startsWith("/tools")) {
 		return ethereumEvmTree;
 	}
