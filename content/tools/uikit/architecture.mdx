@@ -50,7 +50,7 @@ flowchart TD
 <a id="capabilities"></a>
 ## Capabilities
 
-The UIKit type system defines 13 **capabilities** — small, focused interfaces that describe what an adapter can do. This replaces the legacy pattern of a single monolithic adapter class.
+The UIKit type system defines 13 **capabilities** — small, focused interfaces that describe what an adapter can do.
 
 Capabilities are organized into three tiers based on their requirements:
 
@@ -70,39 +70,23 @@ flowchart TD
 
 **Tier 1** requires no runtime context — safe to import anywhere. **Tier 2** needs a `networkConfig`. **Tier 3** additionally needs wallet state and participates in the `dispose()` lifecycle. Each higher tier may import from lower tiers, but never the reverse.
 
-### Tier 1: Declarative / Lightweight
+| Capability | Tier | Purpose |
+| --- | --- | --- |
+| `Addressing` | 1 | Address validation, formatting, checksumming |
+| `Explorer` | 1 | Block explorer URL generation |
+| `NetworkCatalog` | 1 | Available network listing and metadata |
+| `UiLabels` | 1 | Human-readable labels for ecosystem-specific terms |
+| `ContractLoading` | 2 | Fetch and parse contract ABIs/IDLs |
+| `Schema` | 2 | Transform contract definitions into form-renderable schemas |
+| `TypeMapping` | 2 | Map blockchain types (e.g. `uint256`) to form field types |
+| `Query` | 2 | Execute read-only contract calls (view functions) |
+| `Execution` | 3 | Sign, broadcast, and track transactions |
+| `Wallet` | 3 | Connect/disconnect wallets, account state, chain switching |
+| `UiKit` | 3 | Ecosystem-specific React components and hooks |
+| `Relayer` | 3 | Gas-sponsored transaction execution via relayers |
+| `AccessControl` | 3 | Role-based access control queries and snapshots |
 
-These capabilities are side-effect-free and can be imported and used independently without any runtime context:
-
-| Capability | Purpose |
-| --- | --- |
-| `AddressingCapability` | Address validation, formatting, checksumming |
-| `ExplorerCapability` | Block explorer URL generation |
-| `NetworkCatalogCapability` | Available network listing and metadata |
-| `UiLabelsCapability` | Human-readable labels for ecosystem-specific terms |
-
-### Tier 2: Network-Aware
-
-These extend `RuntimeCapability` and require a `networkConfig` to function. They can query the blockchain but do not need a wallet connection:
-
-| Capability | Purpose |
-| --- | --- |
-| `ContractLoadingCapability` | Fetch and parse contract ABIs/IDLs from explorers or manual input |
-| `SchemaCapability` | Transform contract definitions into form-renderable schemas |
-| `TypeMappingCapability` | Map blockchain types (e.g. `uint256`) to form field types |
-| `QueryCapability` | Execute read-only contract calls (view functions) |
-
-### Tier 3: Stateful / Runtime-Bound
-
-These also extend `RuntimeCapability` and participate in the full runtime lifecycle, including wallet state and disposal:
-
-| Capability | Purpose |
-| --- | --- |
-| `ExecutionCapability` | Sign, broadcast, and track transactions |
-| `WalletCapability` | Connect/disconnect wallets, account state, chain switching |
-| `UiKitCapability` | Provide ecosystem-specific React components and hooks |
-| `RelayerCapability` | Gas-sponsored transaction execution via relayers |
-| `AccessControlCapability` | Role-based access control queries and snapshots |
+For detailed interface definitions, method signatures, and tier import rules, see [Ecosystem Adapters — Architecture](/ecosystem-adapters/architecture#capability-tiers).
 
 ### Capability Bundles
 
