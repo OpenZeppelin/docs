@@ -1,0 +1,123 @@
+---
+title: Votes
+---
+
+[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/governance/src/votes)
+
+## Overview
+
+The Votes module adds voting power tracking to a token contract. It is the foundation that makes governance possible — without it, the [Governor](/stellar-contracts/governance/governor) has no way to know how much influence each account holds.
+
+In a governance system, you typically have two contracts: a **token** that tracks voting power (this module) and a **governor** that manages proposals. The Votes module is implemented on the token side, where it hooks into balance changes and maintains a history of who held how much power at each point in time.
+
+## How Voting Power Works
+
+### Voting Units
+
+Every token can carry one **voting unit** per unit of balance. When tokens are minted, transferred, or burned, the corresponding voting units move with them. The implementing contract must call `transfer_voting_units` on every balance change to keep voting power in sync with token balances.
+
+### Delegation: Activating Your Votes
+
+Holding tokens alone does not give you voting power. You must **delegate** your voting units to an address — either to yourself or to someone else — before they count as active votes. This is a deliberate design choice:
+
+- **Self-delegation**: An account delegates to itself to activate its own votes.
+- **Delegating to another**: An account transfers its voting power to a trusted representative, who votes on its behalf.
+- **Undelegating**: There is no separate undelegate operation. To reclaim delegated power, simply delegate back to yourself.
+
+Until an account calls `delegate` at least once, its voting units exist but are not counted in any vote.
+
+### Checkpoints: Snapshots of the Past
+
+Every time voting power changes — through delegation, transfers, mints, or burns — the module records a **checkpoint**: a snapshot of that account's voting power at the current ledger sequence number. These checkpoints allow the Governor to query an account's voting power at any past ledger, which is critical for:
+
+- **Fair voting**: A proposal records a snapshot ledger when it is created. All votes are counted based on power held at that snapshot, not at the time of voting. This prevents vote manipulation through last-minute token purchases.
+- **Flash loan protection**: Since checkpoints record state after all transactions in a ledger are finalized, borrowing and returning tokens within the same ledger leaves a net-zero checkpoint.
+
+## Integrating Votes into a Token Contract
+
+The Votes module is designed to be layered onto an existing fungible or non-fungible token. The integration requires two things:
+
+1. **Hook into balance changes** — call `transfer_voting_units` after every mint, burn, and transfer.
+2. **Expose delegation** — let users delegate their voting power.
+
+```rust
+use stellar_governance::votes::{self, transfer_voting_units};
+
+// After every transfer, update voting units:
+pub fn transfer(e: &Env, from: Address, to: Address, amount: i128) {
+    // ... perform transfer logic ...
+    transfer_voting_units(e, Some(&from), Some(&to), amount as u128);
+}
+
+// For minting (no sender):
+pub fn mint(e: &Env, to: Address, amount: i128) {
+    // ... perform mint logic ...
+    transfer_voting_units(e, None, Some(&to), amount as u128);
+}
+
+// For burning (no receiver):
+pub fn burn(e: &Env, from: Address, amount: i128) {
+    // ... perform burn logic ...
+    transfer_voting_units(e, Some(&from), None, amount as u128);
+}
+
+// Expose delegation to users:
+pub fn delegate(e: &Env, account: Address, delegatee: Address) {
+    votes::delegate(e, &account, &delegatee);
+}
+```
+
+<Callout>
+If you are using the Fungible or Non-Fungible token from this library, the **Votes extension** handles all of this automatically. You only need to enable the extension — no manual integration required. See [Fungible Token](/stellar-contracts/tokens/fungible/fungible) or [Non-Fungible Token](/stellar-contracts/tokens/non-fungible/non-fungible).
+
+```rust
+use stellar_governance::votes::Votes;
+use stellar_tokens::fungible::{votes::FungibleVotes, FungibleToken};
+
+// 1. Set ContractType to FungibleVotes — this hooks into all balance
+//    changes (transfers, mints, burns) and updates voting units automatically.
+#[contractimpl(contracttrait)]
+impl FungibleToken for MyToken {
+    type ContractType = FungibleVotes;
+}
+
+// 2. Implement the Votes trait to expose voting queries to the Governor.
+#[contractimpl(contracttrait)]
+impl Votes for MyToken {}
+```
+</Callout>
+
+## The Votes Trait
+
+The `Votes` trait defines the interface that the Governor queries. All methods have default implementations.
+
+```rust
+#[contracttrait]
+pub trait Votes {
+    /// Current voting power (delegated votes) of an account.
+    fn get_votes(e: &Env, account: Address) -> u128;
+
+    /// Voting power at a specific past ledger.
+    fn get_votes_at_checkpoint(e: &Env, account: Address, ledger: u32) -> u128;
+
+    /// Total voting units in circulation (regardless of delegation).
+    fn get_total_supply(e: &Env) -> u128;
+
+    /// Total supply at a specific past ledger.
+    fn get_total_supply_at_checkpoint(e: &Env, ledger: u32) -> u128;
+
+    /// The current delegate for an account (None if never delegated).
+    fn get_delegate(e: &Env, account: Address) -> Option<Address>;
+
+    /// Delegate voting power from `account` to `delegatee`.
+    fn delegate(e: &Env, account: Address, delegatee: Address);
+}
+```
+
+All query methods return `0` if the account has no voting power or does not exist.
+
+## See Also
+
+- [Governor](/stellar-contracts/governance/governor)
+- [Fungible Token](/stellar-contracts/tokens/fungible/fungible) (Votes extension)
+- [Non-Fungible Token](/stellar-contracts/tokens/non-fungible/non-fungible) (Votes extension)
