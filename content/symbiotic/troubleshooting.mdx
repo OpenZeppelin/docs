@@ -1,0 +1,187 @@
+---
+title: Troubleshooting
+---
+
+Common issues and solutions for the Symbiotic multi-provider template.
+
+## Checking Message Status
+
+```bash
+# List all messages
+curl http://localhost:3001/debug/v1/messages
+
+# Filter by status
+curl "http://localhost:3001/debug/v1/messages?status=pending"
+
+# Get specific message
+curl http://localhost:3001/debug/v1/messages/0xabc123...
+
+# Check pending Merkle roots
+curl http://localhost:3001/debug/v1/pending
+```
+
+## Shared Issues
+
+### Webhook Not Received
+
+1. Check operator logs:
+   ```bash
+   make logs-operators | grep webhook
+   ```
+2. Verify connectivity (operators must be reachable from OZ Monitor):
+   ```bash
+   docker compose exec oz-monitor curl -s http://operator-1:3000/healthz
+   ```
+3. Confirm trigger is linked in the active monitor config under `generated/<env>/oz-monitor/monitors/` and rerun `make deploy` or `make start` if needed.
+
+### Authentication Failures (401)
+
+1. Verify secrets match between OZ Monitor config and operator `.env`
+2. Ensure secret is at least 32 characters
+3. Check for trailing whitespace in config files
+
+### Payload Parsing Errors
+
+1. Ensure `payload_mode: "raw"` is set in trigger config
+2. Check operator logs for deserialization errors
+
+### BLS Signatures Not Aggregating
+
+1. Check sidecar status:
+   ```bash
+   docker compose ps symbiotic-relay-1
+   docker compose logs symbiotic-relay-1
+   ```
+2. Verify BLS keys in `.env`
+3. Verify operator keys are registered in the Settlement contract
+
+### Quorum Not Reached
+
+1. All required operators must be running
+2. Check operators are receiving the same events
+3. Verify keys are registered in Settlement
+
+### Relayer Request Failed After All Retries
+
+1. Check OZ Relayer:
+   ```bash
+   curl -H "Authorization: Bearer $OZ_RELAYER_API_KEY" http://localhost:8080/api/v1/health
+   ```
+2. Check relayer logs:
+   ```bash
+   make logs-relayer
+   ```
+3. For 429 errors: increase `retry_backoff` or reduce submission rate
+
+### Service Won't Start
+
+1. Check missing env vars:
+   ```bash
+   docker compose config
+   ```
+2. Verify secrets are at least 32 characters
+3. Check port conflicts:
+   ```bash
+   lsof -i :3001  # operator
+   lsof -i :8080  # relayer
+   ```
+
+### Anvil Not Responding
+
+```bash
+docker compose restart anvil anvil-settlement
+docker compose logs anvil
+```
+
+### Contracts Not Found
+
+```bash
+cat deployments/local.json
+# Re-deploy if needed:
+make clean && make start
+```
+
+### First-Run Genesis Waits
+
+On fresh devnet, `make start` may wait while voting power is captured.
+
+Symptoms: logs show `genesis not ready: totalVotingPower 0 < quorumThreshold 1`.
+
+This is expected on clean boot. If stuck, reset: `make clean && make start`.
+
+## LayerZero Issues
+
+### Message Stuck at "Processing"
+
+BLS signing not completing. Check sidecar health and logs:
+
+```bash
+docker compose ps symbiotic-relay-1
+docker compose logs symbiotic-relay-1
+```
+
+### submitProof Reverts
+
+Check Settlement contract state (operator keys, quorum threshold). Inspect:
+
+```bash
+make logs-relayer | grep -i "revert\|error"
+```
+
+## Chainlink CCV Issues
+
+### EpochTooStale Revert (0xf5ab0d81)
+
+Settlement epoch/timestamp data is stale. Relayer fails at gas estimation.
+
+```bash
+make logs-relayer | grep -E "estimate_gas|custom error|0xf5ab0d81"
+```
+
+Fix: refresh genesis or tune epoch timing parameters.
+
+### Watch Does Not Reach Success
+
+CCV requires destination `MessageExecuted(messageId)`, not just relayer submission.
+
+```bash
+# Verify provider selection
+jq -r '.activeProvider' config/environments/local.json
+
+# Check message lifecycle
+make watch
+
+# If Failed, inspect relayer
+make logs-relayer
+```
+
+### Submission Fails at estimate-gas
+
+```bash
+make logs-relayer | grep -E "estimate_gas|custom error"
+```
+
+Common causes: stale epoch, incorrect CCV addresses, settlement not initialized.
+
+## Log Analysis
+
+### Useful Commands
+
+```bash
+make logs-operators                          # All operator logs
+make logs-operators 2>&1 | grep -i error     # Errors only
+make logs-operators | grep -i "retrying"     # Retry activity
+make logs-operators | grep "retries exhausted"
+make logs-monitor                            # OZ Monitor
+make logs-relayer                            # OZ Relayer
+```
+
+### Common Log Patterns
+
+| Pattern | Meaning |
+|---------|---------|
+| `webhook received` | Event received from OZ Monitor |
+| `message batched` | Message added to Merkle tree |
+| `signatures aggregated` | BLS quorum reached |
+| `proof submitted` | Sent to OZ Relayer |
+| `tx confirmed` | On-chain confirmation |
