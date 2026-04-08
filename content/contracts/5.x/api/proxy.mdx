@@ -22,10 +22,10 @@ There are two alternative ways to add upgradeability to an ERC-1967 proxy. Their
 **🔥 CAUTION**\
 Using upgradeable proxies correctly and securely is a difficult task that requires deep knowledge of the proxy pattern, Solidity, and the EVM. Unless you want a lot of low level control, we recommend using the [OpenZeppelin Upgrades Plugins](/upgrades-plugins) for Hardhat and Foundry.
 
-A different family of proxies are beacon proxies. This pattern, popularized by Dharma, allows multiple proxies to be upgraded to a different implementation in a single transaction.
+A different family of proxies is beacon proxies. This pattern, popularized by Dharma, allows multiple proxies to be upgraded to a different implementation in a single transaction.
 
 * [`BeaconProxy`](#BeaconProxy): A proxy that retrieves its implementation from a beacon contract.
-* [`UpgradeableBeacon`](#UpgradeableBeacon): A beacon contract with a built in admin that can upgrade the [`BeaconProxy`](#BeaconProxy) pointing to it.
+* [`UpgradeableBeacon`](#UpgradeableBeacon): A beacon contract with a built-in admin that can upgrade the [`BeaconProxy`](#BeaconProxy) pointing to it.
 
 In this pattern, the proxy contract doesn’t hold the implementation address in storage like an ERC-1967 proxy. Instead, the address is stored in a separate beacon contract. The `upgrade` operations are sent to the beacon instead of to the proxy contract, and all proxies that follow that beacon are automatically upgraded.
 
@@ -90,9 +90,9 @@ The current implementation of this security mechanism uses [ERC-1822](https://ei
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `Clones`
+## `Clones` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/proxy/Clones.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/proxy/Clones.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -474,9 +474,9 @@ Get the immutable args attached to a clone.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC1967Proxy`
+## `ERC1967Proxy` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/proxy/ERC1967/ERC1967Proxy.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/proxy/ERC1967/ERC1967Proxy.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -496,10 +496,22 @@ implementation behind the proxy.
 <div className="font-mono">
 - [constructor(implementation, _data)](#ERC1967Proxy-constructor-address-bytes-)
 - [_implementation()](#ERC1967Proxy-_implementation--)
-#### Proxy [!toc]
+- [_unsafeAllowUninitialized()](#ERC1967Proxy-_unsafeAllowUninitialized--)
+<details>
+<summary>Proxy</summary>
+
 - [_delegate(implementation)](#Proxy-_delegate-address-)
 - [_fallback()](#Proxy-_fallback--)
 - [fallback()](#Proxy-fallback--)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [ERC1967ProxyUninitialized()](#ERC1967Proxy-ERC1967ProxyUninitialized--)
 </div>
 </div>
 
@@ -517,8 +529,11 @@ implementation behind the proxy.
 
 Initializes the upgradeable proxy with an initial implementation specified by `implementation`.
 
-If `_data` is nonempty, it's used as data in a delegate call to `implementation`. This will typically be an
-encoded function call, and allows initializing the storage of the proxy like a Solidity constructor.
+Provided `_data` is passed in a delegate call to `implementation`. This will typically be an encoded function
+call, and allows initializing the storage of the proxy like a Solidity constructor. By default construction
+will fail if `_data` is empty. This behavior can be overridden using a custom [`ERC1967Proxy._unsafeAllowUninitialized`](#ERC1967Proxy-_unsafeAllowUninitialized--) that
+returns true. In that case, empty `_data` is ignored and no delegate call to the implementation is performed
+during construction.
 
 Requirements:
 
@@ -550,13 +565,53 @@ the [`eth_getStorageAt`](https://eth.wiki/json-rpc/API#eth_getstorageat) RPC cal
 </div>
 </div>
 
+<a id="ERC1967Proxy-_unsafeAllowUninitialized--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_unsafeAllowUninitialized() → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC1967Proxy-_unsafeAllowUninitialized--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns whether the proxy can be left uninitialized.
+
+<Callout>
+Override this function to allow the proxy to be left uninitialized.
+Consider uninitialized proxies might be susceptible to man-in-the-middle threats
+where the proxy is replaced with a malicious one.
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC1967Proxy-ERC1967ProxyUninitialized--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC1967ProxyUninitialized()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC1967Proxy-ERC1967ProxyUninitialized--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The proxy is left uninitialized.
+
+</div>
+</div>
+
 <a id="ERC1967Utils"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC1967Utils`
+## `ERC1967Utils` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/proxy/ERC1967/ERC1967Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/proxy/ERC1967/ERC1967Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -645,7 +700,7 @@ Returns the current admin.
 
 <Callout>
 To get this value clients can read directly from the storage slot shown below (specified by ERC-1967) using
-the [`eth_getStorageAt`](https://eth.wiki/json-rpc/API#eth_getstorageat) RPC call.
+the [`eth_getStorageAt`](https://ethereum.org/developers/docs/apis/json-rpc/#eth_getstorageat) RPC call.
 `0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103`
 </Callout>
 
@@ -706,9 +761,11 @@ to avoid stuck value in the contract.
 
 Emits an [`IERC1967.BeaconUpgraded`](/contracts/5.x/api/interfaces#IERC1967-BeaconUpgraded-address-) event.
 
-CAUTION: Invoking this function has no effect on an instance of [`BeaconProxy`](#BeaconProxy) since v5, since
+<Callout type="warn">
+Invoking this function has no effect on an instance of [`BeaconProxy`](#BeaconProxy) since v5, since
 it uses an immutable beacon without looking at the value of the ERC-1967 beacon slot for
 efficiency.
+</Callout>
 
 </div>
 </div>
@@ -785,9 +842,9 @@ An upgrade function sees `msg.value > 0` that may be lost.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `Proxy`
+## `Proxy` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/proxy/Proxy.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/proxy/Proxy.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -801,8 +858,8 @@ This abstract contract provides a fallback function that delegates all calls to 
 instruction `delegatecall`. We refer to the second contract as the _implementation_ behind the proxy, and it has to
 be specified by overriding the virtual [`ERC1967Proxy._implementation`](#ERC1967Proxy-_implementation--) function.
 
-Additionally, delegation to the implementation can be triggered manually through the [`AccountERC7579._fallback`](/contracts/5.x/api/account#AccountERC7579-_fallback--) function, or to a
-different contract through the [`Votes._delegate`](/contracts/5.x/api/governance#Votes-_delegate-address-address-) function.
+Additionally, delegation to the implementation can be triggered manually through the [`Proxy._fallback`](#Proxy-_fallback--) function, or to a
+different contract through the [`Proxy._delegate`](#Proxy-_delegate-address-) function.
 
 The success and return data of the delegated call will be returned back to the caller of the proxy.
 
@@ -848,7 +905,7 @@ This function does not return to its internal call site, it will return directly
 <div className="px-4">
 
 This is a virtual function that should be overridden so it returns the address to which the fallback
-function and [`AccountERC7579._fallback`](/contracts/5.x/api/account#AccountERC7579-_fallback--) should delegate.
+function and [`Proxy._fallback`](#Proxy-_fallback--) should delegate.
 
 </div>
 </div>
@@ -894,9 +951,9 @@ function in the contract matches the call data.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `BeaconProxy`
+## `BeaconProxy` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/proxy/beacon/BeaconProxy.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/proxy/beacon/BeaconProxy.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -912,8 +969,10 @@ The beacon address can only be set once during construction, and cannot be chang
 immutable variable to avoid unnecessary storage reads, and also in the beacon storage slot specified by
 [ERC-1967](https://eips.ethereum.org/EIPS/eip-1967) so that it can be accessed externally.
 
-CAUTION: Since the beacon address can never be changed, you must ensure that you either control the beacon, or trust
+<Callout type="warn">
+Since the beacon address can never be changed, you must ensure that you either control the beacon, or trust
 the beacon to not upgrade the implementation maliciously.
+</Callout>
 
 <Callout type="warn">
 Do not use the implementation logic to modify the beacon storage slot. Doing so would leave the proxy in
@@ -926,10 +985,14 @@ an inconsistent state where the beacon storage slot does not match the beacon ad
 - [constructor(beacon, data)](#BeaconProxy-constructor-address-bytes-)
 - [_implementation()](#BeaconProxy-_implementation--)
 - [_getBeacon()](#BeaconProxy-_getBeacon--)
-#### Proxy [!toc]
+<details>
+<summary>Proxy</summary>
+
 - [_delegate(implementation)](#Proxy-_delegate-address-)
 - [_fallback()](#Proxy-_fallback--)
 - [fallback()](#Proxy-fallback--)
+
+</details>
 </div>
 </div>
 
@@ -997,9 +1060,9 @@ Returns the beacon.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `IBeacon`
+## `IBeacon` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/proxy/beacon/IBeacon.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/proxy/beacon/IBeacon.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1041,9 +1104,9 @@ Must return an address that can be used as a delegate call target.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `UpgradeableBeacon`
+## `UpgradeableBeacon` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/proxy/beacon/UpgradeableBeacon.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/proxy/beacon/UpgradeableBeacon.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1064,13 +1127,16 @@ An owner is able to change the implementation the beacon points to, thus upgradi
 - [constructor(implementation_, initialOwner)](#UpgradeableBeacon-constructor-address-address-)
 - [implementation()](#UpgradeableBeacon-implementation--)
 - [upgradeTo(newImplementation)](#UpgradeableBeacon-upgradeTo-address-)
-#### Ownable [!toc]
+<details>
+<summary>Ownable</summary>
+
 - [owner()](#Ownable-owner--)
 - [_checkOwner()](#Ownable-_checkOwner--)
 - [renounceOwnership()](#Ownable-renounceOwnership--)
 - [transferOwnership(newOwner)](#Ownable-transferOwnership-address-)
 - [_transferOwnership(newOwner)](#Ownable-_transferOwnership-address-)
-#### IBeacon [!toc]
+
+</details>
 </div>
 </div>
 
@@ -1078,9 +1144,12 @@ An owner is able to change the implementation the beacon points to, thus upgradi
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
 - [Upgraded(implementation)](#UpgradeableBeacon-Upgraded-address-)
-#### Ownable [!toc]
+<details>
+<summary>Ownable</summary>
+
 - [OwnershipTransferred(previousOwner, newOwner)](#Ownable-OwnershipTransferred-address-address-)
-#### IBeacon [!toc]
+
+</details>
 </div>
 </div>
 
@@ -1088,10 +1157,13 @@ An owner is able to change the implementation the beacon points to, thus upgradi
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
 - [BeaconInvalidImplementation(implementation)](#UpgradeableBeacon-BeaconInvalidImplementation-address-)
-#### Ownable [!toc]
+<details>
+<summary>Ownable</summary>
+
 - [OwnableUnauthorizedAccount(account)](#Ownable-OwnableUnauthorizedAccount-address-)
 - [OwnableInvalidOwner(owner)](#Ownable-OwnableInvalidOwner-address-)
-#### IBeacon [!toc]
+
+</details>
 </div>
 </div>
 
@@ -1143,7 +1215,7 @@ Returns the current implementation address.
 
 Upgrades the beacon to a new implementation.
 
-Emits an [`IERC1967.Upgraded`](/contracts/5.x/api/interfaces#IERC1967-Upgraded-address-) event.
+Emits an [`UpgradeableBeacon.Upgraded`](#UpgradeableBeacon-Upgraded-address-) event.
 
 Requirements:
 
@@ -1192,9 +1264,9 @@ The `implementation` of the beacon is invalid.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ProxyAdmin`
+## `ProxyAdmin` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/proxy/transparent/ProxyAdmin.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/proxy/transparent/ProxyAdmin.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1213,29 +1285,41 @@ explanation of why you would want to use this see the documentation for [`Transp
 - [constructor(initialOwner)](#ProxyAdmin-constructor-address-)
 - [upgradeAndCall(proxy, implementation, data)](#ProxyAdmin-upgradeAndCall-contract-ITransparentUpgradeableProxy-address-bytes-)
 - [UPGRADE_INTERFACE_VERSION()](#ProxyAdmin-UPGRADE_INTERFACE_VERSION-string)
-#### Ownable [!toc]
+<details>
+<summary>Ownable</summary>
+
 - [owner()](#Ownable-owner--)
 - [_checkOwner()](#Ownable-_checkOwner--)
 - [renounceOwnership()](#Ownable-renounceOwnership--)
 - [transferOwnership(newOwner)](#Ownable-transferOwnership-address-)
 - [_transferOwnership(newOwner)](#Ownable-_transferOwnership-address-)
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### Ownable [!toc]
+<details>
+<summary>Ownable</summary>
+
 - [OwnershipTransferred(previousOwner, newOwner)](#Ownable-OwnershipTransferred-address-address-)
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### Ownable [!toc]
+<details>
+<summary>Ownable</summary>
+
 - [OwnableUnauthorizedAccount(account)](#Ownable-OwnableUnauthorizedAccount-address-)
 - [OwnableInvalidOwner(owner)](#Ownable-OwnableInvalidOwner-address-)
+
+</details>
 </div>
 </div>
 
@@ -1305,9 +1389,9 @@ during an upgrade.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ITransparentUpgradeableProxy`
+## `ITransparentUpgradeableProxy` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/proxy/transparent/TransparentUpgradeableProxy.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/proxy/transparent/TransparentUpgradeableProxy.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1326,17 +1410,20 @@ include them in the ABI so this interface must be used to interact with it.
 <h3 style={{ marginTop: "0"}}>Functions</h3>
 <div className="font-mono">
 - [upgradeToAndCall(newImplementation, data)](#ITransparentUpgradeableProxy-upgradeToAndCall-address-bytes-)
-#### IERC1967 [!toc]
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### IERC1967 [!toc]
+<details>
+<summary>IERC1967</summary>
+
 - [Upgraded(implementation)](#IERC1967-Upgraded-address-)
 - [AdminChanged(previousAdmin, newAdmin)](#IERC1967-AdminChanged-address-address-)
 - [BeaconUpgraded(beacon)](#IERC1967-BeaconUpgraded-address-)
+
+</details>
 </div>
 </div>
 
@@ -1361,9 +1448,9 @@ See [`UUPSUpgradeable.upgradeToAndCall`](#UUPSUpgradeable-upgradeToAndCall-addre
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `TransparentUpgradeableProxy`
+## `TransparentUpgradeableProxy` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/proxy/transparent/TransparentUpgradeableProxy.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/proxy/transparent/TransparentUpgradeableProxy.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1426,11 +1513,20 @@ could render the `upgradeToAndCall` function inaccessible, preventing upgradeabi
 - [constructor(_logic, initialOwner, _data)](#TransparentUpgradeableProxy-constructor-address-address-bytes-)
 - [_proxyAdmin()](#TransparentUpgradeableProxy-_proxyAdmin--)
 - [_fallback()](#TransparentUpgradeableProxy-_fallback--)
-#### ERC1967Proxy [!toc]
+<details>
+<summary>ERC1967Proxy</summary>
+
 - [_implementation()](#ERC1967Proxy-_implementation--)
-#### Proxy [!toc]
+- [_unsafeAllowUninitialized()](#ERC1967Proxy-_unsafeAllowUninitialized--)
+
+</details>
+<details>
+<summary>Proxy</summary>
+
 - [_delegate(implementation)](#Proxy-_delegate-address-)
 - [fallback()](#Proxy-fallback--)
+
+</details>
 </div>
 </div>
 
@@ -1438,8 +1534,12 @@ could render the `upgradeToAndCall` function inaccessible, preventing upgradeabi
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
 - [ProxyDeniedAdminAccess()](#TransparentUpgradeableProxy-ProxyDeniedAdminAccess--)
-#### ERC1967Proxy [!toc]
-#### Proxy [!toc]
+<details>
+<summary>ERC1967Proxy</summary>
+
+- [ERC1967ProxyUninitialized()](#ERC1967Proxy-ERC1967ProxyUninitialized--)
+
+</details>
 </div>
 </div>
 
@@ -1517,9 +1617,9 @@ The proxy caller is the current admin, and can't fallback to the proxy target.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `Initializable`
+## `Initializable` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/proxy/utils/Initializable.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/proxy/utils/Initializable.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1560,11 +1660,13 @@ To avoid leaving the proxy in an uninitialized state, the initializer function s
 possible by providing the encoded function call as the `_data` argument to [`ERC1967Proxy.constructor`](#ERC1967Proxy-constructor-address-bytes-).
 </Callout>
 
-CAUTION: When used with inheritance, manual care must be taken to not invoke a parent initializer twice, or to ensure
-that all initializers are idempotent. This is not verified automatically as constructors are by Solidity.
-
 <Callout type="warn">
-Avoid leaving a contract uninitialized.
+When used with inheritance, manual care must be taken to not invoke a parent initializer twice, or to ensure
+that all initializers are idempotent. This is not verified automatically as constructors are by Solidity.
+</Callout>
+
+[CAUTION]
+#### Avoid leaving a contract uninitialized.
 
 An uninitialized contract can be taken over by an attacker. This applies to both a proxy and its implementation
 contract, which may impact the proxy. To prevent the implementation contract from being used, you should invoke
@@ -1577,7 +1679,6 @@ constructor() {
     _disableInitializers();
 }
 ```
-</Callout>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Modifiers</h3>
@@ -1843,9 +1944,9 @@ The contract is not initializing.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `UUPSUpgradeable`
+## `UUPSUpgradeable` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/proxy/utils/UUPSUpgradeable.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/proxy/utils/UUPSUpgradeable.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1883,7 +1984,6 @@ The [`UUPSUpgradeable._authorizeUpgrade`](#UUPSUpgradeable-_authorizeUpgrade-add
 - [_checkNotDelegated()](#UUPSUpgradeable-_checkNotDelegated--)
 - [_authorizeUpgrade(newImplementation)](#UUPSUpgradeable-_authorizeUpgrade-address-)
 - [UPGRADE_INTERFACE_VERSION()](#UUPSUpgradeable-UPGRADE_INTERFACE_VERSION-string)
-#### IERC1822Proxiable [!toc]
 </div>
 </div>
 
@@ -1892,7 +1992,6 @@ The [`UUPSUpgradeable._authorizeUpgrade`](#UUPSUpgradeable-_authorizeUpgrade-add
 <div className="font-mono">
 - [UUPSUnauthorizedCallContext()](#UUPSUpgradeable-UUPSUnauthorizedCallContext--)
 - [UUPSUnsupportedProxiableUUID(slot)](#UUPSUpgradeable-UUPSUnsupportedProxiableUUID-bytes32-)
-#### IERC1822Proxiable [!toc]
 </div>
 </div>
 
@@ -1949,7 +2048,7 @@ callable on the implementing contract but not through proxies.
 </div>
 <div className="px-4">
 
-Implementation of the ERC-1822 [`IERC1822Proxiable.proxiableUUID`](/contracts/5.x/api/interfaces#IERC1822Proxiable-proxiableUUID--) function. This returns the storage slot used by the
+Implementation of the ERC-1822 [`UUPSUpgradeable.proxiableUUID`](#UUPSUpgradeable-proxiableUUID--) function. This returns the storage slot used by the
 implementation. It is used to validate the implementation's compatibility when performing an upgrade.
 
 <Callout type="warn">
@@ -1978,7 +2077,7 @@ encoded in `data`.
 
 Calls [`UUPSUpgradeable._authorizeUpgrade`](#UUPSUpgradeable-_authorizeUpgrade-address-).
 
-Emits an [`IERC1967.Upgraded`](/contracts/5.x/api/interfaces#IERC1967-Upgraded-address-) event.
+Emits an [`UpgradeableBeacon.Upgraded`](#UpgradeableBeacon-Upgraded-address-) event.
 
 </div>
 </div>
@@ -2098,3 +2197,4 @@ The storage `slot` is unsupported as a UUID.
 
 </div>
 </div>
+

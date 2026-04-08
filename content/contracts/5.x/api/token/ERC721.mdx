@@ -24,12 +24,13 @@ OpenZeppelin Contracts provides implementations of all four interfaces:
 
 Additionally there are a few of other extensions:
 
+* [`ERC721Burnable`](#ERC721Burnable): A way for token holders to burn their own tokens.
 * [`ERC721Consecutive`](#ERC721Consecutive): An implementation of [ERC-2309](https://eips.ethereum.org/EIPS/eip-2309) for minting batches of tokens during construction, in accordance with ERC-721.
+* [`ERC721Crosschain`](#ERC721Crosschain): Embedded [`BridgeNonFungible`](/contracts/5.x/api/crosschain#BridgeNonFungible) bridge, making the token crosschain through the use of ERC-7786 gateways.
+* [`ERC721Pausable`](#ERC721Pausable): A primitive to pause contract operation.
+* [`ERC721Royalty`](#ERC721Royalty): A way to signal royalty information following ERC-2981.
 * [`ERC721URIStorage`](#ERC721URIStorage): A more flexible but more expensive way of storing metadata.
 * [`ERC721Votes`](#ERC721Votes): Support for voting and vote delegation.
-* [`ERC721Royalty`](#ERC721Royalty): A way to signal royalty information following ERC-2981.
-* [`ERC721Pausable`](#ERC721Pausable): A primitive to pause contract operation.
-* [`ERC721Burnable`](#ERC721Burnable): A way for token holders to burn their own tokens.
 * [`ERC721Wrapper`](#ERC721Wrapper): Wrapper to create an ERC-721 backed by another ERC-721, with deposit and withdraw methods. Useful in conjunction with [`ERC721Votes`](#ERC721Votes).
 
 <Callout>
@@ -52,17 +53,19 @@ This core set of contracts is designed to be unopinionated, allowing developers 
 
 ## Extensions
 
-[`ERC721Pausable`](#ERC721Pausable)
-
 [`ERC721Burnable`](#ERC721Burnable)
 
 [`ERC721Consecutive`](#ERC721Consecutive)
 
+[`ERC721Crosschain`](#ERC721Crosschain)
+
+[`ERC721Pausable`](#ERC721Pausable)
+
+[`ERC721Royalty`](#ERC721Royalty)
+
 [`ERC721URIStorage`](#ERC721URIStorage)
 
 [`ERC721Votes`](#ERC721Votes)
-
-[`ERC721Royalty`](#ERC721Royalty)
 
 [`ERC721Wrapper`](#ERC721Wrapper)
 
@@ -76,9 +79,9 @@ This core set of contracts is designed to be unopinionated, allowing developers 
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC721`
+## `ERC721` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC721/ERC721.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC721/ERC721.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -127,32 +130,29 @@ the Metadata extension, but not including the Enumerable extension, which is ava
 - [_approve(to, tokenId, auth, emitEvent)](#ERC721-_approve-address-uint256-address-bool-)
 - [_setApprovalForAll(owner, operator, approved)](#ERC721-_setApprovalForAll-address-address-bool-)
 - [_requireOwned(tokenId)](#ERC721-_requireOwned-uint256-)
-#### IERC721Errors [!toc]
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### IERC721Errors [!toc]
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
+<details>
+<summary>IERC721</summary>
+
 - [Transfer(from, to, tokenId)](#IERC721-Transfer-address-address-uint256-)
 - [Approval(owner, approved, tokenId)](#IERC721-Approval-address-address-uint256-)
 - [ApprovalForAll(owner, operator, approved)](#IERC721-ApprovalForAll-address-address-bool-)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### IERC721Errors [!toc]
+<details>
+<summary>IERC721Errors</summary>
+
 - [ERC721InvalidOwner(owner)](#IERC721Errors-ERC721InvalidOwner-address-)
 - [ERC721NonexistentToken(tokenId)](#IERC721Errors-ERC721NonexistentToken-uint256-)
 - [ERC721IncorrectOwner(sender, tokenId, owner)](#IERC721Errors-ERC721IncorrectOwner-address-uint256-address-)
@@ -161,10 +161,8 @@ the Metadata extension, but not including the Enumerable extension, which is ava
 - [ERC721InsufficientApproval(operator, tokenId)](#IERC721Errors-ERC721InsufficientApproval-address-uint256-)
 - [ERC721InvalidApprover(approver)](#IERC721Errors-ERC721InvalidApprover-address-)
 - [ERC721InvalidOperator(operator)](#IERC721Errors-ERC721InvalidOperator-address-)
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -308,7 +306,7 @@ Returns the Uniform Resource Identifier (URI) for `tokenId` token.
 </div>
 <div className="px-4">
 
-Base URI for computing [`IERC6909ContentURI.tokenURI`](../interfaces#IERC6909ContentURI-tokenURI-uint256-). If set, the resulting URI for each
+Base URI for computing [`ERC721.tokenURI`](#ERC721-tokenURI-uint256-). If set, the resulting URI for each
 token will be the concatenation of the `baseURI` and the `tokenId`. Empty
 by default, can be overridden in child contracts.
 
@@ -337,7 +335,7 @@ Requirements:
 - The caller must own the token or be an approved operator.
 - `tokenId` must exist.
 
-Emits an [`IERC6909.Approval`](../interfaces#IERC6909-Approval-address-address-uint256-uint256-) event.
+Emits an [`IERC721.Approval`](#IERC721-Approval-address-address-uint256-) event.
 
 </div>
 </div>
@@ -376,13 +374,13 @@ Requirements:
 <div className="px-4">
 
 Approve or remove `operator` as an operator for the caller.
-Operators can call [`IERC6909.transferFrom`](../interfaces#IERC6909-transferFrom-address-address-uint256-uint256-) or [`ERC1155.safeTransferFrom`](/contracts/5.x/api/token/ERC1155#ERC1155-safeTransferFrom-address-address-uint256-uint256-bytes-) for any token owned by the caller.
+Operators can call [`ERC721.transferFrom`](#ERC721-transferFrom-address-address-uint256-) or [`ERC721.safeTransferFrom`](#ERC721-safeTransferFrom-address-address-uint256-bytes-) for any token owned by the caller.
 
 Requirements:
 
 - The `operator` cannot be the address zero.
 
-Emits an [`IERC1155.ApprovalForAll`](/contracts/5.x/api/token/ERC1155#IERC1155-ApprovalForAll-address-address-bool-) event.
+Emits an [`IERC721.ApprovalForAll`](#IERC721-ApprovalForAll-address-address-bool-) event.
 
 </div>
 </div>
@@ -401,7 +399,7 @@ Emits an [`IERC1155.ApprovalForAll`](/contracts/5.x/api/token/ERC1155#IERC1155-A
 
 Returns if the `operator` is allowed to manage all of the assets of `owner`.
 
-See [`ERC1155.setApprovalForAll`](/contracts/5.x/api/token/ERC1155#ERC1155-setApprovalForAll-address-bool-)
+See [`ERC721.setApprovalForAll`](#ERC721-setApprovalForAll-address-bool-)
 
 </div>
 </div>
@@ -422,7 +420,7 @@ Transfers `tokenId` token from `from` to `to`.
 
 <Callout type="warn">
 Note that the caller is responsible to confirm that the recipient is capable of receiving ERC-721
-or else they may be permanently lost. Usage of [`ERC1155.safeTransferFrom`](/contracts/5.x/api/token/ERC1155#ERC1155-safeTransferFrom-address-address-uint256-uint256-bytes-) prevents loss, though the caller must
+or else they may be permanently lost. Usage of [`ERC721.safeTransferFrom`](#ERC721-safeTransferFrom-address-address-uint256-bytes-) prevents loss, though the caller must
 understand this adds an external call which potentially creates a reentrancy vulnerability.
 </Callout>
 
@@ -431,9 +429,9 @@ Requirements:
 - `from` cannot be the zero address.
 - `to` cannot be the zero address.
 - `tokenId` token must be owned by `from`.
-- If the caller is not `from`, it must be approved to move this token by either [`IERC6909.approve`](../interfaces#IERC6909-approve-address-uint256-uint256-) or [`ERC1155.setApprovalForAll`](/contracts/5.x/api/token/ERC1155#ERC1155-setApprovalForAll-address-bool-).
+- If the caller is not `from`, it must be approved to move this token by either [`ERC721.approve`](#ERC721-approve-address-uint256-) or [`ERC721.setApprovalForAll`](#ERC721-setApprovalForAll-address-bool-).
 
-Emits a [`IERC6909.Transfer`](../interfaces#IERC6909-Transfer-address-address-address-uint256-uint256-) event.
+Emits a [`IERC721.Transfer`](#IERC721-Transfer-address-address-uint256-) event.
 
 </div>
 </div>
@@ -458,12 +456,12 @@ Requirements:
 - `from` cannot be the zero address.
 - `to` cannot be the zero address.
 - `tokenId` token must exist and be owned by `from`.
-- If the caller is not `from`, it must have been allowed to move this token by either [`IERC6909.approve`](../interfaces#IERC6909-approve-address-uint256-uint256-) or
-  [`ERC1155.setApprovalForAll`](/contracts/5.x/api/token/ERC1155#ERC1155-setApprovalForAll-address-bool-).
+- If the caller is not `from`, it must have been allowed to move this token by either [`ERC721.approve`](#ERC721-approve-address-uint256-) or
+  [`ERC721.setApprovalForAll`](#ERC721-setApprovalForAll-address-bool-).
 - If `to` refers to a smart contract, it must implement [`IERC721Receiver.onERC721Received`](#IERC721Receiver-onERC721Received-address-address-uint256-bytes-), which is called upon
   a safe transfer.
 
-Emits a [`IERC6909.Transfer`](../interfaces#IERC6909-Transfer-address-address-address-uint256-uint256-) event.
+Emits a [`IERC721.Transfer`](#IERC721-Transfer-address-address-uint256-) event.
 
 </div>
 </div>
@@ -487,11 +485,11 @@ Requirements:
 - `from` cannot be the zero address.
 - `to` cannot be the zero address.
 - `tokenId` token must exist and be owned by `from`.
-- If the caller is not `from`, it must be approved to move this token by either [`IERC6909.approve`](../interfaces#IERC6909-approve-address-uint256-uint256-) or [`ERC1155.setApprovalForAll`](/contracts/5.x/api/token/ERC1155#ERC1155-setApprovalForAll-address-bool-).
+- If the caller is not `from`, it must be approved to move this token by either [`ERC721.approve`](#ERC721-approve-address-uint256-) or [`ERC721.setApprovalForAll`](#ERC721-setApprovalForAll-address-bool-).
 - If `to` refers to a smart contract, it must implement [`IERC721Receiver.onERC721Received`](#IERC721Receiver-onERC721Received-address-address-uint256-bytes-), which is called upon
   a safe transfer.
 
-Emits a [`IERC6909.Transfer`](../interfaces#IERC6909-Transfer-address-address-address-uint256-uint256-) event.
+Emits a [`IERC721.Transfer`](#IERC721-Transfer-address-address-uint256-) event.
 
 </div>
 </div>
@@ -631,7 +629,7 @@ Transfers `tokenId` from its current owner to `to`, or alternatively mints (or b
 The `auth` argument is optional. If the value passed is non 0, then this function will check that
 `auth` is either the owner of the token, or approved to operate on the token (by the owner).
 
-Emits a [`IERC6909.Transfer`](../interfaces#IERC6909-Transfer-address-address-address-uint256-uint256-) event.
+Emits a [`IERC721.Transfer`](#IERC721-Transfer-address-address-uint256-) event.
 
 <Callout>
 If overriding this function in a way that tracks balances, see also [`ERC721._increaseBalance`](#ERC721-_increaseBalance-address-uint128-).
@@ -663,7 +661,7 @@ Requirements:
 - `tokenId` must not exist.
 - `to` cannot be the zero address.
 
-Emits a [`IERC6909.Transfer`](../interfaces#IERC6909-Transfer-address-address-address-uint256-uint256-) event.
+Emits a [`IERC721.Transfer`](#IERC721-Transfer-address-address-uint256-) event.
 
 </div>
 </div>
@@ -687,7 +685,7 @@ Requirements:
 - `tokenId` must not exist.
 - If `to` refers to a smart contract, it must implement [`IERC721Receiver.onERC721Received`](#IERC721Receiver-onERC721Received-address-address-uint256-bytes-), which is called upon a safe transfer.
 
-Emits a [`IERC6909.Transfer`](../interfaces#IERC6909-Transfer-address-address-address-uint256-uint256-) event.
+Emits a [`IERC721.Transfer`](#IERC721-Transfer-address-address-uint256-) event.
 
 </div>
 </div>
@@ -730,7 +728,7 @@ Requirements:
 
 - `tokenId` must exist.
 
-Emits a [`IERC6909.Transfer`](../interfaces#IERC6909-Transfer-address-address-address-uint256-uint256-) event.
+Emits a [`IERC721.Transfer`](#IERC721-Transfer-address-address-uint256-) event.
 
 </div>
 </div>
@@ -748,14 +746,14 @@ Emits a [`IERC6909.Transfer`](../interfaces#IERC6909-Transfer-address-address-ad
 <div className="px-4">
 
 Transfers `tokenId` from `from` to `to`.
- As opposed to [`IERC6909.transferFrom`](../interfaces#IERC6909-transferFrom-address-address-uint256-uint256-), this imposes no restrictions on msg.sender.
+ As opposed to [`ERC721.transferFrom`](#ERC721-transferFrom-address-address-uint256-), this imposes no restrictions on msg.sender.
 
 Requirements:
 
 - `to` cannot be the zero address.
 - `tokenId` token must be owned by `from`.
 
-Emits a [`IERC6909.Transfer`](../interfaces#IERC6909-Transfer-address-address-address-uint256-uint256-) event.
+Emits a [`IERC721.Transfer`](#IERC721-Transfer-address-address-uint256-) event.
 
 </div>
 </div>
@@ -777,7 +775,7 @@ are aware of the ERC-721 standard to prevent tokens from being forever locked.
 
 `data` is additional data, it has no specified format and it is sent in call to `to`.
 
-This internal function is like [`ERC1155.safeTransferFrom`](/contracts/5.x/api/token/ERC1155#ERC1155-safeTransferFrom-address-address-uint256-uint256-bytes-) in the sense that it invokes
+This internal function is like [`ERC721.safeTransferFrom`](#ERC721-safeTransferFrom-address-address-uint256-bytes-) in the sense that it invokes
 [`IERC721Receiver.onERC721Received`](#IERC721Receiver-onERC721Received-address-address-uint256-bytes-) on the receiver, and can be used to e.g.
 implement alternative mechanisms to perform token transfer, such as signature-based.
 
@@ -788,7 +786,7 @@ Requirements:
 - `from` cannot be the zero address.
 - If `to` refers to a smart contract, it must implement [`IERC721Receiver.onERC721Received`](#IERC721Receiver-onERC721Received-address-address-uint256-bytes-), which is called upon a safe transfer.
 
-Emits a [`IERC6909.Transfer`](../interfaces#IERC6909-Transfer-address-address-address-uint256-uint256-) event.
+Emits a [`IERC721.Transfer`](#IERC721-Transfer-address-address-uint256-) event.
 
 </div>
 </div>
@@ -828,7 +826,7 @@ Approve `to` to operate on `tokenId`
 The `auth` argument is optional. If the value passed is non 0, then this function will check that `auth` is
 either the owner of the token, or approved to operate on all tokens held by this owner.
 
-Emits an [`IERC6909.Approval`](../interfaces#IERC6909-Approval-address-address-uint256-uint256-) event.
+Emits an [`IERC721.Approval`](#IERC721-Approval-address-address-uint256-) event.
 
 Overrides to this logic should be done to the variant with an additional `bool emitEvent` argument.
 
@@ -847,7 +845,7 @@ Overrides to this logic should be done to the variant with an additional `bool e
 </div>
 <div className="px-4">
 
-Variant of `_approve` with an optional flag to enable or disable the [`IERC6909.Approval`](../interfaces#IERC6909-Approval-address-address-uint256-uint256-) event. The event is not
+Variant of `_approve` with an optional flag to enable or disable the [`IERC721.Approval`](#IERC721-Approval-address-address-uint256-) event. The event is not
 emitted in the context of transfers.
 
 </div>
@@ -870,7 +868,7 @@ Approve `operator` to operate on all of `owner` tokens
 Requirements:
 - operator can't be the address zero.
 
-Emits an [`IERC1155.ApprovalForAll`](/contracts/5.x/api/token/ERC1155#IERC1155-ApprovalForAll-address-address-bool-) event.
+Emits an [`IERC721.ApprovalForAll`](#IERC721-ApprovalForAll-address-address-bool-) event.
 
 </div>
 </div>
@@ -899,9 +897,9 @@ Overrides to ownership logic should be done to [`ERC721._ownerOf`](#ERC721-_owne
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `IERC721`
+## `IERC721` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC721/IERC721.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC721/IERC721.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -925,8 +923,12 @@ Required interface of an ERC-721 compliant contract.
 - [setApprovalForAll(operator, approved)](#IERC721-setApprovalForAll-address-bool-)
 - [getApproved(tokenId)](#IERC721-getApproved-uint256-)
 - [isApprovedForAll(owner, operator)](#IERC721-isApprovedForAll-address-address-)
-#### IERC165 [!toc]
+<details>
+<summary>IERC165</summary>
+
 - [supportsInterface(interfaceId)](#IERC165-supportsInterface-bytes4-)
+
+</details>
 </div>
 </div>
 
@@ -936,7 +938,6 @@ Required interface of an ERC-721 compliant contract.
 - [Transfer(from, to, tokenId)](#IERC721-Transfer-address-address-uint256-)
 - [Approval(owner, approved, tokenId)](#IERC721-Approval-address-address-uint256-)
 - [ApprovalForAll(owner, operator, approved)](#IERC721-ApprovalForAll-address-address-bool-)
-#### IERC165 [!toc]
 </div>
 </div>
 
@@ -997,11 +998,11 @@ Requirements:
 - `from` cannot be the zero address.
 - `to` cannot be the zero address.
 - `tokenId` token must exist and be owned by `from`.
-- If the caller is not `from`, it must be approved to move this token by either [`IERC6909.approve`](../interfaces#IERC6909-approve-address-uint256-uint256-) or [`ERC1155.setApprovalForAll`](/contracts/5.x/api/token/ERC1155#ERC1155-setApprovalForAll-address-bool-).
+- If the caller is not `from`, it must be approved to move this token by either [`ERC721.approve`](#ERC721-approve-address-uint256-) or [`ERC721.setApprovalForAll`](#ERC721-setApprovalForAll-address-bool-).
 - If `to` refers to a smart contract, it must implement [`IERC721Receiver.onERC721Received`](#IERC721Receiver-onERC721Received-address-address-uint256-bytes-), which is called upon
   a safe transfer.
 
-Emits a [`IERC6909.Transfer`](../interfaces#IERC6909-Transfer-address-address-address-uint256-uint256-) event.
+Emits a [`IERC721.Transfer`](#IERC721-Transfer-address-address-uint256-) event.
 
 </div>
 </div>
@@ -1026,12 +1027,12 @@ Requirements:
 - `from` cannot be the zero address.
 - `to` cannot be the zero address.
 - `tokenId` token must exist and be owned by `from`.
-- If the caller is not `from`, it must have been allowed to move this token by either [`IERC6909.approve`](../interfaces#IERC6909-approve-address-uint256-uint256-) or
-  [`ERC1155.setApprovalForAll`](/contracts/5.x/api/token/ERC1155#ERC1155-setApprovalForAll-address-bool-).
+- If the caller is not `from`, it must have been allowed to move this token by either [`ERC721.approve`](#ERC721-approve-address-uint256-) or
+  [`ERC721.setApprovalForAll`](#ERC721-setApprovalForAll-address-bool-).
 - If `to` refers to a smart contract, it must implement [`IERC721Receiver.onERC721Received`](#IERC721Receiver-onERC721Received-address-address-uint256-bytes-), which is called upon
   a safe transfer.
 
-Emits a [`IERC6909.Transfer`](../interfaces#IERC6909-Transfer-address-address-address-uint256-uint256-) event.
+Emits a [`IERC721.Transfer`](#IERC721-Transfer-address-address-uint256-) event.
 
 </div>
 </div>
@@ -1052,7 +1053,7 @@ Transfers `tokenId` token from `from` to `to`.
 
 <Callout type="warn">
 Note that the caller is responsible to confirm that the recipient is capable of receiving ERC-721
-or else they may be permanently lost. Usage of [`ERC1155.safeTransferFrom`](/contracts/5.x/api/token/ERC1155#ERC1155-safeTransferFrom-address-address-uint256-uint256-bytes-) prevents loss, though the caller must
+or else they may be permanently lost. Usage of [`ERC721.safeTransferFrom`](#ERC721-safeTransferFrom-address-address-uint256-bytes-) prevents loss, though the caller must
 understand this adds an external call which potentially creates a reentrancy vulnerability.
 </Callout>
 
@@ -1061,9 +1062,9 @@ Requirements:
 - `from` cannot be the zero address.
 - `to` cannot be the zero address.
 - `tokenId` token must be owned by `from`.
-- If the caller is not `from`, it must be approved to move this token by either [`IERC6909.approve`](../interfaces#IERC6909-approve-address-uint256-uint256-) or [`ERC1155.setApprovalForAll`](/contracts/5.x/api/token/ERC1155#ERC1155-setApprovalForAll-address-bool-).
+- If the caller is not `from`, it must be approved to move this token by either [`ERC721.approve`](#ERC721-approve-address-uint256-) or [`ERC721.setApprovalForAll`](#ERC721-setApprovalForAll-address-bool-).
 
-Emits a [`IERC6909.Transfer`](../interfaces#IERC6909-Transfer-address-address-address-uint256-uint256-) event.
+Emits a [`IERC721.Transfer`](#IERC721-Transfer-address-address-uint256-) event.
 
 </div>
 </div>
@@ -1090,7 +1091,7 @@ Requirements:
 - The caller must own the token or be an approved operator.
 - `tokenId` must exist.
 
-Emits an [`IERC6909.Approval`](../interfaces#IERC6909-Approval-address-address-uint256-uint256-) event.
+Emits an [`IERC721.Approval`](#IERC721-Approval-address-address-uint256-) event.
 
 </div>
 </div>
@@ -1108,13 +1109,13 @@ Emits an [`IERC6909.Approval`](../interfaces#IERC6909-Approval-address-address-u
 <div className="px-4">
 
 Approve or remove `operator` as an operator for the caller.
-Operators can call [`IERC6909.transferFrom`](../interfaces#IERC6909-transferFrom-address-address-uint256-uint256-) or [`ERC1155.safeTransferFrom`](/contracts/5.x/api/token/ERC1155#ERC1155-safeTransferFrom-address-address-uint256-uint256-bytes-) for any token owned by the caller.
+Operators can call [`ERC721.transferFrom`](#ERC721-transferFrom-address-address-uint256-) or [`ERC721.safeTransferFrom`](#ERC721-safeTransferFrom-address-address-uint256-bytes-) for any token owned by the caller.
 
 Requirements:
 
 - The `operator` cannot be the address zero.
 
-Emits an [`IERC1155.ApprovalForAll`](/contracts/5.x/api/token/ERC1155#IERC1155-ApprovalForAll-address-address-bool-) event.
+Emits an [`IERC721.ApprovalForAll`](#IERC721-ApprovalForAll-address-address-bool-) event.
 
 </div>
 </div>
@@ -1154,7 +1155,7 @@ Requirements:
 
 Returns if the `operator` is allowed to manage all of the assets of `owner`.
 
-See [`ERC1155.setApprovalForAll`](/contracts/5.x/api/token/ERC1155#ERC1155-setApprovalForAll-address-bool-)
+See [`ERC721.setApprovalForAll`](#ERC721-setApprovalForAll-address-bool-)
 
 </div>
 </div>
@@ -1215,9 +1216,9 @@ Emitted when `owner` enables or disables (`approved`) `operator` to manage all o
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `IERC721Receiver`
+## `IERC721Receiver` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC721/IERC721Receiver.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC721/IERC721Receiver.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1265,9 +1266,9 @@ The selector can be obtained in Solidity with `IERC721Receiver.onERC721Received.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC721Burnable`
+## `ERC721Burnable` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC721/extensions/ERC721Burnable.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC721/extensions/ERC721Burnable.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1283,7 +1284,9 @@ ERC-721 Token that can be burned (destroyed).
 <h3 style={{ marginTop: "0"}}>Functions</h3>
 <div className="font-mono">
 - [burn(tokenId)](#ERC721Burnable-burn-uint256-)
-#### ERC721 [!toc]
+<details>
+<summary>ERC721</summary>
+
 - [supportsInterface(interfaceId)](#ERC721-supportsInterface-bytes4-)
 - [balanceOf(owner)](#ERC721-balanceOf-address-)
 - [ownerOf(tokenId)](#ERC721-ownerOf-uint256-)
@@ -1315,34 +1318,31 @@ ERC-721 Token that can be burned (destroyed).
 - [_approve(to, tokenId, auth, emitEvent)](#ERC721-_approve-address-uint256-address-bool-)
 - [_setApprovalForAll(owner, operator, approved)](#ERC721-_setApprovalForAll-address-address-bool-)
 - [_requireOwned(tokenId)](#ERC721-_requireOwned-uint256-)
-#### IERC721Errors [!toc]
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### ERC721 [!toc]
-#### IERC721Errors [!toc]
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
+<details>
+<summary>IERC721</summary>
+
 - [Transfer(from, to, tokenId)](#IERC721-Transfer-address-address-uint256-)
 - [Approval(owner, approved, tokenId)](#IERC721-Approval-address-address-uint256-)
 - [ApprovalForAll(owner, operator, approved)](#IERC721-ApprovalForAll-address-address-bool-)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### ERC721 [!toc]
-#### IERC721Errors [!toc]
+<details>
+<summary>IERC721Errors</summary>
+
 - [ERC721InvalidOwner(owner)](#IERC721Errors-ERC721InvalidOwner-address-)
 - [ERC721NonexistentToken(tokenId)](#IERC721Errors-ERC721NonexistentToken-uint256-)
 - [ERC721IncorrectOwner(sender, tokenId, owner)](#IERC721Errors-ERC721IncorrectOwner-address-uint256-address-)
@@ -1351,10 +1351,8 @@ ERC-721 Token that can be burned (destroyed).
 - [ERC721InsufficientApproval(operator, tokenId)](#IERC721Errors-ERC721InsufficientApproval-address-uint256-)
 - [ERC721InvalidApprover(approver)](#IERC721Errors-ERC721InvalidApprover-address-)
 - [ERC721InvalidOperator(operator)](#IERC721Errors-ERC721InvalidOperator-address-)
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -1383,9 +1381,9 @@ Requirements:
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC721Consecutive`
+## `ERC721Consecutive` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC721/extensions/ERC721Consecutive.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC721/extensions/ERC721Consecutive.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1406,7 +1404,7 @@ Using this extension removes the ability to mint single tokens during contract c
 regained after construction. During construction, only batch minting is allowed.
 
 <Callout type="warn">
-This extension does not call the [`ERC1155._update`](/contracts/5.x/api/token/ERC1155#ERC1155-_update-address-address-uint256---uint256---) function for tokens minted in batch. Any logic added to this
+This extension does not call the [`ERC721._update`](#ERC721-_update-address-uint256-address-) function for tokens minted in batch. Any logic added to this
 function through overrides will not be triggered when tokens are minted in batch. You may want to also override
 [`ERC721._increaseBalance`](#ERC721-_increaseBalance-address-uint128-) or [`ERC721Consecutive._mintConsecutive`](#ERC721Consecutive-_mintConsecutive-address-uint96-) to account for these mints.
 </Callout>
@@ -1425,7 +1423,9 @@ super call before your custom logic.
 - [_mintConsecutive(to, batchSize)](#ERC721Consecutive-_mintConsecutive-address-uint96-)
 - [_update(to, tokenId, auth)](#ERC721Consecutive-_update-address-uint256-address-)
 - [_firstConsecutiveId()](#ERC721Consecutive-_firstConsecutiveId--)
-#### ERC721 [!toc]
+<details>
+<summary>ERC721</summary>
+
 - [supportsInterface(interfaceId)](#ERC721-supportsInterface-bytes4-)
 - [balanceOf(owner)](#ERC721-balanceOf-address-)
 - [ownerOf(tokenId)](#ERC721-ownerOf-uint256-)
@@ -1455,29 +1455,28 @@ super call before your custom logic.
 - [_approve(to, tokenId, auth, emitEvent)](#ERC721-_approve-address-uint256-address-bool-)
 - [_setApprovalForAll(owner, operator, approved)](#ERC721-_setApprovalForAll-address-address-bool-)
 - [_requireOwned(tokenId)](#ERC721-_requireOwned-uint256-)
-#### IERC721Errors [!toc]
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
-#### IERC2309 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### ERC721 [!toc]
-#### IERC721Errors [!toc]
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
+<details>
+<summary>IERC721</summary>
+
 - [Transfer(from, to, tokenId)](#IERC721-Transfer-address-address-uint256-)
 - [Approval(owner, approved, tokenId)](#IERC721-Approval-address-address-uint256-)
 - [ApprovalForAll(owner, operator, approved)](#IERC721-ApprovalForAll-address-address-bool-)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
-#### IERC2309 [!toc]
+
+</details>
+<details>
+<summary>IERC2309</summary>
+
 - [ConsecutiveTransfer(fromTokenId, toTokenId, fromAddress, toAddress)](#IERC2309-ConsecutiveTransfer-uint256-uint256-address-address-)
+
+</details>
 </div>
 </div>
 
@@ -1488,8 +1487,9 @@ super call before your custom logic.
 - [ERC721ExceededMaxBatchMint(batchSize, maxBatch)](#ERC721Consecutive-ERC721ExceededMaxBatchMint-uint256-uint256-)
 - [ERC721ForbiddenMint()](#ERC721Consecutive-ERC721ForbiddenMint--)
 - [ERC721ForbiddenBatchBurn()](#ERC721Consecutive-ERC721ForbiddenBatchBurn--)
-#### ERC721 [!toc]
-#### IERC721Errors [!toc]
+<details>
+<summary>IERC721Errors</summary>
+
 - [ERC721InvalidOwner(owner)](#IERC721Errors-ERC721InvalidOwner-address-)
 - [ERC721NonexistentToken(tokenId)](#IERC721Errors-ERC721NonexistentToken-uint256-)
 - [ERC721IncorrectOwner(sender, tokenId, owner)](#IERC721Errors-ERC721IncorrectOwner-address-uint256-address-)
@@ -1498,11 +1498,8 @@ super call before your custom logic.
 - [ERC721InsufficientApproval(operator, tokenId)](#IERC721Errors-ERC721InsufficientApproval-address-uint256-)
 - [ERC721InvalidApprover(approver)](#IERC721Errors-ERC721InvalidApprover-address-)
 - [ERC721InvalidOperator(operator)](#IERC721Errors-ERC721InvalidOperator-address-)
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
-#### IERC2309 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -1568,12 +1565,16 @@ Requirements:
 - `batchSize` must not be greater than [`ERC721Consecutive._maxBatchSize`](#ERC721Consecutive-_maxBatchSize--).
 - The function is called in the constructor of the contract (directly or indirectly).
 
-CAUTION: Does not emit a `Transfer` event. This is ERC-721 compliant as long as it is done inside of the
+<Callout type="warn">
+Does not emit a `Transfer` event. This is ERC-721 compliant as long as it is done inside of the
 constructor, which is enforced by this function.
+</Callout>
 
-CAUTION: Does not invoke `onERC721Received` on the receiver.
+<Callout type="warn">
+Does not invoke `onERC721Received` on the receiver.
+</Callout>
 
-Emits a [`IERC2309.ConsecutiveTransfer`](../interfaces#IERC2309-ConsecutiveTransfer-uint256-uint256-address-address-) event.
+Emits a [`IERC2309.ConsecutiveTransfer`](/contracts/5.x/api/interfaces#IERC2309-ConsecutiveTransfer-uint256-uint256-address-address-) event.
 
 </div>
 </div>
@@ -1594,7 +1595,7 @@ See [`ERC721._update`](#ERC721-_update-address-uint256-address-). Override versi
 
 <Callout type="warn">
 Using [`ERC721Consecutive`](#ERC721Consecutive) prevents minting during construction in favor of [`ERC721Consecutive._mintConsecutive`](#ERC721Consecutive-_mintConsecutive-address-uint96-).
-After construction, [`ERC721Consecutive._mintConsecutive`](#ERC721Consecutive-_mintConsecutive-address-uint96-) is no longer available and minting through [`ERC1155._update`](/contracts/5.x/api/token/ERC1155#ERC1155-_update-address-address-uint256---uint256---) becomes available.
+After construction, [`ERC721Consecutive._mintConsecutive`](#ERC721Consecutive-_mintConsecutive-address-uint96-) is no longer available and minting through [`ERC721._update`](#ERC721-_update-address-uint256-address-) becomes available.
 </Callout>
 
 </div>
@@ -1687,13 +1688,211 @@ Batch burn is not supported.
 </div>
 </div>
 
+<a id="ERC721Crosschain"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC721Crosschain` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC721/extensions/ERC721Crosschain.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Crosschain.sol";
+```
+
+Extension of [`ERC721`](#ERC721) that makes it natively cross-chain using the ERC-7786 based [`BridgeNonFungible`](/contracts/5.x/api/crosschain#BridgeNonFungible).
+
+This extension makes the token compatible with:
+* [`ERC721Crosschain`](#ERC721Crosschain) instances on other chains,
+* [`ERC721`](#ERC721) instances on other chains that are bridged using [`BridgeERC721`](/contracts/5.x/api/crosschain#BridgeERC721),
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [crosschainTransferFrom(from, to, tokenId)](#ERC721Crosschain-crosschainTransferFrom-address-bytes-uint256-)
+- [_onSend(from, tokenId)](#ERC721Crosschain-_onSend-address-uint256-)
+- [_onReceive(to, tokenId)](#ERC721Crosschain-_onReceive-address-uint256-)
+<details>
+<summary>BridgeNonFungible</summary>
+
+- [_crosschainTransfer(from, to, tokenId)](#BridgeNonFungible-_crosschainTransfer-address-bytes-uint256-)
+- [_processMessage(, receiveId, , payload)](#BridgeNonFungible-_processMessage-address-bytes32-bytes-bytes-)
+
+</details>
+<details>
+<summary>CrosschainLinked</summary>
+
+- [getLink(chain)](#CrosschainLinked-getLink-bytes-)
+- [_setLink(gateway, counterpart, allowOverride)](#CrosschainLinked-_setLink-address-bytes-bool-)
+- [_sendMessageToCounterpart(chain, payload, attributes)](#CrosschainLinked-_sendMessageToCounterpart-bytes-bytes-bytes---)
+- [_isAuthorizedGateway(instance, sender)](#CrosschainLinked-_isAuthorizedGateway-address-bytes-)
+
+</details>
+<details>
+<summary>ERC7786Recipient</summary>
+
+- [receiveMessage(receiveId, sender, payload)](#ERC7786Recipient-receiveMessage-bytes32-bytes-bytes-)
+
+</details>
+<details>
+<summary>ERC721</summary>
+
+- [supportsInterface(interfaceId)](#ERC721-supportsInterface-bytes4-)
+- [balanceOf(owner)](#ERC721-balanceOf-address-)
+- [ownerOf(tokenId)](#ERC721-ownerOf-uint256-)
+- [name()](#ERC721-name--)
+- [symbol()](#ERC721-symbol--)
+- [tokenURI(tokenId)](#ERC721-tokenURI-uint256-)
+- [_baseURI()](#ERC721-_baseURI--)
+- [approve(to, tokenId)](#ERC721-approve-address-uint256-)
+- [getApproved(tokenId)](#ERC721-getApproved-uint256-)
+- [setApprovalForAll(operator, approved)](#ERC721-setApprovalForAll-address-bool-)
+- [isApprovedForAll(owner, operator)](#ERC721-isApprovedForAll-address-address-)
+- [transferFrom(from, to, tokenId)](#ERC721-transferFrom-address-address-uint256-)
+- [safeTransferFrom(from, to, tokenId)](#ERC721-safeTransferFrom-address-address-uint256-)
+- [safeTransferFrom(from, to, tokenId, data)](#ERC721-safeTransferFrom-address-address-uint256-bytes-)
+- [_ownerOf(tokenId)](#ERC721-_ownerOf-uint256-)
+- [_getApproved(tokenId)](#ERC721-_getApproved-uint256-)
+- [_isAuthorized(owner, spender, tokenId)](#ERC721-_isAuthorized-address-address-uint256-)
+- [_checkAuthorized(owner, spender, tokenId)](#ERC721-_checkAuthorized-address-address-uint256-)
+- [_increaseBalance(account, value)](#ERC721-_increaseBalance-address-uint128-)
+- [_update(to, tokenId, auth)](#ERC721-_update-address-uint256-address-)
+- [_mint(to, tokenId)](#ERC721-_mint-address-uint256-)
+- [_safeMint(to, tokenId)](#ERC721-_safeMint-address-uint256-)
+- [_safeMint(to, tokenId, data)](#ERC721-_safeMint-address-uint256-bytes-)
+- [_burn(tokenId)](#ERC721-_burn-uint256-)
+- [_transfer(from, to, tokenId)](#ERC721-_transfer-address-address-uint256-)
+- [_safeTransfer(from, to, tokenId)](#ERC721-_safeTransfer-address-address-uint256-)
+- [_safeTransfer(from, to, tokenId, data)](#ERC721-_safeTransfer-address-address-uint256-bytes-)
+- [_approve(to, tokenId, auth)](#ERC721-_approve-address-uint256-address-)
+- [_approve(to, tokenId, auth, emitEvent)](#ERC721-_approve-address-uint256-address-bool-)
+- [_setApprovalForAll(owner, operator, approved)](#ERC721-_setApprovalForAll-address-address-bool-)
+- [_requireOwned(tokenId)](#ERC721-_requireOwned-uint256-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+<details>
+<summary>BridgeNonFungible</summary>
+
+- [CrosschainNonFungibleTransferSent(sendId, from, to, tokenId)](#BridgeNonFungible-CrosschainNonFungibleTransferSent-bytes32-address-bytes-uint256-)
+- [CrosschainNonFungibleTransferReceived(receiveId, from, to, tokenId)](#BridgeNonFungible-CrosschainNonFungibleTransferReceived-bytes32-bytes-address-uint256-)
+
+</details>
+<details>
+<summary>CrosschainLinked</summary>
+
+- [LinkRegistered(gateway, counterpart)](#CrosschainLinked-LinkRegistered-address-bytes-)
+
+</details>
+<details>
+<summary>IERC721</summary>
+
+- [Transfer(from, to, tokenId)](#IERC721-Transfer-address-address-uint256-)
+- [Approval(owner, approved, tokenId)](#IERC721-Approval-address-address-uint256-)
+- [ApprovalForAll(owner, operator, approved)](#IERC721-ApprovalForAll-address-address-bool-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+<details>
+<summary>CrosschainLinked</summary>
+
+- [LinkAlreadyRegistered(chain)](#CrosschainLinked-LinkAlreadyRegistered-bytes-)
+
+</details>
+<details>
+<summary>ERC7786Recipient</summary>
+
+- [ERC7786RecipientUnauthorizedGateway(gateway, sender)](#ERC7786Recipient-ERC7786RecipientUnauthorizedGateway-address-bytes-)
+
+</details>
+<details>
+<summary>IERC721Errors</summary>
+
+- [ERC721InvalidOwner(owner)](#IERC721Errors-ERC721InvalidOwner-address-)
+- [ERC721NonexistentToken(tokenId)](#IERC721Errors-ERC721NonexistentToken-uint256-)
+- [ERC721IncorrectOwner(sender, tokenId, owner)](#IERC721Errors-ERC721IncorrectOwner-address-uint256-address-)
+- [ERC721InvalidSender(sender)](#IERC721Errors-ERC721InvalidSender-address-)
+- [ERC721InvalidReceiver(receiver)](#IERC721Errors-ERC721InvalidReceiver-address-)
+- [ERC721InsufficientApproval(operator, tokenId)](#IERC721Errors-ERC721InsufficientApproval-address-uint256-)
+- [ERC721InvalidApprover(approver)](#IERC721Errors-ERC721InvalidApprover-address-)
+- [ERC721InvalidOperator(operator)](#IERC721Errors-ERC721InvalidOperator-address-)
+
+</details>
+</div>
+</div>
+
+<a id="ERC721Crosschain-crosschainTransferFrom-address-bytes-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">crosschainTransferFrom(address from, bytes to, uint256 tokenId) → bytes32</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC721Crosschain-crosschainTransferFrom-address-bytes-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Crosschain variant of [`ERC721.transferFrom`](#ERC721-transferFrom-address-address-uint256-), using the allowance system from the underlying ERC-721 token.
+
+</div>
+</div>
+
+<a id="ERC721Crosschain-_onSend-address-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_onSend(address from, uint256 tokenId)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC721Crosschain-_onSend-address-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+"Locking" tokens is achieved through burning
+
+</div>
+</div>
+
+<a id="ERC721Crosschain-_onReceive-address-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_onReceive(address to, uint256 tokenId)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC721Crosschain-_onReceive-address-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+"Unlocking" tokens is achieved through minting
+
+</div>
+</div>
+
 <a id="ERC721Enumerable"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC721Enumerable`
+## `ERC721Enumerable` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC721/extensions/ERC721Enumerable.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC721/extensions/ERC721Enumerable.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1706,8 +1905,10 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 This implements an optional extension of [`ERC721`](#ERC721) defined in the ERC that adds enumerability
 of all the token ids in the contract as well as all token ids owned by each account.
 
-CAUTION: [`ERC721`](#ERC721) extensions that implement custom `balanceOf` logic, such as [`ERC721Consecutive`](#ERC721Consecutive),
+<Callout type="warn">
+[`ERC721`](#ERC721) extensions that implement custom `balanceOf` logic, such as [`ERC721Consecutive`](#ERC721Consecutive),
 interfere with enumerability and should not be used together with [`ERC721Enumerable`](#ERC721Enumerable).
+</Callout>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Functions</h3>
@@ -1718,8 +1919,9 @@ interfere with enumerability and should not be used together with [`ERC721Enumer
 - [tokenByIndex(index)](#ERC721Enumerable-tokenByIndex-uint256-)
 - [_update(to, tokenId, auth)](#ERC721Enumerable-_update-address-uint256-address-)
 - [_increaseBalance(account, amount)](#ERC721Enumerable-_increaseBalance-address-uint128-)
-#### IERC721Enumerable [!toc]
-#### ERC721 [!toc]
+<details>
+<summary>ERC721</summary>
+
 - [balanceOf(owner)](#ERC721-balanceOf-address-)
 - [ownerOf(tokenId)](#ERC721-ownerOf-uint256-)
 - [name()](#ERC721-name--)
@@ -1748,27 +1950,22 @@ interfere with enumerability and should not be used together with [`ERC721Enumer
 - [_approve(to, tokenId, auth, emitEvent)](#ERC721-_approve-address-uint256-address-bool-)
 - [_setApprovalForAll(owner, operator, approved)](#ERC721-_setApprovalForAll-address-address-bool-)
 - [_requireOwned(tokenId)](#ERC721-_requireOwned-uint256-)
-#### IERC721Errors [!toc]
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### IERC721Enumerable [!toc]
-#### ERC721 [!toc]
-#### IERC721Errors [!toc]
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
+<details>
+<summary>IERC721</summary>
+
 - [Transfer(from, to, tokenId)](#IERC721-Transfer-address-address-uint256-)
 - [Approval(owner, approved, tokenId)](#IERC721-Approval-address-address-uint256-)
 - [ApprovalForAll(owner, operator, approved)](#IERC721-ApprovalForAll-address-address-bool-)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -1777,9 +1974,9 @@ interfere with enumerability and should not be used together with [`ERC721Enumer
 <div className="font-mono">
 - [ERC721OutOfBoundsIndex(owner, index)](#ERC721Enumerable-ERC721OutOfBoundsIndex-address-uint256-)
 - [ERC721EnumerableForbiddenBatchMint()](#ERC721Enumerable-ERC721EnumerableForbiddenBatchMint--)
-#### IERC721Enumerable [!toc]
-#### ERC721 [!toc]
-#### IERC721Errors [!toc]
+<details>
+<summary>IERC721Errors</summary>
+
 - [ERC721InvalidOwner(owner)](#IERC721Errors-ERC721InvalidOwner-address-)
 - [ERC721NonexistentToken(tokenId)](#IERC721Errors-ERC721NonexistentToken-uint256-)
 - [ERC721IncorrectOwner(sender, tokenId, owner)](#IERC721Errors-ERC721IncorrectOwner-address-uint256-address-)
@@ -1788,10 +1985,8 @@ interfere with enumerability and should not be used together with [`ERC721Enumer
 - [ERC721InsufficientApproval(operator, tokenId)](#IERC721Errors-ERC721InsufficientApproval-address-uint256-)
 - [ERC721InvalidApprover(approver)](#IERC721Errors-ERC721InvalidApprover-address-)
 - [ERC721InvalidOperator(operator)](#IERC721Errors-ERC721InvalidOperator-address-)
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -1830,7 +2025,7 @@ This function call must use less than 30 000 gas.
 <div className="px-4">
 
 Returns a token ID owned by `owner` at a given `index` of its token list.
-Use along with [`IERC6909.balanceOf`](../interfaces#IERC6909-balanceOf-address-uint256-) to enumerate all of ``owner``'s tokens.
+Use along with [`ERC721.balanceOf`](#ERC721-balanceOf-address-) to enumerate all of ``owner``'s tokens.
 
 </div>
 </div>
@@ -1865,7 +2060,7 @@ Returns the total amount of tokens stored by the contract.
 <div className="px-4">
 
 Returns a token ID at a given `index` of all the tokens stored by the contract.
-Use along with [`IERC6909TokenSupply.totalSupply`](../interfaces#IERC6909TokenSupply-totalSupply-uint256-) to enumerate all tokens.
+Use along with [`ERC721Enumerable.totalSupply`](#ERC721Enumerable-totalSupply--) to enumerate all tokens.
 
 </div>
 </div>
@@ -1888,7 +2083,7 @@ Transfers `tokenId` from its current owner to `to`, or alternatively mints (or b
 The `auth` argument is optional. If the value passed is non 0, then this function will check that
 `auth` is either the owner of the token, or approved to operate on the token (by the owner).
 
-Emits a [`IERC6909.Transfer`](../interfaces#IERC6909-Transfer-address-address-address-uint256-uint256-) event.
+Emits a [`IERC721.Transfer`](#IERC721-Transfer-address-address-uint256-) event.
 
 <Callout>
 If overriding this function in a way that tracks balances, see also [`ERC721._increaseBalance`](#ERC721-_increaseBalance-address-uint128-).
@@ -1954,9 +2149,9 @@ Batch mint is not allowed.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC721Pausable`
+## `ERC721Pausable` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC721/extensions/ERC721Pausable.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC721/extensions/ERC721Pausable.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1975,8 +2170,8 @@ event of a large bug.
 <Callout type="warn">
 This contract does not include public pause and unpause functions. In
 addition to inheriting this contract, you must define both functions, invoking the
-[`Pausable._pause`](../utils#Pausable-_pause--) and [`Pausable._unpause`](../utils#Pausable-_unpause--) internal functions, with appropriate
-access control, e.g. using [`AccessControl`](../access#AccessControl) or [`Ownable`](../access#Ownable). Not doing so will
+[`Pausable._pause`](/contracts/5.x/api/utils#Pausable-_pause--) and [`Pausable._unpause`](/contracts/5.x/api/utils#Pausable-_unpause--) internal functions, with appropriate
+access control, e.g. using [`AccessControl`](/contracts/5.x/api/access#AccessControl) or [`Ownable`](/contracts/5.x/api/access#Ownable). Not doing so will
 make the contract pause mechanism of the contract unreachable, and thus unusable.
 </Callout>
 
@@ -1984,13 +2179,19 @@ make the contract pause mechanism of the contract unreachable, and thus unusable
 <h3 style={{ marginTop: "0"}}>Functions</h3>
 <div className="font-mono">
 - [_update(to, tokenId, auth)](#ERC721Pausable-_update-address-uint256-address-)
-#### Pausable [!toc]
+<details>
+<summary>Pausable</summary>
+
 - [paused()](#Pausable-paused--)
 - [_requireNotPaused()](#Pausable-_requireNotPaused--)
 - [_requirePaused()](#Pausable-_requirePaused--)
 - [_pause()](#Pausable-_pause--)
 - [_unpause()](#Pausable-_unpause--)
-#### ERC721 [!toc]
+
+</details>
+<details>
+<summary>ERC721</summary>
+
 - [supportsInterface(interfaceId)](#ERC721-supportsInterface-bytes4-)
 - [balanceOf(owner)](#ERC721-balanceOf-address-)
 - [ownerOf(tokenId)](#ERC721-ownerOf-uint256-)
@@ -2021,40 +2222,45 @@ make the contract pause mechanism of the contract unreachable, and thus unusable
 - [_approve(to, tokenId, auth, emitEvent)](#ERC721-_approve-address-uint256-address-bool-)
 - [_setApprovalForAll(owner, operator, approved)](#ERC721-_setApprovalForAll-address-address-bool-)
 - [_requireOwned(tokenId)](#ERC721-_requireOwned-uint256-)
-#### IERC721Errors [!toc]
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### Pausable [!toc]
+<details>
+<summary>Pausable</summary>
+
 - [Paused(account)](#Pausable-Paused-address-)
 - [Unpaused(account)](#Pausable-Unpaused-address-)
-#### ERC721 [!toc]
-#### IERC721Errors [!toc]
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
+
+</details>
+<details>
+<summary>IERC721</summary>
+
 - [Transfer(from, to, tokenId)](#IERC721-Transfer-address-address-uint256-)
 - [Approval(owner, approved, tokenId)](#IERC721-Approval-address-address-uint256-)
 - [ApprovalForAll(owner, operator, approved)](#IERC721-ApprovalForAll-address-address-bool-)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### Pausable [!toc]
+<details>
+<summary>Pausable</summary>
+
 - [EnforcedPause()](#Pausable-EnforcedPause--)
 - [ExpectedPause()](#Pausable-ExpectedPause--)
-#### ERC721 [!toc]
-#### IERC721Errors [!toc]
+
+</details>
+<details>
+<summary>IERC721Errors</summary>
+
 - [ERC721InvalidOwner(owner)](#IERC721Errors-ERC721InvalidOwner-address-)
 - [ERC721NonexistentToken(tokenId)](#IERC721Errors-ERC721NonexistentToken-uint256-)
 - [ERC721IncorrectOwner(sender, tokenId, owner)](#IERC721Errors-ERC721IncorrectOwner-address-uint256-address-)
@@ -2063,10 +2269,8 @@ make the contract pause mechanism of the contract unreachable, and thus unusable
 - [ERC721InsufficientApproval(operator, tokenId)](#IERC721Errors-ERC721InsufficientApproval-address-uint256-)
 - [ERC721InvalidApprover(approver)](#IERC721Errors-ERC721InvalidApprover-address-)
 - [ERC721InvalidOperator(operator)](#IERC721Errors-ERC721InvalidOperator-address-)
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -2095,9 +2299,9 @@ Requirements:
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC721Royalty`
+## `ERC721Royalty` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC721/extensions/ERC721Royalty.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC721/extensions/ERC721Royalty.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2123,7 +2327,9 @@ voluntarily pay royalties together with sales, but note that this standard is no
 <h3 style={{ marginTop: "0"}}>Functions</h3>
 <div className="font-mono">
 - [supportsInterface(interfaceId)](#ERC721Royalty-supportsInterface-bytes4-)
-#### ERC721 [!toc]
+<details>
+<summary>ERC721</summary>
+
 - [balanceOf(owner)](#ERC721-balanceOf-address-)
 - [ownerOf(tokenId)](#ERC721-ownerOf-uint256-)
 - [name()](#ERC721-name--)
@@ -2154,44 +2360,42 @@ voluntarily pay royalties together with sales, but note that this standard is no
 - [_approve(to, tokenId, auth, emitEvent)](#ERC721-_approve-address-uint256-address-bool-)
 - [_setApprovalForAll(owner, operator, approved)](#ERC721-_setApprovalForAll-address-address-bool-)
 - [_requireOwned(tokenId)](#ERC721-_requireOwned-uint256-)
-#### IERC721Errors [!toc]
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
-#### ERC2981 [!toc]
+
+</details>
+<details>
+<summary>ERC2981</summary>
+
 - [royaltyInfo(tokenId, salePrice)](#ERC2981-royaltyInfo-uint256-uint256-)
 - [_feeDenominator()](#ERC2981-_feeDenominator--)
 - [_setDefaultRoyalty(receiver, feeNumerator)](#ERC2981-_setDefaultRoyalty-address-uint96-)
 - [_deleteDefaultRoyalty()](#ERC2981-_deleteDefaultRoyalty--)
 - [_setTokenRoyalty(tokenId, receiver, feeNumerator)](#ERC2981-_setTokenRoyalty-uint256-address-uint96-)
 - [_resetTokenRoyalty(tokenId)](#ERC2981-_resetTokenRoyalty-uint256-)
-#### ERC165 [!toc]
-#### IERC2981 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### ERC721 [!toc]
-#### IERC721Errors [!toc]
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
+<details>
+<summary>IERC721</summary>
+
 - [Transfer(from, to, tokenId)](#IERC721-Transfer-address-address-uint256-)
 - [Approval(owner, approved, tokenId)](#IERC721-Approval-address-address-uint256-)
 - [ApprovalForAll(owner, operator, approved)](#IERC721-ApprovalForAll-address-address-bool-)
-#### ERC2981 [!toc]
-#### ERC165 [!toc]
-#### IERC2981 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### ERC721 [!toc]
-#### IERC721Errors [!toc]
+<details>
+<summary>IERC721Errors</summary>
+
 - [ERC721InvalidOwner(owner)](#IERC721Errors-ERC721InvalidOwner-address-)
 - [ERC721NonexistentToken(tokenId)](#IERC721Errors-ERC721NonexistentToken-uint256-)
 - [ERC721IncorrectOwner(sender, tokenId, owner)](#IERC721Errors-ERC721IncorrectOwner-address-uint256-address-)
@@ -2200,16 +2404,17 @@ voluntarily pay royalties together with sales, but note that this standard is no
 - [ERC721InsufficientApproval(operator, tokenId)](#IERC721Errors-ERC721InsufficientApproval-address-uint256-)
 - [ERC721InvalidApprover(approver)](#IERC721Errors-ERC721InvalidApprover-address-)
 - [ERC721InvalidOperator(operator)](#IERC721Errors-ERC721InvalidOperator-address-)
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
-#### ERC2981 [!toc]
+
+</details>
+<details>
+<summary>ERC2981</summary>
+
 - [ERC2981InvalidDefaultRoyalty(numerator, denominator)](#ERC2981-ERC2981InvalidDefaultRoyalty-uint256-uint256-)
 - [ERC2981InvalidDefaultRoyaltyReceiver(receiver)](#ERC2981-ERC2981InvalidDefaultRoyaltyReceiver-address-)
 - [ERC2981InvalidTokenRoyalty(tokenId, numerator, denominator)](#ERC2981-ERC2981InvalidTokenRoyalty-uint256-uint256-uint256-)
 - [ERC2981InvalidTokenRoyaltyReceiver(tokenId, receiver)](#ERC2981-ERC2981InvalidTokenRoyaltyReceiver-uint256-address-)
-#### ERC165 [!toc]
-#### IERC2981 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -2232,9 +2437,9 @@ voluntarily pay royalties together with sales, but note that this standard is no
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC721URIStorage`
+## `ERC721URIStorage` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC721/extensions/ERC721URIStorage.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC721/extensions/ERC721URIStorage.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2252,7 +2457,10 @@ ERC-721 token with storage based token URI management.
 - [supportsInterface(interfaceId)](#ERC721URIStorage-supportsInterface-bytes4-)
 - [tokenURI(tokenId)](#ERC721URIStorage-tokenURI-uint256-)
 - [_setTokenURI(tokenId, _tokenURI)](#ERC721URIStorage-_setTokenURI-uint256-string-)
-#### ERC721 [!toc]
+- [_suffixURI(tokenId)](#ERC721URIStorage-_suffixURI-uint256-)
+<details>
+<summary>ERC721</summary>
+
 - [balanceOf(owner)](#ERC721-balanceOf-address-)
 - [ownerOf(tokenId)](#ERC721-ownerOf-uint256-)
 - [name()](#ERC721-name--)
@@ -2282,38 +2490,38 @@ ERC-721 token with storage based token URI management.
 - [_approve(to, tokenId, auth, emitEvent)](#ERC721-_approve-address-uint256-address-bool-)
 - [_setApprovalForAll(owner, operator, approved)](#ERC721-_setApprovalForAll-address-address-bool-)
 - [_requireOwned(tokenId)](#ERC721-_requireOwned-uint256-)
-#### IERC721Errors [!toc]
-#### IERC721Metadata [!toc]
-#### IERC4906 [!toc]
-#### IERC721 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### ERC721 [!toc]
-#### IERC721Errors [!toc]
-#### IERC721Metadata [!toc]
-#### IERC4906 [!toc]
+<details>
+<summary>IERC4906</summary>
+
 - [MetadataUpdate(_tokenId)](#IERC4906-MetadataUpdate-uint256-)
 - [BatchMetadataUpdate(_fromTokenId, _toTokenId)](#IERC4906-BatchMetadataUpdate-uint256-uint256-)
-#### IERC721 [!toc]
+
+</details>
+<details>
+<summary>IERC721</summary>
+
 - [Transfer(from, to, tokenId)](#IERC721-Transfer-address-address-uint256-)
 - [Approval(owner, approved, tokenId)](#IERC721-Approval-address-address-uint256-)
 - [ApprovalForAll(owner, operator, approved)](#IERC721-ApprovalForAll-address-address-bool-)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### ERC721 [!toc]
-#### IERC721Errors [!toc]
+<details>
+<summary>IERC721Errors</summary>
+
 - [ERC721InvalidOwner(owner)](#IERC721Errors-ERC721InvalidOwner-address-)
 - [ERC721NonexistentToken(tokenId)](#IERC721Errors-ERC721NonexistentToken-uint256-)
 - [ERC721IncorrectOwner(sender, tokenId, owner)](#IERC721Errors-ERC721IncorrectOwner-address-uint256-address-)
@@ -2322,11 +2530,8 @@ ERC-721 token with storage based token URI management.
 - [ERC721InsufficientApproval(operator, tokenId)](#IERC721Errors-ERC721InsufficientApproval-address-uint256-)
 - [ERC721InvalidApprover(approver)](#IERC721Errors-ERC721InvalidApprover-address-)
 - [ERC721InvalidOperator(operator)](#IERC721Errors-ERC721InvalidOperator-address-)
-#### IERC721Metadata [!toc]
-#### IERC4906 [!toc]
-#### IERC721 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -2381,7 +2586,24 @@ This function call must use less than 30 000 gas.
 
 Sets `_tokenURI` as the tokenURI of `tokenId`.
 
-Emits [`IERC4906.MetadataUpdate`](../interfaces#IERC4906-MetadataUpdate-uint256-).
+Emits [`IERC4906.MetadataUpdate`](/contracts/5.x/api/interfaces#IERC4906-MetadataUpdate-uint256-).
+
+</div>
+</div>
+
+<a id="ERC721URIStorage-_suffixURI-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_suffixURI(uint256 tokenId) → string</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC721URIStorage-_suffixURI-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the suffix part of the tokenURI for `tokenId`.
 
 </div>
 </div>
@@ -2390,9 +2612,9 @@ Emits [`IERC4906.MetadataUpdate`](../interfaces#IERC4906-MetadataUpdate-uint256-
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC721Votes`
+## `ERC721Votes` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC721/extensions/ERC721Votes.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC721/extensions/ERC721Votes.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2402,7 +2624,7 @@ Emits [`IERC4906.MetadataUpdate`](../interfaces#IERC4906-MetadataUpdate-uint256-
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Votes.sol";
 ```
 
-Extension of ERC-721 to support voting and delegation as implemented by [`Votes`](../governance#Votes), where each individual NFT counts
+Extension of ERC-721 to support voting and delegation as implemented by [`Votes`](/contracts/5.x/api/governance#Votes), where each individual NFT counts
 as 1 vote unit.
 
 Tokens do not count as votes until they are delegated, because votes must be tracked which incurs an additional cost
@@ -2415,7 +2637,9 @@ the votes in governance decisions, or they can delegate to themselves to be thei
 - [_update(to, tokenId, auth)](#ERC721Votes-_update-address-uint256-address-)
 - [_getVotingUnits(account)](#ERC721Votes-_getVotingUnits-address-)
 - [_increaseBalance(account, amount)](#ERC721Votes-_increaseBalance-address-uint128-)
-#### Votes [!toc]
+<details>
+<summary>Votes</summary>
+
 - [clock()](#Votes-clock--)
 - [CLOCK_MODE()](#Votes-CLOCK_MODE--)
 - [_validateTimepoint(timepoint)](#Votes-_validateTimepoint-uint256-)
@@ -2431,21 +2655,29 @@ the votes in governance decisions, or they can delegate to themselves to be thei
 - [_moveDelegateVotes(from, to, amount)](#Votes-_moveDelegateVotes-address-address-uint256-)
 - [_numCheckpoints(account)](#Votes-_numCheckpoints-address-)
 - [_checkpoints(account, pos)](#Votes-_checkpoints-address-uint32-)
-#### IERC5805 [!toc]
-#### IVotes [!toc]
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [nonces(owner)](#Nonces-nonces-address-)
 - [_useNonce(owner)](#Nonces-_useNonce-address-)
 - [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
-#### EIP712 [!toc]
+
+</details>
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
-#### ERC721 [!toc]
+
+</details>
+<details>
+<summary>ERC721</summary>
+
 - [supportsInterface(interfaceId)](#ERC721-supportsInterface-bytes4-)
 - [balanceOf(owner)](#ERC721-balanceOf-address-)
 - [ownerOf(tokenId)](#ERC721-ownerOf-uint256-)
@@ -2475,55 +2707,63 @@ the votes in governance decisions, or they can delegate to themselves to be thei
 - [_approve(to, tokenId, auth, emitEvent)](#ERC721-_approve-address-uint256-address-bool-)
 - [_setApprovalForAll(owner, operator, approved)](#ERC721-_setApprovalForAll-address-address-bool-)
 - [_requireOwned(tokenId)](#ERC721-_requireOwned-uint256-)
-#### IERC721Errors [!toc]
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### Votes [!toc]
-#### IERC5805 [!toc]
-#### IVotes [!toc]
+<details>
+<summary>IVotes</summary>
+
 - [DelegateChanged(delegator, fromDelegate, toDelegate)](#IVotes-DelegateChanged-address-address-address-)
 - [DelegateVotesChanged(delegate, previousVotes, newVotes)](#IVotes-DelegateVotesChanged-address-uint256-uint256-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
-#### ERC721 [!toc]
-#### IERC721Errors [!toc]
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
+
+</details>
+<details>
+<summary>IERC721</summary>
+
 - [Transfer(from, to, tokenId)](#IERC721-Transfer-address-address-uint256-)
 - [Approval(owner, approved, tokenId)](#IERC721-Approval-address-address-uint256-)
 - [ApprovalForAll(owner, operator, approved)](#IERC721-ApprovalForAll-address-address-bool-)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### Votes [!toc]
+<details>
+<summary>Votes</summary>
+
 - [ERC6372InconsistentClock()](#Votes-ERC6372InconsistentClock--)
 - [ERC5805FutureLookup(timepoint, clock)](#Votes-ERC5805FutureLookup-uint256-uint48-)
-#### IERC5805 [!toc]
-#### IVotes [!toc]
+
+</details>
+<details>
+<summary>IVotes</summary>
+
 - [VotesExpiredSignature(expiry)](#IVotes-VotesExpiredSignature-uint256-)
-#### IERC6372 [!toc]
-#### Nonces [!toc]
+
+</details>
+<details>
+<summary>Nonces</summary>
+
 - [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
-#### ERC721 [!toc]
-#### IERC721Errors [!toc]
+
+</details>
+<details>
+<summary>IERC721Errors</summary>
+
 - [ERC721InvalidOwner(owner)](#IERC721Errors-ERC721InvalidOwner-address-)
 - [ERC721NonexistentToken(tokenId)](#IERC721Errors-ERC721NonexistentToken-uint256-)
 - [ERC721IncorrectOwner(sender, tokenId, owner)](#IERC721Errors-ERC721IncorrectOwner-address-uint256-address-)
@@ -2532,10 +2772,8 @@ the votes in governance decisions, or they can delegate to themselves to be thei
 - [ERC721InsufficientApproval(operator, tokenId)](#IERC721Errors-ERC721InsufficientApproval-address-uint256-)
 - [ERC721InvalidApprover(approver)](#IERC721Errors-ERC721InvalidApprover-address-)
 - [ERC721InvalidOperator(operator)](#IERC721Errors-ERC721InvalidOperator-address-)
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -2553,7 +2791,7 @@ the votes in governance decisions, or they can delegate to themselves to be thei
 
 See [`ERC721._update`](#ERC721-_update-address-uint256-address-). Adjusts votes when tokens are transferred.
 
-Emits a [`IVotes.DelegateVotesChanged`](../governance#IVotes-DelegateVotesChanged-address-uint256-uint256-) event.
+Emits a [`IVotes.DelegateVotesChanged`](/contracts/5.x/api/governance#IVotes-DelegateVotesChanged-address-uint256-uint256-) event.
 
 </div>
 </div>
@@ -2600,9 +2838,9 @@ See [`ERC721._increaseBalance`](#ERC721-_increaseBalance-address-uint128-). We n
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC721Wrapper`
+## `ERC721Wrapper` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC721/extensions/ERC721Wrapper.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC721/extensions/ERC721Wrapper.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2627,8 +2865,9 @@ the wrapping of an existing "basic" ERC-721 into a governance token.
 - [onERC721Received(, from, tokenId, )](#ERC721Wrapper-onERC721Received-address-address-uint256-bytes-)
 - [_recover(account, tokenId)](#ERC721Wrapper-_recover-address-uint256-)
 - [underlying()](#ERC721Wrapper-underlying--)
-#### IERC721Receiver [!toc]
-#### ERC721 [!toc]
+<details>
+<summary>ERC721</summary>
+
 - [supportsInterface(interfaceId)](#ERC721-supportsInterface-bytes4-)
 - [balanceOf(owner)](#ERC721-balanceOf-address-)
 - [ownerOf(tokenId)](#ERC721-ownerOf-uint256-)
@@ -2660,27 +2899,22 @@ the wrapping of an existing "basic" ERC-721 into a governance token.
 - [_approve(to, tokenId, auth, emitEvent)](#ERC721-_approve-address-uint256-address-bool-)
 - [_setApprovalForAll(owner, operator, approved)](#ERC721-_setApprovalForAll-address-address-bool-)
 - [_requireOwned(tokenId)](#ERC721-_requireOwned-uint256-)
-#### IERC721Errors [!toc]
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### IERC721Receiver [!toc]
-#### ERC721 [!toc]
-#### IERC721Errors [!toc]
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
+<details>
+<summary>IERC721</summary>
+
 - [Transfer(from, to, tokenId)](#IERC721-Transfer-address-address-uint256-)
 - [Approval(owner, approved, tokenId)](#IERC721-Approval-address-address-uint256-)
 - [ApprovalForAll(owner, operator, approved)](#IERC721-ApprovalForAll-address-address-bool-)
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -2688,9 +2922,9 @@ the wrapping of an existing "basic" ERC-721 into a governance token.
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
 - [ERC721UnsupportedToken(token)](#ERC721Wrapper-ERC721UnsupportedToken-address-)
-#### IERC721Receiver [!toc]
-#### ERC721 [!toc]
-#### IERC721Errors [!toc]
+<details>
+<summary>IERC721Errors</summary>
+
 - [ERC721InvalidOwner(owner)](#IERC721Errors-ERC721InvalidOwner-address-)
 - [ERC721NonexistentToken(tokenId)](#IERC721Errors-ERC721NonexistentToken-uint256-)
 - [ERC721IncorrectOwner(sender, tokenId, owner)](#IERC721Errors-ERC721IncorrectOwner-address-uint256-address-)
@@ -2699,10 +2933,8 @@ the wrapping of an existing "basic" ERC-721 into a governance token.
 - [ERC721InsufficientApproval(operator, tokenId)](#IERC721Errors-ERC721InsufficientApproval-address-uint256-)
 - [ERC721InvalidApprover(approver)](#IERC721Errors-ERC721InvalidApprover-address-)
 - [ERC721InvalidOperator(operator)](#IERC721Errors-ERC721InvalidOperator-address-)
-#### IERC721Metadata [!toc]
-#### IERC721 [!toc]
-#### ERC165 [!toc]
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -2771,7 +3003,7 @@ Overrides [`IERC721Receiver.onERC721Received`](#IERC721Receiver-onERC721Received
 this contract.
 
 In case there's data attached, it validates that the operator is this contract, so only trusted data
-is accepted from [`ERC20Wrapper.depositFor`](/contracts/5.x/api/token/ERC20#ERC20Wrapper-depositFor-address-uint256-).
+is accepted from [`ERC721Wrapper.depositFor`](#ERC721Wrapper-depositFor-address-uint256---).
 
 <Callout type="warn">
 Doesn't work with unsafe transfers (eg. [`IERC721.transferFrom`](#IERC721-transferFrom-address-address-uint256-)). Use [`ERC721Wrapper._recover`](#ERC721Wrapper-_recover-address-uint256-)
@@ -2837,9 +3069,9 @@ The received ERC-721 token couldn't be wrapped.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `IERC721Enumerable`
+## `IERC721Enumerable` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC721/extensions/IERC721Enumerable.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC721/extensions/IERC721Enumerable.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2857,7 +3089,9 @@ See https://eips.ethereum.org/EIPS/eip-721
 - [totalSupply()](#IERC721Enumerable-totalSupply--)
 - [tokenOfOwnerByIndex(owner, index)](#IERC721Enumerable-tokenOfOwnerByIndex-address-uint256-)
 - [tokenByIndex(index)](#IERC721Enumerable-tokenByIndex-uint256-)
-#### IERC721 [!toc]
+<details>
+<summary>IERC721</summary>
+
 - [balanceOf(owner)](#IERC721-balanceOf-address-)
 - [ownerOf(tokenId)](#IERC721-ownerOf-uint256-)
 - [safeTransferFrom(from, to, tokenId, data)](#IERC721-safeTransferFrom-address-address-uint256-bytes-)
@@ -2867,19 +3101,28 @@ See https://eips.ethereum.org/EIPS/eip-721
 - [setApprovalForAll(operator, approved)](#IERC721-setApprovalForAll-address-bool-)
 - [getApproved(tokenId)](#IERC721-getApproved-uint256-)
 - [isApprovedForAll(owner, operator)](#IERC721-isApprovedForAll-address-address-)
-#### IERC165 [!toc]
+
+</details>
+<details>
+<summary>IERC165</summary>
+
 - [supportsInterface(interfaceId)](#IERC165-supportsInterface-bytes4-)
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### IERC721 [!toc]
+<details>
+<summary>IERC721</summary>
+
 - [Transfer(from, to, tokenId)](#IERC721-Transfer-address-address-uint256-)
 - [Approval(owner, approved, tokenId)](#IERC721-Approval-address-address-uint256-)
 - [ApprovalForAll(owner, operator, approved)](#IERC721-ApprovalForAll-address-address-bool-)
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -2913,7 +3156,7 @@ Returns the total amount of tokens stored by the contract.
 <div className="px-4">
 
 Returns a token ID owned by `owner` at a given `index` of its token list.
-Use along with [`IERC6909.balanceOf`](../interfaces#IERC6909-balanceOf-address-uint256-) to enumerate all of ``owner``'s tokens.
+Use along with [`ERC721.balanceOf`](#ERC721-balanceOf-address-) to enumerate all of ``owner``'s tokens.
 
 </div>
 </div>
@@ -2931,7 +3174,7 @@ Use along with [`IERC6909.balanceOf`](../interfaces#IERC6909-balanceOf-address-u
 <div className="px-4">
 
 Returns a token ID at a given `index` of all the tokens stored by the contract.
-Use along with [`IERC6909TokenSupply.totalSupply`](../interfaces#IERC6909TokenSupply-totalSupply-uint256-) to enumerate all tokens.
+Use along with [`ERC721Enumerable.totalSupply`](#ERC721Enumerable-totalSupply--) to enumerate all tokens.
 
 </div>
 </div>
@@ -2940,9 +3183,9 @@ Use along with [`IERC6909TokenSupply.totalSupply`](../interfaces#IERC6909TokenSu
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `IERC721Metadata`
+## `IERC721Metadata` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC721/extensions/IERC721Metadata.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC721/extensions/IERC721Metadata.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2960,7 +3203,9 @@ See https://eips.ethereum.org/EIPS/eip-721
 - [name()](#IERC721Metadata-name--)
 - [symbol()](#IERC721Metadata-symbol--)
 - [tokenURI(tokenId)](#IERC721Metadata-tokenURI-uint256-)
-#### IERC721 [!toc]
+<details>
+<summary>IERC721</summary>
+
 - [balanceOf(owner)](#IERC721-balanceOf-address-)
 - [ownerOf(tokenId)](#IERC721-ownerOf-uint256-)
 - [safeTransferFrom(from, to, tokenId, data)](#IERC721-safeTransferFrom-address-address-uint256-bytes-)
@@ -2970,19 +3215,28 @@ See https://eips.ethereum.org/EIPS/eip-721
 - [setApprovalForAll(operator, approved)](#IERC721-setApprovalForAll-address-bool-)
 - [getApproved(tokenId)](#IERC721-getApproved-uint256-)
 - [isApprovedForAll(owner, operator)](#IERC721-isApprovedForAll-address-address-)
-#### IERC165 [!toc]
+
+</details>
+<details>
+<summary>IERC165</summary>
+
 - [supportsInterface(interfaceId)](#IERC165-supportsInterface-bytes4-)
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### IERC721 [!toc]
+<details>
+<summary>IERC721</summary>
+
 - [Transfer(from, to, tokenId)](#IERC721-Transfer-address-address-uint256-)
 - [Approval(owner, approved, tokenId)](#IERC721-Approval-address-address-uint256-)
 - [ApprovalForAll(owner, operator, approved)](#IERC721-ApprovalForAll-address-address-bool-)
-#### IERC165 [!toc]
+
+</details>
 </div>
 </div>
 
@@ -3041,9 +3295,9 @@ Returns the Uniform Resource Identifier (URI) for `tokenId` token.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC721Holder`
+## `ERC721Holder` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC721/utils/ERC721Holder.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC721/utils/ERC721Holder.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3065,7 +3319,6 @@ Make sure the contract is able to use its token with [`IERC721.safeTransferFrom`
 <h3 style={{ marginTop: "0"}}>Functions</h3>
 <div className="font-mono">
 - [onERC721Received(, , , )](#ERC721Holder-onERC721Received-address-address-uint256-bytes-)
-#### IERC721Receiver [!toc]
 </div>
 </div>
 
@@ -3092,9 +3345,9 @@ Always returns `IERC721Receiver.onERC721Received.selector`.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC721Utils`
+## `ERC721Utils` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/token/ERC721/utils/ERC721Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC721/utils/ERC721Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3138,3 +3391,4 @@ the transfer.
 
 </div>
 </div>
+

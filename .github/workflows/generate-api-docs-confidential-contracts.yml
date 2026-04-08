@@ -1,16 +1,7 @@
-# TEMPLATE: Docs Repository Receiver - Non-Versioned Paths
-# Copy to: .github/workflows/generate-api-docs-{YOUR_CONTRACT}.yml (in docs repo)
-#
-# SETUP INSTRUCTIONS:
-# 1. Update workflow name (line 15)
-# 2. Update default tag_name and trigger_type (lines 13 and 18)
-# 3. Configure environment variables (lines 21-24):
-#    - SOURCE_REPO: GitHub owner/repo name
-#    - SOURCE_REPO_URL: Full git URL
-#    - BASE_OUTPUT_PATH: Where to put generated docs
-#    - USE_VERSIONED_PATHS: Keep as 'false' for non-versioned paths
+# Docs Repository Receiver - Non-Versioned Paths
+# Receives trigger from openzeppelin-confidential-contracts and generates API docs
 
-name: Generate API Docs - Community Contracts
+name: Generate API Docs - Confidential Contracts
 
 on:
   workflow_dispatch:
@@ -19,21 +10,21 @@ on:
         description: 'Tag name or commit SHA to generate docs from'
         required: true
         type: string
-        default: 'main'  # TODO: Update default ref
+        default: 'v0.4.0'
       trigger_type:
         description: 'Trigger type (tag or commit)'
         required: false
         type: string
-        default: 'commit'  # TODO: Update if using tags
+        default: 'tag'
 
 permissions:
   contents: write
   pull-requests: write
 
 env:
-  SOURCE_REPO: 'OpenZeppelin/openzeppelin-community-contracts'
-  SOURCE_REPO_URL: 'https://github.com/OpenZeppelin/openzeppelin-community-contracts.git'
-  BASE_OUTPUT_PATH: 'content/community-contracts'
+  SOURCE_REPO: 'OpenZeppelin/openzeppelin-confidential-contracts'
+  SOURCE_REPO_URL: 'https://github.com/OpenZeppelin/openzeppelin-confidential-contracts.git'
+  BASE_OUTPUT_PATH: 'content/confidential-contracts'
   USE_VERSIONED_PATHS: 'false'
 
 jobs:
@@ -76,21 +67,17 @@ jobs:
           USE_VERSIONED="${{ env.USE_VERSIONED_PATHS }}"
 
           if [[ "$USE_VERSIONED" == "false" ]]; then
-            # Non-versioned path (e.g., community-contracts/api)
             OUTPUT_DIR="${BASE_PATH}/api"
             echo "📁 Using non-versioned path"
           elif [[ "$TRIGGER_TYPE" == "commit" ]]; then
-            # Commit-based trigger uses /latest/api
             OUTPUT_DIR="${BASE_PATH}/latest/api"
             echo "🔄 Using latest path for commit-based trigger"
           else
-            # Tag-based trigger: extract major version
             if [[ "$TAG_NAME" =~ v([0-9]+) ]]; then
               MAJOR_VERSION="${BASH_REMATCH[1]}"
               OUTPUT_DIR="${BASE_PATH}/${MAJOR_VERSION}.x/api"
               echo "📊 Detected version: ${MAJOR_VERSION}.x"
             else
-              # Fallback for non-standard tags
               OUTPUT_DIR="${BASE_PATH}/latest/api"
               echo "⚠️  Non-standard tag format, using latest"
             fi
@@ -124,13 +111,12 @@ jobs:
           if [ -n "$(git status --porcelain)" ]; then
             echo "📝 Creating branch and committing documentation changes..."
 
-            # Create unique branch name
             BRANCH_NAME="docs/api-update-${{ env.SOURCE_REPO }}-${{ inputs.tag_name }}"
             BRANCH_NAME=$(echo "$BRANCH_NAME" | sed 's/\//-/g' | sed 's/OpenZeppelin-//g')
 
             git checkout -b "$BRANCH_NAME"
             git add .
-            git commit -m "📚 Update API docs for ${{ env.SOURCE_REPO }} ${{ inputs.tag_name }}
+            git commit -m "Update API docs for ${{ env.SOURCE_REPO }} ${{ inputs.tag_name }}
 
             - Repository: ${{ env.SOURCE_REPO }}
             - Ref: ${{ inputs.tag_name }}
@@ -142,7 +128,6 @@ jobs:
 
             git push origin "$BRANCH_NAME"
 
-            # Create Pull Request
             gh pr create --title "[CI] Update API docs for ${{ env.SOURCE_REPO }} ${{ inputs.tag_name }}" \
                      --body "## API Documentation Update
 
