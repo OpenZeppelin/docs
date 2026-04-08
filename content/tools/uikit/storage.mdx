@@ -1,0 +1,127 @@
+---
+title: Storage
+---
+
+`@openzeppelin/ui-storage` provides client-side persistence for UIKit applications. It is built on [Dexie.js](https://dexie.org/) (an IndexedDB wrapper) and ships a plugin system for extending storage with domain-specific functionality.
+
+## Installation
+
+```bash
+pnpm add @openzeppelin/ui-storage
+```
+
+## Core Abstractions
+
+The package exposes two base classes that your application can extend:
+
+| Class | Description |
+| --- | --- |
+| `EntityStorage<T>` | Generic IndexedDB store for typed entities. Handles create, read, update, delete, and query. |
+| `KeyValueStorage` | Simple key-value store backed by IndexedDB. Useful for persisting settings and preferences. |
+
+Both classes wrap a Dexie database instance and can be composed with plugins.
+
+## Account Alias Plugin
+
+The built-in **account alias plugin** persists address-to-name mappings. It powers the `AddressBookWidget` and integrates with `AddressLabelProvider` and `AddressSuggestionProvider` to resolve human-readable labels automatically across all `AddressDisplay` and `AddressField` components.
+
+### Setup
+
+```tsx
+import { createAccountAliasPlugin } from '@openzeppelin/ui-storage';
+
+const aliasPlugin = createAccountAliasPlugin({
+  networkId: 'ethereum-mainnet',
+});
+```
+
+### Integration with Address Providers
+
+Mount the providers near the root of your app to activate automatic label resolution:
+
+```tsx
+import {
+  AddressLabelProvider,
+  AddressSuggestionProvider,
+} from '@openzeppelin/ui-components';
+import { createAccountAliasPlugin } from '@openzeppelin/ui-storage';
+
+const aliasPlugin = createAccountAliasPlugin({ networkId: 'ethereum-mainnet' });
+
+function App() {
+  return (
+    <AddressLabelProvider plugin={aliasPlugin}>
+      <AddressSuggestionProvider plugin={aliasPlugin}>
+        <YourApp />
+      </AddressSuggestionProvider>
+    </AddressLabelProvider>
+  );
+}
+```
+
+Once mounted:
+
+- Every `AddressDisplay` in the subtree automatically shows the saved alias instead of the raw address.
+- Every `AddressField` shows autocomplete suggestions as the user types.
+
+### AddressBookWidget
+
+The `AddressBookWidget` from `@openzeppelin/ui-renderer` provides a full management UI on top of the alias plugin — create, edit, delete, search, and import/export saved addresses:
+
+```tsx
+import { AddressBookWidget } from '@openzeppelin/ui-renderer';
+
+<AddressBookWidget
+  networkId="ethereum-mainnet"
+  addressing={runtime.addressing}
+/>
+```
+
+See [Components — AddressBookWidget](/tools/uikit/components#addressbookwidget) for a screenshot and usage details.
+
+## Custom Entity Stores
+
+Extend `EntityStorage` to create typed stores for your own domain objects:
+
+```tsx
+import { EntityStorage } from '@openzeppelin/ui-storage';
+
+interface SavedContract {
+  id: string;
+  address: string;
+  name: string;
+  networkId: string;
+  addedAt: number;
+}
+
+class ContractStore extends EntityStorage<SavedContract> {
+  constructor() {
+    super('contracts', { keyPath: 'id' });
+  }
+
+  async findByNetwork(networkId: string): Promise<SavedContract[]> {
+    return this.query((item) => item.networkId === networkId);
+  }
+}
+
+const contractStore = new ContractStore();
+await contractStore.add({ id: '...', address: '0x...', name: 'My Token', networkId: 'ethereum-mainnet', addedAt: Date.now() });
+```
+
+## Key-Value Store
+
+Use `KeyValueStorage` for simple settings and flags:
+
+```tsx
+import { KeyValueStorage } from '@openzeppelin/ui-storage';
+
+const settings = new KeyValueStorage('app-settings');
+
+await settings.set('theme', 'dark');
+const theme = await settings.get('theme'); // 'dark'
+```
+
+## Next Steps
+
+- [Components](/tools/uikit/components) — UI components that consume storage plugins
+- [React Integration](/tools/uikit/react-integration) — Wire up providers and wallet state
