@@ -10,17 +10,17 @@ Smart accounts are contracts that manage the composition of authorization intent
 
 The [accounts](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/accounts) package provides a comprehensive smart account framework, enabling programmable authorization. Rather than hard-coding signature checks directly into the account contract, this framework organizes authorization as a composition of three core elements: context rules, signers, and policies.
 
-To achieve this composability, smart accounts implement the `CustomAccountInterface` and define authorization as data and behavior that can evolve over time. The framework takes a context-centric approach, separating three distinct concerns: who is allowed to act (signers), what they are allowed to do (scope or context rules), and how those permissions are enforced (policies).
+To achieve this composability, smart accounts implement the `CustomAccountInterface` and define authorization as data and behavior that can evolve over time. The framework takes a context-centric approach, separating three distinct concerns: authentication (signers prove identity), authorization scope (context rules bind signers and policies to specific operations), and enforcement logic (policies apply business constraints like spending limits or thresholds).
 
 This separation is made practical by externalizing parts of the logic and state to dedicated contracts. Specifically, policies are external contracts that enforce constraints and can maintain their own state, while verifiers are external contracts that handle signature validation logic. This modular architecture enables flexibility and allows multiple smart accounts to share well-audited verification and policy logic. The Protocol 23 improvements make this design efficient, with substantially cheaper cross-contract calls enabling practical composition of multiple external contracts.
 
-## Core Components
+## Components
 
-The framework separates three distinct concerns:
+The framework is built on three core components:
 
-- **What** (Context Rules): Defines the scope (e.g. call `transfer()` on some token, call any function of a specific contract, deploy contracts, or just any call to any contract)
-- **Who** (Signers): Identifies the authorized entities (e.g. cryptographic keys, G-accounts, or other C-accounts)
-- **How** (Policies): Enforces business logic and constraints (e.g. amount < 500, every month, or 2-of-3 threshold)
+- **Context Rules**: Define the scope (e.g. call `transfer()` on some token, call any function of a specific contract, deploy contracts, or just any call to any contract)
+- **Signers**: Identifie the authorized entities (e.g. cryptographic keys, G-accounts, or other C-accounts)
+- **Policies**: Enforce business logic and constraints (e.g. amount < 500, every month, or 2-of-3 threshold)
 
 ```mermaid
 graph LR
@@ -47,12 +47,12 @@ graph LR
     CR3 --- S4
     CR3 --- S5
 
-    style SA fill:#E8E8E8,stroke:#333,stroke-width:2px
-    style S1 fill:#6B9BD1
-    style S2 fill:#6B9BD1
-    style S3 fill:#F4D03F
-    style S4 fill:#A9DA9B
-    style S5 fill:#A9DA9B
+    style SA fill:transparent,stroke:#888,stroke-width:2px
+    style S1 fill:#4A7FB5,color:#fff
+    style S2 fill:#4A7FB5,color:#fff
+    style S3 fill:#B8860B,color:#fff
+    style S4 fill:#3A7D44,color:#fff
+    style S5 fill:#3A7D44,color:#fff
 ```
 
 ### Context Rules
@@ -79,11 +79,10 @@ This separation allows for clean composition of authorization requirements while
 
 ## Authorization Flow
 
-Authorization is determined by matching the current call context against the account's context rules:
+Authorization is determined per authorization context by evaluating the specific context rule explicitly selected by the client:
 
-1. **Rule Collection**: Retrieve all non-expired rules for the specific context type and default rules
-2. **Rule Evaluation**: For each rule (newest first), authenticate signers and validate policies
-3. **Policy Enforcement**: If enough signers are authenticated and policy prechecks succeed, trigger policy state changes
-4. **Result**: Grant or deny authorization
+1. **Rule Lookup**: Look up the context rule specified by the client via `context_rule_ids` in the `AuthPayload`
+2. **Rule Evaluation**: Validate the rule matches the context, authenticate signers, and enforce policies (policies panic on failure)
+3. **Result**: Grant or deny authorization
 
 For detailed documentation, see [Authorization Flow](/stellar-contracts/accounts/authorization-flow).
