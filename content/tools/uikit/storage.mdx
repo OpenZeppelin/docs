@@ -27,31 +27,47 @@ The built-in **account alias plugin** persists address-to-name mappings. It powe
 
 ### Setup
 
-```tsx
-import { createAccountAliasPlugin } from '@openzeppelin/ui-storage';
+Create a Dexie database instance with the alias schema, then use the provided hooks:
 
-const aliasPlugin = createAccountAliasPlugin({
-  networkId: 'ethereum-mainnet',
-});
+```tsx
+import {
+  createDexieDatabase,
+  ALIAS_SCHEMA,
+  useAliasLabelResolver,
+  useAliasSuggestionResolver,
+  useAddressBookWidgetProps,
+} from '@openzeppelin/ui-storage';
+import Dexie from 'dexie';
+
+const db = createDexieDatabase(new Dexie('my-app'), ALIAS_SCHEMA);
 ```
 
 ### Integration with Address Providers
 
-Mount the providers near the root of your app to activate automatic label resolution:
+Mount the providers near the root of your app to activate automatic label resolution. The `useAliasLabelResolver` and `useAliasSuggestionResolver` hooks return props that can be spread directly into the respective providers:
 
 ```tsx
 import {
   AddressLabelProvider,
   AddressSuggestionProvider,
 } from '@openzeppelin/ui-components';
-import { createAccountAliasPlugin } from '@openzeppelin/ui-storage';
+import {
+  createDexieDatabase,
+  ALIAS_SCHEMA,
+  useAliasLabelResolver,
+  useAliasSuggestionResolver,
+} from '@openzeppelin/ui-storage';
+import Dexie from 'dexie';
 
-const aliasPlugin = createAccountAliasPlugin({ networkId: 'ethereum-mainnet' });
+const db = createDexieDatabase(new Dexie('my-app'), ALIAS_SCHEMA);
 
 function App() {
+  const labelResolver = useAliasLabelResolver(db);
+  const suggestionResolver = useAliasSuggestionResolver(db);
+
   return (
-    <AddressLabelProvider plugin={aliasPlugin}>
-      <AddressSuggestionProvider plugin={aliasPlugin}>
+    <AddressLabelProvider {...labelResolver}>
+      <AddressSuggestionProvider {...suggestionResolver}>
         <YourApp />
       </AddressSuggestionProvider>
     </AddressLabelProvider>
@@ -66,25 +82,36 @@ Once mounted:
 
 ### AddressBookWidget
 
-The `AddressBookWidget` from `@openzeppelin/ui-renderer` provides a full management UI on top of the alias plugin — create, edit, delete, search, and import/export saved addresses:
+Wire `AddressBookWidget` using the `useAddressBookWidgetProps` hook, which returns all the props the widget needs:
 
 ```tsx
 import { AddressBookWidget } from '@openzeppelin/ui-renderer';
+import { createDexieDatabase, ALIAS_SCHEMA, useAddressBookWidgetProps } from '@openzeppelin/ui-storage';
+import Dexie from 'dexie';
 
-<AddressBookWidget
-  networkId="ethereum-mainnet"
-  addressing={runtime.addressing}
-/>
+const db = createDexieDatabase(new Dexie('my-app'), ALIAS_SCHEMA);
+
+function AddressBook({ addressing }) {
+  const widgetProps = useAddressBookWidgetProps(db, { networkId: 'ethereum-mainnet' });
+
+  return (
+    <AddressBookWidget
+      {...widgetProps}
+      addressing={addressing}
+    />
+  );
+}
 ```
 
-See [Components — AddressBookWidget](/tools/uikit/components#addressbookwidget) for a screenshot and usage details.
+See [Components — AddressBookWidget](/tools/uikit/components#addressbookwidget) for a screenshot.
 
 ## Custom Entity Stores
 
-Extend `EntityStorage` to create typed stores for your own domain objects:
+Extend `EntityStorage` to create typed stores for your own domain objects. The constructor takes a Dexie database instance and a table name:
 
 ```tsx
-import { EntityStorage } from '@openzeppelin/ui-storage';
+import { EntityStorage, createDexieDatabase } from '@openzeppelin/ui-storage';
+import Dexie from 'dexie';
 
 interface SavedContract {
   id: string;
@@ -94,9 +121,12 @@ interface SavedContract {
   addedAt: number;
 }
 
+const MY_SCHEMA = { contracts: '++id, address, networkId' };
+const db = createDexieDatabase(new Dexie('my-app'), MY_SCHEMA);
+
 class ContractStore extends EntityStorage<SavedContract> {
   constructor() {
-    super('contracts', { keyPath: 'id' });
+    super(db, 'contracts');
   }
 
   async findByNetwork(networkId: string): Promise<SavedContract[]> {
@@ -110,13 +140,22 @@ await contractStore.add({ id: '...', address: '0x...', name: 'My Token', network
 
 ## Key-Value Store
 
-Use `KeyValueStorage` for simple settings and flags:
+Use `KeyValueStorage` for simple settings and flags. Like `EntityStorage`, it takes a Dexie db instance and a table name:
 
 ```tsx
-import { KeyValueStorage } from '@openzeppelin/ui-storage';
+import { KeyValueStorage, createDexieDatabase } from '@openzeppelin/ui-storage';
+import Dexie from 'dexie';
 
-const settings = new KeyValueStorage('app-settings');
+const MY_SCHEMA = { settings: 'key' };
+const db = createDexieDatabase(new Dexie('my-app'), MY_SCHEMA);
 
+class AppSettings extends KeyValueStorage<string> {
+  constructor() {
+    super(db, 'settings');
+  }
+}
+
+const settings = new AppSettings();
 await settings.set('theme', 'dark');
 const theme = await settings.get('theme'); // 'dark'
 ```

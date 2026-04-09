@@ -220,11 +220,15 @@ A full-featured address book UI for managing saved addresses and their human-rea
 
 ```tsx
 import { AddressBookWidget } from '@openzeppelin/ui-renderer';
+import { createDexieDatabase, ALIAS_SCHEMA, useAddressBookWidgetProps } from '@openzeppelin/ui-storage';
+import Dexie from 'dexie';
 
-<AddressBookWidget
-  networkId="ethereum-mainnet"
-  addressing={runtime.addressing}
-/>
+const db = createDexieDatabase(new Dexie('my-app'), ALIAS_SCHEMA);
+
+function AddressBook({ addressing }) {
+  const widgetProps = useAddressBookWidgetProps(db, { networkId: 'ethereum-mainnet' });
+  return <AddressBookWidget {...widgetProps} addressing={addressing} />;
+}
 ```
 
 See the [Storage](/tools/uikit/storage) page for setup and plugin configuration.
@@ -235,7 +239,6 @@ See the [Storage](/tools/uikit/storage) page for setup and plugin configuration.
 | --- | --- |
 | `ContractActionBar` | Network status display with contract state toggle |
 | `ExecutionConfigDisplay` | Configure execution method (EOA / Relayer) |
-| `TransactionStatusDisplay` | Transaction progress, hash, and explorer links |
 | `NetworkSettingsDialog` | Configure RPC endpoints and indexer URLs |
 | `WalletConnectionWithSettings` | Wallet connection UI with integrated settings |
 | `AliasEditPopover` | Inline popover for editing address aliases |
