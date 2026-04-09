@@ -10,6 +10,40 @@ title: Storage
 pnpm add @openzeppelin/ui-storage
 ```
 
+## Why Use the Storage Plugin?
+
+Browser applications commonly reach for `localStorage` to persist user data. While fine for a handful of string values, `localStorage` hits hard limits as your app grows:
+
+| Concern | `localStorage` | `@openzeppelin/ui-storage` (IndexedDB) |
+| --- | --- | --- |
+| **Storage quota** | ~5 MB per origin | Hundreds of MB — often limited only by available disk space |
+| **Data model** | Flat key-value strings — every read/write requires `JSON.parse`/`JSON.stringify` | Structured object stores with typed records, indexes, and compound queries |
+| **Performance** | Synchronous — blocks the main thread on every call | Asynchronous — all reads and writes are non-blocking |
+| **Querying** | Full-scan only; no way to filter or sort without loading everything | Indexed lookups and range queries via Dexie.js |
+| **Concurrent tabs** | No built-in synchronization; race conditions on simultaneous writes | Transactional; supports multi-tab coordination out of the box |
+| **Schema evolution** | Manual — you must handle migrations yourself | Declarative versioned schemas with automatic upgrade migrations |
+
+Beyond these raw IndexedDB advantages, the storage plugin adds an **opinionated layer** designed for blockchain UIs:
+
+- **Typed base classes** — `EntityStorage<T>` and `KeyValueStorage` give you CRUD, validation, quota handling, and timestamps without boilerplate.
+- **Plugin system** — domain-specific plugins (like the built-in account alias plugin) drop into any Dexie database and integrate with UIKit providers automatically.
+- **Reactive hooks** — `useLiveQuery` re-renders components when the underlying IndexedDB data changes, including changes from other browser tabs.
+- **Quota-safe writes** — the `withQuotaHandling` wrapper catches `QuotaExceededError` and surfaces a typed error code so your UI can handle it gracefully instead of silently failing.
+
+### When Does It Make Sense?
+
+Use `@openzeppelin/ui-storage` when your application needs to persist **structured, queryable data** on the client — especially data that grows over time or must survive page reloads. Common examples include:
+
+- **Contract history and recent contracts** — the [Role Manager](https://github.com/OpenZeppelin/role-manager) persists recently accessed contracts per network in a `RecentContractsStorage` built on `EntityStorage`. Records are indexed by `[networkId+address]` for fast lookups and sorted by `lastAccessed` so the most recent entries always appear first — something that would require deserializing, sorting, and re-serializing an entire array in `localStorage`.
+
+- **UI configuration and form state** — the [UI Builder](https://github.com/OpenZeppelin/ui-builder) stores complete contract UI configurations (including large ABIs and compiled contract definitions) in a `ContractUIStorage` entity store. With records that can reach tens of megabytes, `localStorage`'s 5 MB limit would be a non-starter. The storage plugin also powers the builder's import/export and multi-tab auto-save features.
+
+- **User preferences and settings** — both projects use `KeyValueStorage` for simple typed preferences (theme, active network, page size) — a lightweight alternative that still benefits from async I/O and schema versioning.
+
+- **Address book and aliases** — the built-in account alias plugin persists address-to-name mappings in IndexedDB and wires them into UIKit's `AddressLabelProvider` and `AddressSuggestionProvider`. Every `AddressDisplay` and `AddressField` in the component tree resolves labels automatically without any per-component wiring.
+
+If your app only stores a single flag or token, `localStorage` is perfectly adequate. Reach for the storage plugin when you need **indexed queries, large payloads, multi-tab safety, or domain-specific persistence** that integrates with the rest of the UIKit ecosystem.
+
 ## Core Abstractions
 
 The package exposes two base classes that your application can extend:
