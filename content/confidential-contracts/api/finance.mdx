@@ -7,6 +7,7 @@ This directory includes primitives for on-chain confidential financial systems:
 
 * [`VestingWalletConfidential`](#VestingWalletConfidential): Handles the vesting of confidential tokens for a given beneficiary. Custody of multiple tokens can be given to this contract, which will release the token to the beneficiary following a given, customizable, vesting schedule.
 * [`VestingWalletCliffConfidential`](#VestingWalletCliffConfidential): Variant of [`VestingWalletConfidential`](#VestingWalletConfidential) which adds a cliff period to the vesting schedule.
+* [`BatcherConfidential`](#BatcherConfidential): A batching primitive that enables routing between two [`ERC7984ERC20Wrapper`](/confidential-contracts/api/token#ERC7984ERC20Wrapper) contracts via a non-confidential route.
 
 For convenience, this directory also includes:
 
@@ -16,21 +17,773 @@ For convenience, this directory also includes:
 [`VestingWalletConfidential`](#VestingWalletConfidential)
 [`VestingWalletCliffConfidential`](#VestingWalletCliffConfidential)
 [`VestingWalletConfidentialFactory`](#VestingWalletConfidentialFactory)
+[`BatcherConfidential`](#BatcherConfidential)
 
-<a id="ERC7821WithExecutor"></a>
+<a id="BatcherConfidential"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC7821WithExecutor`
+## `BatcherConfidential` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/release-v0.3.0/contracts/finance/ERC7821WithExecutor.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.4.0/contracts/finance/BatcherConfidential.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
 </div>
 
 ```solidity
-import "@openzeppelin/confidential-contracts/finance/ERC7821WithExecutor.sol";
+import "@openzeppelin/confidential-contracts/contracts/finance/BatcherConfidential.sol";
+```
+
+`BatcherConfidential` is a batching primitive that enables routing between two [`ERC7984ERC20Wrapper`](/confidential-contracts/api/token#ERC7984ERC20Wrapper) contracts
+via a non-confidential route. Users deposit [`BatcherConfidential.fromToken`](#BatcherConfidential-fromToken--) into the batcher and receive [`BatcherConfidential.toToken`](#BatcherConfidential-toToken--) in exchange. Deposits are
+made by using `ERC7984` transfer and call functions such as [`ERC7984.confidentialTransferAndCall`](/confidential-contracts/api/token#ERC7984-confidentialTransferAndCall-address-euint64-bytes-).
+
+Developers must implement the virtual function [`BatcherConfidential._executeRoute`](#BatcherConfidential-_executeRoute-uint256-uint256-) to perform the batch's route. This function is called
+once the batch deposits are unwrapped into the underlying tokens. The function should swap the underlying [`BatcherConfidential.fromToken`](#BatcherConfidential-fromToken--) for
+underlying [`BatcherConfidential.toToken`](#BatcherConfidential-toToken--). If an issue is encountered, the function should return `ExecuteOutcome.Cancel` to cancel the batch.
+
+Developers must also implement the virtual function [`BatcherConfidential.routeDescription`](#BatcherConfidential-routeDescription--) to provide a human readable description of the batch's route.
+
+Claim outputs are rounded down. This may result in small deposits being rounded down to 0 if the exchange rate is less than 1:1.
+[`BatcherConfidential.toToken`](#BatcherConfidential-toToken--) dust from rounding down will accumulate in the batcher over time.
+
+<Callout>
+The batcher does not support [`ERC7984ERC20Wrapper`](/confidential-contracts/api/token#ERC7984ERC20Wrapper) contracts prior to v0.4.0.
+</Callout>
+
+<Callout>
+The batcher could be used to maintain confidentiality of deposits--by default there are no confidentiality guarantees.
+If desired, developers should consider restricting certain functions to increase confidentiality.
+</Callout>
+
+<Callout type="warn">
+The [`BatcherConfidential.toToken`](#BatcherConfidential-toToken--) and [`BatcherConfidential.fromToken`](#BatcherConfidential-fromToken--) must be carefully inspected to ensure proper capacity is maintained. If [`BatcherConfidential.toToken`](#BatcherConfidential-toToken--) or
+[`BatcherConfidential.fromToken`](#BatcherConfidential-fromToken--) are filled--resulting in denial of service--batches could get bricked. The batcher would be unable to wrap
+underlying tokens into [`BatcherConfidential.toToken`](#BatcherConfidential-toToken--). Further, if [`BatcherConfidential.fromToken`](#BatcherConfidential-fromToken--) is also filled, cancellation would also fail on rewrap.
+</Callout>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [constructor(fromToken_, toToken_)](#BatcherConfidential-constructor-contract-IERC7984ERC20Wrapper-contract-IERC7984ERC20Wrapper-)
+- [claim(batchId, account)](#BatcherConfidential-claim-uint256-address-)
+- [quit(batchId)](#BatcherConfidential-quit-uint256-)
+- [dispatchBatch()](#BatcherConfidential-dispatchBatch--)
+- [dispatchBatchCallback(batchId, unwrapAmountCleartext, decryptionProof)](#BatcherConfidential-dispatchBatchCallback-uint256-uint64-bytes-)
+- [onConfidentialTransferReceived(, from, amount, )](#BatcherConfidential-onConfidentialTransferReceived-address-address-euint64-bytes-)
+- [fromToken()](#BatcherConfidential-fromToken--)
+- [toToken()](#BatcherConfidential-toToken--)
+- [currentBatchId()](#BatcherConfidential-currentBatchId--)
+- [unwrapRequestId(batchId)](#BatcherConfidential-unwrapRequestId-uint256-)
+- [totalDeposits(batchId)](#BatcherConfidential-totalDeposits-uint256-)
+- [deposits(batchId, account)](#BatcherConfidential-deposits-uint256-address-)
+- [exchangeRate(batchId)](#BatcherConfidential-exchangeRate-uint256-)
+- [exchangeRateDecimals()](#BatcherConfidential-exchangeRateDecimals--)
+- [routeDescription()](#BatcherConfidential-routeDescription--)
+- [batchState(batchId)](#BatcherConfidential-batchState-uint256-)
+- [_claim(batchId, account)](#BatcherConfidential-_claim-uint256-address-)
+- [_join(to, amount)](#BatcherConfidential-_join-address-euint64-)
+- [_executeRoute(batchId, amount)](#BatcherConfidential-_executeRoute-uint256-uint256-)
+- [_validateStateBitmap(batchId, allowedStates)](#BatcherConfidential-_validateStateBitmap-uint256-bytes32-)
+- [_getAndIncreaseBatchId()](#BatcherConfidential-_getAndIncreaseBatchId--)
+- [_encodeStateBitmap(batchState_)](#BatcherConfidential-_encodeStateBitmap-enum-BatcherConfidential-BatchState-)
+<details>
+<summary>ReentrancyGuardTransient</summary>
+
+- [_reentrancyGuardEntered()](#ReentrancyGuardTransient-_reentrancyGuardEntered--)
+- [_reentrancyGuardStorageSlot()](#ReentrancyGuardTransient-_reentrancyGuardStorageSlot--)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+- [BatchDispatched(batchId)](#BatcherConfidential-BatchDispatched-uint256-)
+- [BatchCanceled(batchId)](#BatcherConfidential-BatchCanceled-uint256-)
+- [BatchFinalized(batchId, exchangeRate)](#BatcherConfidential-BatchFinalized-uint256-uint64-)
+- [Joined(batchId, account, amount)](#BatcherConfidential-Joined-uint256-address-euint64-)
+- [Claimed(batchId, account, amount)](#BatcherConfidential-Claimed-uint256-address-euint64-)
+- [Quit(batchId, account, amount)](#BatcherConfidential-Quit-uint256-address-euint64-)
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [BatchNonexistent(batchId)](#BatcherConfidential-BatchNonexistent-uint256-)
+- [ZeroDeposits(batchId, account)](#BatcherConfidential-ZeroDeposits-uint256-address-)
+- [BatchUnexpectedState(batchId, current, expectedStates)](#BatcherConfidential-BatchUnexpectedState-uint256-enum-BatcherConfidential-BatchState-bytes32-)
+- [InvalidExchangeRate(batchId, totalDeposits, exchangeRate)](#BatcherConfidential-InvalidExchangeRate-uint256-uint256-uint64-)
+- [Unauthorized()](#BatcherConfidential-Unauthorized--)
+- [InvalidWrapperToken(token)](#BatcherConfidential-InvalidWrapperToken-address-)
+<details>
+<summary>ReentrancyGuardTransient</summary>
+
+- [ReentrancyGuardReentrantCall()](#ReentrancyGuardTransient-ReentrancyGuardReentrantCall--)
+
+</details>
+</div>
+</div>
+
+<a id="BatcherConfidential-constructor-contract-IERC7984ERC20Wrapper-contract-IERC7984ERC20Wrapper-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">constructor(contract IERC7984ERC20Wrapper fromToken_, contract IERC7984ERC20Wrapper toToken_)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#BatcherConfidential-constructor-contract-IERC7984ERC20Wrapper-contract-IERC7984ERC20Wrapper-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="BatcherConfidential-claim-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">claim(uint256 batchId, address account) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#BatcherConfidential-claim-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Claim the `toToken` corresponding to `account`'s deposit in batch with id `batchId`.
+
+<Callout>
+This function is not gated and can be called by anyone. Claims could be frontrun.
+</Callout>
+
+</div>
+</div>
+
+<a id="BatcherConfidential-quit-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">quit(uint256 batchId) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#BatcherConfidential-quit-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Quit the batch with id `batchId`. Entire deposit is returned to the user.
+This can only be called if the batch has not yet been dispatched or if the batch was canceled.
+
+<Callout>
+Developers should consider adding additional restrictions to this function
+if maintaining confidentiality of deposits is critical to the application.
+</Callout>
+
+<Callout type="warn">
+[`BatcherConfidential.dispatchBatch`](#BatcherConfidential-dispatchBatch--) may fail if an incompatible version of [`ERC7984ERC20Wrapper`](/confidential-contracts/api/token#ERC7984ERC20Wrapper) is used.
+This function must be unrestricted in cases where batch dispatching fails.
+</Callout>
+
+</div>
+</div>
+
+<a id="BatcherConfidential-dispatchBatch--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">dispatchBatch()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#BatcherConfidential-dispatchBatch--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Permissionless function to dispatch the current batch. Increments the [`BatcherConfidential.currentBatchId`](#BatcherConfidential-currentBatchId--).
+
+<Callout>
+Developers should consider adding additional restrictions to this function
+if maintaining confidentiality of deposits is critical to the application.
+</Callout>
+
+</div>
+</div>
+
+<a id="BatcherConfidential-dispatchBatchCallback-uint256-uint64-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">dispatchBatchCallback(uint256 batchId, uint64 unwrapAmountCleartext, bytes decryptionProof)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#BatcherConfidential-dispatchBatchCallback-uint256-uint64-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Dispatch batch callback callable by anyone. This function finalizes the unwrap of [`BatcherConfidential.fromToken`](#BatcherConfidential-fromToken--)
+and calls [`BatcherConfidential._executeRoute`](#BatcherConfidential-_executeRoute-uint256-uint256-) to perform the batch's route. If `_executeRoute` returns `ExecuteOutcome.Partial`,
+this function should be called again with the same `batchId`, `unwrapAmountCleartext`, and `decryptionProof`.
+
+</div>
+</div>
+
+<a id="BatcherConfidential-onConfidentialTransferReceived-address-address-euint64-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">onConfidentialTransferReceived(address, address from, euint64 amount, bytes) → ebool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">external</p>
+<a className="peer" data-card href="#BatcherConfidential-onConfidentialTransferReceived-address-address-euint64-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See [`IERC7984Receiver.onConfidentialTransferReceived`](/confidential-contracts/api/interfaces#IERC7984Receiver-onConfidentialTransferReceived-address-address-euint64-bytes-).
+
+Deposit [`BatcherConfidential.fromToken`](#BatcherConfidential-fromToken--) into the current batch.
+
+<Callout>
+See [`BatcherConfidential._claim`](#BatcherConfidential-_claim-uint256-address-) to understand how the [`BatcherConfidential.toToken`](#BatcherConfidential-toToken--) amount is calculated. Claim amounts are rounded down. Small
+deposits may be rounded down to 0 if the exchange rate is less than 1:1.
+</Callout>
+
+</div>
+</div>
+
+<a id="BatcherConfidential-fromToken--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">fromToken() → contract IERC7984ERC20Wrapper</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#BatcherConfidential-fromToken--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Batcher from token. Users deposit this token in exchange for [`BatcherConfidential.toToken`](#BatcherConfidential-toToken--).
+
+</div>
+</div>
+
+<a id="BatcherConfidential-toToken--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">toToken() → contract IERC7984ERC20Wrapper</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#BatcherConfidential-toToken--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Batcher to token. Users receive this token in exchange for their [`BatcherConfidential.fromToken`](#BatcherConfidential-fromToken--) deposits.
+
+</div>
+</div>
+
+<a id="BatcherConfidential-currentBatchId--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">currentBatchId() → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#BatcherConfidential-currentBatchId--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The ongoing batch id. New deposits join this batch.
+
+</div>
+</div>
+
+<a id="BatcherConfidential-unwrapRequestId-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">unwrapRequestId(uint256 batchId) → bytes32</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#BatcherConfidential-unwrapRequestId-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The unwrap request id for a batch with id `batchId`.
+
+</div>
+</div>
+
+<a id="BatcherConfidential-totalDeposits-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">totalDeposits(uint256 batchId) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#BatcherConfidential-totalDeposits-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The total deposits made in batch with id `batchId`.
+
+</div>
+</div>
+
+<a id="BatcherConfidential-deposits-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">deposits(uint256 batchId, address account) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#BatcherConfidential-deposits-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The deposits made by `account` in batch with id `batchId`.
+
+</div>
+</div>
+
+<a id="BatcherConfidential-exchangeRate-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">exchangeRate(uint256 batchId) → uint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#BatcherConfidential-exchangeRate-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The exchange rate set for batch with id `batchId`.
+
+</div>
+</div>
+
+<a id="BatcherConfidential-exchangeRateDecimals--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">exchangeRateDecimals() → uint8</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#BatcherConfidential-exchangeRateDecimals--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The number of decimals of precision for the exchange rate.
+
+</div>
+</div>
+
+<a id="BatcherConfidential-routeDescription--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">routeDescription() → string</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#BatcherConfidential-routeDescription--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Human readable description of what the batcher does.
+
+</div>
+</div>
+
+<a id="BatcherConfidential-batchState-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">batchState(uint256 batchId) → enum BatcherConfidential.BatchState</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#BatcherConfidential-batchState-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the current state of a batch. Reverts if the batch does not exist.
+
+</div>
+</div>
+
+<a id="BatcherConfidential-_claim-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_claim(uint256 batchId, address account) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#BatcherConfidential-_claim-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Claims `toToken` for `account`'s deposit in batch with id `batchId`. Tokens are always
+sent to `account`, enabling third-party relayers to claim on behalf of depositors.
+
+</div>
+</div>
+
+<a id="BatcherConfidential-_join-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_join(address to, euint64 amount) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#BatcherConfidential-_join-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Joins a batch with amount `amount` on behalf of `to`. Does not do any transfers in.
+Returns the amount joined with.
+
+</div>
+</div>
+
+<a id="BatcherConfidential-_executeRoute-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_executeRoute(uint256 batchId, uint256 amount) → enum BatcherConfidential.ExecuteOutcome</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#BatcherConfidential-_executeRoute-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Function which is executed by [`BatcherConfidential.dispatchBatchCallback`](#BatcherConfidential-dispatchBatchCallback-uint256-uint64-bytes-) after validation and unwrap finalization. The parameter
+`amount` is the plaintext amount of the `fromToken` which were unwrapped--to attain the underlying tokens received,
+evaluate `amount * fromToken().rate()`. This function should swap the underlying [`BatcherConfidential.fromToken`](#BatcherConfidential-fromToken--) for underlying [`BatcherConfidential.toToken`](#BatcherConfidential-toToken--).
+
+This function returns an [`BatcherConfidential.ExecuteOutcome`](#BatcherConfidential-ExecuteOutcome) enum indicating the new state of the batch. If the route execution is complete,
+the balance of the underlying [`BatcherConfidential.toToken`](#BatcherConfidential-toToken--) is wrapped and the exchange rate is set.
+
+<Callout>
+[`BatcherConfidential.dispatchBatchCallback`](#BatcherConfidential-dispatchBatchCallback-uint256-uint64-bytes-) (and in turn [`BatcherConfidential._executeRoute`](#BatcherConfidential-_executeRoute-uint256-uint256-)) can be repeatedly called until the route execution is complete.
+If a multi-step route is necessary, intermediate steps should return `ExecuteOutcome.Partial`. Intermediate steps *must* not
+result in underlying [`BatcherConfidential.toToken`](#BatcherConfidential-toToken--) being transferred into the batcher.
+</Callout>
+
+[WARNING]
+#### This function must eventually return `ExecuteOutcome.Complete` or `ExecuteOutcome.Cancel`. Failure to do so results
+in user deposits being locked indefinitely.
+
+Additionally, the following must hold:
+
+- `swappedAmount >= ceil(unwrapAmountCleartext / 10 ** exchangeRateDecimals()) * toToken().rate()` (the exchange rate must not be 0)
+- `swappedAmount \<= type(uint64).max * toToken().rate()` (the wrapped amount of [`BatcherConfidential.toToken`](#BatcherConfidential-toToken--) must fit in `uint64`)
+
+</div>
+</div>
+
+<a id="BatcherConfidential-_validateStateBitmap-uint256-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_validateStateBitmap(uint256 batchId, bytes32 allowedStates) → enum BatcherConfidential.BatchState</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#BatcherConfidential-_validateStateBitmap-uint256-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Check that the current state of a batch matches the requirements described by the `allowedStates` bitmap.
+This bitmap should be built using `_encodeStateBitmap`.
+
+If requirements are not met, reverts with a [`BatcherConfidential.BatchUnexpectedState`](#BatcherConfidential-BatchUnexpectedState-uint256-enum-BatcherConfidential-BatchState-bytes32-) error.
+
+</div>
+</div>
+
+<a id="BatcherConfidential-_getAndIncreaseBatchId--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_getAndIncreaseBatchId() → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#BatcherConfidential-_getAndIncreaseBatchId--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Gets the current batch id and increments it.
+
+</div>
+</div>
+
+<a id="BatcherConfidential-_encodeStateBitmap-enum-BatcherConfidential-BatchState-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_encodeStateBitmap(enum BatcherConfidential.BatchState batchState_) → bytes32</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#BatcherConfidential-_encodeStateBitmap-enum-BatcherConfidential-BatchState-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Encodes a `BatchState` into a `bytes32` representation where each bit enabled corresponds to
+the underlying position in the `BatchState` enum. For example:
+
+0x000...1000
+        ^--- Canceled
+         ^-- Finalized
+          ^- Dispatched
+           ^ Pending
+
+</div>
+</div>
+
+<a id="BatcherConfidential-BatchDispatched-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">BatchDispatched(uint256 indexed batchId)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="#BatcherConfidential-BatchDispatched-uint256-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when a batch with id `batchId` is dispatched via [`BatcherConfidential.dispatchBatch`](#BatcherConfidential-dispatchBatch--).
+
+</div>
+</div>
+<a id="BatcherConfidential-BatchCanceled-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">BatchCanceled(uint256 indexed batchId)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="#BatcherConfidential-BatchCanceled-uint256-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when a batch with id `batchId` is canceled.
+
+</div>
+</div>
+<a id="BatcherConfidential-BatchFinalized-uint256-uint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">BatchFinalized(uint256 indexed batchId, uint64 exchangeRate)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="#BatcherConfidential-BatchFinalized-uint256-uint64-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when a batch with id `batchId` is finalized with an exchange rate of `exchangeRate`.
+
+</div>
+</div>
+<a id="BatcherConfidential-Joined-uint256-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">Joined(uint256 indexed batchId, address indexed account, euint64 amount)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="#BatcherConfidential-Joined-uint256-address-euint64-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when an `account` joins a batch with id `batchId` with a deposit of `amount`.
+
+</div>
+</div>
+<a id="BatcherConfidential-Claimed-uint256-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">Claimed(uint256 indexed batchId, address indexed account, euint64 amount)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="#BatcherConfidential-Claimed-uint256-address-euint64-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when an `account` claims their `amount` from batch with id `batchId`.
+
+</div>
+</div>
+<a id="BatcherConfidential-Quit-uint256-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">Quit(uint256 indexed batchId, address indexed account, euint64 amount)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="#BatcherConfidential-Quit-uint256-address-euint64-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when an `account` quits a batch with id `batchId`.
+
+</div>
+</div>
+
+<a id="BatcherConfidential-BatchNonexistent-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">BatchNonexistent(uint256 batchId)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#BatcherConfidential-BatchNonexistent-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The `batchId` does not exist. Batch IDs start at 1 and must be less than or equal to [`BatcherConfidential.currentBatchId`](#BatcherConfidential-currentBatchId--).
+
+</div>
+</div>
+
+<a id="BatcherConfidential-ZeroDeposits-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ZeroDeposits(uint256 batchId, address account)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#BatcherConfidential-ZeroDeposits-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The `account` has a zero deposits in batch `batchId`.
+
+</div>
+</div>
+
+<a id="BatcherConfidential-BatchUnexpectedState-uint256-enum-BatcherConfidential-BatchState-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">BatchUnexpectedState(uint256 batchId, enum BatcherConfidential.BatchState current, bytes32 expectedStates)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#BatcherConfidential-BatchUnexpectedState-uint256-enum-BatcherConfidential-BatchState-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The batch `batchId` is in the state `current`, which is invalid for the operation.
+The `expectedStates` is a bitmap encoding the expected/allowed states for the operation.
+
+See [`BatcherConfidential._encodeStateBitmap`](#BatcherConfidential-_encodeStateBitmap-enum-BatcherConfidential-BatchState-).
+
+</div>
+</div>
+
+<a id="BatcherConfidential-InvalidExchangeRate-uint256-uint256-uint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">InvalidExchangeRate(uint256 batchId, uint256 totalDeposits, uint64 exchangeRate)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#BatcherConfidential-InvalidExchangeRate-uint256-uint256-uint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Thrown when the given exchange rate is invalid. The exchange rate must be non-zero and the wrapped
+amount of [`BatcherConfidential.toToken`](#BatcherConfidential-toToken--) must be less than or equal to `type(uint64).max`.
+
+</div>
+</div>
+
+<a id="BatcherConfidential-Unauthorized--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">Unauthorized()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#BatcherConfidential-Unauthorized--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The caller is not authorized to call this function.
+
+</div>
+</div>
+
+<a id="BatcherConfidential-InvalidWrapperToken-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">InvalidWrapperToken(address token)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#BatcherConfidential-InvalidWrapperToken-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The given `token` does not support `IERC7984ERC20Wrapper` via `ERC165`.
+
+</div>
+</div>
+
+<a id="ERC7821WithExecutor"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC7821WithExecutor` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.4.0/contracts/finance/ERC7821WithExecutor.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/confidential-contracts/contracts/finance/ERC7821WithExecutor.sol";
 ```
 
 Extension of `ERC7821` that adds an [`ERC7821WithExecutor.executor`](#ERC7821WithExecutor-executor--) address that is able to execute arbitrary calls via `ERC7821.execute`.
@@ -41,38 +794,54 @@ Extension of `ERC7821` that adds an [`ERC7821WithExecutor.executor`](#ERC7821Wit
 - [executor()](#ERC7821WithExecutor-executor--)
 - [__ERC7821WithExecutor_init(executor_)](#ERC7821WithExecutor-__ERC7821WithExecutor_init-address-)
 - [_erc7821AuthorizedExecutor(caller, mode, executionData)](#ERC7821WithExecutor-_erc7821AuthorizedExecutor-address-bytes32-bytes-)
-#### ERC7821 [!toc]
+<details>
+<summary>ERC7821</summary>
+
 - [execute(mode, executionData)](#ERC7821-execute-bytes32-bytes-)
 - [supportsExecutionMode(mode)](#ERC7821-supportsExecutionMode-bytes32-)
-#### IERC7821 [!toc]
-#### Initializable [!toc]
+
+</details>
+<details>
+<summary>Initializable</summary>
+
 - [_checkInitializing()](#Initializable-_checkInitializing--)
 - [_disableInitializers()](#Initializable-_disableInitializers--)
 - [_getInitializedVersion()](#Initializable-_getInitializedVersion--)
 - [_isInitializing()](#Initializable-_isInitializing--)
 - [_initializableStorageSlot()](#Initializable-_initializableStorageSlot--)
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### ERC7821 [!toc]
-#### IERC7821 [!toc]
-#### Initializable [!toc]
+<details>
+<summary>Initializable</summary>
+
 - [Initialized(version)](#Initializable-Initialized-uint64-)
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### ERC7821 [!toc]
+<details>
+<summary>ERC7821</summary>
+
 - [UnsupportedExecutionMode()](#ERC7821-UnsupportedExecutionMode--)
-#### IERC7821 [!toc]
-#### Initializable [!toc]
+
+</details>
+<details>
+<summary>Initializable</summary>
+
 - [InvalidInitialization()](#Initializable-InvalidInitialization--)
 - [NotInitializing()](#Initializable-NotInitializing--)
+
+</details>
 </div>
 </div>
 
@@ -143,16 +912,16 @@ function _erc7821AuthorizedExecutor(
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `VestingWalletCliffConfidential`
+## `VestingWalletCliffConfidential` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/release-v0.3.0/contracts/finance/VestingWalletCliffConfidential.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.4.0/contracts/finance/VestingWalletCliffConfidential.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
 </div>
 
 ```solidity
-import "@openzeppelin/confidential-contracts/finance/VestingWalletCliffConfidential.sol";
+import "@openzeppelin/confidential-contracts/contracts/finance/VestingWalletCliffConfidential.sol";
 ```
 
 An extension of [`VestingWalletConfidential`](#VestingWalletConfidential) that adds a cliff to the vesting schedule. The cliff is `cliffSeconds` long and
@@ -165,7 +934,9 @@ starts at the vesting start timestamp (see [`VestingWalletConfidential`](#Vestin
 - [__VestingWalletCliffConfidential_init(beneficiary, startTimestamp, durationSeconds, cliffSeconds)](#VestingWalletCliffConfidential-__VestingWalletCliffConfidential_init-address-uint48-uint48-uint48-)
 - [__VestingWalletCliffConfidential_init_unchained(cliffSeconds)](#VestingWalletCliffConfidential-__VestingWalletCliffConfidential_init_unchained-uint48-)
 - [_vestingSchedule(totalAllocation, timestamp)](#VestingWalletCliffConfidential-_vestingSchedule-euint128-uint48-)
-#### VestingWalletConfidential [!toc]
+<details>
+<summary>VestingWalletConfidential</summary>
+
 - [start()](#VestingWalletConfidential-start--)
 - [duration()](#VestingWalletConfidential-duration--)
 - [end()](#VestingWalletConfidential-end--)
@@ -175,9 +946,18 @@ starts at the vesting start timestamp (see [`VestingWalletConfidential`](#Vestin
 - [vestedAmount(token, timestamp)](#VestingWalletConfidential-vestedAmount-address-uint48-)
 - [__VestingWalletConfidential_init(beneficiary, startTimestamp, durationSeconds)](#VestingWalletConfidential-__VestingWalletConfidential_init-address-uint48-uint48-)
 - [__VestingWalletConfidential_init_unchained(startTimestamp, durationSeconds)](#VestingWalletConfidential-__VestingWalletConfidential_init_unchained-uint48-uint48-)
-#### ReentrancyGuardTransient [!toc]
+
+</details>
+<details>
+<summary>ReentrancyGuardTransient</summary>
+
 - [_reentrancyGuardEntered()](#ReentrancyGuardTransient-_reentrancyGuardEntered--)
-#### OwnableUpgradeable [!toc]
+- [_reentrancyGuardStorageSlot()](#ReentrancyGuardTransient-_reentrancyGuardStorageSlot--)
+
+</details>
+<details>
+<summary>OwnableUpgradeable</summary>
+
 - [__Ownable_init(initialOwner)](#OwnableUpgradeable-__Ownable_init-address-)
 - [__Ownable_init_unchained(initialOwner)](#OwnableUpgradeable-__Ownable_init_unchained-address-)
 - [owner()](#OwnableUpgradeable-owner--)
@@ -185,32 +965,52 @@ starts at the vesting start timestamp (see [`VestingWalletConfidential`](#Vestin
 - [renounceOwnership()](#OwnableUpgradeable-renounceOwnership--)
 - [transferOwnership(newOwner)](#OwnableUpgradeable-transferOwnership-address-)
 - [_transferOwnership(newOwner)](#OwnableUpgradeable-_transferOwnership-address-)
-#### ContextUpgradeable [!toc]
+
+</details>
+<details>
+<summary>ContextUpgradeable</summary>
+
 - [__Context_init()](#ContextUpgradeable-__Context_init--)
 - [__Context_init_unchained()](#ContextUpgradeable-__Context_init_unchained--)
 - [_msgSender()](#ContextUpgradeable-_msgSender--)
 - [_msgData()](#ContextUpgradeable-_msgData--)
 - [_contextSuffixLength()](#ContextUpgradeable-_contextSuffixLength--)
-#### Initializable [!toc]
+
+</details>
+<details>
+<summary>Initializable</summary>
+
 - [_checkInitializing()](#Initializable-_checkInitializing--)
 - [_disableInitializers()](#Initializable-_disableInitializers--)
 - [_getInitializedVersion()](#Initializable-_getInitializedVersion--)
 - [_isInitializing()](#Initializable-_isInitializing--)
 - [_initializableStorageSlot()](#Initializable-_initializableStorageSlot--)
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### VestingWalletConfidential [!toc]
+<details>
+<summary>VestingWalletConfidential</summary>
+
 - [VestingWalletConfidentialTokenReleased(token, amount)](#VestingWalletConfidential-VestingWalletConfidentialTokenReleased-address-euint64-)
-#### ReentrancyGuardTransient [!toc]
-#### OwnableUpgradeable [!toc]
+
+</details>
+<details>
+<summary>OwnableUpgradeable</summary>
+
 - [OwnershipTransferred(previousOwner, newOwner)](#OwnableUpgradeable-OwnershipTransferred-address-address-)
-#### ContextUpgradeable [!toc]
-#### Initializable [!toc]
+
+</details>
+<details>
+<summary>Initializable</summary>
+
 - [Initialized(version)](#Initializable-Initialized-uint64-)
+
+</details>
 </div>
 </div>
 
@@ -218,16 +1018,26 @@ starts at the vesting start timestamp (see [`VestingWalletConfidential`](#Vestin
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
 - [VestingWalletCliffConfidentialInvalidCliffDuration(cliffSeconds, durationSeconds)](#VestingWalletCliffConfidential-VestingWalletCliffConfidentialInvalidCliffDuration-uint64-uint64-)
-#### VestingWalletConfidential [!toc]
-#### ReentrancyGuardTransient [!toc]
+<details>
+<summary>ReentrancyGuardTransient</summary>
+
 - [ReentrancyGuardReentrantCall()](#ReentrancyGuardTransient-ReentrancyGuardReentrantCall--)
-#### OwnableUpgradeable [!toc]
+
+</details>
+<details>
+<summary>OwnableUpgradeable</summary>
+
 - [OwnableUnauthorizedAccount(account)](#OwnableUpgradeable-OwnableUnauthorizedAccount-address-)
 - [OwnableInvalidOwner(owner)](#OwnableUpgradeable-OwnableInvalidOwner-address-)
-#### ContextUpgradeable [!toc]
-#### Initializable [!toc]
+
+</details>
+<details>
+<summary>Initializable</summary>
+
 - [InvalidInitialization()](#Initializable-InvalidInitialization--)
 - [NotInitializing()](#Initializable-NotInitializing--)
+
+</details>
 </div>
 </div>
 
@@ -326,16 +1136,16 @@ The specified cliff duration is larger than the vesting duration.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `VestingWalletConfidential`
+## `VestingWalletConfidential` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/release-v0.3.0/contracts/finance/VestingWalletConfidential.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.4.0/contracts/finance/VestingWalletConfidential.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
 </div>
 
 ```solidity
-import "@openzeppelin/confidential-contracts/finance/VestingWalletConfidential.sol";
+import "@openzeppelin/confidential-contracts/contracts/finance/VestingWalletConfidential.sol";
 ```
 
 A vesting wallet is an ownable contract that can receive ERC7984 tokens, and release these
@@ -354,7 +1164,7 @@ Since the wallet is `Ownable`, and ownership can be transferred, it is possible 
 
 <Callout>
 When using this contract with any token whose balance is adjusted automatically (i.e. a rebase token), make
-sure to account the supply/balance adjustment in the vesting schedule to ensure the vested amount is as intended.
+sure to account for the supply/balance adjustment in the vesting schedule to ensure the vested amount is as intended.
 </Callout>
 
 Confidential vesting wallet contracts can be deployed (as clones) using the [`VestingWalletConfidentialFactory`](#VestingWalletConfidentialFactory).
@@ -372,9 +1182,16 @@ Confidential vesting wallet contracts can be deployed (as clones) using the [`Ve
 - [__VestingWalletConfidential_init(beneficiary, startTimestamp, durationSeconds)](#VestingWalletConfidential-__VestingWalletConfidential_init-address-uint48-uint48-)
 - [__VestingWalletConfidential_init_unchained(startTimestamp, durationSeconds)](#VestingWalletConfidential-__VestingWalletConfidential_init_unchained-uint48-uint48-)
 - [_vestingSchedule(totalAllocation, timestamp)](#VestingWalletConfidential-_vestingSchedule-euint128-uint48-)
-#### ReentrancyGuardTransient [!toc]
+<details>
+<summary>ReentrancyGuardTransient</summary>
+
 - [_reentrancyGuardEntered()](#ReentrancyGuardTransient-_reentrancyGuardEntered--)
-#### OwnableUpgradeable [!toc]
+- [_reentrancyGuardStorageSlot()](#ReentrancyGuardTransient-_reentrancyGuardStorageSlot--)
+
+</details>
+<details>
+<summary>OwnableUpgradeable</summary>
+
 - [__Ownable_init(initialOwner)](#OwnableUpgradeable-__Ownable_init-address-)
 - [__Ownable_init_unchained(initialOwner)](#OwnableUpgradeable-__Ownable_init_unchained-address-)
 - [owner()](#OwnableUpgradeable-owner--)
@@ -382,18 +1199,28 @@ Confidential vesting wallet contracts can be deployed (as clones) using the [`Ve
 - [renounceOwnership()](#OwnableUpgradeable-renounceOwnership--)
 - [transferOwnership(newOwner)](#OwnableUpgradeable-transferOwnership-address-)
 - [_transferOwnership(newOwner)](#OwnableUpgradeable-_transferOwnership-address-)
-#### ContextUpgradeable [!toc]
+
+</details>
+<details>
+<summary>ContextUpgradeable</summary>
+
 - [__Context_init()](#ContextUpgradeable-__Context_init--)
 - [__Context_init_unchained()](#ContextUpgradeable-__Context_init_unchained--)
 - [_msgSender()](#ContextUpgradeable-_msgSender--)
 - [_msgData()](#ContextUpgradeable-_msgData--)
 - [_contextSuffixLength()](#ContextUpgradeable-_contextSuffixLength--)
-#### Initializable [!toc]
+
+</details>
+<details>
+<summary>Initializable</summary>
+
 - [_checkInitializing()](#Initializable-_checkInitializing--)
 - [_disableInitializers()](#Initializable-_disableInitializers--)
 - [_getInitializedVersion()](#Initializable-_getInitializedVersion--)
 - [_isInitializing()](#Initializable-_isInitializing--)
 - [_initializableStorageSlot()](#Initializable-_initializableStorageSlot--)
+
+</details>
 </div>
 </div>
 
@@ -401,27 +1228,44 @@ Confidential vesting wallet contracts can be deployed (as clones) using the [`Ve
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
 - [VestingWalletConfidentialTokenReleased(token, amount)](#VestingWalletConfidential-VestingWalletConfidentialTokenReleased-address-euint64-)
-#### ReentrancyGuardTransient [!toc]
-#### OwnableUpgradeable [!toc]
+<details>
+<summary>OwnableUpgradeable</summary>
+
 - [OwnershipTransferred(previousOwner, newOwner)](#OwnableUpgradeable-OwnershipTransferred-address-address-)
-#### ContextUpgradeable [!toc]
-#### Initializable [!toc]
+
+</details>
+<details>
+<summary>Initializable</summary>
+
 - [Initialized(version)](#Initializable-Initialized-uint64-)
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### ReentrancyGuardTransient [!toc]
+<details>
+<summary>ReentrancyGuardTransient</summary>
+
 - [ReentrancyGuardReentrantCall()](#ReentrancyGuardTransient-ReentrancyGuardReentrantCall--)
-#### OwnableUpgradeable [!toc]
+
+</details>
+<details>
+<summary>OwnableUpgradeable</summary>
+
 - [OwnableUnauthorizedAccount(account)](#OwnableUpgradeable-OwnableUnauthorizedAccount-address-)
 - [OwnableInvalidOwner(owner)](#OwnableUpgradeable-OwnableInvalidOwner-address-)
-#### ContextUpgradeable [!toc]
-#### Initializable [!toc]
+
+</details>
+<details>
+<summary>Initializable</summary>
+
 - [InvalidInitialization()](#Initializable-InvalidInitialization--)
 - [NotInitializing()](#Initializable-NotInitializing--)
+
+</details>
 </div>
 </div>
 
@@ -620,16 +1464,16 @@ Emitted when releasable vested tokens are released.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `VestingWalletConfidentialFactory`
+## `VestingWalletConfidentialFactory` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/release-v0.3.0/contracts/finance/VestingWalletConfidentialFactory.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.4.0/contracts/finance/VestingWalletConfidentialFactory.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
 </div>
 
 ```solidity
-import "@openzeppelin/confidential-contracts/finance/VestingWalletConfidentialFactory.sol";
+import "@openzeppelin/confidential-contracts/contracts/finance/VestingWalletConfidentialFactory.sol";
 ```
 
 A factory which enables batch funding of vesting wallets.
@@ -836,3 +1680,4 @@ Emitted when a vesting wallet is deployed.
 
 </div>
 </div>
+
