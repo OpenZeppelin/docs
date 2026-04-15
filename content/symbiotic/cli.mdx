@@ -1,0 +1,268 @@
+---
+title: CLI & API Reference
+---
+
+Command-line interface and HTTP API for the Symbiotic multi-provider template.
+
+## Make Commands
+
+### `make send`
+
+Send one test message. Provider-aware based on `activeProvider`.
+
+```bash
+make send
+make send MSG="test message"
+make send ENV=testnet MSG="hello"
+```
+
+### `make watch`
+
+Watch a previously sent message until it lands on the destination chain.
+
+```bash
+make watch
+make watch ENV=testnet TIMEOUT=300
+make watch GUID=0x...
+make watch TX=0x...
+```
+
+| Variable | Description |
+|----------|-------------|
+| `ENV` | Environment (default: local) |
+| `TIMEOUT` | Max wait in seconds |
+| `GUID` | Watch specific message by GUID |
+| `TX` | Watch message by source TX hash |
+
+### `make e2e`
+
+Send a message, then watch it to completion.
+
+```bash
+make e2e
+make e2e MSG="custom message"
+make e2e ENV=testnet MSG="hello" TIMEOUT=180
+```
+
+Example output:
+
+```
+[18:53:21] Operators: waiting to batch
+[18:53:28] Operators: collecting BLS signatures
+[18:53:30] Operators: signed (quorum reached)
+[18:53:32] Relayer: submitted
+[18:53:34] Relayer: confirmed (tx: 0x4617...)
+[18:53:34] Destination target: verified on-chain (tx: 0x4617...)
+
+Message verified on destination chain!
+```
+
+## Direct xtask Commands
+
+Use the Rust CLI directly:
+
+```bash
+cargo xtask --env local msg send "hello"
+cargo xtask --env local msg watch --timeout 120
+cargo xtask --env local msg e2e "hello" --timeout 120
+```
+
+### `cargo xtask msg send`
+
+```bash
+cargo xtask --env local msg send "hello"
+cargo xtask --env local msg send "hello" --gas 250000
+cargo xtask --env local msg send "hello" --json
+```
+
+### `cargo xtask msg watch`
+
+```bash
+cargo xtask --env local msg watch
+cargo xtask --env local msg watch --id 0x...
+cargo xtask --env local msg watch --tx 0x...
+cargo xtask --env local msg watch --timeout 300
+```
+
+### `cargo xtask msg e2e`
+
+```bash
+cargo xtask --env local msg e2e "hello"
+cargo xtask --env local msg e2e "hello" --timeout 300
+cargo xtask --env local msg e2e "hello" --json
+```
+
+## Message Cache
+
+After `send`, xtask saves message details to:
+
+```
+generated/<env>/msg-cache.json
+```
+
+`watch` uses this cache when no explicit `--id` or `--tx` is provided.
+
+## HTTP API
+
+Each operator exposes HTTP endpoints on ports 3001-3003.
+
+### Webhook Endpoints
+
+#### POST /webhook/events
+
+Receives provider ingress events from OZ Monitor.
+
+**Authentication:** HMAC-SHA256 via two headers:
+- `X-Signature`: Hex-encoded HMAC-SHA256 of `body + timestamp`
+- `X-Timestamp`: Unix timestamp in milliseconds
+
+The webhook secret must match between operator (`WEBHOOK_SECRET` env var) and OZ Monitor trigger config (`config.secret.value`).
+
+#### POST /api/v1/webhooks/oz-relayer
+
+Receives transaction status updates from OZ Relayer.
+
+**Authentication:** Base64-encoded HMAC-SHA256 of raw JSON body in `X-Signature` header, using `OZ_RELAYER_WEBHOOK_SECRET`.
+
+### Debug Endpoints
+
+#### GET /debug/v1/messages
+
+List messages with processing and submission status.
+
+```bash
+curl -s http://localhost:3001/debug/v1/messages
+curl "http://localhost:3001/debug/v1/messages?status=pending&limit=10"
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `status` | (all) | Filter: `pending`, `processing`, `signed` |
+| `limit` | 50 | Max messages returned |
+| `offset` | 0 | Pagination offset |
+
+#### GET /debug/v1/messages/:message_id
+
+Get a specific message by ID.
+
+#### GET /debug/v1/pending
+
+List Merkle roots awaiting BLS signatures.
+
+### Proof Endpoints
+
+#### POST /api/v1/layerzero/proof
+
+Retrieve Merkle proofs for processed messages.
+
+```bash
+curl -X POST http://localhost:3001/api/v1/layerzero/proof \
+  -H "Content-Type: application/json" \
+  -d '{"message_ids": ["0xabc123..."]}'
+```
+
+Response fields: `root_hash`, `root_proof` (BLS signature), `index`, `leaf`, `siblings`, `original_list`.
+
+#### POST /api/v1/layerzero/verify
+
+Verify a Merkle proof is valid (testing only).
+
+### GET /healthz
+
+Returns `200 OK` if healthy.
+
+## Webhook Configuration
+
+OZ Monitor sends events via HMAC-SHA256 authenticated webhooks.
+
+### Trigger Template
+
+Webhook triggers are defined in `config/templates/oz-monitor/triggers/` and copied to `generated/<env>/oz-monitor/triggers/` at startup.
+
+Key settings:
+
+| Setting | Description |
+|---------|-------------|
+| `url.value` | Operator endpoint (use Docker service name in compose) |
+| `secret.value` | Must match `WEBHOOK_SECRET` in operator `.env` |
+| `payload_mode` | Must be `"raw"` |
+
+### Monitor Jobs
+
+Provider-specific monitor templates:
+- `config/templates/oz-monitor/monitors/layerzero_job_assigned.json`
+- `config/templates/oz-monitor/monitors/ccip_message_sent.json`
+
+### Webhook Payload Format
+
+```json
+{
+  "EVM": {
+    "logs": [{ "address": "0x...", "topics": ["..."], "data": "0x..." }],
+    "matched_on_args": {
+      "events": [{
+        "signature": "JobAssigned(address,bytes,uint256,address)",
+        "args": [{ "name": "dvn", "kind": "address", "value": "0x..." }]
+      }]
+    },
+    "monitor": { "name": "LayerZero JobAssigned" },
+    "network_slug": "anvil-source",
+    "transaction": { "hash": "0x...", "blockNumber": 123 }
+  }
+}
+```
+
+For CCV, the event signature is `CCIPMessageSent(...)` with different args.
+
+## Retry Configuration
+
+### Symbiotic Relay (Linear Backoff)
+
+For gRPC calls to BLS signing sidecars.
+
+```
+backoff = retry_backoff x (attempt + 1)
+```
+
+### OZ Relayer (Exponential Backoff with Jitter)
+
+For HTTP calls to the transaction relayer.
+
+```
+base = retry_backoff x 2^attempt
+jitter = random(0, base x 0.25)
+backoff = min(base + jitter, 60s)
+```
+
+### Retry Settings
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `max_retries` | Maximum retry attempts (0 = no retries) | 3 |
+| `retry_backoff` | Base backoff duration | 1s |
+| `timeout` | Request timeout (OZ Relayer only) | 30s |
+
+### Retryable vs Non-Retryable Errors
+
+**Retried:** HTTP 429, HTTP 500-504, network errors (connection refused, timeout, DNS failure).
+
+**Not retried:** HTTP 4xx (except 429), domain errors (chain not configured, transaction not found).
+
+### Tuning Examples
+
+```json
+// Low-latency (devnet/testnet)
+{ "oz_relayer": { "max_retries": 5, "retry_backoff": "100ms" } }
+
+// Production
+{ "oz_relayer": { "max_retries": 3, "retry_backoff": "1s" } }
+
+// High-volume
+{ "oz_relayer": { "max_retries": 5, "retry_backoff": "2s" } }
+```
+
+| Config | Symbiotic Relay total | OZ Relayer total |
+|--------|----------------------|------------------|
+| 1s / 3 retries | ~6s | ~9s |
+| 1s / 5 retries | ~15s | ~39s |
+| 2s / 3 retries | ~12s | ~18s |
