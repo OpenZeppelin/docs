@@ -1,7 +1,6 @@
 ---
 title: Integer Math
 ---
-
 The `openzeppelin_math` package is the numeric foundation for OpenZeppelin Contracts for Sui. It provides deterministic arithmetic across unsigned integer widths, explicit rounding controls, and helpers for decimal normalization.
 
 Use this package when your app needs arithmetic behavior that is predictable, auditable, and safe around overflow and precision boundaries. Instead of hiding rounding and truncation inside implementation details, `openzeppelin_math` makes those decisions explicit so they can be part of your protocol rules.
@@ -12,7 +11,7 @@ Add the dependency in `Move.toml`:
 
 ```toml
 [dependencies]
-openzeppelin_math = { r.mvr = "@openzeppelin-move/integer-math" }
+openzeppelin_math = { r.mvr = "@pkg/openzeppelin_math" }
 ```
 
 Import the modules you need:
@@ -21,36 +20,45 @@ Import the modules you need:
 use openzeppelin_math::{rounding, u64};
 ```
 
+## What's included
+
+- **`rounding`** — Shared rounding policy (`Down`, `Up`, `Nearest`) passed explicitly to arithmetic functions that need to decide how to handle fractional results. Centralizing this as a named value means the rounding direction appears in code as a reviewable protocol decision, not a hidden truncation.
+- **`u8`, `u16`, `u32`, `u64`, `u128`, `u256`** — Uniform arithmetic API across all unsigned widths: `mul_div`, `sqrt`, `log2`, `log10`, `average`, `inv_mod`, `mul_mod`, and shift operations. Overflow-returning variants return `Option<T>` rather than aborting.
+- **`decimal_scaling`** — Safe conversion of token amounts between different decimal precisions (e.g., from a 6-decimal token to a 9-decimal internal system). Uses `u512` internally to avoid overflow during the scaling multiplication.
+- **`u512`** — Wide-integer helper for intermediate calculations that would overflow `u256`. Available for high-precision arithmetic paths that carry full precision before a final truncation.
+
 ## Examples
 
 ### Fee quote with explicit rounding
 
+`mul_div` computes `(amount * numerator) / denominator`, performing the overflow check on the intermediate product before dividing.
+
 ```move
 module my_sui_app::pricing;
-
 use openzeppelin_math::{rounding, u64};
-
 const EMathOverflow: u64 = 0;
-
 public fun quote_with_fee(amount: u64): u64 {
     u64::mul_div(amount, 1025u64, 1000u64, rounding::nearest())
         .destroy_or!(abort EMathOverflow)
 }
 ```
 
+`rounding::nearest()` rounds to the nearest integer, breaking ties toward even. Using `nearest()` here means the protocol does not systematically favor the buyer or seller across a large number of small trades — that choice is intentional and visible in code. If you want fees to always round in your protocol's favor, use `rounding::up()` instead.
+
+
 ### Square root with deterministic rounding
 
 ```move
 module my_sui_app::analytics;
-
 use openzeppelin_math::{rounding, u64};
-
 public fun sqrt_floor(value: u64): u64 {
     u64::sqrt(value, rounding::down())
 }
 ```
 
 ### Decimal normalization between precisions
+
+`safe_upcast_balance` converts an amount from a lower-precision representation to a higher one; `safe_downcast_balance` does the reverse, truncating any fractional remainder at the lower boundary.
 
 ```move
 module my_sui_app::scaling;
@@ -68,12 +76,18 @@ public fun scale_down_9_to_6(amount: u256): u64 {
 }
 ```
 
+`safe_downcast_balance` discards any fractional remainder in the lower digits — if your protocol must account for that remainder rather than silently dropping it, capture it before the downcast.
+
+<Callout>
+For a deeper walkthrough of every function with background on why safe integer math matters on-chain, see the Integer Math guide — coming soon.
+</Callout>
+
 ## Picking the right primitives
 
-- `rounding`: shared rounding policy (`Down`, `Up`, `Nearest`) for value-sensitive paths.
-- `u8`, `u16`, `u32`, `u64`, `u128`, `u256`: same API surface across widths for portability.
-- `decimal_scaling`: decimal conversion between systems using different precision.
-- `u512`: wide intermediate support for high-precision arithmetic paths.
+- **`rounding`**: The rounding policy type. Pass `Down`, `Up`, or `Nearest` explicitly for value-sensitive paths. This makes the rounding direction a named, reviewable protocol decision rather than a consequence of integer truncation.
+- **`u8` – `u256`**: The per-width arithmetic modules. They share the same API surface, so code that starts on `u64` can be ported to `u128` or `u256` without relearning the interface. Reach for a wider type when intermediate products risk overflowing your current width.
+- **`decimal_scaling`**: Use this when crossing decimal precision boundaries. For example, bridging between a 6-decimal stablecoin and a 9-decimal internal accounting system. It handles the multiplier arithmetic and guards against intermediate overflow using `u512` internally.
+- **`u512`**: Use this directly when intermediate calculations exceed the `u256` range and you need to carry the full precision through before truncating. `decimal_scaling` uses it internally, but it is also available for custom high-precision paths.
 
 ## API Reference
 
