@@ -30,6 +30,7 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 	// reading it during render would cause a hydration mismatch on shared paths
 	// (e.g. /relayer/*) where the active ecosystem is only known on the client.
 	const [lastEcosystem, setLastEcosystem] = useState<string | null>(null);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-read sessionStorage when pathname changes
 	useEffect(() => {
 		setLastEcosystem(sessionStorage.getItem("lastEcosystem"));
 	}, [pathname]);
