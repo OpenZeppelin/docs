@@ -6,10 +6,10 @@ title: Using with Hardhat
 This is the documentation for Hardhat 3. For Hardhat 2, see the [Hardhat 2 (legacy) docs](/upgrades-plugins/hardhat-2/hardhat-upgrades).
 </Callout>
 
-This package adds functions to your Hardhat scripts so you can deploy and upgrade proxies for your contracts. Depends on `ethers.js`.
+This package adds functions to your Hardhat scripts so you can deploy and upgrade proxies for your contracts. Requires `@nomicfoundation/hardhat-ethers`.
 
 <Callout>
-Check out the [step by step tutorial](https://forum.openzeppelin.com/t/openzeppelin-buidler-upgrades-step-by-step-tutorial/3580), showing from creating, testing and deploying, all the way through to upgrading with Gnosis Safe.
+Migrating from Hardhat 2? See the [example projects](https://github.com/OpenZeppelin/openzeppelin-upgrades/tree/master/packages/plugin-hardhat/examples) for complete Transparent, UUPS, and Solidity-test examples using Hardhat 3.
 </Callout>
 
 ## Installation
@@ -19,47 +19,79 @@ $ npm install --save-dev @openzeppelin/hardhat-upgrades
 $ npm install --save-dev @nomicfoundation/hardhat-ethers ethers # peer dependencies
 ```
 
-And register the plugin in your [`hardhat.config.js`](https://hardhat.org/config):
+<Callout>
+Hardhat 3 supports both ethers and viem. This plugin uses `@nomicfoundation/hardhat-ethers` internally and loads it automatically. If your project uses viem, install `@nomicfoundation/hardhat-viem` and add it to your config alongside this plugin.
+</Callout>
 
-```js
-require('@openzeppelin/hardhat-upgrades');
+Register the `@openzeppelin/hardhat-upgrades` plugin in your [`hardhat.config.ts`](https://hardhat.org/config/):
+
+```typescript
+import { defineConfig } from 'hardhat/config';
+import hardhatUpgrades from '@openzeppelin/hardhat-upgrades';
+
+export default defineConfig({
+  plugins: [hardhatUpgrades],
+  // ... rest of config
+});
 ```
+
+If you use the `verify` task, also add `@nomicfoundation/hardhat-verify` to the `plugins` array and configure Hardhat's `verify.etherscan.apiKey` setting.
 
 ## Usage in scripts
 
+**Important:** Create a single network connection and share it across all operations. This ensures operations share the same context and state.
+
 ### Proxies
 
-You can use this plugin in a [Hardhat script](https://hardhat.org/guides/scripts.html) to deploy an upgradeable instance of one of your contracts via the `deployProxy` function:
+You can use this plugin in a [Hardhat script](https://hardhat.org/docs/guides/writing-scripts) to deploy an upgradeable instance of one of your contracts via the `deployProxy` function:
 
-```js
-// scripts/create-box.js
-const  ethers, upgrades  = require("hardhat");
+```typescript
+// scripts/create-box.ts
+import hre from 'hardhat';
+import { upgrades } from '@openzeppelin/hardhat-upgrades';
 
-async function main()
-  const Box = await ethers.getContractFactory("Box");
-  const box = await upgrades.deployProxy(Box, [42]);
+async function main() {
+  const connection = await hre.network.connect();
+  const { ethers } = connection;
+  const upgradesApi = await upgrades(hre, connection);
+
+  const Box = await ethers.getContractFactory('Box');
+  const box = await upgradesApi.deployProxy(Box, [42]);
   await box.waitForDeployment();
-  console.log("Box deployed to:", await box.getAddress());
+  console.log('Box deployed to:', await box.getAddress());
+}
 
-
-main();
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
 ```
 
 This will automatically check that the `Box` contract is upgrade-safe, deploy an implementation contract for the `Box` contract (unless there is one already from a previous deployment), create a proxy (along with a proxy admin if needed), and initialize it by calling `initialize(42)`.
 
-Then, in another script, you can use the `upgradeProxy` function to upgrade the deployed instance to a new version. The new version can be a different contract (such as `BoxV2`), or you can just modify the existing `Box` contract and recompile it - the plugin will note it changed.
+Then, in another script, you can use the `upgradeProxy` function to upgrade the deployed instance to a new version. The new version can be a different contract (such as `BoxV2`), or you can just modify the existing `Box` contract and recompile it — the plugin will note it changed.
 
-```js
-// scripts/upgrade-box.js
-const  ethers, upgrades  = require("hardhat");
+```typescript
+// scripts/upgrade-box.ts
+import hre from 'hardhat';
+import { upgrades } from '@openzeppelin/hardhat-upgrades';
 
-async function main()
-  const BoxV2 = await ethers.getContractFactory("BoxV2");
-  const box = await upgrades.upgradeProxy(BOX_ADDRESS, BoxV2);
-  console.log("Box upgraded");
+const PROXY_ADDRESS = '0x...'; // Replace with your proxy address
 
+async function main() {
+  const connection = await hre.network.connect();
+  const { ethers } = connection;
+  const upgradesApi = await upgrades(hre, connection);
 
-main();
+  const BoxV2 = await ethers.getContractFactory('BoxV2');
+  await upgradesApi.upgradeProxy(PROXY_ADDRESS, BoxV2);
+  console.log('Box upgraded');
+}
+
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
 ```
 
 > Note: While this plugin keeps track of all the implementation contracts you have deployed per network, in order to reuse them and validate storage compatibilities, it does _not_ keep track of the proxies you have deployed. This means that you will need to manually keep track of each deployment address, to supply those to the upgrade function when needed.
@@ -70,86 +102,173 @@ The plugin will take care of comparing `BoxV2` to the previous one to ensure the
 
 You can also use this plugin to deploy an upgradeable beacon for your contract with the `deployBeacon` function, then deploy one or more beacon proxies that point to it by using the `deployBeaconProxy` function.
 
-```js
-// scripts/create-box.js
-const  ethers, upgrades  = require("hardhat");
+```typescript
+// scripts/create-box.ts
+import hre from 'hardhat';
+import { upgrades } from '@openzeppelin/hardhat-upgrades';
 
-async function main()
-  const Box = await ethers.getContractFactory("Box");
+async function main() {
+  const connection = await hre.network.connect();
+  const { ethers } = connection;
+  const upgradesApi = await upgrades(hre, connection);
 
-  const beacon = await upgrades.deployBeacon(Box);
+  const Box = await ethers.getContractFactory('Box');
+
+  const beacon = await upgradesApi.deployBeacon(Box);
   await beacon.waitForDeployment();
-  console.log("Beacon deployed to:", await beacon.getAddress());
+  console.log('Beacon deployed to:', await beacon.getAddress());
 
-  const box = await upgrades.deployBeaconProxy(beacon, Box, [42]);
+  const box = await upgradesApi.deployBeaconProxy(beacon, Box, [42]);
   await box.waitForDeployment();
-  console.log("Box deployed to:", await box.getAddress());
+  console.log('Box deployed to:', await box.getAddress());
+}
 
-
-main();
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
 ```
 
 Then, in another script, you can use the `upgradeBeacon` function to upgrade the beacon to a new version. When the beacon is upgraded, all of the beacon proxies that point to it will use the new contract implementation.
 
-```js
-// scripts/upgrade-box.js
-const  ethers, upgrades  = require("hardhat");
+```typescript
+// scripts/upgrade-box.ts
+import hre from 'hardhat';
+import { upgrades } from '@openzeppelin/hardhat-upgrades';
 
-async function main()
-  const BoxV2 = await ethers.getContractFactory("BoxV2");
+const BEACON_ADDRESS = '0x...'; // Replace with your beacon address
 
-  await upgrades.upgradeBeacon(BEACON_ADDRESS, BoxV2);
-  console.log("Beacon upgraded");
+async function main() {
+  const connection = await hre.network.connect();
+  const { ethers } = connection;
+  const upgradesApi = await upgrades(hre, connection);
 
-  const box = BoxV2.attach(BOX_ADDRESS);
+  const BoxV2 = await ethers.getContractFactory('BoxV2');
+  await upgradesApi.upgradeBeacon(BEACON_ADDRESS, BoxV2);
+  console.log('Beacon upgraded');
+}
 
-
-main();
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
 ```
 
 ## Usage in tests
 
-You can also use the plugin’s functions from your Hardhat tests, in case you want to add tests for upgrading your contracts (which you should!). The API is the same as in scripts.
+You can also use the plugin's functions from your Hardhat tests, in case you want to add tests for upgrading your contracts (which you should!). The API is the same as in scripts.
+
+**Important:** Share a single connection across all tests in a suite. Create the connection once in a `before` / `beforeAll` hook, or at module scope using ESM top-level `await`.
 
 ### Proxies
 
-```js
-const  expect  = require("chai");
+```typescript
+import { expect } from 'chai';
+import hre from 'hardhat';
+import { upgrades } from '@openzeppelin/hardhat-upgrades';
 
-describe("Box", function()
+describe('Box', function () {
+  let upgradesApi;
+  let ethers;
+
+  before(async () => {
+    const connection = await hre.network.connect();
+    ({ ethers } = connection);
+    upgradesApi = await upgrades(hre, connection);
+  });
+
   it('works', async () => {
-    const Box = await ethers.getContractFactory("Box");
-    const BoxV2 = await ethers.getContractFactory("BoxV2");
+    const Box = await ethers.getContractFactory('Box');
+    const BoxV2 = await ethers.getContractFactory('BoxV2');
 
-    const instance = await upgrades.deployProxy(Box, [42]);
-    const upgraded = await upgrades.upgradeProxy(await instance.getAddress(), BoxV2);
+    const instance = await upgradesApi.deployProxy(Box, [42]);
+    const upgraded = await upgradesApi.upgradeProxy(await instance.getAddress(), BoxV2);
 
     const value = await upgraded.value();
     expect(value.toString()).to.equal('42');
-  );
+  });
 });
 ```
 
 ### Beacon proxies
 
-```js
-const  expect  = require("chai");
+```typescript
+import { expect } from 'chai';
+import hre from 'hardhat';
+import { upgrades } from '@openzeppelin/hardhat-upgrades';
 
-describe("Box", function()
+describe('Box', function () {
+  let upgradesApi;
+  let ethers;
+
+  before(async () => {
+    const connection = await hre.network.connect();
+    ({ ethers } = connection);
+    upgradesApi = await upgrades(hre, connection);
+  });
+
   it('works', async () => {
-    const Box = await ethers.getContractFactory("Box");
-    const BoxV2 = await ethers.getContractFactory("BoxV2");
+    const Box = await ethers.getContractFactory('Box');
+    const BoxV2 = await ethers.getContractFactory('BoxV2');
 
-    const beacon = await upgrades.deployBeacon(Box);
-    const instance = await upgrades.deployBeaconProxy(beacon, Box, [42]);
+    const beacon = await upgradesApi.deployBeacon(Box);
+    const instance = await upgradesApi.deployBeaconProxy(beacon, Box, [42]);
 
-    await upgrades.upgradeBeacon(beacon, BoxV2);
+    await upgradesApi.upgradeBeacon(beacon, BoxV2);
     const upgraded = BoxV2.attach(await instance.getAddress());
 
     const value = await upgraded.value();
     expect(value.toString()).to.equal('42');
-  );
+  });
 });
+```
+
+## Solidity tests
+
+Hardhat 3 supports writing tests in Solidity. You can use Solidity to test deployments, upgrades, and upgrade safety via the [`@openzeppelin/foundry-upgrades`](https://github.com/OpenZeppelin/openzeppelin-foundry-upgrades) Solidity library.
+
+For the Solidity API, see [`Upgrades.sol`](/upgrades-plugins/foundry/api/Upgrades) (deployment and upgrade functions) and [`Options.sol`](/upgrades-plugins/foundry/api/Options) (common options).
+
+This section is optional and is only needed if you want Solidity-based tests.
+
+Install:
+
+```console
+$ npm install --save-dev @openzeppelin/foundry-upgrades
+```
+
+Configure your Hardhat config to enable Solidity tests and expose the artifacts directory to FFI:
+
+```typescript
+import { defineConfig } from 'hardhat/config';
+import hardhatUpgrades, { proxyFilesToBuild } from '@openzeppelin/hardhat-upgrades';
+
+if (!process.env.FOUNDRY_OUT) {
+  process.env.FOUNDRY_OUT = 'artifacts/contracts';
+}
+
+export default defineConfig({
+  plugins: [hardhatUpgrades],
+  solidity: {
+    version: '0.8.28',
+    npmFilesToBuild: [...proxyFilesToBuild()],
+  },
+  test: {
+    solidity: {
+      ffi: true,
+      fsPermissions: {
+        readDirectory: ['artifacts/contracts'],
+      },
+    },
+  },
+});
+```
+
+Run `hardhat clean` before running your Solidity tests, or include the `--force` option when running `hardhat compile`. Any previous build artifacts must be cleared first to avoid duplicate contract definitions when the Solidity-based validation reads the build info:
+
+```console
+$ npx hardhat compile --force
+$ npx hardhat test solidity
 ```
 
 ## Usage with Defender
