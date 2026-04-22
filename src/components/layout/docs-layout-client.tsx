@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { baseOptions } from "@/app/layout.config";
 import {
 	ArbitrumIcon,
@@ -26,6 +26,15 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 	const currentTree = useNavigationTree();
 	const pathname = usePathname();
 
+	// Read sessionStorage in an effect so SSR and the initial client render match;
+	// reading it during render would cause a hydration mismatch on shared paths
+	// (e.g. /relayer/*) where the active ecosystem is only known on the client.
+	const [lastEcosystem, setLastEcosystem] = useState<string | null>(null);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-read sessionStorage when pathname changes
+	useEffect(() => {
+		setLastEcosystem(sessionStorage.getItem("lastEcosystem"));
+	}, [pathname]);
+
 	// Determine if shared paths should be included in Stellar tab based on sessionStorage
 	const tabs = useMemo(() => {
 		// Don't show ecosystem tabs on impact pages
@@ -37,10 +46,6 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 			pathname.startsWith("/monitor") ||
 			pathname.startsWith("/relayer") ||
 			pathname.startsWith("/ui-builder");
-		const lastEcosystem =
-			typeof window !== "undefined"
-				? sessionStorage.getItem("lastEcosystem")
-				: null;
 
 		// Include shared paths in Stellar tab only if coming from Stellar context
 		const stellarUrls =
@@ -58,6 +63,11 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 			isSharedPath && lastEcosystem === "contracts-stylus"
 				? new Set(["/contracts-stylus", "/monitor", "/relayer"])
 				: new Set(["/contracts-stylus"]);
+
+		const zamaUrls =
+			isSharedPath && lastEcosystem === "zama"
+				? new Set(["/confidential-contracts", "/relayer"])
+				: new Set(["/confidential-contracts"]);
 
 		return [
 			{
@@ -119,9 +129,10 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 				title: "Zama FHEVM",
 				url: "/confidential-contracts",
 				icon: <ZamaIcon className="w-5 h-5" />,
+				urls: zamaUrls,
 			},
 		];
-	}, [pathname]);
+	}, [pathname, lastEcosystem]);
 
 	return (
 		<DocsLayout
