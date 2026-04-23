@@ -2,29 +2,11 @@
 title: OpenZeppelin Hardhat Upgrades API
 ---
 
-<Callout>
-This is the documentation for Hardhat 3. For Hardhat 2, see the [Hardhat Upgrades API docs (Hardhat 2)](/upgrades-plugins/hardhat-2/api-hardhat-upgrades).
+<Callout type="warn" title="Outdated Version">
+You're viewing the documentation for Hardhat 2. The latest documentation is available for [Hardhat 3](/upgrades-plugins/api-hardhat-upgrades).
 </Callout>
 
-Both `deployProxy` and `upgradeProxy` functions will return instances of [ethers.js contracts](https://docs.ethers.org/v6/api/contract/#Contract), and require [ethers.js contract factories](https://docs.ethers.org/v6/api/contract/#ContractFactory) as arguments. For [beacons](/contracts/5.x/api/proxy#beacon), `deployBeacon` and `upgradeBeacon` will both return an upgradable beacon instance that can be used with a beacon proxy. All deploy and upgrade functions validate that the implementation contract is upgrade-safe, and will fail otherwise.
-
-## Setup
-
-In Hardhat 3, all of the functions below are accessed via an `upgradesApi` object created from the `upgrades` factory. Defender-specific functions (`defender.*`) are accessed via `defenderApi` from the `defender` factory. Both factories take a network connection as an argument; share one connection across your operations.
-
-```typescript
-import hre from 'hardhat';
-import { upgrades, defender } from '@openzeppelin/hardhat-upgrades';
-
-const connection = await hre.network.connect();
-const { ethers } = connection;
-const upgradesApi = await upgrades(hre, connection);
-
-// For Defender-specific functions:
-const defenderApi = await defender(hre, connection);
-```
-
-`upgradesApi` exposes every top-level function documented below (e.g. `upgradesApi.deployProxy(...)`). `defenderApi` exposes the same functions plus the `defender.*` functions (e.g. `defenderApi.deployContract(...)`, `defenderApi.proposeUpgradeWithApproval(...)`). The `admin`, `erc1967`, and `beacon` namespaces are accessed as `upgradesApi.admin.*`, `upgradesApi.erc1967.*`, and `upgradesApi.beacon.*`.
+Both `deployProxy` and `upgradeProxy` functions will return instances of [ethers.js contracts](https://docs.ethers.io/v5/api/contract/contract), and require [ethers.js contract factories](https://docs.ethers.io/v5/api/contract/contract-factory) as arguments. For [beacons](/contracts/5.x/api/proxy#beacon), `deployBeacon` and `upgradeBeacon` will both return an upgradable beacon instance that can be used with a beacon proxy. All deploy and upgrade functions validate that the implementation contract is upgrade-safe, and will fail otherwise.
 
 ## Common Options
 
@@ -383,29 +365,19 @@ Validates a new implementation contract without deploying it and without actuall
 
 Validate upgrading an existing proxy to a new contract (replace `PROXY_ADDRESS` with the address of your proxy):
 ```ts
-import hre from 'hardhat';
-import { upgrades } from '@openzeppelin/hardhat-upgrades';
-
-const connection = await hre.network.connect();
-const { ethers } = connection;
-const upgradesApi = await upgrades(hre, connection);
+const  ethers, upgrades  = require('hardhat');
 
 const BoxV2 = await ethers.getContractFactory('BoxV2');
-await upgradesApi.validateUpgrade(PROXY_ADDRESS, BoxV2);
+await upgrades.validateUpgrade(PROXY_ADDRESS, BoxV2);
 ```
 
 Validate upgrading between two contract implementations:
 ```ts
-import hre from 'hardhat';
-import { upgrades } from '@openzeppelin/hardhat-upgrades';
-
-const connection = await hre.network.connect();
-const { ethers } = connection;
-const upgradesApi = await upgrades(hre, connection);
+const  ethers, upgrades  = require('hardhat');
 
 const Box = await ethers.getContractFactory('Box');
 const BoxV2 = await ethers.getContractFactory('BoxV2');
-await upgradesApi.validateUpgrade(Box, BoxV2);
+await upgrades.validateUpgrade(Box, BoxV2);
 ```
 
 ## prepareUpgrade
@@ -699,25 +671,27 @@ To use this task, ensure you have hardhat-verify installed:
 npm install --save-dev @nomicfoundation/hardhat-verify
 ```
 
-Then add both `@nomicfoundation/hardhat-verify` and `@openzeppelin/hardhat-upgrades` to the `plugins` array in your `hardhat.config.ts`. The upgrades plugin detects hardhat-verify and automatically extends its `verify` task:
-```typescript
-import { configVariable, defineConfig } from ‘hardhat/config’;
-import hardhatVerify from ‘@nomicfoundation/hardhat-verify’;
-import hardhatUpgrades from ‘@openzeppelin/hardhat-upgrades’;
-
-export default defineConfig({
-  plugins: [hardhatVerify, hardhatUpgrades],
-  verify: {
-    etherscan: {
-      apiKey: configVariable(‘ETHERSCAN_API_KEY’),
-    },
-  },
-});
+Then import the `@nomicfoundation/hardhat-verify` plugin along with the `@openzeppelin/hardhat-upgrades` plugin in your Hardhat configuration.
+For example, if you are using JavaScript, import the plugins in `hardhat.config.js`:
+```js
+require("@nomicfoundation/hardhat-verify");
+require("@openzeppelin/hardhat-upgrades");
+```
+Or if you are using TypeScript, import the plugins in `hardhat.config.ts`:
+```ts
+import "@nomicfoundation/hardhat-verify";
+import "@openzeppelin/hardhat-upgrades";
 ```
 
-Then run the `verify` task from the command line with the proxy address:
+Finally, follow [hardhat-verify’s usage documentation](https://hardhat.org/hardhat-runner/plugins/nomicfoundation-hardhat-verify#usage) to configure your Etherscan API key and run the `verify` task from the command line with the proxy address:
 ```
 npx hardhat verify --network mainnet PROXY_ADDRESS
 ```
+or programmatically using the [`verify:verify` subtask](https://hardhat.org/hardhat-runner/plugins/nomicfoundation-hardhat-verify#using-programmatically):
+```javascript
+await hre.run("verify:verify",
+  address: PROXY_ADDRESS,
+);
+```
 
-Note that you do not need to include constructor arguments when verifying if your implementation contract only uses initializers.  However, if your implementation contract has an actual constructor with arguments (such as to set immutable variables), then include constructor arguments according to the usage information for the [task](https://hardhat.org/hardhat-runner/plugins/nomicfoundation-hardhat-verify#usage).
+Note that you do not need to include constructor arguments when verifying if your implementation contract only uses initializers.  However, if your implementation contract has an actual constructor with arguments (such as to set immutable variables), then include constructor arguments according to the usage information for the [task](https://hardhat.org/hardhat-runner/plugins/nomicfoundation-hardhat-verify#usage) or [subtask](https://hardhat.org/hardhat-runner/plugins/nomicfoundation-hardhat-verify#using-programmatically).
