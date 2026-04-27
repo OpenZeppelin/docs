@@ -1,0 +1,222 @@
+---
+title: Getting Started
+---
+
+This guide walks you through installing OpenZeppelin UIKit, configuring styles, and rendering your first blockchain transaction form.
+
+<Callout type="info">
+**Live example**: See UIKit and ecosystem adapters working together in the browser at [**openzeppelin-ui.netlify.app**](https://openzeppelin-ui.netlify.app).
+</Callout>
+
+## Prerequisites
+
+- **Node.js** >= 20.19.0
+- **React** 19
+- **Tailwind CSS** 4
+- A package manager: `pnpm` (recommended), `npm`, or `yarn`
+
+## Installation
+
+Install only the packages your application needs. The packages are designed to be incrementally adopted.
+
+### Minimal Setup (Types + Components)
+
+For projects that only need the component library and type system:
+
+```bash
+pnpm add @openzeppelin/ui-types @openzeppelin/ui-utils @openzeppelin/ui-components @openzeppelin/ui-styles
+```
+
+### Full Setup (With Rendering + React Integration)
+
+For applications that need transaction form rendering and wallet integration:
+
+```bash
+pnpm add @openzeppelin/ui-types @openzeppelin/ui-utils @openzeppelin/ui-styles \
+  @openzeppelin/ui-components @openzeppelin/ui-react @openzeppelin/ui-renderer
+```
+
+### Optional Packages
+
+```bash
+# IndexedDB persistence (address book, settings, etc.)
+pnpm add @openzeppelin/ui-storage
+
+# Dev CLI for Tailwind wiring and local development
+pnpm add -D @openzeppelin/ui-dev-cli
+```
+
+### Ecosystem Adapters
+
+You also need at least one ecosystem adapter package for the blockchain(s) your app supports:
+
+```bash
+# EVM (Ethereum, Polygon, Arbitrum, etc.)
+pnpm add @openzeppelin/adapter-evm
+
+# Stellar / Soroban
+pnpm add @openzeppelin/adapter-stellar
+
+# Polkadot (EVM-compatible path)
+pnpm add @openzeppelin/adapter-polkadot
+```
+
+## Step 1: Configure Tailwind CSS
+
+UIKit uses Tailwind CSS 4 for styling. Components ship class names but **not** compiled CSS. Your application's Tailwind build must know where to find them.
+
+### Automated Setup (Recommended)
+
+The dev CLI handles Tailwind configuration automatically:
+
+```bash
+pnpm add -D @openzeppelin/ui-dev-cli
+pnpm exec oz-ui-dev tailwind doctor --project "$PWD"
+pnpm exec oz-ui-dev tailwind fix --project "$PWD"
+```
+
+This generates an `oz-tailwind.generated.css` file with the correct `@source` directives for all installed OpenZeppelin packages.
+
+### Manual Setup
+
+If you prefer manual configuration, your entry CSS must register the OpenZeppelin package sources:
+
+```css
+@layer base, components, utilities;
+
+@import 'tailwindcss' source(none);
+@source "./";
+@source "../";
+@source "../node_modules/@openzeppelin/ui-components";
+@source "../node_modules/@openzeppelin/ui-react";
+@source "../node_modules/@openzeppelin/ui-renderer";
+@source "../node_modules/@openzeppelin/ui-styles";
+@source "../node_modules/@openzeppelin/ui-utils";
+@import '@openzeppelin/ui-styles/global.css';
+```
+
+<Callout type="warn">
+A bare Tailwind import is not enough. Tailwind v4 must be told to scan the OpenZeppelin `node_modules` paths, or component classes will be missing from the final CSS.
+</Callout>
+
+## Step 2: Use Components
+
+UIKit components work with [react-hook-form](https://react-hook-form.com/) for form state management. Here is a simple form with an address field and a submit button:
+
+```tsx
+import { useForm } from 'react-hook-form';
+import { Button, TextField, AddressField } from '@openzeppelin/ui-components';
+
+function SimpleForm() {
+  const { control, handleSubmit } = useForm();
+
+  const onSubmit = (data) => {
+    console.log('Form data:', data);
+  };
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <AddressField
+        name="recipient"
+        label="Recipient Address"
+        control={control}
+        placeholder="0x..."
+      />
+      <TextField
+        name="memo"
+        label="Memo"
+        control={control}
+        placeholder="Optional note"
+      />
+      <Button type="submit">Send</Button>
+    </form>
+  );
+}
+```
+
+## Step 3: Render a Transaction Form
+
+The renderer package provides a declarative way to build transaction forms from a schema. The form fields, layout, and submission are all driven by data.
+
+```tsx
+import { TransactionForm } from '@openzeppelin/ui-renderer';
+import type { RenderFormSchema } from '@openzeppelin/ui-types';
+
+const schema: RenderFormSchema = {
+  id: 'transfer-form',
+  title: 'Transfer Tokens',
+  fields: [
+    { id: 'to', name: 'to', type: 'address', label: 'Recipient' },
+    { id: 'amount', name: 'amount', type: 'amount', label: 'Amount' },
+  ],
+  layout: { columns: 1, spacing: 'normal', labelPosition: 'top' },
+  submitButton: { text: 'Transfer', loadingText: 'Transferring...' },
+};
+
+function TransferPage({ adapter, contractSchema }) {
+  return (
+    <TransactionForm
+      schema={schema}
+      contractSchema={contractSchema}
+      adapter={adapter}
+      onTransactionSuccess={(result) => {
+        console.log('Transaction successful:', result);
+      }}
+    />
+  );
+}
+```
+
+The `adapter` prop accepts a `TransactionFormCapabilities` object: a bundle of capabilities from your active [Ecosystem Runtime](/tools/uikit/architecture#runtimes).
+
+## Step 4: Wire Up React Providers
+
+For wallet integration and multi-network support, wrap your app with `RuntimeProvider` and `WalletStateProvider`:
+
+```tsx
+import { RuntimeProvider, WalletStateProvider } from '@openzeppelin/ui-react';
+import { ecosystemDefinition } from '@openzeppelin/adapter-evm';
+
+async function resolveRuntime(networkConfig) {
+  return ecosystemDefinition.createRuntime('composer', networkConfig);
+}
+
+function App() {
+  return (
+    <RuntimeProvider resolveRuntime={resolveRuntime}>
+      <WalletStateProvider
+        initialNetworkId="ethereum-mainnet"
+        getNetworkConfigById={getNetworkById}
+      >
+        <YourApp />
+      </WalletStateProvider>
+    </RuntimeProvider>
+  );
+}
+```
+
+Then access wallet state and runtime capabilities from any component:
+
+```tsx
+import { useWalletState } from '@openzeppelin/ui-react';
+
+function WalletInfo() {
+  const { activeNetworkConfig, activeRuntime, isRuntimeLoading } = useWalletState();
+
+  if (isRuntimeLoading || !activeRuntime) {
+    return <p>Loading...</p>;
+  }
+
+  return <p>Connected to {activeNetworkConfig?.name}</p>;
+}
+```
+
+For the full React integration guide, see [React Integration](/tools/uikit/react-integration).
+
+## Next Steps
+
+- [Architecture](/tools/uikit/architecture): Understand the package layers, capability tiers, and runtime model
+- [Components](/tools/uikit/components): Explore UI primitives and blockchain-aware form fields
+- [React Integration](/tools/uikit/react-integration): Deep dive into providers, hooks, and wallet state
+- [Theming & Styling](/tools/uikit/theming): Customize tokens, colors, and dark mode
+- [Building an adapter](/ecosystem-adapters/building-an-adapter): Background on adapter packages and ecosystem integrations

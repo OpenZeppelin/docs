@@ -20,7 +20,7 @@ export function useNavigationTree() {
 
 	// Read sessionStorage after mount so SSR and initial client render match.
 	// Reading during render would cause hydration mismatches on shared paths
-	// (/relayer, /monitor, /ui-builder, /ecosystem-adapters) where the active
+	// (/relayer, /monitor, /ui-builder, /ecosystem-adapters, /tools) where the active
 	// ecosystem is only known on the client.
 	const [lastEcosystem, setLastEcosystem] = useState<string | null>(null);
 
@@ -46,12 +46,11 @@ export function useNavigationTree() {
 			pathname.startsWith("/upgrades-plugins") ||
 			pathname.startsWith("/wizard") ||
 			pathname.startsWith("/upgrades") ||
-			pathname.startsWith("/defender") ||
-			pathname.startsWith("/tools")
+			pathname.startsWith("/defender")
 		) {
 			sessionStorage.setItem("lastEcosystem", "ethereum");
 		}
-		// Note: /ui-builder, /monitor, /relayer, and /ecosystem-adapters are intentionally NOT set here
+		// Note: /ui-builder, /monitor, /relayer, /ecosystem-adapters, and /tools are intentionally NOT set here
 		// They inherit the lastEcosystem from whichever tab the user was in before navigating
 
 		setLastEcosystem(sessionStorage.getItem("lastEcosystem"));
@@ -76,8 +75,6 @@ export function useNavigationTree() {
 		return uniswapTree;
 	} else if (pathname.startsWith("/substrate-runtimes")) {
 		return polkadotTree;
-	} else if (pathname.startsWith("/tools")) {
-		return ethereumEvmTree;
 	}
 
 	// For shared paths, use the lastEcosystem state (from sessionStorage after mount)
@@ -85,7 +82,8 @@ export function useNavigationTree() {
 		pathname.startsWith("/monitor") ||
 		pathname.startsWith("/relayer") ||
 		pathname.startsWith("/ui-builder") ||
-		pathname.startsWith("/ecosystem-adapters")
+		pathname.startsWith("/ecosystem-adapters") ||
+		pathname.startsWith("/tools")
 	) {
 		switch (lastEcosystem) {
 			case "stellar":
