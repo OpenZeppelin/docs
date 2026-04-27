@@ -1,5 +1,4 @@
 import arbitrumStylusData from "./arbitrum-stylus.json";
-import ecosystemAdaptersData from "./ecosystem-adapters.json";
 import ethereumEvmData from "./ethereum-evm.json";
 import impactData from "./impact.json";
 import midnightData from "./midnight.json";
@@ -22,7 +21,6 @@ const zama = zamaData as NavigationNode[];
 const uniswap = uniswapData as NavigationNode[];
 const polkadot = polkadotData as NavigationNode[];
 const impact = impactData as NavigationNode[];
-const ecosystemAdapters = ecosystemAdaptersData as NavigationNode[];
 
 // Create separate navigation trees for each blockchain
 export const ethereumEvmTree: NavigationTree = {
@@ -73,11 +71,6 @@ export const polkadotTree: NavigationTree = {
 export const impactTree: NavigationTree = {
 	name: "OpenZeppelin Impact",
 	children: impact,
-};
-
-export const ecosystemAdaptersTree: NavigationTree = {
-	name: "Ecosystem Adapters",
-	children: ecosystemAdapters,
 };
 
 export * from "./types";

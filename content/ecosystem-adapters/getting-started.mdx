@@ -28,7 +28,7 @@ pnpm add @openzeppelin/adapter-stellar @openzeppelin/ui-types
 pnpm add @openzeppelin/adapter-polkadot @openzeppelin/ui-types
 ```
 
-If you're consuming multiple ecosystems, install all of them — each adapter is independent and tree-shakeable.
+If you're consuming multiple ecosystems, install all of them. Each adapter is independent and tree-shakeable.
 
 ## Quick Start
 
@@ -56,7 +56,7 @@ const network = ecosystemDefinition.networks[0]; // e.g., Ethereum Mainnet
 const runtime = ecosystemDefinition.createRuntime('viewer', network);
 ```
 
-The `createRuntime` call is **synchronous** — it assembles capability instances immediately. Expensive initialization (RPC connections, wallet discovery) happens lazily on first use.
+The `createRuntime` call is **synchronous**. It assembles capability instances immediately. Expensive initialization (RPC connections, wallet discovery) happens lazily on first use.
 
 If you request a profile the adapter doesn't fully support, `createRuntime` throws an `UnsupportedProfileError` listing the missing capabilities.
 
@@ -65,10 +65,10 @@ If you request a profile the adapter doesn't fully support, `createRuntime` thro
 Access capabilities directly from the runtime object:
 
 ```ts
-// Validate an address (Tier 1 — instant, no network call)
+// Validate an address (Tier 1: instant, no network call)
 const isValid = runtime.addressing.isValidAddress('0x1234...');
 
-// Read contract state (Tier 2 — triggers RPC on first call)
+// Read contract state (Tier 2: triggers RPC on first call)
 const result = await runtime.query.queryViewFunction(
   '0xContractAddress',
   'balanceOf',
@@ -149,7 +149,7 @@ export default mergeConfig(
 );
 ```
 
-This centralizes `resolve.dedupe`, `optimizeDeps`, `ssr.noExternal`, and any adapter-specific Vite plugins — adapters remain the source of truth for their own build requirements.
+This centralizes `resolve.dedupe`, `optimizeDeps`, `ssr.noExternal`, and any adapter-specific Vite plugins. Adapters remain the source of truth for their own build requirements.
 
 ## Network Switching
 
@@ -194,7 +194,7 @@ Adapters integrate with React through three layers: a **wallet context provider*
 
 ### Wallet Context Provider
 
-Each adapter exports a root React component via `getEcosystemReactUiContextProvider()`. This component wraps your application (or the relevant subtree) and bootstraps the wallet SDK context — for example, EVM adapters render `WagmiProvider` and `QueryClientProvider` internally, while the Stellar adapter renders its own `StellarWalletContext.Provider`.
+Each adapter exports a root React component via `getEcosystemReactUiContextProvider()`. This component wraps your application (or the relevant subtree) and bootstraps the wallet SDK context. For example, EVM adapters render `WagmiProvider` and `QueryClientProvider` internally, while the Stellar adapter renders its own `StellarWalletContext.Provider`.
 
 You don't render these providers yourself. Instead, pass the runtime to a shared `WalletStateProvider` from `@openzeppelin/ui-react`, which delegates to the correct ecosystem provider automatically:
 
@@ -266,7 +266,7 @@ await runtime.wallet.disconnectWallet();
 ```
 
 <Callout type="info">
-`connectWallet` and `disconnectWallet` are imperative calls on the runtime — they are independent of the React rendering layer. You can call them from event handlers, effects, or outside React entirely.
+`connectWallet` and `disconnectWallet` are imperative calls on the runtime. They are independent of the React rendering layer. You can call them from event handlers, effects, or outside React entirely.
 </Callout>
 
 ### Hook Facade Pattern
@@ -295,7 +295,7 @@ Each facade object includes these hooks:
 | `useChains` | Returns the list of configured chains |
 | `useBalance` | Returns the native token balance for the connected account |
 
-In practice, you access facade hooks through the runtime rather than importing them directly — the runtime's `uiKit.getEcosystemReactHooks()` method returns the correct facade for the active ecosystem:
+In practice, you access facade hooks through the runtime rather than importing them directly. The runtime's `uiKit.getEcosystemReactHooks()` method returns the correct facade for the active ecosystem:
 
 ```tsx
 import { useWalletState } from '@openzeppelin/ui-react';
@@ -320,12 +320,12 @@ function AccountInfo() {
 ```
 
 <Callout type="info">
-Hooks that don't apply to a given ecosystem return safe stubs. For example, the Stellar facade's `useSwitchChain` returns `{ switchChain: undefined }` — your components can feature-detect this without conditional imports.
+Hooks that don't apply to a given ecosystem return safe stubs. For example, the Stellar facade's `useSwitchChain` returns `{ switchChain: undefined }`. Your components can feature-detect this without conditional imports.
 </Callout>
 
 ## Multi-Ecosystem Apps
 
-Applications that interact with multiple blockchains create one runtime per ecosystem. Each runtime is independent — it manages its own wallet session, RPC connections, and lifecycle.
+Applications that interact with multiple blockchains create one runtime per ecosystem. Each runtime is independent. It manages its own wallet session, RPC connections, and lifecycle.
 
 ### Setup
 
@@ -359,16 +359,16 @@ Instantiate a runtime from each adapter's `ecosystemDefinition`:
 import { ecosystemDefinition as evmDefinition } from '@openzeppelin/adapter-evm';
 import { ecosystemDefinition as stellarDefinition } from '@openzeppelin/adapter-stellar';
 
-// EVM runtime — e.g., Ethereum Mainnet
+// EVM runtime (e.g. Ethereum Mainnet)
 const evmNetwork = evmDefinition.networks[0];
 const evmRuntime = evmDefinition.createRuntime('composer', evmNetwork);
 
-// Stellar runtime — e.g., Stellar Mainnet
+// Stellar runtime (e.g. Stellar Mainnet)
 const stellarNetwork = stellarDefinition.networks[0];
 const stellarRuntime = stellarDefinition.createRuntime('viewer', stellarNetwork);
 ```
 
-Each runtime is fully isolated. The EVM runtime connects to Ethereum via wagmi, the Stellar runtime connects to Horizon/Soroban — they share no state and can be disposed independently:
+Each runtime is fully isolated. The EVM runtime connects to Ethereum via wagmi, the Stellar runtime connects to Horizon/Soroban. They share no state and can be disposed independently:
 
 ```ts
 // Use both runtimes side by side
@@ -385,7 +385,7 @@ evmRuntime.dispose();
 ```
 
 <Callout type="info">
-Wallet sessions are ecosystem-scoped, not runtime-scoped. Disposing an EVM runtime to switch from Mainnet to Sepolia does not disconnect the user's MetaMask — the wallet session persists across runtime recreation within the same ecosystem.
+Wallet sessions are ecosystem-scoped, not runtime-scoped. Disposing an EVM runtime to switch from Mainnet to Sepolia does not disconnect the user's MetaMask. The wallet session persists across runtime recreation within the same ecosystem.
 </Callout>
 
 ## Next Steps

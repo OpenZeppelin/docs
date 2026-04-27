@@ -4,7 +4,6 @@ import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import {
 	arbitrumStylusTree,
-	ecosystemAdaptersTree,
 	ethereumEvmTree,
 	impactTree,
 	midnightTree,
@@ -31,6 +30,8 @@ export function useNavigationTree() {
 			sessionStorage.setItem("lastEcosystem", "sui");
 		} else if (pathname.startsWith("/contracts-stylus")) {
 			sessionStorage.setItem("lastEcosystem", "contracts-stylus");
+		} else if (pathname.startsWith("/contracts-compact")) {
+			sessionStorage.setItem("lastEcosystem", "midnight");
 		} else if (
 			pathname.startsWith("/contracts") ||
 			pathname.startsWith("/community-contracts") ||
@@ -42,7 +43,7 @@ export function useNavigationTree() {
 		) {
 			sessionStorage.setItem("lastEcosystem", "ethereum");
 		}
-		// Note: /ui-builder, /monitor, and /relayer paths are intentionally NOT set here
+		// Note: /ui-builder, /monitor, /relayer, and /ecosystem-adapters are intentionally NOT set here
 		// They inherit the lastEcosystem from whichever tab the user was in before navigating
 	}, [pathname]);
 
@@ -65,27 +66,28 @@ export function useNavigationTree() {
 		return uniswapTree;
 	} else if (pathname.startsWith("/substrate-runtimes")) {
 		return polkadotTree;
-	} else if (pathname.startsWith("/ecosystem-adapters")) {
-		return ecosystemAdaptersTree;
 	} else if (pathname.startsWith("/tools")) {
 		return ethereumEvmTree;
 	}
 
-	// For shared paths like /monitor and /relayer, check sessionStorage to see
-	// which ecosystem was last active, defaulting to ethereumEvmTree
+	// For shared paths (cross-ecosystem tools), check sessionStorage to see which
+	// ecosystem was last active so the sidebar matches Relayer, Monitor, etc.
 	if (typeof window !== "undefined") {
 		const lastEcosystem = sessionStorage.getItem("lastEcosystem");
 
 		if (
 			pathname.startsWith("/monitor") ||
 			pathname.startsWith("/relayer") ||
-			pathname.startsWith("/ui-builder")
+			pathname.startsWith("/ui-builder") ||
+			pathname.startsWith("/ecosystem-adapters")
 		) {
 			switch (lastEcosystem) {
 				case "stellar":
 					return stellarTree;
 				case "polkadot":
 					return polkadotTree;
+				case "midnight":
+					return midnightTree;
 				case "ethereum":
 					return ethereumEvmTree;
 				case "contracts-stylus":

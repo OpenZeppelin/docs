@@ -2,7 +2,7 @@
 title: Architecture
 ---
 
-This page describes the capability-based architecture that underpins all OpenZeppelin Ecosystem Adapters. Understanding this architecture will help you choose the right profile for your application, consume capabilities efficiently, and — if needed — build your own adapter.
+This page describes the capability-based architecture that underpins all OpenZeppelin Ecosystem Adapters. Understanding this architecture will help you choose the right profile for your application, consume capabilities efficiently, and build your own adapter if you need to.
 
 ## Package Topology
 
@@ -54,7 +54,7 @@ Tier isolation is enforced physically through sub-path exports, not tree-shaking
 - **Tier 2** modules may import from Tier 1
 - **Tier 3** modules may import from Tier 1 and Tier 2
 
-This means importing `@openzeppelin/adapter-evm/addressing` will never pull in wallet SDKs, RPC clients, or access control code — regardless of your bundler configuration.
+This means importing `@openzeppelin/adapter-evm/addressing` will never pull in wallet SDKs, RPC clients, or access control code, regardless of your bundler configuration.
 
 ### Capability Reference
 
@@ -76,11 +76,11 @@ This means importing `@openzeppelin/adapter-evm/addressing` will never pull in w
 
 ## Profiles
 
-Profiles are pre-composed bundles of capabilities that match common application archetypes. They exist for convenience — you can always consume individual capabilities directly via the `CapabilityFactoryMap`.
+Profiles are pre-composed bundles of capabilities that match common application archetypes. They exist for convenience. You can always consume individual capabilities directly via the `CapabilityFactoryMap`.
 
-Each profile is a strict superset of Declarative — higher profiles add capabilities incrementally:
+Each profile is a strict superset of Declarative. Higher profiles add capabilities incrementally:
 
-### Profile–Capability Matrix
+### Profile-Capability Matrix
 
 | Capability | Declarative | Viewer | Transactor | Composer | Operator |
 | --- | --- | --- | --- | --- | --- |
@@ -138,11 +138,11 @@ sequenceDiagram
 
 ### Dispose Contract
 
-- `dispose()` is **idempotent** — calling it multiple times is a no-op
+- `dispose()` is **idempotent**: calling it multiple times is a no-op
 - After `dispose()`, any method or property access throws `RuntimeDisposedError`
 - Pending async operations (e.g., in-flight `signAndBroadcast`) are rejected with `RuntimeDisposedError`
 - Cleanup follows a staged order: mark disposed → reject pending operations → clean up listeners and subscriptions → dispose capabilities → release wallet and RPC resources
-- Runtime disposal does **not** disconnect the wallet — disconnect is always an explicit user action
+- Runtime disposal does **not** disconnect the wallet. Disconnect is always an explicit user action
 
 ## Execution Strategies
 
@@ -172,14 +172,14 @@ The EVM and Stellar adapters ship with both EOA and Relayer strategies. Adapter 
 Each adapter publishes every implemented capability and profile as a dedicated sub-path export:
 
 ```ts
-// Tier 1 — no wallet, no RPC, no heavy dependencies
+// Tier 1: no wallet, no RPC, no heavy dependencies
 import { createAddressing } from '@openzeppelin/adapter-stellar/addressing';
 import { createExplorer } from '@openzeppelin/adapter-stellar/explorer';
 
-// Tier 2 — network-aware
+// Tier 2: network-aware
 import { createQuery } from '@openzeppelin/adapter-stellar/query';
 
-// Tier 3 — wallet-dependent
+// Tier 3: wallet-dependent
 import { createExecution } from '@openzeppelin/adapter-stellar/execution';
 
 // Profile runtimes
