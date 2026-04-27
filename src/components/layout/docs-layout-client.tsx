@@ -28,7 +28,7 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 
 	// Read sessionStorage in an effect so SSR and the initial client render match;
 	// reading it during render would cause a hydration mismatch on shared paths
-	// (e.g. /relayer/*) where the active ecosystem is only known on the client.
+	// (e.g. /relayer/*, /tools/*) where the active ecosystem is only known on the client.
 	const [lastEcosystem, setLastEcosystem] = useState<string | null>(null);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: re-read sessionStorage when pathname changes
 	useEffect(() => {
@@ -46,7 +46,8 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 			pathname.startsWith("/monitor") ||
 			pathname.startsWith("/relayer") ||
 			pathname.startsWith("/ui-builder") ||
-			pathname.startsWith("/ecosystem-adapters");
+			pathname.startsWith("/ecosystem-adapters") ||
+			pathname.startsWith("/tools");
 
 		// Include shared paths in Stellar tab only if coming from Stellar context
 		const stellarUrls =
@@ -57,6 +58,7 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 						"/relayer",
 						"/ui-builder",
 						"/ecosystem-adapters",
+						"/tools",
 					])
 				: new Set(["/stellar-contracts"]);
 
@@ -68,6 +70,7 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 						"/monitor",
 						"/relayer",
 						"/ecosystem-adapters",
+						"/tools",
 					])
 				: new Set(["/substrate-runtimes"]);
 
@@ -78,6 +81,7 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 						"/monitor",
 						"/relayer",
 						"/ecosystem-adapters",
+						"/tools",
 					])
 				: new Set(["/contracts-stylus"]);
 
@@ -93,7 +97,6 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 			"/ui-builder",
 			"/upgrades",
 			"/defender",
-			"/tools",
 		]);
 		if (
 			!isSharedPath ||
@@ -103,11 +106,12 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 			)
 		) {
 			ethereumUrls.add("/ecosystem-adapters");
+			ethereumUrls.add("/tools");
 		}
 
 		const midnightUrls =
 			isSharedPath && lastEcosystem === "midnight"
-				? new Set(["/contracts-compact", "/ecosystem-adapters"])
+				? new Set(["/contracts-compact", "/ecosystem-adapters", "/tools"])
 				: new Set(["/contracts-compact"]);
 
 		const zamaUrls =
@@ -116,6 +120,7 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 						"/confidential-contracts",
 						"/relayer",
 						"/ecosystem-adapters",
+						"/tools",
 					])
 				: new Set(["/confidential-contracts"]);
 
