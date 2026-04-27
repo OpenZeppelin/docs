@@ -1,0 +1,396 @@
+---
+title: Getting Started
+---
+
+This guide walks you through installing an adapter, creating a runtime, and performing your first on-chain interaction.
+
+## Prerequisites
+
+- Node.js >= 20.19.0
+- A package manager: pnpm (recommended), npm, or yarn
+
+## Installation
+
+Install the adapter for your target ecosystem along with the shared types package:
+
+**EVM (Ethereum, Polygon, etc.)**
+```bash
+pnpm add @openzeppelin/adapter-evm @openzeppelin/ui-types
+```
+
+**Stellar (Soroban)**
+```bash
+pnpm add @openzeppelin/adapter-stellar @openzeppelin/ui-types
+```
+
+**Polkadot**
+```bash
+pnpm add @openzeppelin/adapter-polkadot @openzeppelin/ui-types
+```
+
+If you're consuming multiple ecosystems, install all of them. Each adapter is independent and tree-shakeable.
+
+## Quick Start
+
+### 1. Choose a Profile
+
+Pick the [profile](/ecosystem-adapters/architecture#profiles) that matches your application's needs:
+
+| Profile | What it gives you |
+| --- | --- |
+| `declarative` | Address validation, explorer links, network lists |
+| `viewer` | + Contract reading, schema parsing, type mapping |
+| `transactor` | + Transaction signing and broadcasting |
+| `composer` | + Full UI integration with wallet and relayer |
+| `operator` | + Role and access control management |
+
+### 2. Create a Runtime
+
+Every adapter exports an `ecosystemDefinition` object. Use its `createRuntime` method to compose a profile runtime:
+
+```ts
+import { ecosystemDefinition } from '@openzeppelin/adapter-evm';
+
+const network = ecosystemDefinition.networks[0]; // e.g., Ethereum Mainnet
+
+const runtime = ecosystemDefinition.createRuntime('viewer', network);
+```
+
+The `createRuntime` call is **synchronous**. It assembles capability instances immediately. Expensive initialization (RPC connections, wallet discovery) happens lazily on first use.
+
+If you request a profile the adapter doesn't fully support, `createRuntime` throws an `UnsupportedProfileError` listing the missing capabilities.
+
+### 3. Use Capabilities
+
+Access capabilities directly from the runtime object:
+
+```ts
+// Validate an address (Tier 1: instant, no network call)
+const isValid = runtime.addressing.isValidAddress('0x1234...');
+
+// Read contract state (Tier 2: triggers RPC on first call)
+const result = await runtime.query.queryViewFunction(
+  '0xContractAddress',
+  'balanceOf',
+  ['0xOwnerAddress']
+);
+const formatted = runtime.query.formatFunctionResult(result, schema, 'balanceOf');
+```
+
+### 4. Dispose When Done
+
+Runtimes hold network connections and event listeners. Dispose them when switching networks or unmounting:
+
+```ts
+runtime.dispose();
+// Any further access throws RuntimeDisposedError
+```
+
+<Callout type="info">
+**Live example**: For an end-to-end reference that combines adapters with OpenZeppelin UI in the browser, open the hosted demo at [**openzeppelin-ui.netlify.app**](https://openzeppelin-ui.netlify.app).
+</Callout>
+
+## Consuming Individual Capabilities
+
+You don't have to use profiles. Import individual capability factories via sub-path exports for maximum control:
+
+```ts
+import { createAddressing } from '@openzeppelin/adapter-evm/addressing';
+import { createExplorer } from '@openzeppelin/adapter-evm/explorer';
+
+const addressing = createAddressing();
+const explorer = createExplorer(networkConfig);
+
+console.log(addressing.isValidAddress('0xABC...')); // true or false
+console.log(explorer.getExplorerUrl('0xABC...')); // https://etherscan.io/address/0xABC...
+```
+
+<Callout type="info">
+Standalone capability instances created from factory functions are fully isolated. They do not share state with profile runtimes or with each other.
+</Callout>
+
+## Vite / Vitest Integration
+
+Applications that consume multiple adapter packages should use `@openzeppelin/adapters-vite` to merge adapter-owned build configuration:
+
+```bash
+pnpm add -D @openzeppelin/adapters-vite
+```
+
+### Vite Config
+
+```ts
+import { defineOpenZeppelinAdapterViteConfig } from '@openzeppelin/adapters-vite';
+import react from '@vitejs/plugin-react';
+
+export default defineOpenZeppelinAdapterViteConfig({
+  ecosystems: ['evm', 'stellar', 'polkadot'],
+  config: {
+    plugins: [react()],
+  },
+});
+```
+
+### Vitest Config
+
+```ts
+import { defineOpenZeppelinAdapterVitestConfig } from '@openzeppelin/adapters-vite';
+import { mergeConfig } from 'vitest/config';
+
+export default mergeConfig(
+  sharedVitestConfig,
+  await defineOpenZeppelinAdapterVitestConfig({
+    ecosystems: ['evm', 'stellar'],
+    importMetaUrl: import.meta.url,
+    config: {
+      test: { environment: 'jsdom' },
+    },
+  })
+);
+```
+
+This centralizes `resolve.dedupe`, `optimizeDeps`, `ssr.noExternal`, and any adapter-specific Vite plugins. Adapters remain the source of truth for their own build requirements.
+
+## Network Switching
+
+Runtimes are network-scoped and immutable. To switch networks, dispose and recreate:
+
+```ts
+let runtime = ecosystemDefinition.createRuntime('composer', ethereumMainnet);
+
+// User switches to Sepolia
+runtime.dispose();
+runtime = ecosystemDefinition.createRuntime('composer', sepoliaTestnet);
+```
+
+<Callout type="info">
+Wallet sessions survive network changes. Runtime disposal cleans up runtime-owned resources (listeners, subscriptions, RPC connections) but does **not** disconnect the wallet. Disconnect is always an explicit user action.
+</Callout>
+
+## Error Handling
+
+The adapter system uses two primary error classes:
+
+| Error | When it's thrown |
+| --- | --- |
+| `UnsupportedProfileError` | `createRuntime` is called with a profile the adapter can't fully support. The error message lists the missing capabilities. |
+| `RuntimeDisposedError` | Any method or property is accessed on a disposed runtime, or an in-flight async operation is interrupted by disposal. |
+
+```ts
+import { UnsupportedProfileError, RuntimeDisposedError } from '@openzeppelin/ui-types';
+
+try {
+  const runtime = ecosystemDefinition.createRuntime('operator', network);
+} catch (error) {
+  if (error instanceof UnsupportedProfileError) {
+    console.log('Missing capabilities:', error.message);
+  }
+}
+```
+
+## Using with React
+
+Adapters integrate with React through three layers: a **wallet context provider** that manages wallet SDK state, **`configureUiKit`** that selects and configures the wallet UI kit, and a **hook facade** that exposes a uniform set of React hooks across every ecosystem.
+
+### Wallet Context Provider
+
+Each adapter exports a root React component via `getEcosystemReactUiContextProvider()`. This component wraps your application (or the relevant subtree) and bootstraps the wallet SDK context. For example, EVM adapters render `WagmiProvider` and `QueryClientProvider` internally, while the Stellar adapter renders its own `StellarWalletContext.Provider`.
+
+You don't render these providers yourself. Instead, pass the runtime to a shared `WalletStateProvider` from `@openzeppelin/ui-react`, which delegates to the correct ecosystem provider automatically:
+
+```tsx
+import { WalletStateProvider } from '@openzeppelin/ui-react';
+
+function App() {
+  return (
+    <WalletStateProvider
+      runtime={runtime}
+      loadConfigModule={loadAppConfigModule}
+    >
+      <YourApp />
+    </WalletStateProvider>
+  );
+}
+```
+
+The `loadConfigModule` callback lets the adapter lazily load user-authored wallet configuration files (e.g. `src/config/wallet/rainbowkit.config.ts` for a RainbowKit setup). If you don't use a native config file, pass a function that returns `null`.
+
+### Configuring the UI Kit
+
+Before rendering wallet UI components, configure the UI kit on the runtime's `uiKit` capability. This selects which wallet UI library to use (RainbowKit, a custom theme, or none) and passes kit-specific options:
+
+```ts
+await runtime.uiKit?.configureUiKit(
+  {
+    kitName: 'rainbowkit',  // or 'custom', 'none'
+    kitConfig: {
+      // kit-specific options, e.g., showInjectedConnector: true
+    },
+  },
+  {
+    loadUiKitNativeConfig: loadAppConfigModule,
+  }
+);
+```
+
+After configuration, retrieve the wallet UI components from the runtime:
+
+```ts
+const walletComponents = runtime.uiKit?.getEcosystemWalletComponents?.();
+const ConnectButton = walletComponents?.ConnectButton;
+const AccountDisplay = walletComponents?.AccountDisplay;
+const NetworkSwitcher = walletComponents?.NetworkSwitcher;
+```
+
+### Connecting and Disconnecting Wallets
+
+The `WalletCapability` on the runtime exposes imperative methods for wallet lifecycle management:
+
+```ts
+// List available wallet connectors
+const connectors = runtime.wallet.getAvailableConnectors();
+
+// Connect using a specific connector
+await runtime.wallet.connectWallet(connectors[0].id);
+
+// Check connection status
+const status = runtime.wallet.getWalletConnectionStatus();
+
+// Listen for connection changes
+const unsubscribe = runtime.wallet.onWalletConnectionChange?.((newStatus) => {
+  console.log('Wallet status changed:', newStatus);
+});
+
+// Disconnect
+await runtime.wallet.disconnectWallet();
+```
+
+<Callout type="info">
+`connectWallet` and `disconnectWallet` are imperative calls on the runtime. They are independent of the React rendering layer. You can call them from event handlers, effects, or outside React entirely.
+</Callout>
+
+### Hook Facade Pattern
+
+Every adapter exports a **facade hooks** object that conforms to the `EcosystemSpecificReactHooks` interface. This gives consuming applications a uniform set of React hooks regardless of the underlying wallet library.
+
+The EVM adapter maps its facade to [wagmi](https://wagmi.sh/) hooks, the Stellar adapter provides custom implementations, and other adapters follow the same pattern:
+
+```ts
+// EVM facade (wraps wagmi)
+import { evmFacadeHooks } from '@openzeppelin/adapter-evm';
+
+// Stellar facade (custom hooks)
+import { stellarFacadeHooks } from '@openzeppelin/adapter-stellar';
+```
+
+Each facade object includes these hooks:
+
+| Hook | Purpose |
+| --- | --- |
+| `useAccount` | Returns the connected account address, connection status, and chain info |
+| `useConnect` | Provides a `connect` function and available connectors |
+| `useDisconnect` | Provides a `disconnect` function |
+| `useSwitchChain` | Returns a `switchChain` function (EVM-only; stubs on other ecosystems) |
+| `useChainId` | Returns the currently active chain ID |
+| `useChains` | Returns the list of configured chains |
+| `useBalance` | Returns the native token balance for the connected account |
+
+In practice, you access facade hooks through the runtime rather than importing them directly. The runtime's `uiKit.getEcosystemReactHooks()` method returns the correct facade for the active ecosystem:
+
+```tsx
+import { useWalletState } from '@openzeppelin/ui-react';
+
+function AccountInfo() {
+  const { walletFacadeHooks } = useWalletState();
+
+  const { address, isConnected } = walletFacadeHooks.useAccount();
+  const { switchChain } = walletFacadeHooks.useSwitchChain();
+
+  if (!isConnected) return <p>Not connected</p>;
+
+  return (
+    <div>
+      <p>Connected: {address}</p>
+      <button onClick={() => switchChain?.({ chainId: 11155111 })}>
+        Switch to Sepolia
+      </button>
+    </div>
+  );
+}
+```
+
+<Callout type="info">
+Hooks that don't apply to a given ecosystem return safe stubs. For example, the Stellar facade's `useSwitchChain` returns `{ switchChain: undefined }`. Your components can feature-detect this without conditional imports.
+</Callout>
+
+## Multi-Ecosystem Apps
+
+Applications that interact with multiple blockchains create one runtime per ecosystem. Each runtime is independent. It manages its own wallet session, RPC connections, and lifecycle.
+
+### Setup
+
+Install the adapters you need and the shared Vite plugin:
+
+```bash
+pnpm add @openzeppelin/adapter-evm @openzeppelin/adapter-stellar @openzeppelin/ui-types
+pnpm add -D @openzeppelin/adapters-vite
+```
+
+Merge adapter build requirements with `defineOpenZeppelinAdapterViteConfig`:
+
+```ts
+// vite.config.ts
+import { defineOpenZeppelinAdapterViteConfig } from '@openzeppelin/adapters-vite';
+import react from '@vitejs/plugin-react';
+
+export default defineOpenZeppelinAdapterViteConfig({
+  ecosystems: ['evm', 'stellar'],
+  config: {
+    plugins: [react()],
+  },
+});
+```
+
+### Creating Runtimes
+
+Instantiate a runtime from each adapter's `ecosystemDefinition`:
+
+```ts
+import { ecosystemDefinition as evmDefinition } from '@openzeppelin/adapter-evm';
+import { ecosystemDefinition as stellarDefinition } from '@openzeppelin/adapter-stellar';
+
+// EVM runtime (e.g. Ethereum Mainnet)
+const evmNetwork = evmDefinition.networks[0];
+const evmRuntime = evmDefinition.createRuntime('composer', evmNetwork);
+
+// Stellar runtime (e.g. Stellar Mainnet)
+const stellarNetwork = stellarDefinition.networks[0];
+const stellarRuntime = stellarDefinition.createRuntime('viewer', stellarNetwork);
+```
+
+Each runtime is fully isolated. The EVM runtime connects to Ethereum via wagmi, the Stellar runtime connects to Horizon/Soroban. They share no state and can be disposed independently:
+
+```ts
+// Use both runtimes side by side
+const evmValid = evmRuntime.addressing.isValidAddress('0x1234...');
+const stellarValid = stellarRuntime.addressing.isValidAddress('G...');
+
+const evmBalance = await evmRuntime.query.queryViewFunction(
+  '0xToken', 'balanceOf', ['0xOwner']
+);
+
+// Dispose one without affecting the other
+evmRuntime.dispose();
+// stellarRuntime continues working
+```
+
+<Callout type="info">
+Wallet sessions are ecosystem-scoped, not runtime-scoped. Disposing an EVM runtime to switch from Mainnet to Sepolia does not disconnect the user's MetaMask. The wallet session persists across runtime recreation within the same ecosystem.
+</Callout>
+
+## Next Steps
+
+- Read the [Architecture](/ecosystem-adapters/architecture) page for a deep dive into tiers, profiles, and lifecycle management
+- Explore [Supported Ecosystems](/ecosystem-adapters/supported-ecosystems) to see what each adapter provides
+- Follow the [Building an Adapter](/ecosystem-adapters/building-an-adapter) guide to add support for a new chain
+- Browse the [adapter source code on GitHub](https://github.com/OpenZeppelin/openzeppelin-adapters) for implementation details
