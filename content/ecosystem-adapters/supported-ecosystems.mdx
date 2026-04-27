@@ -1,0 +1,149 @@
+---
+title: Supported Ecosystems
+---
+
+Each adapter implements the subset of the [13 capability interfaces](/ecosystem-adapters/architecture#capability-tiers) that its blockchain supports. This page summarizes what each production adapter provides.
+
+| Adapter | Networks | Capabilities | Status |
+| --- | --- | --- | --- |
+| **EVM** | Ethereum, Polygon, Arbitrum, Base, Optimism, ... | 13/13 | Production |
+| **Stellar** | Stellar Public, Stellar Testnet | 13/13 | Production |
+| **Polkadot** | Polkadot Hub, Moonbeam, Moonriver | 13/13 (EVM path) | Production |
+| **Midnight** | Midnight Testnet | 11/13 | Production |
+| **Solana** | Devnet, Testnet, Mainnet Beta | 4/13 (Tier 1 only) | Scaffolding |
+
+## EVM (`@openzeppelin/adapter-evm`)
+
+The EVM adapter targets Ethereum and all EVM-compatible chains. It implements the full set of 13 capabilities and supports all 5 profiles.
+
+**Supported Networks**: Ethereum Mainnet, Sepolia, Polygon, Polygon Amoy, Arbitrum One, Arbitrum Sepolia, Base, Base Sepolia, Optimism, Optimism Sepolia, and more.
+
+**Profiles Supported**: Declarative, Viewer, Transactor, Composer, Operator
+
+### Highlights
+
+- **Contract Loading**: Fetches ABIs from Etherscan and Sourcify with automatic fallback ordering. Detects proxy contracts and resolves implementation ABIs.
+- **Type Mapping**: Maps all Solidity types (`uint256`, `address`, `bytes32`, tuples, dynamic arrays) to UI-friendly form fields.
+- **Execution Strategies**: Pluggable EOA (direct wallet signing via Wagmi/Viem) and OpenZeppelin Relayer strategies.
+- **Wallet Integration**: Built on Wagmi and RainbowKit with React context providers and hooks.
+- **Access Control**: Full role management including `grantRole`, `revokeRole`, `renounceRole`, ownership transfers, and role enumeration.
+
+### Configuration Resolution
+
+The EVM adapter resolves RPC URLs and explorer API keys through a layered priority system:
+
+1. **User-provided config**: settings from the end-user (stored in localStorage)
+2. **Application config**: deployer settings via `app.config.json` or environment variables
+3. **Default config**: values from the `NetworkConfig` the adapter was instantiated with
+
+### Internal Architecture
+
+`@openzeppelin/adapter-evm` is a thin public layer that re-exports capabilities from `@openzeppelin/adapter-evm-core`. The core package centralizes all reusable EVM implementations:
+
+| Core Module | Responsibility |
+| --- | --- |
+| ABI loading | Etherscan / Sourcify fetching, proxy detection |
+| Schema transformation | ABI → `ContractSchema` conversion |
+| Input/output conversion | Solidity type ↔ form field mapping |
+| Query helpers | Public client creation, view function calls |
+| Transaction execution | Calldata formatting, strategy dispatch |
+| Wallet infrastructure | Wagmi config, RainbowKit setup, session management |
+| Relayer | Relayer SDK integration, network service forms |
+| Access Control | Role queries, grant/revoke operations |
+
+## Stellar (`@openzeppelin/adapter-stellar`)
+
+The Stellar adapter provides a complete Soroban implementation with all 13 capabilities.
+
+**Supported Networks**: Stellar Public, Stellar Testnet
+
+**Profiles Supported**: Declarative, Viewer, Transactor, Composer, Operator
+
+### Highlights
+
+- **Contract Loading**: Loads Soroban contract specifications and transforms them into the shared `ContractSchema`.
+- **Type Mapping**: Maps Soroban types (`Address`, `i128`, `Bytes`, `Vec<T>`, `Map<K,V>`) to form fields with input validation.
+- **Execution**: Parses form values into Soroban `ScVal` arguments. Supports both EOA and Relayer execution strategies.
+- **Wallet Integration**: Uses Stellar Wallets Kit with React UI providers and hooks.
+- **Access Control**: First-class support for Ownable and AccessControl patterns, including role queries, ownership actions, and optional indexer-backed historical lookups.
+- **SAC Support**: Detects Stellar Asset Contracts and dynamically loads their specifications.
+
+## Polkadot (`@openzeppelin/adapter-polkadot`)
+
+The Polkadot adapter targets EVM-compatible parachains and relay chains, reusing the shared EVM core for most capabilities.
+
+**Supported Networks**: Polkadot Hub, Kusama Hub, Moonbeam, Moonriver
+
+**Profiles Supported**: Declarative, Viewer, Transactor, Composer (EVM execution path)
+
+### Highlights
+
+- **EVM Core Reuse**: Delegates ABI loading, queries, transaction execution, and wallet infrastructure to `adapter-evm-core`.
+- **Polkadot Metadata**: Exposes relay chain associations and network category distinctions.
+- **React Wallet Provider**: Ships wallet provider utilities for consumer applications.
+- **Future Substrate Path**: Structured to support native Substrate/Wasm modules alongside the current EVM path.
+
+<Callout type="info">
+Non-EVM execution paths (native Substrate) are not yet implemented. Requesting a profile that requires execution on a non-EVM network will throw `UnsupportedProfileError`.
+</Callout>
+
+## Midnight (`@openzeppelin/adapter-midnight`)
+
+The Midnight adapter enables browser-based interaction with Midnight contracts using zero-knowledge proof workflows.
+
+**Supported Networks**: Midnight Testnet
+
+### Highlights
+
+- **Artifact Ingestion**: Supports ZIP-based artifact bundles for contract evaluation and ZK proof orchestration entirely in the browser.
+- **Lace Wallet**: Integrates with the Lace wallet for signing and execution.
+- **Runtime Secrets**: Handles organizer-only secrets as in-memory execution-time inputs, not persisted configuration.
+- **Lazy Polyfills**: Midnight-specific browser polyfills are lazy-loaded so they don't affect other ecosystem bundles.
+- **Export Bootstrap**: Supports exporting self-contained applications that bundle Midnight contract artifacts for standalone use.
+
+### Build Requirements
+
+Midnight requires host-provided plugin factories for WASM and top-level await:
+
+```ts
+import { loadOpenZeppelinAdapterViteConfig } from '@openzeppelin/adapters-vite';
+
+const adapterConfigs = await loadOpenZeppelinAdapterViteConfig({
+  ecosystems: ['midnight'],
+  pluginFactories: {
+    midnight: { wasm, topLevelAwait },
+  },
+});
+```
+
+## Solana (`@openzeppelin/adapter-solana`)
+
+<Callout type="warn">
+The Solana adapter is scaffolding only and is not yet production-ready.
+</Callout>
+
+The Solana package defines the package boundaries and network configurations for a future adapter. It currently provides:
+
+- Solana network configurations (Devnet, Testnet, Mainnet Beta)
+- Package structure and sub-path export scaffolding
+- Tier 1 capability implementations (Addressing, Explorer, NetworkCatalog, UiLabels)
+
+The Operator profile is explicitly unsupported. Calling `createRuntime('operator', ...)` throws `UnsupportedProfileError` because `accessControl` factories are not yet implemented.
+
+## Capability Support Matrix
+
+| Capability | EVM | Stellar | Polkadot | Midnight | Solana |
+| --- | --- | --- | --- | --- | --- |
+| Addressing | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Explorer | ✅ | ✅ | ✅ | ✅ | ✅ |
+| NetworkCatalog | ✅ | ✅ | ✅ | ✅ | ✅ |
+| UiLabels | ✅ | ✅ | ✅ | ✅ | ✅ |
+| ContractLoading | ✅ | ✅ | ✅ | ✅ | - |
+| Schema | ✅ | ✅ | ✅ | ✅ | - |
+| TypeMapping | ✅ | ✅ | ✅ | ✅ | - |
+| Query | ✅ | ✅ | ✅ | ✅ | - |
+| Execution | ✅ | ✅ | ✅ (EVM) | ✅ | - |
+| Wallet | ✅ | ✅ | ✅ | ✅ | - |
+| UiKit | ✅ | ✅ | ✅ | ✅ | - |
+| Relayer | ✅ | ✅ | ✅ | - | - |
+| AccessControl | ✅ | ✅ | ✅ | - | - |
