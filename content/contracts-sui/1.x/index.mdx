@@ -2,9 +2,10 @@
 title: Contracts for Sui 1.x
 ---
 
-**OpenZeppelin Contracts for Sui v1.x** ships two core packages:
+**OpenZeppelin Contracts for Sui v1.x** ships three core packages:
 
-- `openzeppelin_math` for deterministic arithmetic, configurable rounding, and decimal scaling.
+- `openzeppelin_math` for deterministic integer arithmetic, configurable rounding, and decimal scaling.
+- `openzeppelin_fp_math` for 9-decimal fixed-point arithmetic (`UD30x9`, `SD29x9`) backed by `u128`.
 - `openzeppelin_access` for ownership-transfer wrappers around privileged `key + store` objects.
 
 ## Quickstart
@@ -27,16 +28,20 @@ cd my_sui_app
 ```bash
 mvr add @openzeppelin-move/access
 mvr add @openzeppelin-move/integer-math
+mvr add @openzeppelin-move/fixed-point-math
 ```
+
+You only need the dependencies your app actually uses — add what you need and drop the others.
 
 ### 3. Verify `Move.toml`
 
-`mvr add` updates `Move.toml` automatically. It should include:
+`mvr add` updates `Move.toml` automatically. With all three installed it should include:
 
 ```toml
 [dependencies]
 openzeppelin_access = { r.mvr = "@openzeppelin-move/access" }
 openzeppelin_math = { r.mvr = "@openzeppelin-move/integer-math" }
+openzeppelin_fp_math = { r.mvr = "@openzeppelin-move/fixed-point-math" }
 ```
 
 ### 4. Add a Minimal Module
@@ -53,7 +58,7 @@ use openzeppelin_math::u64::{mul_div, sqrt};
 
 public fun quote_with_fee(amount: u64): u64 {
     // 2.5% fee, rounded to nearest.
-    let quoted = mul_div(amount,1025u64, 1000u64, rounding::nearest());
+    let quoted = mul_div(amount, 1025u64, 1000u64, rounding::nearest());
     quoted.destroy_some()
 }
 
@@ -69,7 +74,15 @@ sui move build
 sui move test
 ```
 
+## Picking a package
+
+- Need integer arithmetic with safe overflow and explicit rounding? Use [Integer Math](/contracts-sui/1.x/math).
+- Need fractional values — prices, fees, rates, signed deltas? Use [Fixed-Point Math](/contracts-sui/1.x/fixed-point).
+- Need controlled transfer of admin/treasury/upgrade capabilities? Use [Access](/contracts-sui/1.x/access).
+
+The packages compose. A typical protocol module imports `openzeppelin_math` for share math, `openzeppelin_fp_math` for rate and fee math, and `openzeppelin_access` for the admin capability that governs both.
+
 ## Next Steps
 
-- Read package guides: [Integer Math](/contracts-sui/1.x/math), [Access](/contracts-sui/1.x/access).
-- Use API docs: [Integer Math](/contracts-sui/1.x/api/math), [Access](/contracts-sui/1.x/api/access).
+- Package guides: [Integer Math](/contracts-sui/1.x/math), [Fixed-Point Math](/contracts-sui/1.x/fixed-point), [Access](/contracts-sui/1.x/access).
+- API reference: [Integer Math](/contracts-sui/1.x/api/math), [Fixed-Point Math](/contracts-sui/1.x/api/fixed-point), [Access](/contracts-sui/1.x/api/access).

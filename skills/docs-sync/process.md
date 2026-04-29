@@ -7,149 +7,125 @@ skipping ahead.
 All paths in this document are relative to `<DOCS_REPO_PATH>` unless
 explicitly prefixed with `<CONTRACTS_REPO_PATH>`.
 
+In `interactive` mode, the workflow stops at four gates (G1–G4) and
+waits for explicit user approval. The skill MUST emit a structured
+proposal block (templates under `references/proposals/`) and end its
+turn at each gate. The skill MUST NOT call `AskUserQuestion` or any
+other interactive tool — inputs are gathered by the harness from the
+frontmatter `inputs` schema before this process starts. In `automatic`
+mode, every gate is skipped and its proposal contents are appended to
+the final report.
+
 ---
 
-## Step 0 — Collect runtime inputs
+## Step 0 — Validate runtime inputs
 
-Inputs may arrive in two ways:
+Inputs arrive from the frontmatter `inputs` schema (the harness gathers
+them upfront). Step 0 validates them and applies safe defaults — it
+does not prompt the user.
 
-1. **Pre-supplied** in the invocation prompt (`LIBRARY_ID=contracts-sui`,
-   `BASE_COMMIT=abc123`, etc.).
-2. **Collected interactively** here, using the `AskUserQuestion` tool,
-   for any required input the caller did not supply.
+### 0.1 Apply defaults
 
-Required inputs (see SKILL.md for full list): `<MODE>`,
-`<CONTRACTS_REPO_PATH>`, `<DOCS_REPO_PATH>`, `<BASE_COMMIT>`,
-`<HEAD_COMMIT>`, `<LIBRARY_ID>`, `<DOCS_VERSION>`, `<RELEASE_VERSION>`,
-`<DOCS_UPDATE_SCOPE>`.
+For each input that arrived empty, apply:
 
-### 0.1 Resolve from caller args and defaults first
+- `mode`: read `automation.default_mode` from the resolved slice config
+  if present; otherwise `interactive`.
+- `docs_repo_path`: current working directory, **only if** it is the
+  docs repo (verify by checking that `skills/docs-sync/SKILL.md` exists
+  inside it). Otherwise this is a hard error.
+- `docs_update_scope`: `full`.
+- `target_audience` / `docs_tone`: read from slice config; do not invent
+  values.
 
-Before prompting, fill in what can be inferred without the user:
+Record every default that was applied so the G1 proposal and the final
+report can list them as assumptions.
 
-- `<DOCS_REPO_PATH>`: default to the current working directory if it is
-  the docs repo (verify by checking for `skills/docs-sync/SKILL.md`).
-- `<LIBRARY_ID>`: if exactly one file exists under
-  `skills/docs-sync/config/libraries/*.yml`, use that slice id.
-- `<DOCS_VERSION>`: if the resolved slice has exactly one version
-  directory under `docs.version_root`'s parent, use that.
-- `<DOCS_UPDATE_SCOPE>`: default to `full` unless the caller scoped it.
-- `<MODE>`: if not supplied, read `automation.default_mode` from the
-  resolved config; otherwise default to `interactive`.
+### 0.2 Validate
 
-Record every default that was applied so the final report can list them
-as assumptions.
+For each input, validate inline. On failure, **stop** and return a
+single error message that names every failing field — do not partially
+proceed.
 
-### 0.2 If `<MODE>` resolves to `automatic`, do not prompt
+- `contracts_repo_path` exists and is a git repo:
+  `git -C <CONTRACTS_REPO_PATH> rev-parse --is-inside-work-tree`.
+- `docs_repo_path` exists and is a git repo.
+- `contracts_repo_path` is **not** the same path as `docs_repo_path`.
+- `library_id` has a config file at
+  `skills/docs-sync/config/libraries/<library_id>.yml`.
+- `base_commit` and `head_commit` resolve in the contracts repo:
+  `git -C <CONTRACTS_REPO_PATH> rev-parse --verify <SHA>^{commit}`.
 
-In `automatic` mode, missing required inputs are a hard failure. Stop
-with a clear message naming the missing fields. Do not invent SHAs,
-versions, or paths.
+In `automatic` mode, any validation failure is a hard error — never
+invent SHAs, paths, or versions.
 
-### 0.3 Otherwise, prompt for missing inputs
+In `interactive` mode, the validation error is the response — the user
+re-invokes with corrected inputs. The skill MUST NOT retry on its own.
 
-For each input still missing, ask the user via `AskUserQuestion`. Group
-related inputs into a single call (the tool accepts up to 4 questions
-per call). Use the templates below.
+## Step 1 — Confirm mode
 
-**Bounded inputs — multiple choice** (let the user pick "Other" only
-when the listed options truly do not fit):
+The mode arrives as input. This step normalizes it for the rest of the
+process:
 
-- `<MODE>`: options `interactive` (Recommended) and `automatic`.
-- `<DOCS_UPDATE_SCOPE>`: options `full` (Recommended), `api-only`,
-  `guides-only`, `targeted:<paths>`.
-- `<LIBRARY_ID>`: options enumerated from the filenames under
-  `skills/docs-sync/config/libraries/*.yml`. If only one slice exists,
-  skip the prompt and apply it as the default.
-
-**Free-form inputs — ask via `AskUserQuestion` with a "Recommended"
-default option plus "Other" for custom input:**
-
-- `<CONTRACTS_REPO_PATH>`: an absolute filesystem path. No safe default
-  unless the user has previously supplied one this session.
-- `<BASE_COMMIT>` / `<HEAD_COMMIT>`: commit SHAs or refs in the
-  contracts repo. If reasonable, suggest the latest tag as `<BASE>` and
-  `HEAD` as `<HEAD>`; let the user override.
-- `<DOCS_VERSION>`: e.g. `1.x`. Suggest the highest existing version
-  directory in the slice.
-- `<RELEASE_VERSION>`: e.g. `v1.2.0`. No safe default; ask.
-
-### 0.4 Validate as you collect
-
-After collection, validate inline and re-prompt on failure rather than
-deferring to later steps:
-
-- Paths exist and are git repos (`git -C <path> rev-parse
-  --is-inside-work-tree`).
-- `<CONTRACTS_REPO_PATH>` is not the same as `<DOCS_REPO_PATH>`.
-- `<BASE_COMMIT>` and `<HEAD_COMMIT>` resolve in the contracts repo
-  (`git -C <CONTRACTS_REPO_PATH> rev-parse --verify <SHA>^{commit}`).
-- `<LIBRARY_ID>` has a config file at
-  `skills/docs-sync/config/libraries/<LIBRARY_ID>.yml`.
-
-If a validation fails in interactive mode, re-prompt for just that
-field. If it fails in automatic mode (e.g. caller supplied a bad SHA),
-stop with a clear error.
-
-Once all inputs are present and validated, proceed to Step 1. Steps 3
-and 4 below still run, but become no-ops because the same checks have
-already passed.
-
-## Step 1 — Select mode
-
-1. If the caller passed `<MODE>`, use it.
-2. Otherwise read `automation.default_mode` from the config file
-   (Step 2).
-3. Otherwise default to `interactive`.
-
-Mode behavior:
-
-- `interactive`: summarize and classify before broad edits. Ask only
-  questions whose answers change scope, examples, release notes,
-  audience, or security framing. API reference edits can proceed
-  deterministically; broad guide/tutorial/explanation rewrites need
-  confirmation.
-- `automatic`: ask no questions. Infer from config and sibling pages.
-  Record assumptions. If a required decision cannot be inferred safely,
-  stop or record `needs-human-review` rather than inventing context.
+- `interactive`: gates G1–G4 are active; broad rewrites need per-page
+  approval at G4.
+- `automatic`: gates are skipped; assumptions go into the final report.
 
 ## Step 2 — Load config memory
 
-1. Resolve `<CONFIG_PATH>`. Default:
-   `skills/docs-sync/config/libraries/<LIBRARY_ID>.yml`.
-2. If the file does not exist, **stop**. Do not fabricate a config; ask
-   the user (interactive) or fail with a clear message (automatic).
+1. Resolve `<CONFIG_PATH>`:
+   `skills/docs-sync/config/libraries/<library_id>.yml`.
+2. If the file does not exist, **stop** with a clear error. Do not
+   fabricate a config.
 3. Parse the file as YAML.
 4. Read `library.id`, `library.language`, `docs.*`, `navigation.*`,
    `examples.*`, `security.*`, `release.*`, `automation.*`.
 5. Treat all `docs.*` paths as relative to `<DOCS_REPO_PATH>`.
-6. Apply optional overrides from runtime: `<TARGET_AUDIENCE>` overrides
-   `docs.target_audience`; `<DOCS_TONE>` overrides `docs.tone`.
+6. Apply optional overrides from runtime: `target_audience` overrides
+   `docs.target_audience`; `docs_tone` overrides `docs.tone`.
+
+---
+
+## 🛑 Gate G1 — Inputs & config confirmation
+
+Active in `interactive` mode only. After Step 2 completes successfully,
+emit the **G1 proposal block** (template:
+`references/proposals/g1-inputs-and-config.md`) and **end the turn**.
+
+The proposal block MUST contain:
+
+- All resolved inputs, with each defaulted value clearly marked
+  `(default applied)`.
+- The resolved slice paths (`<LIBRARY_DOCS_ROOT>`, `<VERSION_DOCS_ROOT>`,
+  `<API_REFERENCE_PATH>`, `<NAV_CONFIG_PATH>`,
+  `<LOCAL_DOCS_CONVENTIONS_PATH>`).
+- Mode and scope, with one-line consequences for each.
+- Anything missing, ambiguous, or surprising flagged with `⚠️`.
+- A trailing line: `Reply "approve" to proceed, or describe corrections.`
+
+When the user replies:
+
+- "approve" / "looks good" / "proceed" / "yes" → continue to Step 3.
+- Anything else → treat as refinement, apply the requested changes,
+  re-emit the G1 block, and wait again.
+
+In `automatic` mode, append the G1 contents to the final report's
+"Resolved inputs" section and continue to Step 3 without stopping.
+
+---
 
 ## Step 3 — Resolve contracts repo and docs repo
 
-1. Verify `<CONTRACTS_REPO_PATH>` exists and is a git repository:
-   `git -C <CONTRACTS_REPO_PATH> rev-parse --is-inside-work-tree`.
-2. Verify `<DOCS_REPO_PATH>` exists and is a git repository.
-3. Confirm `<CONTRACTS_REPO_PATH>` is **not** the same as
-   `<DOCS_REPO_PATH>`.
-4. Confirm the docs repo's working tree is clean **enough** to make
+(Validation in Step 0.2 already covers most of this; redo the checks
+that depend on filesystem state at run time.)
+
+1. Confirm the docs repo's working tree is clean **enough** to make
    reviewable edits (no unrelated unstaged changes that would muddy the
    diff). Warn but continue if not.
 
-## Step 4 — Verify base and head commits
+## Step 4 — Verify base and head commits ancestry
 
-```
-git -C <CONTRACTS_REPO_PATH> rev-parse --verify <BASE_COMMIT>^{commit}
-git -C <CONTRACTS_REPO_PATH> rev-parse --verify <HEAD_COMMIT>^{commit}
-```
-
-Both must resolve. If either fails:
-
-- Interactive: ask the user to fetch the right revision.
-- Automatic: stop with a clear error.
-
-Confirm `<BASE_COMMIT>` is an ancestor of `<HEAD_COMMIT>`:
+Step 0.2 already verified both commits resolve. Now confirm
+`<BASE_COMMIT>` is an ancestor of `<HEAD_COMMIT>`:
 
 ```
 git -C <CONTRACTS_REPO_PATH> merge-base --is-ancestor <BASE_COMMIT> <HEAD_COMMIT>
@@ -165,7 +141,7 @@ git -C <CONTRACTS_REPO_PATH> diff --stat <BASE_COMMIT>..<HEAD_COMMIT>
 git -C <CONTRACTS_REPO_PATH> diff <BASE_COMMIT>..<HEAD_COMMIT>
 ```
 
-Persist the output for use in Steps 6–10. Also gather:
+Persist the output for use in Steps 6–11. Also gather:
 
 ```
 git -C <CONTRACTS_REPO_PATH> log --pretty=oneline <BASE_COMMIT>..<HEAD_COMMIT>
@@ -242,10 +218,10 @@ record the command. Produce a structured list:
 
 - Added modules / packages.
 - Removed modules / packages.
-- Added public functions, with signatures.
-- Removed public functions.
+- Added public functions, with full signatures.
+- Removed public functions, with full signatures.
 - Changed function signatures (parameter types/order, return type,
-  visibility, abilities).
+  visibility, abilities) — show **before → after** signatures.
 - Added or changed structs/types and their fields/abilities.
 - Added or removed constants.
 - Added or removed events.
@@ -255,6 +231,59 @@ record the command. Produce a structured list:
 The spec is language-agnostic; for `MOVE_SUI`, parse `module ...`
 declarations, `public fun`/`entry` signatures, `struct ... has ...`
 declarations, `const`s, error constants (`E*`), and event structs.
+
+This structured list is the input to Gate G2 below — make every entry
+self-explanatory (full signature, full module path) so the user can
+review without reopening source files.
+
+---
+
+## 🛑 Gate G2 — Public API delta confirmation
+
+Active in `interactive` mode only. After Step 9 completes, emit the
+**G2 proposal block** (template:
+`references/proposals/g2-api-delta.md`) and **end the turn**.
+
+The proposal block MUST contain, for each category, a bulleted list of
+items with full signatures:
+
+```
+### Added public functions
+- `module::path::function_name(arg: Type, ...): ReturnType`
+- ...
+
+### Removed public functions
+- `module::path::function_name(arg: Type, ...): ReturnType`
+- ...
+
+### Changed function signatures
+- `module::path::function_name`
+  - before: `(old_arg: OldType): OldReturn`
+  - after:  `(new_arg: NewType): NewReturn`
+- ...
+
+### Added / removed / changed structs, events, errors, constants
+- ...
+```
+
+Also include:
+
+- Total counts per category (`Added: 5 functions, 2 structs, …`).
+- A "Skipped (out of public surface)" list of contracts files Step 8
+  excluded, so the user can spot a wrongly-skipped file.
+- A trailing line: `Reply "approve" to proceed to docs planning, or
+  describe corrections (e.g. "treat foo as private", "include bar/").`
+
+When the user replies:
+
+- "approve" / "looks good" / "proceed" / "yes" → continue to Step 10.
+- Anything else → treat as refinement to the API surface (re-classify,
+  re-extract, etc.), re-emit the G2 block, and wait again.
+
+In `automatic` mode, append the G2 contents to the final report's
+"Public API delta" section and continue to Step 10 without stopping.
+
+---
 
 ## Step 10 — Classify changes
 
@@ -291,17 +320,80 @@ Apply `<DOCS_UPDATE_SCOPE>`:
   and API navigation updates only; report other required work as skipped.
 - `guides-only`: keep guide, tutorial, explanation, and snippet updates;
   do not regenerate API reference pages.
-- `targeted:<paths>`: keep only listed paths plus navigation changes
-  required for those paths; report omitted matrix-required work.
 
-In `interactive` mode, present the aggregated plan and wait for
-confirmation before broad rewrites of guides, tutorials, or
-explanations. API reference updates proceed without confirmation but
-follow `references/rules/api-reference-rules.md`.
+Build a per-file edit plan with:
+
+- `action`: one of `create`, `edit`, `delete`.
+- `path` relative to `<DOCS_REPO_PATH>`.
+- `category`: API reference / guide / tutorial / explanation / example /
+  navigation / release notes / security warning.
+- `covers`: which API items from Step 9 this file addresses (so the
+  user can sanity-check coverage).
+- `reason`: which matrix row(s) forced this entry.
+
+Also build a parallel "skipped" list for matrix-required updates that
+fall outside `<DOCS_UPDATE_SCOPE>` — every skipped item must be
+attributed to the scope choice that excluded it.
+
+---
+
+## 🛑 Gate G3 — Docs edit plan confirmation
+
+Active in `interactive` mode only. After Step 11 completes, emit the
+**G3 proposal block** (template:
+`references/proposals/g3-docs-edit-plan.md`) and **end the turn**.
+
+The proposal block MUST contain, in this order:
+
+```
+### Will create
+- <path> — <category> — covers: <api items> — reason: <matrix row>
+- ...
+
+### Will edit
+- <path> — <category> — covers: <api items> — reason: <matrix row>
+- ...
+
+### Will delete
+- <path> — <category> — reason: <matrix row>
+- ...
+
+### Will leave alone (matrix-required but out of <docs_update_scope>)
+- <path> — would have been <category> — excluded by scope=<value>
+- ...
+
+### Navigation deltas (will apply at Step 15)
+- add: <nav entry path>
+- remove: <nav entry path>
+- rename: <old> -> <new>
+```
+
+Also include:
+
+- Total counts (`5 to create, 12 to edit, 1 to delete, 3 skipped`).
+- A list of pages where the rewrite will be **broad** (full-section or
+  whole-page rewrite) vs **targeted** (single signature/snippet swap).
+  Broad rewrites trigger Gate G4 individually in Step 13.
+- A trailing line: `Reply "approve" to proceed with edits, or describe
+  scope changes (e.g. "skip release notes", "drop the new tutorial").`
+
+When the user replies:
+
+- "approve" / "looks good" / "proceed" / "yes" → continue to Step 12.
+- Anything else → treat as refinement, update the plan, re-emit the G3
+  block, and wait again.
+
+In `automatic` mode, append the G3 contents to the final report's
+"Docs edit plan" section and continue to Step 12 without stopping.
+
+---
 
 ## Step 12 — Update API reference
 
-Follow `references/rules/api-reference-rules.md`:
+API reference edits are deterministic translations of the API delta
+into reference pages — they proceed without per-page approval (the
+overall set was approved at G3). Follow
+`references/rules/api-reference-rules.md`:
 
 1. For each touched module, read the existing API reference page (if
    any) under `<API_REFERENCE_PATH>`.
@@ -320,13 +412,26 @@ Follow `references/rules/api-reference-rules.md`:
    to point to `<RELEASE_VERSION>` (or `<HEAD_COMMIT>` if no matching
    tag exists).
 
+After completing Step 12, output a one-line summary: `Step 12 — API
+reference updated: <N> files edited, <M> files created.` Then continue.
+
 ## Step 13 — Update guides, tutorials, and explanations
 
-For every guide/tutorial/explanation flagged in Step 11:
+For every guide/tutorial/explanation flagged in Step 11 and approved at
+G3, decide whether the rewrite is **targeted** (single
+signature/snippet/section change) or **broad** (multi-section or
+whole-page rewrite, new page, or Diátaxis category move).
+
+- **Targeted rewrites** proceed without further approval. Apply the
+  edit, then move on.
+- **Broad rewrites** stop at Gate G4 (below) and wait for per-page
+  approval before editing.
+
+For each rewrite (targeted or broad):
 
 1. Use `references/rules/diataxis-rules.md` to confirm the page is
    still in the right Diátaxis category. If not, propose a move
-   (interactive) or record it as a `needs-human-review` finding
+   (interactive, via G4) or record it as a `needs-human-review` finding
    (automatic).
 2. Apply the matching template (`references/templates/guide-template.md`,
    `references/templates/tutorial-template.md`,
@@ -339,6 +444,45 @@ For every guide/tutorial/explanation flagged in Step 11:
 5. Add or update security warnings according to
    `security.warning_style` and `security.require_security_sections_for`
    from config.
+
+---
+
+## 🛑 Gate G4 — Per-page rewrite confirmation (broad rewrites only)
+
+Active in `interactive` mode only, and only for **broad rewrites** as
+defined in Step 13. Targeted rewrites do not stop here.
+
+For each broad rewrite, before editing the file:
+
+1. Emit the **G4 proposal block** (template:
+   `references/proposals/g4-page-rewrite.md`).
+2. **End the turn** and wait for approval.
+
+The proposal block MUST contain:
+
+```
+### Page: <path>
+- Diátaxis category: <category> (unchanged | move from <old> to <new>)
+- Action: <create | rewrite | section-rewrite>
+- Sections affected: <list of section headings, or "whole page">
+- Triggered by: <api items from Step 9 + matrix row(s)>
+- Approach: <one paragraph describing the structure of the rewrite>
+
+Reply "approve" to apply this rewrite, or describe changes.
+```
+
+When the user replies:
+
+- "approve" → apply the rewrite and continue to the next broad rewrite
+  (or to Step 14 if none remain).
+- "skip" → record the page as `needs-human-review` and move on.
+- Anything else → treat as refinement, update the approach, re-emit the
+  G4 block for this page, and wait again.
+
+In `automatic` mode, all rewrites proceed without G4. Pages that would
+have triggered a Diátaxis move are recorded as `needs-human-review`.
+
+---
 
 ## Step 14 — Update examples
 
@@ -353,7 +497,7 @@ fenced code blocks inside MDX, update those.
 
 ## Step 15 — Update navigation / sidebar
 
-Open `<NAV_CONFIG_PATH>` and apply the deltas:
+Open `<NAV_CONFIG_PATH>` and apply the deltas approved at G3:
 
 - Add new modules to the `Packages` and `API Reference` folders (or the
   equivalent labels for the slice).
