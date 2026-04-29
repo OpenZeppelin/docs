@@ -1,0 +1,169 @@
+---
+title: Theming & Styling
+---
+
+OpenZeppelin UIKit uses **Tailwind CSS 4** with a centralized design token system. This page explains how styling works, how to customize the theme, and how to set up your application's CSS pipeline.
+
+## How Styling Works
+
+UIKit components use Tailwind CSS utility classes internally. The `@openzeppelin/ui-styles` package provides:
+
+- A **`global.css`** file with Tailwind v4 `@theme` definitions using OKLCH color tokens
+- CSS custom properties for colors, radii, spacing, and animations
+- A `@custom-variant dark` for dark mode support
+- Chart and sidebar color tokens
+
+Components do **not** ship pre-compiled CSS. Your application runs Tailwind and produces the final stylesheet, which means:
+
+- You have full control over the CSS output
+- Unused component styles are automatically tree-shaken
+- You can extend or override any design token
+
+## Setting Up Styles
+
+### Automated Setup
+
+The dev CLI generates and maintains the Tailwind configuration:
+
+```bash
+pnpm add -D @openzeppelin/ui-dev-cli
+pnpm exec oz-ui-dev tailwind doctor --project "$PWD"
+pnpm exec oz-ui-dev tailwind fix --project "$PWD"
+```
+
+This creates `oz-tailwind.generated.css` with `@source` directives that tell Tailwind where to find class names in OpenZeppelin packages.
+
+### Manual Setup
+
+Add these directives to your application's entry CSS file:
+
+```css
+@layer base, components, utilities;
+
+@import 'tailwindcss' source(none);
+
+/* Your app sources */
+@source "./";
+@source "../";
+
+/* OpenZeppelin UIKit sources */
+@source "../node_modules/@openzeppelin/ui-components";
+@source "../node_modules/@openzeppelin/ui-react";
+@source "../node_modules/@openzeppelin/ui-renderer";
+@source "../node_modules/@openzeppelin/ui-styles";
+@source "../node_modules/@openzeppelin/ui-utils";
+
+/* OpenZeppelin theme tokens */
+@import '@openzeppelin/ui-styles/global.css';
+```
+
+<Callout type="warn">
+If you also use Ecosystem Adapter packages, add their `@source` directives too. Adapters may ship UI components (wallet dialogs, network selectors) that need Tailwind scanning. The `oz-ui-dev tailwind fix` command handles this automatically.
+</Callout>
+
+## Design Tokens
+
+The theme is defined in `@openzeppelin/ui-styles/global.css` using Tailwind v4's `@theme` directive with [OKLCH](https://oklch.com/) color values. OKLCH provides perceptually uniform colors across light and dark modes.
+
+### Color Tokens
+
+The theme defines semantic color tokens rather than raw color values:
+
+| Token | Purpose |
+| --- | --- |
+| `--background` / `--foreground` | Page background and default text |
+| `--card` / `--card-foreground` | Card surfaces |
+| `--primary` / `--primary-foreground` | Primary actions (buttons, links) |
+| `--secondary` / `--secondary-foreground` | Secondary actions |
+| `--muted` / `--muted-foreground` | Subdued elements |
+| `--accent` / `--accent-foreground` | Highlighted elements |
+| `--destructive` / `--destructive-foreground` | Destructive actions (delete, error) |
+| `--border` | Border colors |
+| `--input` | Input field borders |
+| `--ring` | Focus ring color |
+
+### Layout Tokens
+
+| Token | Purpose |
+| --- | --- |
+| `--radius` | Base border radius (used with `rounded-*` utilities) |
+| `--sidebar-*` | Sidebar-specific colors and dimensions |
+| `--chart-1` through `--chart-5` | Chart/data visualization colors |
+
+## Dark Mode
+
+UIKit uses `next-themes` for dark mode support, with a `@custom-variant dark` in the theme CSS. The dark variant activates automatically based on the user's system preference or an explicit toggle.
+
+All color tokens have dark mode equivalents defined in the theme. Components automatically adjust when the variant is active.
+
+### Integrating with next-themes
+
+If your app uses `next-themes`, dark mode works out of the box:
+
+```tsx
+import { ThemeProvider } from 'next-themes';
+
+function App({ children }) {
+  return (
+    <ThemeProvider attribute="class" defaultTheme="system">
+      {children}
+    </ThemeProvider>
+  );
+}
+```
+
+## Component Variants
+
+Button and other interactive components use [`class-variance-authority`](https://cva.style/) for variant management:
+
+```tsx
+import { Button } from '@openzeppelin/ui-components';
+
+// Variant options: default, destructive, outline, secondary, ghost, link
+<Button variant="outline">Cancel</Button>
+<Button variant="destructive">Delete</Button>
+
+// Size options: default, sm, lg, icon
+<Button size="sm">Small</Button>
+<Button size="lg">Large</Button>
+```
+
+## Customizing the Theme
+
+Since the theme is CSS custom properties, you can override any token in your app's CSS:
+
+```css
+@import '@openzeppelin/ui-styles/global.css';
+
+:root {
+  --primary: oklch(0.65 0.2 250);
+  --radius: 0.75rem;
+}
+```
+
+This approach works because UIKit components reference the CSS variables, not hard-coded values. Your overrides take precedence and propagate to all components.
+
+## Utility Functions
+
+`@openzeppelin/ui-components` exports styling utilities used internally and available for your custom components:
+
+| Utility | Source | Purpose |
+| --- | --- | --- |
+| `cn(...classes)` | `tailwind-merge` + `clsx` | Merge Tailwind classes with conflict resolution |
+| `buttonVariants` | `class-variance-authority` | Apply button variant styles to custom elements |
+
+```tsx
+import { cn } from '@openzeppelin/ui-utils';
+
+function CustomCard({ className, ...props }) {
+  return (
+    <div className={cn('rounded-lg border bg-card p-4', className)} {...props} />
+  );
+}
+```
+
+## Next Steps
+
+- [Getting Started](/tools/uikit/getting-started): Full setup walkthrough including Tailwind configuration
+- [Components](/tools/uikit/components): Browse all available UI components
+- [Architecture](/tools/uikit/architecture): Understand the package layer system
