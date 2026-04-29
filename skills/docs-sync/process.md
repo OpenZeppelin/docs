@@ -9,6 +9,92 @@ explicitly prefixed with `<CONTRACTS_REPO_PATH>`.
 
 ---
 
+## Step 0 — Collect runtime inputs
+
+Inputs may arrive in two ways:
+
+1. **Pre-supplied** in the invocation prompt (`LIBRARY_ID=contracts-sui`,
+   `BASE_COMMIT=abc123`, etc.).
+2. **Collected interactively** here, using the `AskUserQuestion` tool,
+   for any required input the caller did not supply.
+
+Required inputs (see SKILL.md for full list): `<MODE>`,
+`<CONTRACTS_REPO_PATH>`, `<DOCS_REPO_PATH>`, `<BASE_COMMIT>`,
+`<HEAD_COMMIT>`, `<LIBRARY_ID>`, `<DOCS_VERSION>`, `<RELEASE_VERSION>`,
+`<DOCS_UPDATE_SCOPE>`.
+
+### 0.1 Resolve from caller args and defaults first
+
+Before prompting, fill in what can be inferred without the user:
+
+- `<DOCS_REPO_PATH>`: default to the current working directory if it is
+  the docs repo (verify by checking for `skills/docs-sync/SKILL.md`).
+- `<LIBRARY_ID>`: if exactly one file exists under
+  `skills/docs-sync/config/libraries/*.yml`, use that slice id.
+- `<DOCS_VERSION>`: if the resolved slice has exactly one version
+  directory under `docs.version_root`'s parent, use that.
+- `<DOCS_UPDATE_SCOPE>`: default to `full` unless the caller scoped it.
+- `<MODE>`: if not supplied, read `automation.default_mode` from the
+  resolved config; otherwise default to `interactive`.
+
+Record every default that was applied so the final report can list them
+as assumptions.
+
+### 0.2 If `<MODE>` resolves to `automatic`, do not prompt
+
+In `automatic` mode, missing required inputs are a hard failure. Stop
+with a clear message naming the missing fields. Do not invent SHAs,
+versions, or paths.
+
+### 0.3 Otherwise, prompt for missing inputs
+
+For each input still missing, ask the user via `AskUserQuestion`. Group
+related inputs into a single call (the tool accepts up to 4 questions
+per call). Use the templates below.
+
+**Bounded inputs — multiple choice** (let the user pick "Other" only
+when the listed options truly do not fit):
+
+- `<MODE>`: options `interactive` (Recommended) and `automatic`.
+- `<DOCS_UPDATE_SCOPE>`: options `full` (Recommended), `api-only`,
+  `guides-only`, `targeted:<paths>`.
+- `<LIBRARY_ID>`: options enumerated from the filenames under
+  `skills/docs-sync/config/libraries/*.yml`. If only one slice exists,
+  skip the prompt and apply it as the default.
+
+**Free-form inputs — ask via `AskUserQuestion` with a "Recommended"
+default option plus "Other" for custom input:**
+
+- `<CONTRACTS_REPO_PATH>`: an absolute filesystem path. No safe default
+  unless the user has previously supplied one this session.
+- `<BASE_COMMIT>` / `<HEAD_COMMIT>`: commit SHAs or refs in the
+  contracts repo. If reasonable, suggest the latest tag as `<BASE>` and
+  `HEAD` as `<HEAD>`; let the user override.
+- `<DOCS_VERSION>`: e.g. `1.x`. Suggest the highest existing version
+  directory in the slice.
+- `<RELEASE_VERSION>`: e.g. `v1.2.0`. No safe default; ask.
+
+### 0.4 Validate as you collect
+
+After collection, validate inline and re-prompt on failure rather than
+deferring to later steps:
+
+- Paths exist and are git repos (`git -C <path> rev-parse
+  --is-inside-work-tree`).
+- `<CONTRACTS_REPO_PATH>` is not the same as `<DOCS_REPO_PATH>`.
+- `<BASE_COMMIT>` and `<HEAD_COMMIT>` resolve in the contracts repo
+  (`git -C <CONTRACTS_REPO_PATH> rev-parse --verify <SHA>^{commit}`).
+- `<LIBRARY_ID>` has a config file at
+  `skills/docs-sync/config/libraries/<LIBRARY_ID>.yml`.
+
+If a validation fails in interactive mode, re-prompt for just that
+field. If it fails in automatic mode (e.g. caller supplied a bad SHA),
+stop with a clear error.
+
+Once all inputs are present and validated, proceed to Step 1. Steps 3
+and 4 below still run, but become no-ops because the same checks have
+already passed.
+
 ## Step 1 — Select mode
 
 1. If the caller passed `<MODE>`, use it.

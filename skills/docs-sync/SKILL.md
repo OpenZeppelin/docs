@@ -24,23 +24,20 @@ Do **not** trigger this skill for:
 
 ## Required runtime inputs
 
-Collect these before editing:
+The skill needs the inputs listed below. Callers may pre-supply any of
+them in the invocation prompt; whatever is missing is collected
+interactively in **Step 0** of `process.md` via `AskUserQuestion`. In
+`automatic` mode, missing required inputs are a hard failure — the
+skill will not invent SHAs, paths, or versions.
 
-- `<MODE>`: `interactive` or `automatic`.
-- `<CONTRACTS_REPO_PATH>`: local path to the contracts repo (runtime).
-- `<DOCS_REPO_PATH>`: local path to this docs repo (runtime).
-- `<BASE_COMMIT>`: contracts commit immediately **before** the change set.
-- `<HEAD_COMMIT>`: contracts commit at the **tip** of the change set.
-- `<LIBRARY_ID>`: docs slice id (e.g. `contracts-sui`).
-- `<DOCS_VERSION>`: docs version (e.g. `1.x`).
-- `<RELEASE_VERSION>`: human-facing release tag (e.g. `v1.1.0`).
-- `<DOCS_UPDATE_SCOPE>`: `full`, `api-only`, `guides-only`, or
-  `targeted:<paths>`. Default: `full`.
+Required: `<MODE>`, `<CONTRACTS_REPO_PATH>`, `<DOCS_REPO_PATH>`,
+`<BASE_COMMIT>`, `<HEAD_COMMIT>`, `<LIBRARY_ID>`, `<DOCS_VERSION>`,
+`<RELEASE_VERSION>`, `<DOCS_UPDATE_SCOPE>` (default `full`).
 
-Optional:
+Optional: `<TARGET_AUDIENCE>`, `<DOCS_TONE>`.
 
-- `<TARGET_AUDIENCE>`
-- `<DOCS_TONE>`
+See `process.md` Step 0 for defaults, prompt templates, and inline
+validation rules.
 
 ## Source-of-truth constraint
 

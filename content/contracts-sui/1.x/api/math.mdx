@@ -8,7 +8,7 @@ This page documents the public API of `openzeppelin_math` for OpenZeppelin Contr
 
 <APIGithubLinkHeader
   moduleName="rounding"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/math/core/sources/rounding.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.1.0/math/core/sources/rounding.move"
 />
 
 ```move
@@ -67,7 +67,7 @@ Returns `RoundingMode::Nearest` (round-half-up behavior).
 
 <APIGithubLinkHeader
   moduleName="decimal_scaling"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/math/core/sources/decimal_scaling.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.1.0/math/core/sources/decimal_scaling.move"
 />
 
 ```move
@@ -134,12 +134,12 @@ Each module wraps shared arithmetic helpers with width-specific bit limits and r
 
 Source modules:
 
-- [`u8.move`](https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/math/core/sources/u8.move)
-- [`u16.move`](https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/math/core/sources/u16.move)
-- [`u32.move`](https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/math/core/sources/u32.move)
-- [`u64.move`](https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/math/core/sources/u64.move)
-- [`u128.move`](https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/math/core/sources/u128.move)
-- [`u256.move`](https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/math/core/sources/u256.move)
+- [`u8.move`](https://github.com/OpenZeppelin/contracts-sui/blob/v1.1.0/math/core/sources/u8.move)
+- [`u16.move`](https://github.com/OpenZeppelin/contracts-sui/blob/v1.1.0/math/core/sources/u16.move)
+- [`u32.move`](https://github.com/OpenZeppelin/contracts-sui/blob/v1.1.0/math/core/sources/u32.move)
+- [`u64.move`](https://github.com/OpenZeppelin/contracts-sui/blob/v1.1.0/math/core/sources/u64.move)
+- [`u128.move`](https://github.com/OpenZeppelin/contracts-sui/blob/v1.1.0/math/core/sources/u128.move)
+- [`u256.move`](https://github.com/OpenZeppelin/contracts-sui/blob/v1.1.0/math/core/sources/u256.move)
 
 Functions
 
@@ -156,6 +156,7 @@ Functions
 - [`sqrt(value, rounding_mode)`](#width-sqrt)
 - [`inv_mod(value, modulus)`](#width-inv_mod)
 - [`mul_mod(a, b, modulus)`](#width-mul_mod)
+- [`is_power_of_ten(n)`](#width-is_power_of_ten)
 
 #### Functions [!toc] [#width-Functions]
 
@@ -271,11 +272,19 @@ Computes `(a * b) mod modulus`.
 Aborts when `modulus` is zero.
 </APIItem>
 
+<APIItem
+  functionSignature="is_power_of_ten(n: Int) -> bool"
+  id="width-is_power_of_ten"
+  kind="public"
+>
+Returns `true` when `n` is a power of ten within the width's range. The check is implemented as a width-specific lookup table, so it is O(1) and never aborts.
+</APIItem>
+
 ### `u512` [toc] [#u512]
 
 <APIGithubLinkHeader
   moduleName="u512"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.0.0/math/core/sources/u512.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.1.0/math/core/sources/u512.move"
 />
 
 ```move
@@ -419,4 +428,44 @@ Raised when `div_rem_u256` is called with `divisor = 0`.
   kind="error"
 >
 Raised when internal division remainder invariants are violated.
+</APIItem>
+
+### `vector` [toc] [#vector]
+
+<APIGithubLinkHeader
+  moduleName="vector"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.1.0/math/core/sources/vector.move"
+/>
+
+```move
+use openzeppelin_math::vector;
+```
+
+Generic in-place sorting macros built on iterative quicksort with three-way partitioning (Dutch National Flag) and median-of-three pivot selection. The macros use an explicit stack so they work on arbitrarily large vectors without hitting Move macro recursion limits.
+
+Functions
+
+- [`quick_sort!(vec)`](#vector-quick_sort)
+- [`quick_sort_by!(vec, le)`](#vector-quick_sort_by)
+
+#### Functions [!toc] [#vector-Functions]
+
+<APIItem
+  functionSignature="macro fun quick_sort<$Int>($vec: &mut vector<$Int>)"
+  id="vector-quick_sort"
+  kind="public"
+>
+Sorts an unsigned integer vector in ascending order in place. Generic over any unsigned integer type (`u8`, `u16`, `u32`, `u64`, `u128`, `u256`).
+
+NOTE: Unstable sort. Average time complexity is `O(n log n)`; theoretical worst case is `O(n^2)`, mitigated by median-of-three pivot selection and three-way partitioning.
+</APIItem>
+
+<APIItem
+  functionSignature="macro fun quick_sort_by<$T>($vec: &mut vector<$T>, $le: |&$T, &$T| -> bool)"
+  id="vector-quick_sort_by"
+  kind="public"
+>
+Sorts a vector in place using a caller-supplied comparison function. The comparator must implement **non-strict** ordering (`<=` for ascending, `>=` for descending) — using a strict comparator (`<` or `>`) defeats three-way partitioning and degrades performance to `O(n^2)` when duplicates are present.
+
+NOTE: Unstable sort. The same complexity caveats as [`quick_sort`](#vector-quick_sort) apply.
 </APIItem>

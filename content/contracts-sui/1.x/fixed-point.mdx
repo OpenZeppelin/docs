@@ -1,0 +1,116 @@
+---
+title: Fixed-Point Math
+---
+
+The `openzeppelin_fp_math` package adds two decimal fixed-point types with 9 decimals of precision, matching Sui's native coin precision (`10^9`). It is the right tool whenever you need real-valued arithmetic — prices, fees, rates, ratios, balance deltas — without giving up determinism or onchain auditability.
+
+The package complements `openzeppelin_math`, which covers integer arithmetic. Use `openzeppelin_math` when your values are whole numbers; reach for `openzeppelin_fp_math` when fractional values are part of the protocol.
+
+## Why a 9-decimal scale
+
+- Matches Sui's native coin decimals, so converting between token amounts and fixed-point values is straightforward.
+- Decimal scale is intuitive for humans, UIs, and offchain systems — `1.5` is `1_500_000_000`, no binary fixed-point surprises.
+- Fits in `u128`, keeping storage and arithmetic light compared to `u256`-based decimal types.
+
+## The two types
+
+- [`UD30x9`](/contracts-sui/1.x/api/fixed-point#ud30x9) — unsigned. Decimal range from `0` to roughly `3.4 × 10^29`.
+- [`SD29x9`](/contracts-sui/1.x/api/fixed-point#sd29x9) — signed (two's complement). Decimal range from roughly `-1.7 × 10^29` to `1.7 × 10^29`. Useful for balance deltas, signed adjustments, and any quantity that can dip below zero.
+
+## Usage
+
+Add the dependency in `Move.toml`:
+
+```toml
+[dependencies]
+openzeppelin_fp_math = { r.mvr = "@openzeppelin-move/fixed-point-math" }
+```
+
+Import the modules you need:
+
+```move
+use openzeppelin_fp_math::{ud30x9, ud30x9_convert};
+```
+
+## Casting vs converting
+
+Two distinct ways to move into and out of fixed-point form:
+
+- **Casting** — `wrap` / `unwrap` and cross-type casts. Preserves the underlying scaled bits. Use when the value is already in raw fixed-point form.
+- **Converting** — the `*_convert` modules. Applies or removes the `10^9` scale factor. Use when the input is a whole integer like `42` and you mean `42.0`.
+
+## Examples
+
+### Build a fixed-point value from a whole integer
+
+```move
+module my_sui_app::pricing;
+
+use openzeppelin_fp_math::{ud30x9, ud30x9_convert};
+
+public fun reference_price(): ud30x9::UD30x9 {
+    // 1.5 = 1.0 + 0.500000000
+    ud30x9_convert::from_u128(1).add(ud30x9::wrap(500_000_000))
+}
+```
+
+### Multiply with explicit rounding
+
+```move
+module my_sui_app::quote;
+
+use openzeppelin_fp_math::{ud30x9, ud30x9_convert};
+
+public fun apply_fee(amount: ud30x9::UD30x9, fee_rate: ud30x9::UD30x9): ud30x9::UD30x9 {
+    // Round away from zero so quoted fees never under-charge.
+    amount.mul_away(fee_rate)
+}
+```
+
+### Track a signed balance delta
+
+```move
+module my_sui_app::ledger;
+
+use openzeppelin_fp_math::{sd29x9, sd29x9_convert};
+
+public fun apply_adjustment(
+    balance: sd29x9::SD29x9,
+    magnitude: u128,
+    is_negative: bool,
+): sd29x9::SD29x9 {
+    let delta = sd29x9_convert::from_u128(magnitude, is_negative);
+    balance.add(delta)
+}
+```
+
+### Convert back to a whole integer
+
+```move
+module my_sui_app::settlement;
+
+use openzeppelin_fp_math::{ud30x9, ud30x9_convert};
+
+/// Truncate a `UD30x9` value to a `u64` token amount.
+public fun settle(amount: ud30x9::UD30x9): u64 {
+    amount.to_u64_trunc()
+}
+```
+
+## Choosing a function
+
+- `mul`, `div` — round toward zero. Equivalent to `mul_trunc`, `div_trunc`. Use as the default when rounding direction does not matter.
+- `mul_trunc`, `div_trunc` — round toward zero (truncate). Use when you want to spell the rounding direction out at the call site.
+- `mul_away`, `div_away` — round away from zero when inexact. Use for fees, slippage caps, and protocol-side accounting where rounding should never favor the user against the protocol.
+- `unchecked_add`, `unchecked_sub` — wrap modulo `2^128` instead of aborting on overflow/underflow. Use only when you have already proved the operation is safe and you want to avoid the abort path; otherwise prefer `add` / `sub`.
+- `pow` — approximate, biased toward zero, and not associative under truncation. Reasonable for small, integer exponents over typical fixed-point ranges; verify expected behavior at your application's exponent and operand magnitudes before relying on it.
+
+For `SD29x9` specifically, prefer `mod` (Euclidean, always non-negative) over `rem` (truncating, sign follows dividend) unless your protocol explicitly wants the truncating variant.
+
+<Callout type="warn">
+`SD29x9::min()` is `-2^127`. There is no representable `+2^127`, so calling `abs` or `negate` on `min()` aborts with `EOverflow`. Same caveat for `wrap(_, true)` at maximum magnitude.
+</Callout>
+
+## API Reference
+
+Use the full function-level reference here: [Fixed-Point Math API](/contracts-sui/1.x/api/fixed-point).
