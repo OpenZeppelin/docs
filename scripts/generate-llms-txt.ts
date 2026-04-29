@@ -38,10 +38,15 @@ const INTRO = `# OpenZeppelin Docs
 
 > Security-first libraries, tools, and infrastructure for building on Ethereum and other blockchains. Covers smart contract libraries for Solidity, Cairo, Stylus, Sui, Midnight, Stellar, Zama FHEVM, and Polkadot; operational tools (Defender, Monitor, Relayer, UI Builder); and the Upgrades Plugins and Contract Wizard.
 
-Each ecosystem section lists the smart-contract libraries and language-specific guides for that chain. Cross-ecosystem tools — Defender, Monitor, Relayer, UI Builder, Role Manager — are grouped at the end under "Open Source Tools" to avoid duplication. Unversioned URLs (for example \`/contracts/\`) redirect to the latest supported version.
+Each ecosystem section lists the smart-contract libraries and language-specific guides for that chain. Cross-ecosystem developer libraries and tools are grouped at the end to avoid duplication. Unversioned URLs (for example \`/contracts/\`) redirect to the latest supported version.
 `;
 
-const SHARED_TOOLS_SEPARATOR = "Open Source Tools";
+const SHARED_SECTION_NAMES = [
+	"Developer Libraries",
+	"Open Source Tools",
+] as const;
+type SharedSectionName = (typeof SHARED_SECTION_NAMES)[number];
+const SHARED_SECTION_NAME_SET = new Set<string>(SHARED_SECTION_NAMES);
 
 const frontmatterCache = new Map<
 	string,
@@ -160,18 +165,32 @@ function walk(nodes: NavigationNode[], ctx: WalkContext): void {
 	}
 }
 
-function splitSharedTools(nodes: NavigationNode[]): {
+function splitSharedSections(nodes: NavigationNode[]): {
 	ecosystem: NavigationNode[];
-	shared: NavigationNode[];
+	shared: Map<SharedSectionName, NavigationNode[]>;
 } {
-	const separatorIndex = nodes.findIndex(
-		(n) => n.type === "separator" && n.name === SHARED_TOOLS_SEPARATOR,
-	);
-	if (separatorIndex === -1) return { ecosystem: nodes, shared: [] };
-	return {
-		ecosystem: nodes.slice(0, separatorIndex),
-		shared: nodes.slice(separatorIndex + 1),
-	};
+	const ecosystem: NavigationNode[] = [];
+	const shared = new Map<SharedSectionName, NavigationNode[]>();
+	let currentSharedSection: SharedSectionName | null = null;
+
+	for (const node of nodes) {
+		if (node.type === "separator" && SHARED_SECTION_NAME_SET.has(node.name)) {
+			currentSharedSection = node.name as SharedSectionName;
+			if (!shared.has(currentSharedSection)) {
+				shared.set(currentSharedSection, []);
+			}
+			continue;
+		}
+
+		if (currentSharedSection) {
+			shared.get(currentSharedSection)?.push(node);
+			continue;
+		}
+
+		ecosystem.push(node);
+	}
+
+	return { ecosystem, shared };
 }
 
 function mergeByName(nodes: NavigationNode[]): NavigationNode[] {
@@ -234,12 +253,11 @@ function renderSection(
 }
 
 function main(): void {
-	const sharedSeen = new Set<string>();
 	const ecosystemSections: string[] = [];
-	const sharedToolNodes: NavigationNode[] = [];
+	const sharedSectionNodes = new Map<SharedSectionName, NavigationNode[]>();
 
 	for (const tree of TREES) {
-		const { ecosystem, shared } = splitSharedTools(tree.children);
+		const { ecosystem, shared } = splitSharedSections(tree.children);
 
 		const section = renderSection(
 			`## ${tree.name}`,
@@ -248,17 +266,22 @@ function main(): void {
 		);
 		if (section) ecosystemSections.push(section);
 
-		for (const node of shared) sharedToolNodes.push(node);
+		for (const [sectionName, nodes] of shared) {
+			const existing = sharedSectionNodes.get(sectionName) ?? [];
+			sharedSectionNodes.set(sectionName, [...existing, ...nodes]);
+		}
 	}
 
-	const toolsSection = renderSection(
-		`## Open Source Tools`,
-		mergeByName(sharedToolNodes),
-		sharedSeen,
-	);
-
 	const parts = [INTRO, ...ecosystemSections];
-	if (toolsSection) parts.push(toolsSection);
+	for (const sectionName of SHARED_SECTION_NAMES) {
+		const nodes = sharedSectionNodes.get(sectionName) ?? [];
+		const section = renderSection(
+			`## ${sectionName}`,
+			mergeByName(nodes),
+			new Set<string>(),
+		);
+		if (section) parts.push(section);
+	}
 
 	writeFileSync(OUTPUT_PATH, parts.join("\n"), "utf8");
 
