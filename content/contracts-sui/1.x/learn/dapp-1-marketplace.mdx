@@ -37,7 +37,7 @@ The Move package depends on [`openzeppelin_math`](/contracts-sui/1.x/math) for i
 
 ## Object model
 
-![Object model and ownership: Shop is a shared object with three typed Tables (accepted_currencies, listings, discounts); Shop Owner holds an owned ShopOwnerCap that gates admin actions; Pyth's PriceInfoObject is a separate shared object read by reference; Buyers receive an owned ShopItem<phantom T> receipt.](/contracts-sui/dapp-1-marketplace/frame-2-object-model.png)
+![Object model and ownership: Shop is a shared object with three typed Tables (accepted_currencies, listings, discounts); Shop Owner holds an owned ShopOwnerCap that gates admin actions; Pyth's PriceInfoObject is a separate shared object read by reference; Buyers receive an owned phantom-typed ShopItem receipt.](/contracts-sui/dapp-1-marketplace/frame-2-object-model.png)
 
 State is split across four object kinds. The `Shop` is a single shared root with three typed Tables (`accepted_currencies` keyed by `TypeName`, `listings`, and `discounts`) hung off its `UID` as dynamic fields. Authority lives in the owned `ShopOwnerCap` — every admin function takes `&ShopOwnerCap` as an argument, and the `shop_id` field binds the cap to one specific shop. Pyth's `PriceInfoObject` is an external shared object read by immutable reference during settlement. When a purchase completes, the buyer receives an owned `ShopItem<phantom T>` receipt.
 
@@ -45,7 +45,7 @@ The receipt carries a phantom type parameter — `T` is part of the type identit
 
 ## Purchase flow
 
-![Buyer Purchase PTB — atomic transaction with four steps: pyth::update_price_feeds (step 0), shop::buy_item_with_discount (step 1), transfer of the ShopItem<Bike> receipt to buyer (step 2), and transfer of the Coin<USDC> change to buyer (step 3). Step 0 always runs before step 1, making stale-oracle attacks structurally impossible.](/contracts-sui/dapp-1-marketplace/frame-3-purchase-ptb.png)
+![Buyer Purchase PTB — atomic transaction with four steps: pyth::update_price_feeds (step 0), shop::buy_item_with_discount (step 1), transfer of the bike receipt to the buyer (step 2), and transfer of the USDC change to the buyer (step 3). Step 0 always runs before step 1, making stale-oracle attacks structurally impossible.](/contracts-sui/dapp-1-marketplace/frame-3-purchase-ptb.png)
 
 Every purchase composes into a single Programmable Transaction Block. Step 0 pushes a fresh Pyth attestation on-chain — the off-chain Hermes service produces a guardian-signed VAA that Pyth's on-chain verifier validates. Step 1 reads that same `PriceInfoObject` (now fresh) and runs `shop::buy_item_with_discount`. Steps 2 and 3 transfer the minted `ShopItem<T>` receipt and any change back to the buyer. All four execute atomically — either every step succeeds or the entire transaction reverts.
 
