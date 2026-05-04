@@ -1,0 +1,109 @@
+---
+title: Delayed Transfer
+---
+
+<Callout type="warn">
+The example code snippets used in this guide are experimental and have not been audited. They simply help exemplify usage of the OpenZeppelin Sui Package.
+</Callout>
+
+The `delayed_transfer` module provides an ownership-transfer wrapper that enforces a configurable minimum delay before a privileged object can transfer or unwrap.
+
+## When to use it
+
+Use `delayed_transfer` when:
+
+- Your protocol requires on-chain lead time before authority changes.
+- Users, DAOs, or monitoring systems need a window to detect and respond.
+- The delay should be a reliable, inspectable commitment visible to anyone.
+
+## Import
+
+```move
+use openzeppelin_access::delayed_transfer;
+```
+
+## Step 1: Wrap with a delay
+
+```move
+module my_sui_app::treasury;
+
+use openzeppelin_access::delayed_transfer;
+
+public struct TreasuryCap has key, store { id: UID }
+
+const MIN_DELAY_MS: u64 = 86_400_000; // 24 hours
+
+/// Creates the wrapper and transfers it to ctx.sender() internally.
+public fun wrap_treasury_cap(cap: TreasuryCap, ctx: &mut TxContext) {
+    delayed_transfer::wrap(cap, MIN_DELAY_MS, ctx.sender(), ctx);
+}
+```
+
+`wrap` creates a `DelayedTransferWrapper<TreasuryCap>`, stores the capability inside it as a dynamic object field, and transfers the wrapper to the specified `recipient`. Unlike `two_step_transfer::wrap`, which returns the wrapper, `delayed_transfer::wrap` handles the transfer internally and has no return value.
+
+## Step 2: Schedule a transfer
+
+```move
+/// Called by the current wrapper owner.
+wrapper.schedule_transfer(new_owner_address, &clock, ctx);
+/// Emits TransferScheduled with execute_after_ms = clock.timestamp_ms() + min_delay_ms
+```
+
+The `Clock` object is Sui's shared on-chain clock. The deadline is computed as `clock.timestamp_ms() + min_delay_ms` and stored in the wrapper. Only one action can be pending at a time; scheduling a second without canceling the first aborts with `ETransferAlreadyScheduled`.
+
+During the delay window, the `TransferScheduled` event is visible on-chain. Monitoring systems, governance dashboards, or individual users watching the chain can detect the pending transfer and take action before it executes.
+
+<Callout type="warn">
+The `recipient` in `schedule_transfer` must be a wallet address, not an object ID. If the wrapper is transferred to an object via transfer-to-object (TTO), both the wrapper and the capability inside it become permanently locked. The `delayed_transfer` module does not implement a `Receiving`-based retrieval mechanism, so there is no way to borrow, unwrap, or further transfer a wrapper that has been sent to an object.
+</Callout>
+
+## Step 3: Wait, then execute
+
+```move
+/// Callable after the delay window has passed.
+wrapper.execute_transfer(&clock, ctx);
+/// Emits OwnershipTransferred. Consumes the wrapper and delivers it to the recipient.
+```
+
+`execute_transfer` consumes the wrapper by value. After this call, the wrapper has been transferred to the scheduled recipient and no longer exists in the caller's scope. Calling it before `execute_after_ms` aborts with `EDelayNotElapsed`.
+
+## Scheduling an unwrap
+
+The same delay enforcement applies to recovering the raw capability:
+
+```move
+/// Schedule the unwrap.
+wrapper.schedule_unwrap(&clock, ctx);
+/// Emits UnwrapScheduled.
+
+/// After the delay has elapsed, execute the unwrap.
+let treasury_cap = wrapper.unwrap(&clock, ctx);
+/// Emits UnwrapExecuted.
+```
+
+## Canceling
+
+The owner can cancel a pending action at any time before execution:
+
+```move
+wrapper.cancel_schedule();
+```
+
+This clears the pending slot immediately, allowing a new action to be scheduled.
+
+## Borrowing without unwrapping
+
+The module provides three ways to use the wrapped capability without changing ownership:
+
+```move
+let cap_ref = wrapper.borrow();
+let cap_mut = wrapper.borrow_mut();
+let (cap, borrow_token) = wrapper.borrow_val();
+wrapper.return_val(cap, borrow_token);
+```
+
+`borrow_val` uses a hot-potato guard, so the value must be returned to the same wrapper before the transaction ends.
+
+## API Reference
+
+For function-level signatures and error codes, see the [Access API reference](/contracts-sui/1.x/api/access#delayed_transfer).

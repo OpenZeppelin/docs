@@ -17,8 +17,6 @@ title: <Action verb + object> (e.g. "Rotate an admin capability")
 description: <One sentence describing the user goal.>
 ---
 
-import { APIItem, APIGithubLinkHeader } from "@/components/api"
-
 # <Title>
 
 ## Goal
@@ -143,5 +141,7 @@ module my_app::full_example;
   valid, write two guides.
 - Do not include narrative context that does not advance the task. The
   reader is busy.
+- Do not include source-code links in guides. Link to the related API
+  reference instead; API reference pages own source links.
 - Match `docs.tone` from config. Default for the contracts-sui slice:
   *clear, precise, security-conscious*.

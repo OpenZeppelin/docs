@@ -1,0 +1,69 @@
+---
+title: Access Control
+---
+
+<Callout type="warn">
+The example code snippets used in this guide are experimental and have not been audited. They simply help exemplify usage of the OpenZeppelin Sui Package.
+</Callout>
+
+The `access_control` module provides role-based authorization for Sui Move packages. It is the right choice when authority is not a single transferable object, or when several privileged actors need different permissions over shared protocol state.
+
+## Use cases
+
+Use `access_control` when your protocol needs:
+
+- A root role controlled by a package One-Time Witness (OTW).
+- Operational roles such as admin, treasurer, operator, guardian, pauser, or keeper.
+- Role-admin relationships, where one role grants and revokes another.
+- Typed authorization proofs with `Auth<R>` for new functions.
+- Signature-preserving checks with `assert_role` for existing public functions.
+- Delayed transfer of the root role to governance or a multisig.
+
+## Import
+
+```move
+use openzeppelin_access::access_control::{Self, AccessControl, Auth};
+```
+
+## Basic pattern
+
+The central object is `AccessControl<RootRole>`. Your package defines the root role as its OTW, defines role marker types in the same module, and creates one registry during `init`.
+
+```move
+module my_sui_app::roles;
+
+use openzeppelin_access::access_control::{Self, AccessControl};
+
+public struct ROLES has drop {}
+
+public struct OperatorRole {}
+
+const DEFAULT_ADMIN_DELAY_MS: u64 = 24 * 60 * 60 * 1_000;
+
+fun init(otw: ROLES, ctx: &mut TxContext) {
+    let mut access = access_control::new(otw, DEFAULT_ADMIN_DELAY_MS, ctx);
+    access.grant_role<_, OperatorRole>(ctx.sender(), ctx);
+
+    transfer::public_share_object(access);
+}
+
+public fun assert_operator(access: &AccessControl<ROLES>, ctx: &mut TxContext) {
+    access.assert_role<_, OperatorRole>(ctx.sender());
+}
+```
+
+<Callout type="warn">
+Do not renounce the last root role holder unless the protocol is intentionally being locked. The root role controls delayed root transfer and recovery of role administration.
+</Callout>
+
+## Authorization styles
+
+Use `Auth<R>` for new functions when you want authorization to be explicit in the function type and reusable across multiple calls in the same PTB.
+
+Use `assert_role` when you are retrofitting an existing public function and changing the signature would be disruptive or invalid for package-upgrade compatibility.
+
+## Learn more
+
+For a full walkthrough of roles, `Auth<R>`, publishing, upgrades, and PTB usage, see the [Access Control guide](/contracts-sui/1.x/guides/access-control).
+
+For function-level signatures, events, and errors, see the [Access API reference](/contracts-sui/1.x/api/access).
