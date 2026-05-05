@@ -8,7 +8,7 @@ This page documents the public API of `openzeppelin_access` for OpenZeppelin Con
 
 <APIGithubLinkHeader
   moduleName="access_control"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/34389a440e63715c377276577643dc9ade07ebc0/contracts/access/sources/access_control.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/b30fe928b55f38754b05f02117c598cf8d53316a/contracts/access/sources/access_control.move"
 />
 
 ```move
@@ -17,11 +17,11 @@ use openzeppelin_access::access_control;
 
 Role-based access control registry for Sui Move packages. The root role is the consumer module's One-Time Witness (OTW), and managed roles must be defined in the same module as the root role.
 
-The module supports ordinary role grants and revocations, typed `Auth<R>` proofs, delayed root-role transfer, delayed root-role renounce, and delayed changes to the root-operation delay.
+The module supports ordinary role grants and revocations, typed `Auth<Role>` proofs, delayed root-role transfer, delayed root-role renounce, and delayed changes to the root-operation delay.
 
 Types
 
-- [`Auth<R>`](#access_control-Auth)
+- [`Auth<Role>`](#access_control-Auth)
 - [`AccessControl<RootRole>`](#access_control-AccessControl)
 - [`RoleData`](#access_control-RoleData)
 - [`PendingAdminTransfer`](#access_control-PendingAdminTransfer)
@@ -84,15 +84,18 @@ Errors
 - [`ENotPendingTransfer`](#access_control-ENotPendingTransfer)
 - [`ENotPendingRenounce`](#access_control-ENotPendingRenounce)
 - [`ENoPendingDelayChange`](#access_control-ENoPendingDelayChange)
+- [`EZeroAddress`](#access_control-EZeroAddress)
 
 #### Types [!toc] [#access_control-Types]
 
 <APIItem
-  functionSignature="struct Auth<R>"
+  functionSignature="struct Auth<Role>"
   id="access_control-Auth"
   kind="struct"
 >
-Drop-only typed proof that the transaction sender held role `R` when the proof was minted with `new_auth`.
+Drop-only typed proof that the transaction sender held `Role` when the proof was minted with `new_auth`.
+
+Because `new_auth` only mints against the singleton registry for `Role`'s home module, consumers can take `&Auth<Role>` as authorization without repeating role checks.
 </APIItem>
 
 <APIItem
@@ -101,6 +104,8 @@ Drop-only typed proof that the transaction sender held role `R` when the proof w
   kind="struct"
 >
 Key object storing role membership, role-admin relationships, root-role pending state, pending delay changes, and the current root-operation delay.
+
+`RootRole` is the consuming module's OTW type. It pins the registry identity and is the protected root role for the registry.
 </APIItem>
 
 <APIItem
@@ -136,61 +141,81 @@ Pending change to `default_admin_delay_ms`, including the new delay and the time
 >
 Creates the registry for the consumer module. `RootRole` must be a genuine OTW, and `ctx.sender()` becomes the initial root-role holder.
 
-Aborts if `otw` is not an OTW or if `default_admin_delay_ms` exceeds `max_default_admin_delay_ms()`.
+The caller is responsible for sharing, embedding, or otherwise positioning the returned `AccessControl<RootRole>` registry.
+
+Aborts with `ENotOneTimeWitness` if `otw` is not an OTW.
+
+Aborts with `EDelayTooLarge` if `default_admin_delay_ms` exceeds `max_default_admin_delay_ms()`.
 </APIItem>
 
 <APIItem
-  functionSignature="has_role<RootRole, R>(ac: &AccessControl<RootRole>, account: address) -> bool"
+  functionSignature="has_role<RootRole, Role>(ac: &AccessControl<RootRole>, account: address) -> bool"
   id="access_control-has_role"
   kind="public"
 >
-Returns whether `account` currently holds role `R`.
+Returns whether `account` currently holds `Role`. Returns `false` for roles that have never been registered.
 </APIItem>
 
 <APIItem
-  functionSignature="get_role_admin<RootRole, R>(ac: &AccessControl<RootRole>) -> TypeName"
+  functionSignature="get_role_admin<RootRole, Role>(ac: &AccessControl<RootRole>) -> TypeName"
   id="access_control-get_role_admin"
   kind="public"
 >
-Returns the admin role for `R`, defaulting to the protected root role when no role data exists yet.
+Returns the admin role for `Role`, defaulting to the protected root role when no role data exists yet.
 </APIItem>
 
 <APIItem
-  functionSignature="assert_role<RootRole, R>(ac: &AccessControl<RootRole>, account: address)"
+  functionSignature="assert_role<RootRole, Role>(ac: &AccessControl<RootRole>, account: address)"
   id="access_control-assert_role"
   kind="public"
 >
-Aborts with `EUnauthorized` if `account` does not hold role `R`.
+Checks that `account` holds `Role`.
+
+Aborts with `EUnauthorized` if `account` does not hold `Role`.
 </APIItem>
 
 <APIItem
-  functionSignature="grant_role<RootRole, R>(ac: &mut AccessControl<RootRole>, account: address, ctx: &mut TxContext)"
+  functionSignature="grant_role<RootRole, Role>(ac: &mut AccessControl<RootRole>, account: address, ctx: &mut TxContext)"
   id="access_control-grant_role"
   kind="public"
 >
-Grants role `R` to `account`. Caller must hold the admin role of `R`. No-op if `account` already has the role.
+Grants `Role` to `account`. Caller must hold the admin role of `Role`. No-op if `account` already has the role.
 
-Aborts for foreign role types, root-role management, or missing admin authorization.
+Aborts with `EForeignRole` if `Role` is not defined in the same module as `RootRole`.
+
+Aborts with `ECannotManageRootRole` if `Role` is the root role.
+
+Aborts with `EUnauthorized` if caller does not hold the admin role of `Role`.
+
+Aborts with `EZeroAddress` if `account` is `@0x0`.
 </APIItem>
 
 <APIItem
-  functionSignature="revoke_role<RootRole, R>(ac: &mut AccessControl<RootRole>, account: address, ctx: &mut TxContext)"
+  functionSignature="revoke_role<RootRole, Role>(ac: &mut AccessControl<RootRole>, account: address, ctx: &mut TxContext)"
   id="access_control-revoke_role"
   kind="public"
 >
-Revokes role `R` from `account`. Caller must hold the admin role of `R`. No-op if `account` does not have the role.
+Revokes `Role` from `account`. Caller must hold the admin role of `Role`. No-op if `account` does not have the role.
 
-Aborts for foreign role types, root-role management, or missing admin authorization.
+Aborts with `EForeignRole` if `Role` is not defined in the same module as `RootRole`.
+
+Aborts with `ECannotManageRootRole` if `Role` is the root role.
+
+Aborts with `EUnauthorized` if caller does not hold the admin role of `Role`.
 </APIItem>
 
 <APIItem
-  functionSignature="renounce_role<RootRole, R>(ac: &mut AccessControl<RootRole>, account: address, ctx: &mut TxContext)"
+  functionSignature="renounce_role<RootRole, Role>(ac: &mut AccessControl<RootRole>, account: address, ctx: &mut TxContext)"
   id="access_control-renounce_role"
   kind="public"
 >
-Lets the caller renounce their own non-root role. No-op if the caller does not hold `R`.
+Lets the caller renounce their own non-root `Role`. No-op if caller does not hold `Role`.
 
-Aborts if `account` is not `ctx.sender()`, if `R` is foreign, or if `R` is the root role. Root renounce must use `begin_default_admin_renounce` and `accept_default_admin_renounce`.
+Aborts with `ECannotRenounceForOtherAccount` if `account` is not `ctx.sender()`.
+
+Aborts with `EForeignRole` if `Role` is not defined in the same module as `RootRole`.
+
+Aborts with `ECannotManageRootRole` if `Role` is the root role. Root renounce must use `begin_default_admin_renounce` and `accept_default_admin_renounce`.
 </APIItem>
 
 <APIItem
@@ -200,7 +225,11 @@ Aborts if `account` is not `ctx.sender()`, if `R` is foreign, or if `R` is the r
 >
 Changes the admin role for `Role` to `AdminRole`. Caller must hold the current admin role of `Role`.
 
-Aborts if either role is foreign, if `Role` is the root role, or if caller lacks the current admin role.
+Aborts with `EForeignRole` if either `Role` or `AdminRole` is not defined in the same module as `RootRole`.
+
+Aborts with `ECannotManageRootRole` if `Role` is the root role.
+
+Aborts with `EUnauthorized` if caller lacks the current admin role of `Role`.
 </APIItem>
 
 <APIItem
@@ -211,6 +240,10 @@ Aborts if either role is foreign, if `Role` is the root role, or if caller lacks
 Schedules a root-role transfer to `new_admin` at `clock.timestamp_ms() + default_admin_delay_ms`.
 
 Caller must hold the root role. An existing pending transfer or renounce is overwritten.
+
+Aborts with `EUnauthorized` if caller does not hold the root role.
+
+Aborts with `EZeroAddress` if `new_admin` is `@0x0`. Use `begin_default_admin_renounce` to permanently lock the registry.
 </APIItem>
 
 <APIItem
@@ -221,6 +254,14 @@ Caller must hold the root role. An existing pending transfer or renounce is over
 Accepts a pending root-role transfer after the scheduled delay. Caller must be the pending new admin.
 
 The call clears the pending action, revokes the old root holder, and grants the root role to the caller.
+
+Aborts with `ENoPendingAdminTransfer` if there is no pending transfer or renounce.
+
+Aborts with `ENotPendingTransfer` if the pending action is a renounce.
+
+Aborts with `ENotPendingAdmin` if caller is not the scheduled new admin.
+
+Aborts with `EDelayNotElapsed` if the timelock has not elapsed.
 </APIItem>
 
 <APIItem
@@ -231,6 +272,8 @@ The call clears the pending action, revokes the old root holder, and grants the 
 Schedules a root-role renounce at `clock.timestamp_ms() + default_admin_delay_ms`.
 
 Caller must hold the root role. An existing pending transfer or renounce is overwritten.
+
+Aborts with `EUnauthorized` if caller does not hold the root role.
 </APIItem>
 
 <APIItem
@@ -241,6 +284,14 @@ Caller must hold the root role. An existing pending transfer or renounce is over
 Finalizes a pending root-role renounce after the scheduled delay. Caller must still hold the root role.
 
 After this call, no account holds the root role and root administration is permanently unavailable unless another protocol-specific recovery path exists.
+
+Aborts with `ENoPendingAdminTransfer` if there is no pending transfer or renounce.
+
+Aborts with `ENotPendingRenounce` if the pending action is a transfer.
+
+Aborts with `EUnauthorized` if caller does not hold the root role.
+
+Aborts with `EDelayNotElapsed` if the timelock has not elapsed.
 </APIItem>
 
 <APIItem
@@ -249,6 +300,10 @@ After this call, no account holds the root role and root administration is perma
   kind="public"
 >
 Cancels a pending root-role transfer or pending root-role renounce. Caller must hold the root role.
+
+Aborts with `ENoPendingAdminTransfer` if there is no pending transfer or renounce.
+
+Aborts with `EUnauthorized` if caller does not hold the root role.
 </APIItem>
 
 <APIItem
@@ -259,6 +314,10 @@ Cancels a pending root-role transfer or pending root-role renounce. Caller must 
 Schedules a change to `default_admin_delay_ms`. Caller must hold the root role, and `new_delay_ms` must not exceed `max_default_admin_delay_ms()`.
 
 Increases wait for `min(new_delay_ms, max_delay_increase_wait_ms())`; decreases wait for `current_delay_ms - new_delay_ms`. An existing pending delay change is overwritten.
+
+Aborts with `EUnauthorized` if caller does not hold the root role.
+
+Aborts with `EDelayTooLarge` if `new_delay_ms` exceeds `max_default_admin_delay_ms()`.
 </APIItem>
 
 <APIItem
@@ -269,6 +328,10 @@ Increases wait for `min(new_delay_ms, max_delay_increase_wait_ms())`; decreases 
 Applies a pending delay change after `schedule_after_ms`.
 
 No authorization is required at accept time; the root holder authorized the change when scheduling it.
+
+Aborts with `ENoPendingDelayChange` if no delay change is pending.
+
+Aborts with `EDelayNotElapsed` if `schedule_after_ms` has not been reached.
 </APIItem>
 
 <APIItem
@@ -277,24 +340,30 @@ No authorization is required at accept time; the root holder authorized the chan
   kind="public"
 >
 Cancels a pending delay change. Caller must hold the root role.
+
+Aborts with `ENoPendingDelayChange` if no delay change is pending.
+
+Aborts with `EUnauthorized` if caller does not hold the root role.
 </APIItem>
 
 <APIItem
-  functionSignature="new_auth<RootRole, R>(ac: &AccessControl<RootRole>, ctx: &mut TxContext) -> Auth<R>"
+  functionSignature="new_auth<RootRole, Role>(ac: &AccessControl<RootRole>, ctx: &mut TxContext) -> Auth<Role>"
   id="access_control-new_auth"
   kind="public"
 >
-Mints a temporary `Auth<R>` proof for `ctx.sender()`.
+Mints a temporary `Auth<Role>` proof for `ctx.sender()`. Pass it by reference to gated functions in the same PTB.
 
-Aborts if `R` is foreign to the root-role module or if the sender does not hold `R`.
+Aborts with `EForeignRole` if `Role` is not defined in the same module as `RootRole`.
+
+Aborts with `EUnauthorized` if sender does not hold `Role`.
 </APIItem>
 
 <APIItem
-  functionSignature="auth_addr<R>(auth: &Auth<R>) -> address"
+  functionSignature="auth_addr<Role>(auth: &Auth<Role>) -> address"
   id="access_control-auth_addr"
   kind="public"
 >
-Returns the address authorized when `auth` was minted.
+Returns the address that held `Role` when `auth` was minted.
 </APIItem>
 
 <APIItem
@@ -302,7 +371,7 @@ Returns the address authorized when `auth` was minted.
   id="access_control-protected_root"
   kind="public"
 >
-Returns the `TypeName` of the protected root role.
+Returns the `TypeName` of the protected root role captured at construction time.
 </APIItem>
 
 <APIItem
@@ -318,7 +387,7 @@ Returns the maximum allowed root-operation delay: 60 days in milliseconds.
   id="access_control-default_admin_delay_ms"
   kind="public"
 >
-Returns the current delay for root transfers and root renounces.
+Returns the current delay, in milliseconds, for root transfers and root renounces.
 </APIItem>
 
 <APIItem
@@ -334,7 +403,7 @@ Returns whether there is any pending root-role action: either a transfer or a re
   id="access_control-is_pending_default_admin_renounce"
   kind="public"
 >
-Returns whether the pending root-role action is specifically a renounce.
+Returns whether the pending root-role action is specifically a renounce. Returns `false` when there is no pending action or when the pending action is a transfer.
 </APIItem>
 
 <APIItem
@@ -343,6 +412,8 @@ Returns whether the pending root-role action is specifically a renounce.
   kind="public"
 >
 Returns `some(address)` for a pending transfer. Returns `none` when there is no pending action or when the pending action is a renounce.
+
+Use `is_pending_default_admin_renounce` to distinguish no pending action from pending renounce.
 </APIItem>
 
 <APIItem
@@ -350,7 +421,7 @@ Returns `some(address)` for a pending transfer. Returns `none` when there is no 
   id="access_control-pending_default_admin_execute_after_ms"
   kind="public"
 >
-Returns the timestamp after which the pending root-role action can be accepted, if any.
+Returns `some(timestamp_ms)` with the timestamp after which the pending root-role action can be accepted. Returns `none` when no root action is pending.
 </APIItem>
 
 <APIItem
@@ -374,7 +445,7 @@ Returns whether a default-admin delay change is pending.
   id="access_control-pending_default_admin_delay_change_new_delay_ms"
   kind="public"
 >
-Returns the new delay from a pending delay change, if any.
+Returns `some(new_delay_ms)` with the proposed delay if a change is pending. Returns `none` otherwise.
 </APIItem>
 
 <APIItem
@@ -382,7 +453,7 @@ Returns the new delay from a pending delay change, if any.
   id="access_control-pending_default_admin_delay_change_schedule_after_ms"
   kind="public"
 >
-Returns the timestamp after which a pending delay change can be applied, if any.
+Returns `some(timestamp_ms)` with the timestamp after which a pending delay change can be applied. Returns `none` otherwise.
 </APIItem>
 
 #### Events [!toc] [#access_control-Events]
@@ -392,7 +463,11 @@ Returns the timestamp after which a pending delay change can be applied, if any.
   id="access_control-RoleGranted"
   kind="event"
 >
-Emitted when a role is granted.
+Emitted when a role is granted to an account.
+
+Fired by `grant_role` when `account` was not already a member, by `new` for the initial root holder, and by `accept_default_admin_transfer` for the incoming root holder.
+
+The `role` field is a `TypeName` that identifies the defining package address and module of the role struct.
 </APIItem>
 
 <APIItem
@@ -400,7 +475,11 @@ Emitted when a role is granted.
   id="access_control-RoleRevoked"
   kind="event"
 >
-Emitted when a role is revoked.
+Emitted when a role is removed from an account.
+
+Fired by `revoke_role` when `account` held the role, by `renounce_role`, by `accept_default_admin_transfer` for the previous root holder, and by `accept_default_admin_renounce` for the renouncing root holder.
+
+The `role` field is a `TypeName` that identifies the defining package address and module of the role struct.
 </APIItem>
 
 <APIItem
@@ -408,7 +487,9 @@ Emitted when a role is revoked.
   id="access_control-RoleAdminChanged"
   kind="event"
 >
-Emitted when the admin role for a role changes.
+Emitted when a role's admin role is reconfigured by `set_role_admin`.
+
+The `role`, `previous_admin_role`, and `new_admin_role` fields are `TypeName`s.
 </APIItem>
 
 <APIItem
@@ -416,7 +497,9 @@ Emitted when the admin role for a role changes.
   id="access_control-DefaultAdminTransferScheduled"
   kind="event"
 >
-Emitted when a root-role transfer is scheduled.
+Emitted when a root-role transfer is scheduled by `begin_default_admin_transfer`.
+
+`execute_after_ms` is the earliest timestamp at which `accept_default_admin_transfer` can be called.
 </APIItem>
 
 <APIItem
@@ -424,7 +507,9 @@ Emitted when a root-role transfer is scheduled.
   id="access_control-DefaultAdminRenounceScheduled"
   kind="event"
 >
-Emitted when a root-role renounce is scheduled.
+Emitted when a root-role renounce is scheduled by `begin_default_admin_renounce`.
+
+`execute_after_ms` is the earliest timestamp at which `accept_default_admin_renounce` can be called.
 </APIItem>
 
 <APIItem
@@ -432,7 +517,9 @@ Emitted when a root-role renounce is scheduled.
   id="access_control-DefaultAdminTransferCancelled"
   kind="event"
 >
-Emitted when a pending root-role transfer or renounce is cancelled.
+Emitted by `cancel_default_admin_transfer` when a pending root-role transfer or renounce is cancelled.
+
+Indexers can correlate this event with the prior `DefaultAdminTransferScheduled` or `DefaultAdminRenounceScheduled` event to identify which pending action was cancelled.
 </APIItem>
 
 <APIItem
@@ -440,7 +527,9 @@ Emitted when a pending root-role transfer or renounce is cancelled.
   id="access_control-DefaultAdminDelayChangeScheduled"
   kind="event"
 >
-Emitted when a default-admin delay change is scheduled.
+Emitted when a default-admin delay change is scheduled by `begin_default_admin_delay_change`.
+
+`new_delay_ms` is the proposed new delay. `schedule_after_ms` is the earliest timestamp at which `accept_default_admin_delay_change` can apply it.
 </APIItem>
 
 <APIItem
@@ -448,7 +537,7 @@ Emitted when a default-admin delay change is scheduled.
   id="access_control-DefaultAdminDelayChangeCancelled"
   kind="event"
 >
-Emitted when a pending default-admin delay change is cancelled.
+Emitted by `cancel_default_admin_delay_change` when a pending default-admin delay change is cancelled.
 </APIItem>
 
 #### Errors [!toc] [#access_control-Errors]
@@ -474,7 +563,7 @@ Raised when grant, revoke, renounce, or admin-change logic is used on the root r
   id="access_control-ENoPendingAdminTransfer"
   kind="error"
 >
-Raised when a root transfer, root renounce, or root cancellation function expects a pending root action but none exists.
+Raised when `accept_default_admin_transfer`, `accept_default_admin_renounce`, or `cancel_default_admin_transfer` expects a pending root transfer or renounce but none exists.
 </APIItem>
 
 <APIItem
@@ -490,7 +579,7 @@ Raised when a caller other than the scheduled new root holder tries to accept a 
   id="access_control-EDelayNotElapsed"
   kind="error"
 >
-Raised when a scheduled root action or delay change is accepted before its timestamp.
+Raised when `accept_default_admin_transfer`, `accept_default_admin_renounce`, or `accept_default_admin_delay_change` is called before the pending action's timelock has elapsed.
 </APIItem>
 
 <APIItem
@@ -547,6 +636,16 @@ Raised when `accept_default_admin_renounce` is called while the pending root act
   kind="error"
 >
 Raised when accepting or cancelling a default-admin delay change but no delay change is pending.
+</APIItem>
+
+<APIItem
+  functionSignature="EZeroAddress"
+  id="access_control-EZeroAddress"
+  kind="error"
+>
+Raised when `grant_role` or `begin_default_admin_transfer` is called with `@0x0` as the target address.
+
+The zero address has no signing key, so a role granted to it can never be exercised and a root transfer scheduled to it can never be accepted.
 </APIItem>
 
 ### `two_step_transfer` [toc] [#two_step_transfer]
