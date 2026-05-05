@@ -445,9 +445,11 @@ sui client ptb \
 
 The `borrow_access` call returns `&AccessControl<ROLES>` from the dynamic object field. PTBs can pass that returned reference into a later Move call, so `new_auth` can come directly from the OpenZeppelin package.
 
-## Root role transfer
+## Root role operations
 
-The root role is intentionally harder to transfer than ordinary roles. It cannot be granted or revoked with `grant_role` and `revoke_role`; use the delayed default-admin transfer flow.
+The root role is intentionally harder to change than ordinary roles. It cannot be granted, revoked, or renounced with `grant_role`, `revoke_role`, or `renounce_role`. Use the delayed default-admin flows for root transfer, root renounce, and changes to the root-operation delay.
+
+Scheduling a root transfer or a root renounce uses the same pending slot. Starting one overwrites the other, and `cancel_default_admin_transfer` cancels either pending action.
 
 ```mermaid
 sequenceDiagram
@@ -460,7 +462,9 @@ sequenceDiagram
     Registry-->>Registry: revokes old root and grants new root
 ```
 
-Schedule the transfer:
+### Transfer the root role
+
+Schedule the transfer from the current root holder:
 
 ```bash
 export CLOCK=0x6
@@ -502,6 +506,116 @@ sui client ptb \
   --gas-budget 10000000
 ```
 
+### Renounce the root role
+
+Root renounce is a delayed two-step flow. Use it only when the protocol is intentionally being locked, because after acceptance no account holds the root role and the registry can no longer recover role administration through root actions.
+
+```mermaid
+sequenceDiagram
+    participant Root as Current root holder
+    participant Registry as AccessControl
+    Root->>Registry: begin_default_admin_renounce(clock)
+    Registry-->>Registry: records execute_after_ms
+    Root->>Registry: accept_default_admin_renounce(clock)
+    Registry-->>Registry: revokes root from caller
+```
+
+Schedule the renounce:
+
+```bash
+sui client ptb \
+  --move-call $PACKAGE::vault::borrow_access_mut @$CONFIG \
+  --assign access \
+  --move-call $ACCESS::access_control::begin_default_admin_renounce \
+    "<$PACKAGE::roles::ROLES>" \
+    access \
+    @$CLOCK \
+  --gas-budget 10000000
+```
+
+After the configured delay elapses, the current root holder finalizes it:
+
+```bash
+sui client ptb \
+  --move-call $PACKAGE::vault::borrow_access_mut @$CONFIG \
+  --assign access \
+  --move-call $ACCESS::access_control::accept_default_admin_renounce \
+    "<$PACKAGE::roles::ROLES>" \
+    access \
+    @$CLOCK \
+  --gas-budget 10000000
+```
+
+The current root holder can cancel a pending transfer or renounce with the same cancellation call:
+
+```bash
+sui client ptb \
+  --move-call $PACKAGE::vault::borrow_access_mut @$CONFIG \
+  --assign access \
+  --move-call $ACCESS::access_control::cancel_default_admin_transfer \
+    "<$PACKAGE::roles::ROLES>" \
+    access \
+  --gas-budget 10000000
+```
+
+### Change the root-operation delay
+
+`default_admin_delay_ms` controls how long root transfers and root renounces must wait before acceptance. It can also be changed through a delayed flow. The maximum value is `max_default_admin_delay_ms()`, currently 60 days.
+
+Delay increases take effect after `min(new_delay_ms, max_delay_increase_wait_ms())`; `max_delay_increase_wait_ms()` is 48 hours. Delay decreases take effect after `current_delay_ms - new_delay_ms`, so the root holder cannot immediately shorten the protection window and schedule a faster root change.
+
+```mermaid
+sequenceDiagram
+    participant Root as Root holder
+    participant Registry as AccessControl
+    participant Any as Any signer
+    Root->>Registry: begin_default_admin_delay_change(newDelay, clock)
+    Registry-->>Registry: records schedule_after_ms
+    Any->>Registry: accept_default_admin_delay_change(clock)
+    Registry-->>Registry: updates default_admin_delay_ms
+```
+
+Schedule a delay change:
+
+```bash
+export NEW_DEFAULT_ADMIN_DELAY_MS=172800000
+
+sui client ptb \
+  --move-call $PACKAGE::vault::borrow_access_mut @$CONFIG \
+  --assign access \
+  --move-call $ACCESS::access_control::begin_default_admin_delay_change \
+    "<$PACKAGE::roles::ROLES>" \
+    access \
+    $NEW_DEFAULT_ADMIN_DELAY_MS \
+    @$CLOCK \
+  --gas-budget 10000000
+```
+
+After `schedule_after_ms`, any signer can apply the scheduled delay change:
+
+```bash
+sui client ptb \
+  --move-call $PACKAGE::vault::borrow_access_mut @$CONFIG \
+  --assign access \
+  --move-call $ACCESS::access_control::accept_default_admin_delay_change \
+    "<$PACKAGE::roles::ROLES>" \
+    access \
+    @$CLOCK \
+  --gas-budget 10000000
+```
+
+The root holder can cancel a pending delay change before it is applied:
+
+```bash
+sui client ptb \
+  --move-call $PACKAGE::vault::borrow_access_mut @$CONFIG \
+  --assign access \
+  --move-call $ACCESS::access_control::cancel_default_admin_delay_change \
+    "<$PACKAGE::roles::ROLES>" \
+    access \
+  --gas-budget 10000000
+```
+
 These PTBs use the upgrade example's config-anchored registry. If your module embeds `AccessControl` in a different object, expose equivalent access getters over that object and pass the returned reference instead.
 
 ## Operational checklist
@@ -512,4 +626,5 @@ These PTBs use the upgrade example's config-anchored registry. If your module em
 - Use `Auth<R>` for new role-gated functions, especially when multiple protected calls should share one authorization proof in a PTB.
 - Use `assert_role` when upgrading existing functions and changing the signature would be disruptive.
 - Transfer the root role to governance or a multisig through the delayed transfer flow.
-- Do not renounce the last root role holder unless the protocol is intentionally being locked.
+- Renounce the root role only through the delayed renounce flow and only when the protocol is intentionally being locked.
+- Change `default_admin_delay_ms` only through the delayed delay-change flow; existing pending root transfers or renounces keep the delay they were scheduled under.

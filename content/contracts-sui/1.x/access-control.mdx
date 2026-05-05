@@ -1,5 +1,5 @@
 ---
-title: Access Control
+title: RBAC
 ---
 
 <Callout type="warn">
@@ -17,7 +17,9 @@ Use `access_control` when your protocol needs:
 - Role-admin relationships, where one role grants and revokes another.
 - Typed authorization proofs with `Auth<R>` for new functions.
 - Signature-preserving checks with `assert_role` for existing public functions.
-- Delayed transfer of the root role to governance or a multisig.
+- Delayed root-role transfer to governance or a multisig.
+- Delayed root-role renounce when the protocol should be permanently locked.
+- Delayed changes to the root-role transfer and renounce delay.
 
 ## Import
 
@@ -53,8 +55,19 @@ public fun assert_operator(access: &AccessControl<ROLES>, ctx: &mut TxContext) {
 ```
 
 <Callout type="warn">
-Do not renounce the last root role holder unless the protocol is intentionally being locked. The root role controls delayed root transfer and recovery of role administration.
+The root role cannot be granted, revoked, or renounced with ordinary role-management calls. Use the delayed root transfer or delayed root renounce flows instead. Finalizing a root renounce leaves the registry without a root holder, so use it only when the protocol should become permanently unmanaged.
 </Callout>
+
+## Root role operations
+
+The root role is the fallback admin for every role. Because it can recover role administration, root-role changes go through delayed flows:
+
+- `begin_default_admin_transfer` schedules transfer to a new root holder.
+- `accept_default_admin_transfer` lets the pending holder accept after the configured delay.
+- `begin_default_admin_renounce` schedules an intentional lock-in where the current root holder gives up the root role.
+- `accept_default_admin_renounce` finalizes that lock-in after the configured delay.
+- `cancel_default_admin_transfer` cancels either a pending transfer or a pending renounce.
+- `begin_default_admin_delay_change`, `accept_default_admin_delay_change`, and `cancel_default_admin_delay_change` manage the delay itself.
 
 ## Authorization styles
 
@@ -64,6 +77,6 @@ Use `assert_role` when you are retrofitting an existing public function and chan
 
 ## Learn more
 
-For a full walkthrough of roles, `Auth<R>`, publishing, upgrades, and PTB usage, see the [Access Control guide](/contracts-sui/1.x/guides/access-control).
+For a full walkthrough of roles, `Auth<R>`, publishing, upgrades, and PTB usage, see the [Role Based Access Control guide](/contracts-sui/1.x/guides/access-control).
 
 For function-level signatures, events, and errors, see the [Access API reference](/contracts-sui/1.x/api/access).
