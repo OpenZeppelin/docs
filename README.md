@@ -153,6 +153,14 @@ Source repos need a `DOCS_REPO_TOKEN` secret (GitHub PAT with `repo` + `workflow
 3. Follow existing directory structure for consistency
 4. Update navigation if adding new product categories
 
+### Updating `llms.txt`
+
+The `public/llms.txt` file is generated from the navigation tree and MDX frontmatter. Run the generator whenever you add, remove, rename, or reorder navigation items, or when you update page descriptions that should appear in `llms.txt`.
+
+```bash
+pnpm run generate:llms-txt
+```
+
 ### Versioning
 
 - Version-specific content in numbered subdirectories (e.g., `contracts/4.x/`)

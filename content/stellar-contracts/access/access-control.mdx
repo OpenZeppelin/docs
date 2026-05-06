@@ -53,10 +53,10 @@ impl MyContract {
 
         // 1. Set MANAGER_ROLE as the admin role for GUARDIAN_ROLE:
         // accounts with MANAGER_ROLE can manage accounts with GUARDIAN_ROLE
-        access_control::set_role_admin_no_auth(e, &admin, &GUARDIAN_ROLE, &MANAGER_ROLE);
+        access_control::set_role_admin_no_auth(e, &GUARDIAN_ROLE, &MANAGER_ROLE);
 
         // 2. Admin grants MANAGER_ROLE to the manager account
-        access_control::grant_role_no_auth(e, &admin, &manager, &MANAGER_ROLE);
+        access_control::grant_role_no_auth(e, &manager, &MANAGER_ROLE, &admin);
     }
 
     pub fn manage_guardians(e: &Env, manager: Address, guardian1: Address, guardian2: Address) {
@@ -64,11 +64,11 @@ impl MyContract {
         manager.require_auth();
 
         // 3. Now the manager can grant GUARDIAN_ROLE to other accounts
-        access_control::grant_role_no_auth(e, &manager, &guardian1, &GUARDIAN_ROLE);
-        access_control::grant_role_no_auth(e, &manager, &guardian2, &GUARDIAN_ROLE);
+        access_control::grant_role_no_auth(e, &guardian1, &GUARDIAN_ROLE, &manager);
+        access_control::grant_role_no_auth(e, &guardian2, &GUARDIAN_ROLE, &manager);
 
         // Manager can also revoke GUARDIAN_ROLE
-        access_control::revoke_role_no_auth(e, &manager, &guardian1, &GUARDIAN_ROLE);
+        access_control::revoke_role_no_auth(e, &guardian1, &GUARDIAN_ROLE, &manager);
     }
 }
 ```
