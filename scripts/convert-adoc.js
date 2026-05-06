@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
-const fs = require("fs").promises;
-const fsSync = require("fs");
-const path = require("path");
-const { execSync } = require("child_process");
-const { glob } = require("glob");
+import { promises as fs } from "node:fs";
+import fsSync from "node:fs";
+import path from "node:path";
+import { execSync } from "node:child_process";
+import { glob } from "glob";
 
 async function convertAdocFiles(directory, apiRoute = "contracts/5.x/api") {
 	if (!directory) {
@@ -173,6 +173,17 @@ async function convertAdocFiles(directory, apiRoute = "contracts/5.x/api") {
 
 			// Fix any remaining ++ that might be standalone
 			mdContent = mdContent.replace(/\+\+/g, "");
+
+			// Escape bare < that aren't HTML/JSX tag starts (e.g., "<1 share",
+			// "< 0x80") to prevent MDX parse errors. Skip code blocks and
+			// inline code — content there is rendered verbatim, so escaping
+			// would corrupt it (e.g. `<4.6 to >=4.6`).
+			const ltSplit = mdContent.split(/(```[\s\S]*?```|`[^`\n]*`)/g);
+			mdContent = ltSplit
+				.map((part, idx) =>
+					idx % 2 === 1 ? part : part.replace(/(<)(\s+\w|\d)/g, "&lt;$2"),
+				)
+				.join("");
 			// Extract title
 			const headerMatch = mdContent.match(/^#+\s+(.+)$/m);
 			const title = headerMatch ? headerMatch[1].trim() : filename;
@@ -182,9 +193,10 @@ async function convertAdocFiles(directory, apiRoute = "contracts/5.x/api") {
 				.replace(/^#+\s+.+$/m, "")
 				.replace(/^\n+/, "");
 
-			// Create MDX with frontmatter
+			// Create MDX with frontmatter — JSON.stringify quotes and escapes
+			// the title so colons (e.g. "ERC-7540: ...") don't break YAML parsing.
 			const mdxContent = `---
-title: ${title}
+title: ${JSON.stringify(title)}
 ---
 
 ${contentWithoutFirstH1}`;

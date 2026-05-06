@@ -42,7 +42,6 @@ Miscellaneous contracts and libraries containing utility functions you can use t
 * [`RelayedCall`](#RelayedCall): A library for performing calls that use minimal and predictable relayers to hide the sender.
 * [`RLP`](#RLP): Library for encoding and decoding data in Ethereum’s Recursive Length Prefix format.
 * [`ShortStrings`](#ShortStrings): Library to encode (and decode) short strings into (or from) a single bytes32 slot for optimizing costs. Short strings are limited to 31 characters.
-* [`SimulateCall`](#SimulateCall): Library for simulating contract calls, enabling safe inspection of call results without affecting on-chain state.
 * [`SlotDerivation`](#SlotDerivation): Methods for deriving storage slot from ERC-7201 namespaces as well as from constructions such as mapping and arrays.
 * [`StorageSlot`](#StorageSlot): Methods for accessing specific storage slots formatted as common primitive types.
 * [`Strings`](#Strings): Common operations for strings formatting.
@@ -148,8 +147,6 @@ Ethereum contracts have no native concept of an interface, so applications must 
 [`RLP`](#RLP)
 
 [`ShortStrings`](#ShortStrings)
-
-[`SimulateCall`](#SimulateCall)
 
 [`SlotDerivation`](#SlotDerivation)
 
@@ -7387,8 +7384,8 @@ A "non-canonical" encoding represents the same value but doesn't follow these mi
 For example, encoding the integer 1234 (0x04d2) with a leading zero as `0x830004d2` instead
 of the canonical `0x8204d2`.
 
-[IMPORTANT]
-#### This implementation takes a permissive approach to decoding, accepting some non-canonical
+<Callout type="warn">
+This implementation takes a permissive approach to decoding, accepting some non-canonical
 encodings (e.g., scalar values with leading zero bytes) that would be rejected by
 strict implementations like go-ethereum. This design choice prioritizes compatibility
 with diverse RLP encoders in the ecosystem over strict adherence to the Yellow Paper
@@ -7400,6 +7397,7 @@ Users should be aware that:
 * Encoding followed by decoding is guaranteed to work correctly
 * External RLP data from untrusted sources may have non-canonical encodings
 * Improperly wrapped single bytes (&lt; 0x80) are still rejected as invalid
+</Callout>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Functions</h3>
@@ -7783,14 +7781,15 @@ for true). For example, `0x02`, `0x03`, etc. will all decode as `true`.
 
 Decode an RLP encoded address. See `encode-address`
 
-[NOTE]
-#### This function accepts both single-byte encodings (for values 0-127, including
+<Callout>
+This function accepts both single-byte encodings (for values 0-127, including
 precompile addresses like 0x01) and the standard 21-byte encoding with the `0x94` prefix.
 For example, `0x01` decodes to `0x0000000000000000000000000000000000000001`.
 
 Additionally, like [`RLP.readUint256`](#RLP-readUint256-Memory-Slice-), this function accepts non-canonical encodings with
 leading zeros. For instance, both `0x01` and `0x940000000000000000000000000000000000000001`
 decode to the same address.
+</Callout>
 
 </div>
 </div>
@@ -7809,8 +7808,8 @@ decode to the same address.
 
 Decode an RLP encoded uint256. See `encode-uint256`
 
-[NOTE]
-#### This function accepts non-canonical encodings with leading zero bytes for multi-byte values,
+<Callout>
+This function accepts non-canonical encodings with leading zero bytes for multi-byte values,
 which differs from the Ethereum Yellow Paper specification and some reference
 implementations like go-ethereum. For example, both `0x88ab54a98ceb1f0ad2` and
 `0x8900ab54a98ceb1f0ad2` will decode to the same uint256 value (12345678901234567890).
@@ -7821,6 +7820,7 @@ However, single bytes less than 0x80 must NOT be wrapped with a prefix. For exam
 This permissive behavior is intentional for compatibility with various RLP encoders
 in the ecosystem, but users should be aware that multiple RLP encodings may map
 to the same decoded value (non-injective decoding).
+</Callout>
 
 </div>
 </div>
@@ -8423,7 +8423,7 @@ supports for EIP-3855.
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">relayCall(address target, bytes data) → bool success, bytes retData</p>
+<p className="font-bold text-sm font-mono">relayCall(address target, bytes data) → bool, bytes</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
 <a className="peer" data-card href="#RelayedCall-relayCall-address-bytes-">#</a>
@@ -8440,7 +8440,7 @@ Relays a call to the target contract through a dynamically deployed relay contra
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">relayCall(address target, uint256 value, bytes data) → bool success, bytes retData</p>
+<p className="font-bold text-sm font-mono">relayCall(address target, uint256 value, bytes data) → bool, bytes</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
 <a className="peer" data-card href="#RelayedCall-relayCall-address-uint256-bytes-">#</a>
@@ -8448,7 +8448,7 @@ Relays a call to the target contract through a dynamically deployed relay contra
 </div>
 <div className="px-4">
 
-Same as `relayCall-address-bytes` but with a value.
+Same as [`RelayedCall.relayCall`](#RelayedCall-relayCall-address-uint256-bytes-bytes32-) but with a value.
 
 </div>
 </div>
@@ -8457,7 +8457,7 @@ Same as `relayCall-address-bytes` but with a value.
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">relayCall(address target, bytes data, bytes32 salt) → bool success, bytes retData</p>
+<p className="font-bold text-sm font-mono">relayCall(address target, bytes data, bytes32 salt) → bool, bytes</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
 <a className="peer" data-card href="#RelayedCall-relayCall-address-bytes-bytes32-">#</a>
@@ -8465,7 +8465,7 @@ Same as `relayCall-address-bytes` but with a value.
 </div>
 <div className="px-4">
 
-Same as `relayCall-address-bytes` but with a salt.
+Same as [`RelayedCall.relayCall`](#RelayedCall-relayCall-address-uint256-bytes-bytes32-) but with a salt.
 
 </div>
 </div>
@@ -8474,7 +8474,7 @@ Same as `relayCall-address-bytes` but with a salt.
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">relayCall(address target, uint256 value, bytes data, bytes32 salt) → bool success, bytes retData</p>
+<p className="font-bold text-sm font-mono">relayCall(address target, uint256 value, bytes data, bytes32 salt) → bool, bytes</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
 <a className="peer" data-card href="#RelayedCall-relayCall-address-uint256-bytes-bytes32-">#</a>
@@ -8482,7 +8482,7 @@ Same as `relayCall-address-bytes` but with a salt.
 </div>
 <div className="px-4">
 
-Same as `relayCall-address-bytes` but with a salt and a value.
+Same as [`RelayedCall.relayCall`](#RelayedCall-relayCall-address-uint256-bytes-bytes32-) but with a salt and a value.
 
 </div>
 </div>
@@ -8736,95 +8736,6 @@ actual characters as the UTF-8 encoding of a single character can span over mult
 </div>
 </div>
 <div className="px-4">
-
-</div>
-</div>
-
-<a id="SimulateCall"></a>
-
-<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
-
-## `SimulateCall` 
-
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/SimulateCall.sol">
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
-</a>
-
-</div>
-
-```solidity
-import "@openzeppelin/contracts/utils/SimulateCall.sol";
-```
-
-Library for simulating external calls and inspecting the result of the call while reverting any state changes
-of events the call may have produced.
-
-This pattern is useful when you need to simulate the result of a call without actually executing it on-chain. Since
-the address of the sender is preserved, this supports simulating calls that perform token swap that use the caller's
-balance, or any operation that is restricted to the caller.
-
-<div className="bg-secondary p-4 rounded-md mb-6">
-<h3 style={{ marginTop: "0"}}>Functions</h3>
-<div className="font-mono">
-- [simulateCall(target, data)](#SimulateCall-simulateCall-address-bytes-)
-- [simulateCall(target, value, data)](#SimulateCall-simulateCall-address-uint256-bytes-)
-- [getSimulator()](#SimulateCall-getSimulator--)
-</div>
-</div>
-
-<a id="SimulateCall-simulateCall-address-bytes-"></a>
-
-<div className="border rounded-md mb-4">
-<div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">simulateCall(address target, bytes data) → bool success, bytes retData</p>
-<div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="#SimulateCall-simulateCall-address-bytes-">#</a>
-</div>
-</div>
-<div className="px-4">
-
-Simulates a call to the target contract through a dynamically deployed simulator.
-
-</div>
-</div>
-
-<a id="SimulateCall-simulateCall-address-uint256-bytes-"></a>
-
-<div className="border rounded-md mb-4">
-<div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">simulateCall(address target, uint256 value, bytes data) → bool success, bytes retData</p>
-<div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="#SimulateCall-simulateCall-address-uint256-bytes-">#</a>
-</div>
-</div>
-<div className="px-4">
-
-Same as `simulateCall-address-bytes` but with a value.
-
-</div>
-</div>
-
-<a id="SimulateCall-getSimulator--"></a>
-
-<div className="border rounded-md mb-4">
-<div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">getSimulator() → address instance</p>
-<div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="#SimulateCall-getSimulator--">#</a>
-</div>
-</div>
-<div className="px-4">
-
-Returns the simulator address.
-
-The simulator REVERTs on success and RETURNs on failure, preserving the return data in both cases.
-
-* A failed target call returns the return data and succeeds in our context (no state changes).
-* A successful target call causes a revert in our context (undoing all state changes) while still
-capturing the return data.
 
 </div>
 </div>
@@ -14960,13 +14871,14 @@ The following map types are supported:
 - `bytes -> bytes` (`BytesToBytesMap`) since v5.4.0
 - `bytes4 -> address` (`Bytes4ToAddressMap`) since v5.6.0
 
-[WARNING]
-#### Trying to delete such a structure from storage will likely result in data corruption, rendering the structure
+<Callout type="warn">
+Trying to delete such a structure from storage will likely result in data corruption, rendering the structure
 unusable.
 See [ethereum/solidity#11843](https://github.com/ethereum/solidity/pull/11843) for more info.
 
 In order to clean an EnumerableMap, you can either remove all elements one by one or create a fresh instance using an
 array of EnumerableMap.
+</Callout>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Functions</h3>
@@ -17449,13 +17361,14 @@ The following types are supported:
 - `bytes` (`BytesSet`) since v5.4.0
 - `bytes4` (`Bytes4Set`) since v5.6.0
 
-[WARNING]
-#### Trying to delete such a structure from storage will likely result in data corruption, rendering the structure
+<Callout type="warn">
+Trying to delete such a structure from storage will likely result in data corruption, rendering the structure
 unusable.
 See [ethereum/solidity#11843](https://github.com/ethereum/solidity/pull/11843) for more info.
 
 In order to clean an EnumerableSet, you can either remove all elements one by one or create a fresh instance using an
 array of EnumerableSet.
+</Callout>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Functions</h3>

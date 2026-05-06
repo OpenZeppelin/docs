@@ -24,13 +24,12 @@ OpenZeppelin Contracts provides implementations of all four interfaces:
 
 Additionally there are a few of other extensions:
 
-* [`ERC721Burnable`](#ERC721Burnable): A way for token holders to burn their own tokens.
 * [`ERC721Consecutive`](#ERC721Consecutive): An implementation of [ERC-2309](https://eips.ethereum.org/EIPS/eip-2309) for minting batches of tokens during construction, in accordance with ERC-721.
-* [`ERC721Crosschain`](#ERC721Crosschain): Embedded [`BridgeNonFungible`](/contracts/5.x/api/crosschain#BridgeNonFungible) bridge, making the token crosschain through the use of ERC-7786 gateways.
-* [`ERC721Pausable`](#ERC721Pausable): A primitive to pause contract operation.
-* [`ERC721Royalty`](#ERC721Royalty): A way to signal royalty information following ERC-2981.
 * [`ERC721URIStorage`](#ERC721URIStorage): A more flexible but more expensive way of storing metadata.
 * [`ERC721Votes`](#ERC721Votes): Support for voting and vote delegation.
+* [`ERC721Royalty`](#ERC721Royalty): A way to signal royalty information following ERC-2981.
+* [`ERC721Pausable`](#ERC721Pausable): A primitive to pause contract operation.
+* [`ERC721Burnable`](#ERC721Burnable): A way for token holders to burn their own tokens.
 * [`ERC721Wrapper`](#ERC721Wrapper): Wrapper to create an ERC-721 backed by another ERC-721, with deposit and withdraw methods. Useful in conjunction with [`ERC721Votes`](#ERC721Votes).
 
 <Callout>
@@ -53,19 +52,17 @@ This core set of contracts is designed to be unopinionated, allowing developers 
 
 ## Extensions
 
+[`ERC721Pausable`](#ERC721Pausable)
+
 [`ERC721Burnable`](#ERC721Burnable)
 
 [`ERC721Consecutive`](#ERC721Consecutive)
 
-[`ERC721Crosschain`](#ERC721Crosschain)
-
-[`ERC721Pausable`](#ERC721Pausable)
-
-[`ERC721Royalty`](#ERC721Royalty)
-
 [`ERC721URIStorage`](#ERC721URIStorage)
 
 [`ERC721Votes`](#ERC721Votes)
+
+[`ERC721Royalty`](#ERC721Royalty)
 
 [`ERC721Wrapper`](#ERC721Wrapper)
 
@@ -1684,204 +1681,6 @@ Individual minting is not allowed.
 <div className="px-4">
 
 Batch burn is not supported.
-
-</div>
-</div>
-
-<a id="ERC721Crosschain"></a>
-
-<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
-
-## `ERC721Crosschain` 
-
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC721/extensions/ERC721Crosschain.sol">
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
-</a>
-
-</div>
-
-```solidity
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Crosschain.sol";
-```
-
-Extension of [`ERC721`](#ERC721) that makes it natively cross-chain using the ERC-7786 based [`BridgeNonFungible`](/contracts/5.x/api/crosschain#BridgeNonFungible).
-
-This extension makes the token compatible with:
-* [`ERC721Crosschain`](#ERC721Crosschain) instances on other chains,
-* [`ERC721`](#ERC721) instances on other chains that are bridged using [`BridgeERC721`](/contracts/5.x/api/crosschain#BridgeERC721),
-
-<div className="bg-secondary p-4 rounded-md mb-6">
-<h3 style={{ marginTop: "0"}}>Functions</h3>
-<div className="font-mono">
-- [crosschainTransferFrom(from, to, tokenId)](#ERC721Crosschain-crosschainTransferFrom-address-bytes-uint256-)
-- [_onSend(from, tokenId)](#ERC721Crosschain-_onSend-address-uint256-)
-- [_onReceive(to, tokenId)](#ERC721Crosschain-_onReceive-address-uint256-)
-<details>
-<summary>BridgeNonFungible</summary>
-
-- [_crosschainTransfer(from, to, tokenId)](#BridgeNonFungible-_crosschainTransfer-address-bytes-uint256-)
-- [_processMessage(, receiveId, , payload)](#BridgeNonFungible-_processMessage-address-bytes32-bytes-bytes-)
-
-</details>
-<details>
-<summary>CrosschainLinked</summary>
-
-- [getLink(chain)](#CrosschainLinked-getLink-bytes-)
-- [_setLink(gateway, counterpart, allowOverride)](#CrosschainLinked-_setLink-address-bytes-bool-)
-- [_sendMessageToCounterpart(chain, payload, attributes)](#CrosschainLinked-_sendMessageToCounterpart-bytes-bytes-bytes---)
-- [_isAuthorizedGateway(instance, sender)](#CrosschainLinked-_isAuthorizedGateway-address-bytes-)
-
-</details>
-<details>
-<summary>ERC7786Recipient</summary>
-
-- [receiveMessage(receiveId, sender, payload)](#ERC7786Recipient-receiveMessage-bytes32-bytes-bytes-)
-
-</details>
-<details>
-<summary>ERC721</summary>
-
-- [supportsInterface(interfaceId)](#ERC721-supportsInterface-bytes4-)
-- [balanceOf(owner)](#ERC721-balanceOf-address-)
-- [ownerOf(tokenId)](#ERC721-ownerOf-uint256-)
-- [name()](#ERC721-name--)
-- [symbol()](#ERC721-symbol--)
-- [tokenURI(tokenId)](#ERC721-tokenURI-uint256-)
-- [_baseURI()](#ERC721-_baseURI--)
-- [approve(to, tokenId)](#ERC721-approve-address-uint256-)
-- [getApproved(tokenId)](#ERC721-getApproved-uint256-)
-- [setApprovalForAll(operator, approved)](#ERC721-setApprovalForAll-address-bool-)
-- [isApprovedForAll(owner, operator)](#ERC721-isApprovedForAll-address-address-)
-- [transferFrom(from, to, tokenId)](#ERC721-transferFrom-address-address-uint256-)
-- [safeTransferFrom(from, to, tokenId)](#ERC721-safeTransferFrom-address-address-uint256-)
-- [safeTransferFrom(from, to, tokenId, data)](#ERC721-safeTransferFrom-address-address-uint256-bytes-)
-- [_ownerOf(tokenId)](#ERC721-_ownerOf-uint256-)
-- [_getApproved(tokenId)](#ERC721-_getApproved-uint256-)
-- [_isAuthorized(owner, spender, tokenId)](#ERC721-_isAuthorized-address-address-uint256-)
-- [_checkAuthorized(owner, spender, tokenId)](#ERC721-_checkAuthorized-address-address-uint256-)
-- [_increaseBalance(account, value)](#ERC721-_increaseBalance-address-uint128-)
-- [_update(to, tokenId, auth)](#ERC721-_update-address-uint256-address-)
-- [_mint(to, tokenId)](#ERC721-_mint-address-uint256-)
-- [_safeMint(to, tokenId)](#ERC721-_safeMint-address-uint256-)
-- [_safeMint(to, tokenId, data)](#ERC721-_safeMint-address-uint256-bytes-)
-- [_burn(tokenId)](#ERC721-_burn-uint256-)
-- [_transfer(from, to, tokenId)](#ERC721-_transfer-address-address-uint256-)
-- [_safeTransfer(from, to, tokenId)](#ERC721-_safeTransfer-address-address-uint256-)
-- [_safeTransfer(from, to, tokenId, data)](#ERC721-_safeTransfer-address-address-uint256-bytes-)
-- [_approve(to, tokenId, auth)](#ERC721-_approve-address-uint256-address-)
-- [_approve(to, tokenId, auth, emitEvent)](#ERC721-_approve-address-uint256-address-bool-)
-- [_setApprovalForAll(owner, operator, approved)](#ERC721-_setApprovalForAll-address-address-bool-)
-- [_requireOwned(tokenId)](#ERC721-_requireOwned-uint256-)
-
-</details>
-</div>
-</div>
-
-<div className="bg-secondary p-4 rounded-md mb-6">
-<h3 style={{ marginTop: "0"}}>Events</h3>
-<div className="font-mono">
-<details>
-<summary>BridgeNonFungible</summary>
-
-- [CrosschainNonFungibleTransferSent(sendId, from, to, tokenId)](#BridgeNonFungible-CrosschainNonFungibleTransferSent-bytes32-address-bytes-uint256-)
-- [CrosschainNonFungibleTransferReceived(receiveId, from, to, tokenId)](#BridgeNonFungible-CrosschainNonFungibleTransferReceived-bytes32-bytes-address-uint256-)
-
-</details>
-<details>
-<summary>CrosschainLinked</summary>
-
-- [LinkRegistered(gateway, counterpart)](#CrosschainLinked-LinkRegistered-address-bytes-)
-
-</details>
-<details>
-<summary>IERC721</summary>
-
-- [Transfer(from, to, tokenId)](#IERC721-Transfer-address-address-uint256-)
-- [Approval(owner, approved, tokenId)](#IERC721-Approval-address-address-uint256-)
-- [ApprovalForAll(owner, operator, approved)](#IERC721-ApprovalForAll-address-address-bool-)
-
-</details>
-</div>
-</div>
-
-<div className="bg-secondary p-4 rounded-md mb-6">
-<h3 style={{ marginTop: "0"}}>Errors</h3>
-<div className="font-mono">
-<details>
-<summary>CrosschainLinked</summary>
-
-- [LinkAlreadyRegistered(chain)](#CrosschainLinked-LinkAlreadyRegistered-bytes-)
-
-</details>
-<details>
-<summary>ERC7786Recipient</summary>
-
-- [ERC7786RecipientUnauthorizedGateway(gateway, sender)](#ERC7786Recipient-ERC7786RecipientUnauthorizedGateway-address-bytes-)
-
-</details>
-<details>
-<summary>IERC721Errors</summary>
-
-- [ERC721InvalidOwner(owner)](#IERC721Errors-ERC721InvalidOwner-address-)
-- [ERC721NonexistentToken(tokenId)](#IERC721Errors-ERC721NonexistentToken-uint256-)
-- [ERC721IncorrectOwner(sender, tokenId, owner)](#IERC721Errors-ERC721IncorrectOwner-address-uint256-address-)
-- [ERC721InvalidSender(sender)](#IERC721Errors-ERC721InvalidSender-address-)
-- [ERC721InvalidReceiver(receiver)](#IERC721Errors-ERC721InvalidReceiver-address-)
-- [ERC721InsufficientApproval(operator, tokenId)](#IERC721Errors-ERC721InsufficientApproval-address-uint256-)
-- [ERC721InvalidApprover(approver)](#IERC721Errors-ERC721InvalidApprover-address-)
-- [ERC721InvalidOperator(operator)](#IERC721Errors-ERC721InvalidOperator-address-)
-
-</details>
-</div>
-</div>
-
-<a id="ERC721Crosschain-crosschainTransferFrom-address-bytes-uint256-"></a>
-
-<div className="border rounded-md mb-4">
-<div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">crosschainTransferFrom(address from, bytes to, uint256 tokenId) → bytes32</p>
-<div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">public</p>
-<a className="peer" data-card href="#ERC721Crosschain-crosschainTransferFrom-address-bytes-uint256-">#</a>
-</div>
-</div>
-<div className="px-4">
-
-Crosschain variant of [`ERC721.transferFrom`](#ERC721-transferFrom-address-address-uint256-), using the allowance system from the underlying ERC-721 token.
-
-</div>
-</div>
-
-<a id="ERC721Crosschain-_onSend-address-uint256-"></a>
-
-<div className="border rounded-md mb-4">
-<div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">_onSend(address from, uint256 tokenId)</p>
-<div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="#ERC721Crosschain-_onSend-address-uint256-">#</a>
-</div>
-</div>
-<div className="px-4">
-
-"Locking" tokens is achieved through burning
-
-</div>
-</div>
-
-<a id="ERC721Crosschain-_onReceive-address-uint256-"></a>
-
-<div className="border rounded-md mb-4">
-<div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">_onReceive(address to, uint256 tokenId)</p>
-<div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="#ERC721Crosschain-_onReceive-address-uint256-">#</a>
-</div>
-</div>
-<div className="px-4">
-
-"Unlocking" tokens is achieved through minting
 
 </div>
 </div>

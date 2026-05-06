@@ -226,15 +226,26 @@ function resolveReference(refId, links) {
     return `[\`${displayText}\`](${links[directKey]})`;
   }
 
-  // Try fuzzy matching
+  // Strict matching: only keys whose normalized form equals the ref or starts with `ref-`
+  // (drops the bidirectional substring match that caused cross-standard contamination)
+  const normalizedRef = refId.replace(/\./g, '-').toLowerCase();
   const matchingKeys = Object.keys(links).filter(key => {
+    if (key.startsWith('__')) return false;
     const normalizedKey = key.replace('xref-', '').toLowerCase();
-    const normalizedRef = refId.replace(/\./g, '-').toLowerCase();
-    return normalizedKey.includes(normalizedRef) || normalizedRef.includes(normalizedKey);
+    return normalizedKey === normalizedRef || normalizedKey.startsWith(normalizedRef + '-');
   });
 
   if (matchingKeys.length > 0) {
-    const bestMatch = matchingKeys[0];
+    const linkPages = links.__linkPages || {};
+    const currentPagePath = links.__currentPagePath || '';
+
+    // Prefer same-page matches when available
+    let bestMatch = matchingKeys[0];
+    if (currentPagePath && matchingKeys.length > 1) {
+      const samePageMatch = matchingKeys.find(k => linkPages[k] === currentPagePath);
+      if (samePageMatch) bestMatch = samePageMatch;
+    }
+
     const parts = refId.split('.');
     const displayText = parts.length > 1 ? `${parts[0]}.${parts[1]}` : refId;
     return `[\`${displayText}\`](${links[bestMatch]})`;
@@ -384,10 +395,13 @@ function processAdocContent(content) {
 
 function processCallouts(content) {
   // Convert AsciiDoc headings in natspec (==== heading -> #### heading)
-  // Must come BEFORE block delimiter normalization
-  let result = content.replace(/^={4}\s+(.+)$/gm, '#### $1');
-  result = result.replace(/^={3}\s+(.+)$/gm, '### $1');
-  result = result.replace(/^={2}\s+(.+)$/gm, '## $1');
+  // Use [ \t]+ instead of \s+ so the regex does not consume the following
+  // newline and pull the next line's text up — that bug was eating the
+  // opening ==== delimiter of [CAUTION]/[NOTE] block admonitions.
+  // Must come BEFORE block delimiter normalization.
+  let result = content.replace(/^={4}[ \t]+(.+)$/gm, '#### $1');
+  result = result.replace(/^={3}[ \t]+(.+)$/gm, '### $1');
+  result = result.replace(/^={2}[ \t]+(.+)$/gm, '## $1');
 
   // Normalize whitespace around block delimiters to make patterns more consistent
   result = result.replace(/\s*\n====\s*\n/g, '\n====\n').replace(/\n====\s*\n/g, '\n====\n');
@@ -400,8 +414,13 @@ function processCallouts(content) {
   );
 
   // Handle single/multi-line admonitions (NOTE: content until blank line)
-  result = result.replace(/^(NOTE|TIP):\s*([\s\S]*?)(?=\n\n|$)/gm, '<Callout>\n$2\n</Callout>');
-  result = result.replace(/^(IMPORTANT|WARNING|CAUTION):\s*([\s\S]*?)(?=\n\n|$)/gm, '<Callout type="warn">\n$2\n</Callout>');
+  // No /m flag — $ must match end-of-string, not end-of-line, so the body
+  // can span newlines until either a blank line or true end-of-string.
+  result = result.replace(/(^|\n)(NOTE|TIP):\s*([\s\S]*?)(?=\n\n|$(?![\s\S]))/g, '$1<Callout>\n$3\n</Callout>');
+  result = result.replace(
+    /(^|\n)(IMPORTANT|WARNING|CAUTION):\s*([\s\S]*?)(?=\n\n|$(?![\s\S]))/g,
+    '$1<Callout type="warn">\n$3\n</Callout>',
+  );
 
   // Handle markdown-style bold admonitions (the ones you're seeing)
   result = result.replace(

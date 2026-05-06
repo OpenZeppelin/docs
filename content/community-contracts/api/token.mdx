@@ -2090,6 +2090,4197 @@ Send exit fee to [`ERC4626Fees._exitFeeRecipient`](#ERC4626Fees-_exitFeeRecipien
 </div>
 </div>
 
+<a id="ERC7540"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC7540` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-community-contracts/blob/v0.0.1/contracts/token/ERC20/extensions/ERC7540.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/community-contracts/contracts/token/ERC20/extensions/ERC7540.sol";
+```
+
+Implementation of the ERC-7540 "Asynchronous ERC-4626 Tokenized Vaults" as defined in
+[ERC-7540](https://eips.ethereum.org/EIPS/eip-7540).
+
+This abstract contract provides a single base for building vaults with asynchronous deposit and/or redemption
+flows on top of ERC-4626. It integrates operator management ([`IERC7540Operator`](/community-contracts/api/interfaces#IERC7540Operator)), the full ERC-4626 vault
+interface, and routing logic that delegates to either synchronous (standard ERC-4626) or asynchronous paths
+depending on the return value of [`ERC7540._isDepositAsync`](#ERC7540-_isDepositAsync--) and [`ERC7540._isRedeemAsync`](#ERC7540-_isRedeemAsync--).
+
+Subcontracts choose their async behavior by overriding two `internal pure` boolean selectors:
+
+* [`ERC7540._isDepositAsync`](#ERC7540-_isDepositAsync--): when `true`, the deposit side uses the Request lifecycle (Pending -> Claimable -> Claimed).
+* [`ERC7540._isRedeemAsync`](#ERC7540-_isRedeemAsync--): when `true`, the redeem side uses the Request lifecycle.
+
+Each async path requires a fulfillment strategy that implements the virtual hooks declared in this contract
+(e.g. [`ERC7540._consumeClaimableDeposit`](#ERC7540-_consumeClaimableDeposit-uint256-address-), [`ERC7540._pendingDepositRequest`](#ERC7540-_pendingDepositRequest-uint256-address-), [`ERC7540._asyncMaxDeposit`](#ERC7540-_asyncMaxDeposit-address-), etc.).
+
+Deposit and redeem strategies are independent: a vault can combine any deposit strategy with any redeem
+strategy (e.g. delay-based deposits with admin-based redeems).
+
+Share custody during the async lifecycle is configurable via [`ERC7540._depositShareOrigin`](#ERC7540-_depositShareOrigin--) and
+[`ERC7540._redeemShareDestination`](#ERC7540-_redeemShareDestination--). When these return `address(0)` (the default), shares are minted/burned
+at claim time. When they return a non-zero address, shares are pre-minted to (or transferred to)
+that address at fulfillment time and then transferred to the receiver on claim.
+
+<Callout>
+When implementing a custom fulfillment strategy, the following virtual hooks MUST be overridden for each
+async side enabled:
+
+* Async deposits: [`ERC7540._pendingDepositRequest`](#ERC7540-_pendingDepositRequest-uint256-address-), [`ERC7540._claimableDepositRequest`](#ERC7540-_claimableDepositRequest-uint256-address-), [`ERC7540._consumeClaimableDeposit`](#ERC7540-_consumeClaimableDeposit-uint256-address-),
+[`ERC7540._consumeClaimableMint`](#ERC7540-_consumeClaimableMint-uint256-address-), [`ERC7540._asyncMaxDeposit`](#ERC7540-_asyncMaxDeposit-address-), [`ERC7540._asyncMaxMint`](#ERC7540-_asyncMaxMint-address-).
+
+* Async redeems: [`ERC7540._pendingRedeemRequest`](#ERC7540-_pendingRedeemRequest-uint256-address-), [`ERC7540._claimableRedeemRequest`](#ERC7540-_claimableRedeemRequest-uint256-address-), [`ERC7540._consumeClaimableWithdraw`](#ERC7540-_consumeClaimableWithdraw-uint256-address-),
+[`ERC7540._consumeClaimableRedeem`](#ERC7540-_consumeClaimableRedeem-uint256-address-), [`ERC7540._asyncMaxWithdraw`](#ERC7540-_asyncMaxWithdraw-address-), [`ERC7540._asyncMaxRedeem`](#ERC7540-_asyncMaxRedeem-address-).
+</Callout>
+<Callout type="warn">
+ERC-7540 introduces operator permissions that allow operators to manage requests on behalf of controllers.
+An operator approved by a controller can request deposits using the controller's assets, request redemptions
+using the controller's shares, and claim assets or shares on behalf of the controller. Users should only
+approve operators they fully trust with both their assets and shares.
+</Callout>
+<Callout type="warn">
+This contract assumes the underlying `asset` is a well-behaved ERC-20: transfers move exactly the requested
+amount, balances do not change without explicit transfers, and `balanceOf` reports faithfully. Fee-on-transfer,
+rebasing, and similar non-standard asset behaviors are out of scope. When the asset misbehaves, internal
+accounting (notably [`ERC7540.totalAssets`](#ERC7540-totalAssets--)) can revert and freeze claim paths that depend on live conversions.
+</Callout>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Modifiers</h3>
+<div className="font-mono">
+- [onlyOperatorOrController(async, controller, operator)](#ERC7540-onlyOperatorOrController-bool-address-address-)
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [constructor(asset_)](#ERC7540-constructor-contract-IERC20-)
+- [supportsInterface(interfaceId)](#ERC7540-supportsInterface-bytes4-)
+- [isOperator(controller, operator)](#ERC7540-isOperator-address-address-)
+- [setOperator(operator, approved)](#ERC7540-setOperator-address-bool-)
+- [_setOperator(controller, operator, approved)](#ERC7540-_setOperator-address-address-bool-)
+- [_checkOperatorOrController(async, controller, operator)](#ERC7540-_checkOperatorOrController-bool-address-address-)
+- [decimals()](#ERC7540-decimals--)
+- [asset()](#ERC7540-asset--)
+- [share()](#ERC7540-share--)
+- [vault(asset_)](#ERC7540-vault-address-)
+- [totalAssets()](#ERC7540-totalAssets--)
+- [totalSupply()](#ERC7540-totalSupply--)
+- [pendingDepositRequest(requestId, controller)](#ERC7540-pendingDepositRequest-uint256-address-)
+- [claimableDepositRequest(requestId, controller)](#ERC7540-claimableDepositRequest-uint256-address-)
+- [pendingRedeemRequest(requestId, controller)](#ERC7540-pendingRedeemRequest-uint256-address-)
+- [claimableRedeemRequest(requestId, controller)](#ERC7540-claimableRedeemRequest-uint256-address-)
+- [totalPendingDepositAssets()](#ERC7540-totalPendingDepositAssets--)
+- [totalPendingRedeemShares()](#ERC7540-totalPendingRedeemShares--)
+- [convertToShares(assets)](#ERC7540-convertToShares-uint256-)
+- [convertToAssets(shares)](#ERC7540-convertToAssets-uint256-)
+- [maxDeposit(owner)](#ERC7540-maxDeposit-address-)
+- [maxMint(owner)](#ERC7540-maxMint-address-)
+- [maxWithdraw(owner)](#ERC7540-maxWithdraw-address-)
+- [maxRedeem(owner)](#ERC7540-maxRedeem-address-)
+- [previewDeposit(assets)](#ERC7540-previewDeposit-uint256-)
+- [previewMint(shares)](#ERC7540-previewMint-uint256-)
+- [previewWithdraw(assets)](#ERC7540-previewWithdraw-uint256-)
+- [previewRedeem(shares)](#ERC7540-previewRedeem-uint256-)
+- [requestDeposit(assets, controller, owner)](#ERC7540-requestDeposit-uint256-address-address-)
+- [deposit(assets, receiver)](#ERC7540-deposit-uint256-address-)
+- [deposit(assets, receiver, controller)](#ERC7540-deposit-uint256-address-address-)
+- [mint(shares, receiver)](#ERC7540-mint-uint256-address-)
+- [mint(shares, receiver, controller)](#ERC7540-mint-uint256-address-address-)
+- [requestRedeem(shares, controller, owner)](#ERC7540-requestRedeem-uint256-address-address-)
+- [withdraw(assets, receiver, ownerOrController)](#ERC7540-withdraw-uint256-address-address-)
+- [redeem(shares, receiver, ownerOrController)](#ERC7540-redeem-uint256-address-address-)
+- [_convertToShares(assets, rounding)](#ERC7540-_convertToShares-uint256-enum-Math-Rounding-)
+- [_convertToAssets(shares, rounding)](#ERC7540-_convertToAssets-uint256-enum-Math-Rounding-)
+- [_requestDeposit(assets, controller, owner, requestId)](#ERC7540-_requestDeposit-uint256-address-address-uint256-)
+- [_mintSharesOnDepositFulfill(assets, shares)](#ERC7540-_mintSharesOnDepositFulfill-uint256-uint256-)
+- [_deposit(callerOrController, receiver, assets, shares)](#ERC7540-_deposit-address-address-uint256-uint256-)
+- [_requestRedeem(shares, controller, owner, requestId)](#ERC7540-_requestRedeem-uint256-address-address-uint256-)
+- [_burnSharesOnRedeemFulfill(, shares)](#ERC7540-_burnSharesOnRedeemFulfill-uint256-uint256-)
+- [_withdraw(caller, receiver, owner, assets, shares)](#ERC7540-_withdraw-address-address-address-uint256-uint256-)
+- [_transferIn(from, assets)](#ERC7540-_transferIn-address-uint256-)
+- [_transferOut(to, assets)](#ERC7540-_transferOut-address-uint256-)
+- [_decimalsOffset()](#ERC7540-_decimalsOffset--)
+- [_depositShareOrigin()](#ERC7540-_depositShareOrigin--)
+- [_redeemShareDestination()](#ERC7540-_redeemShareDestination--)
+- [_isDepositAsync()](#ERC7540-_isDepositAsync--)
+- [_isRedeemAsync()](#ERC7540-_isRedeemAsync--)
+- [_pendingDepositRequest(, )](#ERC7540-_pendingDepositRequest-uint256-address-)
+- [_claimableDepositRequest(, )](#ERC7540-_claimableDepositRequest-uint256-address-)
+- [_pendingRedeemRequest(, )](#ERC7540-_pendingRedeemRequest-uint256-address-)
+- [_claimableRedeemRequest(, )](#ERC7540-_claimableRedeemRequest-uint256-address-)
+- [_consumeClaimableDeposit(, )](#ERC7540-_consumeClaimableDeposit-uint256-address-)
+- [_consumeClaimableMint(, )](#ERC7540-_consumeClaimableMint-uint256-address-)
+- [_consumeClaimableWithdraw(, )](#ERC7540-_consumeClaimableWithdraw-uint256-address-)
+- [_consumeClaimableRedeem(, )](#ERC7540-_consumeClaimableRedeem-uint256-address-)
+- [_asyncMaxDeposit()](#ERC7540-_asyncMaxDeposit-address-)
+- [_asyncMaxMint()](#ERC7540-_asyncMaxMint-address-)
+- [_asyncMaxWithdraw()](#ERC7540-_asyncMaxWithdraw-address-)
+- [_asyncMaxRedeem()](#ERC7540-_asyncMaxRedeem-address-)
+<details>
+<summary>ERC20</summary>
+
+- [name()](#ERC20-name--)
+- [symbol()](#ERC20-symbol--)
+- [balanceOf(account)](#ERC20-balanceOf-address-)
+- [transfer(to, value)](#ERC20-transfer-address-uint256-)
+- [allowance(owner, spender)](#ERC20-allowance-address-address-)
+- [approve(spender, value)](#ERC20-approve-address-uint256-)
+- [transferFrom(from, to, value)](#ERC20-transferFrom-address-address-uint256-)
+- [_transfer(from, to, value)](#ERC20-_transfer-address-address-uint256-)
+- [_update(from, to, value)](#ERC20-_update-address-address-uint256-)
+- [_mint(account, value)](#ERC20-_mint-address-uint256-)
+- [_burn(account, value)](#ERC20-_burn-address-uint256-)
+- [_approve(owner, spender, value)](#ERC20-_approve-address-address-uint256-)
+- [_approve(owner, spender, value, emitEvent)](#ERC20-_approve-address-address-uint256-bool-)
+- [_spendAllowance(owner, spender, value)](#ERC20-_spendAllowance-address-address-uint256-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+<details>
+<summary>IERC4626</summary>
+
+- [Deposit(sender, owner, assets, shares)](#IERC4626-Deposit-address-address-uint256-uint256-)
+- [Withdraw(sender, receiver, owner, assets, shares)](#IERC4626-Withdraw-address-address-address-uint256-uint256-)
+
+</details>
+<details>
+<summary>IERC20</summary>
+
+- [Transfer(from, to, value)](#IERC20-Transfer-address-address-uint256-)
+- [Approval(owner, spender, value)](#IERC20-Approval-address-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Redeem</summary>
+
+- [RedeemRequest(controller, owner, requestId, sender, shares)](#IERC7540Redeem-RedeemRequest-address-address-uint256-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Deposit</summary>
+
+- [DepositRequest(controller, owner, requestId, sender, assets)](#IERC7540Deposit-DepositRequest-address-address-uint256-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Operator</summary>
+
+- [OperatorSet(controller, operator, approved)](#IERC7540Operator-OperatorSet-address-address-bool-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [ERC4626ExceededMaxDeposit(receiver, assets, max)](#ERC7540-ERC4626ExceededMaxDeposit-address-uint256-uint256-)
+- [ERC4626ExceededMaxMint(receiver, shares, max)](#ERC7540-ERC4626ExceededMaxMint-address-uint256-uint256-)
+- [ERC4626ExceededMaxWithdraw(owner, assets, max)](#ERC7540-ERC4626ExceededMaxWithdraw-address-uint256-uint256-)
+- [ERC4626ExceededMaxRedeem(owner, shares, max)](#ERC7540-ERC4626ExceededMaxRedeem-address-uint256-uint256-)
+- [ERC7540InvalidOperator(controller, operator)](#ERC7540-ERC7540InvalidOperator-address-address-)
+- [ERC7540SyncDeposit()](#ERC7540-ERC7540SyncDeposit--)
+- [ERC7540AsyncDeposit()](#ERC7540-ERC7540AsyncDeposit--)
+- [ERC7540SyncRedeem()](#ERC7540-ERC7540SyncRedeem--)
+- [ERC7540AsyncRedeem()](#ERC7540-ERC7540AsyncRedeem--)
+- [ERC7540MissingAsync()](#ERC7540-ERC7540MissingAsync--)
+- [ERC7540UnauthorizedMintSharesOnDepositFulfill()](#ERC7540-ERC7540UnauthorizedMintSharesOnDepositFulfill--)
+- [ERC7540UnauthorizedBurnSharesOnRedeemFulfill()](#ERC7540-ERC7540UnauthorizedBurnSharesOnRedeemFulfill--)
+<details>
+<summary>IERC20Errors</summary>
+
+- [ERC20InsufficientBalance(sender, balance, needed)](#IERC20Errors-ERC20InsufficientBalance-address-uint256-uint256-)
+- [ERC20InvalidSender(sender)](#IERC20Errors-ERC20InvalidSender-address-)
+- [ERC20InvalidReceiver(receiver)](#IERC20Errors-ERC20InvalidReceiver-address-)
+- [ERC20InsufficientAllowance(spender, allowance, needed)](#IERC20Errors-ERC20InsufficientAllowance-address-uint256-uint256-)
+- [ERC20InvalidApprover(approver)](#IERC20Errors-ERC20InvalidApprover-address-)
+- [ERC20InvalidSpender(spender)](#IERC20Errors-ERC20InvalidSpender-address-)
+
+</details>
+</div>
+</div>
+
+<a id="ERC7540-onlyOperatorOrController-bool-address-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">onlyOperatorOrController(bool async, address controller, address operator)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-onlyOperatorOrController-bool-address-address-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Modifier that enforces operator-or-controller authorization.
+
+When `async` is `false` the check is skipped, which allows the standard ERC-4626 flow where
+`msg.sender` is the caller and no controller/operator distinction exists.
+
+</div>
+</div>
+
+<a id="ERC7540-constructor-contract-IERC20-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">constructor(contract IERC20 asset_)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-constructor-contract-IERC20-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Sets the underlying asset contract. This must be an ERC-20-compatible contract.
+
+Caches the asset's `decimals()` value at construction time. If the call fails (e.g. the asset has not
+been created yet), a default of 18 is used.
+
+Requirements:
+
+* At least one of [`ERC7540._isDepositAsync`](#ERC7540-_isDepositAsync--) or [`ERC7540._isRedeemAsync`](#ERC7540-_isRedeemAsync--) must return `true`.
+
+<Callout>
+Either [`ERC7540._isDepositAsync`](#ERC7540-_isDepositAsync--) or [`ERC7540._isRedeemAsync`](#ERC7540-_isRedeemAsync--) must return `true`. Use `ERC4626` otherwise.
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7540-supportsInterface-bytes4-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">supportsInterface(bytes4 interfaceId) → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-supportsInterface-bytes4-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See `IERC165-supportsInterface`.
+
+Reports support for [`IERC7540Operator`](/community-contracts/api/interfaces#IERC7540Operator) unconditionally. Support for [`IERC7540Deposit`](/community-contracts/api/interfaces#IERC7540Deposit) and
+[`IERC7540Redeem`](/community-contracts/api/interfaces#IERC7540Redeem) is conditional on the corresponding async selector returning `true`.
+
+</div>
+</div>
+
+<a id="ERC7540-isOperator-address-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">isOperator(address controller, address operator) → bool status</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-isOperator-address-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns `true` if the `operator` is approved as an operator for a `controller`.
+
+</div>
+</div>
+
+<a id="ERC7540-setOperator-address-bool-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">setOperator(address operator, bool approved) → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-setOperator-address-bool-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Grants or revokes permissions for `operator` to manage requests on behalf of the caller.
+
+- MUST set the operator status to the `approved` value.
+- MUST emit the [`IERC7540Operator.OperatorSet`](/community-contracts/api/interfaces#IERC7540Operator-OperatorSet-address-address-bool-) event when the operator status is set.
+- MUST return true.
+
+</div>
+</div>
+
+<a id="ERC7540-_setOperator-address-address-bool-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_setOperator(address controller, address operator, bool approved)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_setOperator-address-address-bool-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Sets the `operator` approval status for `controller` to `approved`.
+
+Emits an [`IERC7540Operator.OperatorSet`](/community-contracts/api/interfaces#IERC7540Operator-OperatorSet-address-address-bool-) event.
+
+</div>
+</div>
+
+<a id="ERC7540-_checkOperatorOrController-bool-address-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_checkOperatorOrController(bool async, address controller, address operator)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_checkOperatorOrController-bool-address-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Reverts with [`ERC7540.ERC7540InvalidOperator`](#ERC7540-ERC7540InvalidOperator-address-address-) if `operator` is not the `controller` and is not
+approved as an operator for `controller`. When `async` is `false` the check is a no-op,
+preserving standard ERC-4626 authorization semantics.
+
+</div>
+</div>
+
+<a id="ERC7540-decimals--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">decimals() → uint8</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-decimals--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Decimals are computed by adding the decimal offset on top of the underlying asset's decimals. This
+"original" value is cached during construction of the vault contract. If this read operation fails (e.g., the
+asset has not been created yet), a default of 18 is used to represent the underlying asset's decimals.
+
+See `IERC20Metadata-decimals`.
+
+</div>
+</div>
+
+<a id="ERC7540-asset--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">asset() → address</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-asset--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the address of the underlying token used for the Vault for accounting, depositing, and withdrawing.
+
+- MUST be an ERC-20 token contract.
+- MUST NOT revert.
+
+</div>
+</div>
+
+<a id="ERC7540-share--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">share() → address</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-share--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The address of the underlying share received on deposit into the vault.
+
+</div>
+</div>
+
+<a id="ERC7540-vault-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">vault(address asset_) → address</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-vault-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The address of the vault for a specific asset.
+
+</div>
+</div>
+
+<a id="ERC7540-totalAssets--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">totalAssets() → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-totalAssets--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See `IERC4626-totalAssets`.
+
+Pending deposit assets are subtracted from the vault's token balance, since they have not yet been
+converted into shares and must not be treated as yield for outstanding shareholders.
+
+<Callout>
+Internal flows preserve the invariant `balanceOf(asset, vault) >= totalPendingDepositAssets()` for
+any well-behaved ERC-20. Assets with transfer fees, negative rebases, or externally-mutable balances can
+violate it and cause this function to revert with an underflow. Strategies that read [`ERC7540.totalAssets`](#ERC7540-totalAssets--) on the
+claim path become uncallable in that state. Strategies that lock the rate at fulfillment time
+are unaffected.
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7540-totalSupply--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">totalSupply() → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-totalSupply--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See `IERC20-totalSupply`.
+
+Adds [`ERC7540.totalPendingRedeemShares`](#ERC7540-totalPendingRedeemShares--) to the ERC-20 supply. When shares are burned at request time
+(i.e. [`ERC7540._redeemShareDestination`](#ERC7540-_redeemShareDestination--) returns `address(0)`), pending redeem shares are removed from
+the on-chain supply but still logically outstanding until claimed; this override compensates.
+
+<Callout>
+As a consequence, two standard ERC-20 assumptions do not hold: (a) `totalSupply()` may
+exceed the sum of all `balanceOf()` (pending shares are virtual and unowned); (b) `totalSupply()`
+can change without a matching `Transfer` event when [`ERC7540.totalPendingRedeemShares`](#ERC7540-totalPendingRedeemShares--) changes. Integrators
+that snapshot supply for governance or reward weighting, or reconstruct supply from event logs
+(indexers, bridges), must account for this.
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7540-pendingDepositRequest-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">pendingDepositRequest(uint256 requestId, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-pendingDepositRequest-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See [`IERC7540Deposit.pendingDepositRequest`](/community-contracts/api/interfaces#IERC7540Deposit-pendingDepositRequest-uint256-address-).
+
+Requirements:
+
+* [`ERC7540._isDepositAsync`](#ERC7540-_isDepositAsync--) must return `true`.
+
+</div>
+</div>
+
+<a id="ERC7540-claimableDepositRequest-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">claimableDepositRequest(uint256 requestId, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-claimableDepositRequest-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See [`IERC7540Deposit.claimableDepositRequest`](/community-contracts/api/interfaces#IERC7540Deposit-claimableDepositRequest-uint256-address-).
+
+Requirements:
+
+* [`ERC7540._isDepositAsync`](#ERC7540-_isDepositAsync--) must return `true`.
+
+</div>
+</div>
+
+<a id="ERC7540-pendingRedeemRequest-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">pendingRedeemRequest(uint256 requestId, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-pendingRedeemRequest-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See [`IERC7540Redeem.pendingRedeemRequest`](/community-contracts/api/interfaces#IERC7540Redeem-pendingRedeemRequest-uint256-address-).
+
+Requirements:
+
+* [`ERC7540._isRedeemAsync`](#ERC7540-_isRedeemAsync--) must return `true`.
+
+</div>
+</div>
+
+<a id="ERC7540-claimableRedeemRequest-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">claimableRedeemRequest(uint256 requestId, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-claimableRedeemRequest-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See [`IERC7540Redeem.claimableRedeemRequest`](/community-contracts/api/interfaces#IERC7540Redeem-claimableRedeemRequest-uint256-address-).
+
+Requirements:
+
+* [`ERC7540._isRedeemAsync`](#ERC7540-_isRedeemAsync--) must return `true`.
+
+</div>
+</div>
+
+<a id="ERC7540-totalPendingDepositAssets--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">totalPendingDepositAssets() → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-totalPendingDepositAssets--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the total amount of underlying assets currently pending in deposit Requests.
+
+</div>
+</div>
+
+<a id="ERC7540-totalPendingRedeemShares--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">totalPendingRedeemShares() → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-totalPendingRedeemShares--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the total amount of vault shares currently pending in redeem Requests.
+
+</div>
+</div>
+
+<a id="ERC7540-convertToShares-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">convertToShares(uint256 assets) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-convertToShares-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the amount of shares that the Vault would exchange for the amount of assets provided, in an ideal
+scenario where all the conditions are met.
+
+- MUST NOT be inclusive of any fees that are charged against assets in the Vault.
+- MUST NOT show any variations depending on the caller.
+- MUST NOT reflect slippage or other on-chain conditions, when performing the actual exchange.
+- MUST NOT revert.
+
+<Callout>
+This calculation MAY NOT reflect the “per-user” price-per-share, and instead should reflect the
+“average-user’s” price-per-share, meaning what the average user should expect to see when exchanging to and
+from.
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7540-convertToAssets-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">convertToAssets(uint256 shares) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-convertToAssets-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the amount of assets that the Vault would exchange for the amount of shares provided, in an ideal
+scenario where all the conditions are met.
+
+- MUST NOT be inclusive of any fees that are charged against assets in the Vault.
+- MUST NOT show any variations depending on the caller.
+- MUST NOT reflect slippage or other on-chain conditions, when performing the actual exchange.
+- MUST NOT revert.
+
+<Callout>
+This calculation MAY NOT reflect the “per-user” price-per-share, and instead should reflect the
+“average-user’s” price-per-share, meaning what the average user should expect to see when exchanging to and
+from.
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7540-maxDeposit-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">maxDeposit(address owner) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-maxDeposit-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See `IERC4626-maxDeposit`.
+
+When the deposit flow is synchronous, returns `type(uint256).max` (no vault-imposed limit).
+When async, delegates to [`ERC7540._asyncMaxDeposit`](#ERC7540-_asyncMaxDeposit-address-) which must be provided by the fulfillment strategy.
+
+</div>
+</div>
+
+<a id="ERC7540-maxMint-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">maxMint(address owner) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-maxMint-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See `IERC4626-maxMint`.
+
+When the deposit flow is synchronous, returns `type(uint256).max`.
+When async, delegates to [`ERC7540._asyncMaxMint`](#ERC7540-_asyncMaxMint-address-).
+
+</div>
+</div>
+
+<a id="ERC7540-maxWithdraw-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">maxWithdraw(address owner) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-maxWithdraw-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See `IERC4626-maxWithdraw`.
+
+When the redeem flow is synchronous, returns the asset-equivalent of the owner's share balance.
+When async, delegates to [`ERC7540._asyncMaxWithdraw`](#ERC7540-_asyncMaxWithdraw-address-).
+
+</div>
+</div>
+
+<a id="ERC7540-maxRedeem-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">maxRedeem(address owner) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-maxRedeem-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See `IERC4626-maxRedeem`.
+
+When the redeem flow is synchronous, returns the owner's share balance.
+When async, delegates to [`ERC7540._asyncMaxRedeem`](#ERC7540-_asyncMaxRedeem-address-).
+
+</div>
+</div>
+
+<a id="ERC7540-previewDeposit-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">previewDeposit(uint256 assets) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-previewDeposit-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See `IERC4626-previewDeposit`.
+
+MUST revert when [`ERC7540._isDepositAsync`](#ERC7540-_isDepositAsync--) returns `true`, per the ERC-7540 specification which
+mandates that preview functions revert for async flows.
+
+</div>
+</div>
+
+<a id="ERC7540-previewMint-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">previewMint(uint256 shares) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-previewMint-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See `IERC4626-previewMint`.
+
+MUST revert when [`ERC7540._isDepositAsync`](#ERC7540-_isDepositAsync--) returns `true`.
+
+</div>
+</div>
+
+<a id="ERC7540-previewWithdraw-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">previewWithdraw(uint256 assets) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-previewWithdraw-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See `IERC4626-previewWithdraw`.
+
+MUST revert when [`ERC7540._isRedeemAsync`](#ERC7540-_isRedeemAsync--) returns `true`.
+
+</div>
+</div>
+
+<a id="ERC7540-previewRedeem-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">previewRedeem(uint256 shares) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-previewRedeem-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See `IERC4626-previewRedeem`.
+
+MUST revert when [`ERC7540._isRedeemAsync`](#ERC7540-_isRedeemAsync--) returns `true`.
+
+</div>
+</div>
+
+<a id="ERC7540-requestDeposit-uint256-address-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">requestDeposit(uint256 assets, address controller, address owner) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-requestDeposit-uint256-address-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See [`IERC7540Deposit.requestDeposit`](/community-contracts/api/interfaces#IERC7540Deposit-requestDeposit-uint256-address-address-).
+
+Transfers `assets` from `owner` into the vault and submits a deposit Request for `controller`.
+The Request enters Pending state. Uses `requestId = 0` by default; override [`ERC7540._requestDeposit`](#ERC7540-_requestDeposit-uint256-address-address-uint256-)
+to use non-zero request IDs.
+
+Requirements:
+
+* [`ERC7540._isDepositAsync`](#ERC7540-_isDepositAsync--) must return `true`.
+* `owner` must be `msg.sender` or `msg.sender` must be an approved operator of `owner`.
+* `owner` must have approved the vault for at least `assets` of the underlying token.
+
+<Callout>
+The `controller` is the only address authorized to claim the resulting Request. Passing an address
+with no claim authority (e.g. `address(0)`, `0x...dead`) or any contract that cannot itself call
+[`ERC7540.deposit`](#ERC7540-deposit-uint256-address-address-)/[`ERC7540.mint`](#ERC7540-mint-uint256-address-address-) or designate an operator via [`ERC7540.setOperator`](#ERC7540-setOperator-address-bool-) will permanently lock the committed
+`assets`, since claims are gated by [`ERC7540.onlyOperatorOrController`](#ERC7540-onlyOperatorOrController-bool-address-address-) on `controller` and there is no
+cancellation path. Callers are responsible for supplying a controller capable of authorizing claims.
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7540-deposit-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">deposit(uint256 assets, address receiver) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-deposit-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See `IERC4626-deposit`. Calls the three-argument overload with `msg.sender` as `controller`.
+
+</div>
+</div>
+
+<a id="ERC7540-deposit-uint256-address-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">deposit(uint256 assets, address receiver, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-deposit-uint256-address-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See [`IERC7540Deposit.deposit`](/community-contracts/api/interfaces#IERC7540Deposit-deposit-uint256-address-address-).
+
+When async, claims `assets` worth of shares from a Claimable deposit Request controlled by `controller`,
+and transfers the resulting shares to `receiver`. When sync, behaves as standard ERC-4626 deposit.
+
+<Callout>
+When [`ERC7540._isDepositAsync`](#ERC7540-_isDepositAsync--) is `false`, the `controller` parameter is ignored and `receiver` is used
+for limit checks, matching standard ERC-4626 semantics.
+</Callout>
+
+Requirements:
+
+* `assets` must not exceed [`ERC7540.maxDeposit`](#ERC7540-maxDeposit-address-) for the relevant account.
+* When async, `msg.sender` must be `controller` or an approved operator of `controller`.
+
+</div>
+</div>
+
+<a id="ERC7540-mint-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">mint(uint256 shares, address receiver) → uint256 assets</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-mint-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See `IERC4626-mint`. Calls the three-argument overload with `msg.sender` as `controller`.
+
+</div>
+</div>
+
+<a id="ERC7540-mint-uint256-address-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">mint(uint256 shares, address receiver, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-mint-uint256-address-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See [`IERC7540Deposit.mint`](/community-contracts/api/interfaces#IERC7540Deposit-mint-uint256-address-address-).
+
+When async, claims exactly `shares` from a Claimable deposit Request controlled by `controller`,
+and transfers them to `receiver`. When sync, behaves as standard ERC-4626 mint.
+
+<Callout>
+When [`ERC7540._isDepositAsync`](#ERC7540-_isDepositAsync--) is `false`, the `controller` parameter is ignored.
+</Callout>
+
+Requirements:
+
+* `shares` must not exceed [`ERC7540.maxMint`](#ERC7540-maxMint-address-) for the relevant account.
+* When async, `msg.sender` must be `controller` or an approved operator of `controller`.
+
+</div>
+</div>
+
+<a id="ERC7540-requestRedeem-uint256-address-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">requestRedeem(uint256 shares, address controller, address owner) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-requestRedeem-uint256-address-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See [`IERC7540Redeem.requestRedeem`](/community-contracts/api/interfaces#IERC7540Redeem-requestRedeem-uint256-address-address-).
+
+Assumes control of `shares` from `owner` and submits a redeem Request for `controller`.
+The Request enters Pending state. Uses `requestId = 0` by default.
+
+Authorization for a `msg.sender` not equal to `owner` may come from either ERC-20 approval
+over the shares of `owner` or from operator approval (see [`IERC7540Operator`](/community-contracts/api/interfaces#IERC7540Operator)). This is
+consistent with the approach described in ERC-6909.
+
+Requirements:
+
+* [`ERC7540._isRedeemAsync`](#ERC7540-_isRedeemAsync--) must return `true`.
+
+<Callout>
+The `controller` is the only address authorized to claim the resulting Request. Passing an address
+with no claim authority (e.g. `address(0)`, `0x...dead`) or any contract that cannot itself call
+[`ERC7540.withdraw`](#ERC7540-withdraw-uint256-address-address-)/[`ERC7540.redeem`](#ERC7540-redeem-uint256-address-address-) or designate an operator via [`ERC7540.setOperator`](#ERC7540-setOperator-address-bool-) will permanently lock the committed
+`shares`, since claims are gated by [`ERC7540.onlyOperatorOrController`](#ERC7540-onlyOperatorOrController-bool-address-address-) on `controller` and there is no
+cancellation path. Callers are responsible for supplying a controller capable of authorizing claims.
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7540-withdraw-uint256-address-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">withdraw(uint256 assets, address receiver, address ownerOrController) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-withdraw-uint256-address-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See `IERC4626-withdraw`.
+
+When async, claims `assets` from a Claimable redeem Request controlled by `ownerOrController`,
+and transfers the underlying assets to `receiver`. When sync, behaves as standard ERC-4626 withdraw.
+
+<Callout>
+Per ERC-7540, when async the `ownerOrController` parameter acts as the `controller`
+(replacing the traditional ERC-4626 `owner` role).
+</Callout>
+
+Requirements:
+
+* `assets` must not exceed [`ERC7540.maxWithdraw`](#ERC7540-maxWithdraw-address-) for `ownerOrController`.
+* When async, `msg.sender` must be `ownerOrController` or an approved operator.
+* When sync, `msg.sender` must be `ownerOrController` or have sufficient ERC-20 allowance.
+
+</div>
+</div>
+
+<a id="ERC7540-redeem-uint256-address-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">redeem(uint256 shares, address receiver, address ownerOrController) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540-redeem-uint256-address-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See `IERC4626-redeem`.
+
+When async, claims `shares` from a Claimable redeem Request controlled by `ownerOrController`,
+and transfers the corresponding underlying assets to `receiver`. When sync, behaves as standard
+ERC-4626 redeem.
+
+<Callout>
+Per ERC-7540, when async the `ownerOrController` parameter acts as the `controller`.
+</Callout>
+
+Requirements:
+
+* `shares` must not exceed [`ERC7540.maxRedeem`](#ERC7540-maxRedeem-address-) for `ownerOrController`.
+* When async, `msg.sender` must be `ownerOrController` or an approved operator.
+* When sync, `msg.sender` must be `ownerOrController` or have sufficient ERC-20 allowance.
+
+</div>
+</div>
+
+<a id="ERC7540-_convertToShares-uint256-enum-Math-Rounding-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_convertToShares(uint256 assets, enum Math.Rounding rounding) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_convertToShares-uint256-enum-Math-Rounding-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal conversion function (from assets to shares) with support for rounding direction.
+
+Uses virtual shares and virtual assets to mitigate the inflation attack vector described in
+[ERC-4626 security considerations](https://docs.openzeppelin.com/contracts/5.x/erc4626#inflation-attack).
+The offset is configurable via [`ERC7540._decimalsOffset`](#ERC7540-_decimalsOffset--).
+
+</div>
+</div>
+
+<a id="ERC7540-_convertToAssets-uint256-enum-Math-Rounding-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_convertToAssets(uint256 shares, enum Math.Rounding rounding) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_convertToAssets-uint256-enum-Math-Rounding-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal conversion function (from shares to assets) with support for rounding direction.
+
+</div>
+</div>
+
+<a id="ERC7540-_requestDeposit-uint256-address-address-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_requestDeposit(uint256 assets, address controller, address owner, uint256 requestId) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_requestDeposit-uint256-address-address-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal handler for deposit Requests. Increments [`ERC7540.totalPendingDepositAssets`](#ERC7540-totalPendingDepositAssets--), transfers
+assets from `owner` into the vault, and emits [`IERC7540Deposit.DepositRequest`](/community-contracts/api/interfaces#IERC7540Deposit-DepositRequest-address-address-uint256-address-uint256-).
+
+Strategy extensions (e.g. [`ERC7540AdminDeposit`](#ERC7540AdminDeposit)) should override this to record per-controller
+pending state before calling `super._requestDeposit(...)`.
+
+<Callout>
+Pending accounting is updated before [`ERC7540._transferIn`](#ERC7540-_transferIn-address-uint256-) to follow Checks-Effects-Interactions.
+Assets with transfer hooks (e.g. ERC-777) may observe [`ERC7540.totalAssets`](#ERC7540-totalAssets--) temporarily understated
+during the transfer, since `_totalPendingDepositAssets` is already incremented while the
+token balance has not yet increased.
+</Callout>
+
+Requirements:
+
+* [`ERC7540._isDepositAsync`](#ERC7540-_isDepositAsync--) must return `true`, otherwise reverts with [`ERC7540SyncDeposit`](#ERC7540SyncDeposit).
+
+</div>
+</div>
+
+<a id="ERC7540-_mintSharesOnDepositFulfill-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_mintSharesOnDepositFulfill(uint256 assets, uint256 shares)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_mintSharesOnDepositFulfill-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Mints shares to [`ERC7540._depositShareOrigin`](#ERC7540-_depositShareOrigin--) as part of deposit fulfillment when using the
+pre-mint share custody model. Decrements [`ERC7540.totalPendingDepositAssets`](#ERC7540-totalPendingDepositAssets--) by `assets`.
+
+<Callout type="warn">
+This function requires [`ERC7540._depositShareOrigin`](#ERC7540-_depositShareOrigin--) to return a non-zero address.
+When [`ERC7540._depositShareOrigin`](#ERC7540-_depositShareOrigin--) returns `address(0)`, shares are minted directly at claim time
+inside [`ERC4626Fees._deposit`](#ERC4626Fees-_deposit-address-address-uint256-uint256-) and this function must not be called.
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7540-_deposit-address-address-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_deposit(address callerOrController, address receiver, uint256 assets, uint256 shares)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_deposit-address-address-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Common workflow for deposit and mint claim operations.
+
+Handles three cases depending on the vault configuration:
+
+1. **Synchronous** ([`ERC7540._isDepositAsync`](#ERC7540-_isDepositAsync--) returns `false`): transfers assets from `callerOrController` into the vault
+   and mints new shares to `receiver`. Standard ERC-4626 behavior.
+2. **Async, mint-on-claim** ([`ERC7540._depositShareOrigin`](#ERC7540-_depositShareOrigin--) returns `address(0)`): decrements
+   `_totalPendingDepositAssets` and mints new shares to `receiver`. No asset transfer occurs
+   since assets were already transferred during [`ERC7540.requestDeposit`](#ERC7540-requestDeposit-uint256-address-address-).
+3. **Async, pre-minted** ([`ERC7540._depositShareOrigin`](#ERC7540-_depositShareOrigin--) returns non-zero): transfers pre-minted shares
+   from the share origin address to `receiver`.
+
+Emits `IERC4626-Deposit`. Per ERC-7540, the first event parameter is the `controller` in async
+mode and `msg.sender` in sync mode.
+
+</div>
+</div>
+
+<a id="ERC7540-_requestRedeem-uint256-address-address-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_requestRedeem(uint256 shares, address controller, address owner, uint256 requestId) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_requestRedeem-uint256-address-address-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal handler for redeem Requests. Assumes control of `shares` from `owner` and
+emits [`IERC7540Redeem.RedeemRequest`](/community-contracts/api/interfaces#IERC7540Redeem-RedeemRequest-address-address-uint256-address-uint256-).
+
+Share custody depends on [`ERC7540._redeemShareDestination`](#ERC7540-_redeemShareDestination--):
+
+* `address(0)` (default): shares are burned immediately and `_totalPendingRedeemShares` is
+  incremented to keep [`ERC7540.totalSupply`](#ERC7540-totalSupply--) accurate.
+* Non-zero address: shares are transferred to that address and held until fulfillment.
+
+Authorization for a `msg.sender` not equal to `owner` is checked via operator status first;
+if that fails, ERC-20 allowance is spent via `ERC20-_spendAllowance`. This dual-authorization
+approach is consistent with ERC-6909 semantics.
+
+Requirements:
+
+* [`ERC7540._isRedeemAsync`](#ERC7540-_isRedeemAsync--) must return `true`, otherwise reverts with [`ERC7540SyncRedeem`](#ERC7540SyncRedeem).
+
+</div>
+</div>
+
+<a id="ERC7540-_burnSharesOnRedeemFulfill-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_burnSharesOnRedeemFulfill(uint256, uint256 shares)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_burnSharesOnRedeemFulfill-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Burns shares from [`ERC7540._redeemShareDestination`](#ERC7540-_redeemShareDestination--) as part of redeem fulfillment when using
+the escrow share custody model. Increments [`ERC7540.totalPendingRedeemShares`](#ERC7540-totalPendingRedeemShares--) by `shares`.
+
+<Callout type="warn">
+This function requires [`ERC7540._redeemShareDestination`](#ERC7540-_redeemShareDestination--) to return a non-zero address.
+When [`ERC7540._redeemShareDestination`](#ERC7540-_redeemShareDestination--) returns `address(0)`, shares were already burned at request
+time inside [`ERC7540._requestRedeem`](#ERC7540-_requestRedeem-uint256-address-address-uint256-) and this function must not be called.
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7540-_withdraw-address-address-address-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_withdraw(address caller, address receiver, address owner, uint256 assets, uint256 shares)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_withdraw-address-address-address-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Common workflow for withdraw and redeem claim operations.
+
+Handles two cases depending on the vault configuration:
+
+1. **Synchronous** ([`ERC7540._isRedeemAsync`](#ERC7540-_isRedeemAsync--) returns `false`): spends ERC-20 allowance if `caller` is not
+   `owner`, burns shares from `owner`, and transfers underlying assets to `receiver`.
+2. **Async**: decrements `_totalPendingRedeemShares` (shares were already burned/escrowed during
+   the Request or fulfillment phase) and transfers underlying assets to `receiver`.
+
+Emits `IERC4626-Withdraw`.
+
+</div>
+</div>
+
+<a id="ERC7540-_transferIn-address-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_transferIn(address from, uint256 assets)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_transferIn-address-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Performs a transfer-in of underlying assets from `from` to the vault.
+The default implementation uses `SafeERC20-safeTransferFrom`. Used by [`ERC4626Fees._deposit`](#ERC4626Fees-_deposit-address-address-uint256-uint256-) (sync) and
+[`ERC7540._requestDeposit`](#ERC7540-_requestDeposit-uint256-address-address-uint256-) (async).
+
+</div>
+</div>
+
+<a id="ERC7540-_transferOut-address-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_transferOut(address to, uint256 assets)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_transferOut-address-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Performs a transfer-out of underlying assets from the vault to `to`.
+The default implementation uses `SafeERC20-safeTransfer`. Used by [`ERC4626Fees._withdraw`](#ERC4626Fees-_withdraw-address-address-address-uint256-uint256-).
+
+</div>
+</div>
+
+<a id="ERC7540-_decimalsOffset--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_decimalsOffset() → uint8</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_decimalsOffset--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the decimal offset used for virtual shares/assets in [`ERC7540._convertToShares`](#ERC7540-_convertToShares-uint256-enum-Math-Rounding-) and
+[`ERC7540._convertToAssets`](#ERC7540-_convertToAssets-uint256-enum-Math-Rounding-). Defaults to 0. Increase to strengthen inflation-attack protection
+at the cost of share-price granularity.
+
+See [ERC-4626 security considerations](https://docs.openzeppelin.com/contracts/5.x/erc4626#inflation-attack).
+
+</div>
+</div>
+
+<a id="ERC7540-_depositShareOrigin--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_depositShareOrigin() → address</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_depositShareOrigin--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the address from which shares are transferred to the receiver on deposit claim.
+
+* `address(0)` (default): shares are minted directly to the receiver at claim time. Pending
+  deposit assets are tracked via [`ERC7540.totalPendingDepositAssets`](#ERC7540-totalPendingDepositAssets--) and decremented in [`ERC4626Fees._deposit`](#ERC4626Fees-_deposit-address-address-uint256-uint256-).
+* Non-zero address: shares are pre-minted to this address during fulfillment (via
+  [`ERC7540._mintSharesOnDepositFulfill`](#ERC7540-_mintSharesOnDepositFulfill-uint256-uint256-)) and transferred to the receiver on claim.
+
+<Callout>
+If overridden to return a non-zero address, that address must not be able to transfer
+shares (otherwise pre-minted shares could be moved before they are claimed). Use an unowned
+address such as `address(0xdead)`. Avoid addresses in the precompile reserved range
+(`address(1)` through `address(0x1ff)`, see EIP-7587).
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7540-_redeemShareDestination--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_redeemShareDestination() → address</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_redeemShareDestination--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the address to which shares are transferred (escrowed) on redeem request.
+
+* `address(0)` (default): shares are burned immediately at request time. Pending redeem shares
+  are tracked via [`ERC7540.totalPendingRedeemShares`](#ERC7540-totalPendingRedeemShares--) so that [`ERC7540.totalSupply`](#ERC7540-totalSupply--) remains accurate.
+* Non-zero address: shares are transferred to this address on request and burned during
+  fulfillment (via [`ERC7540._burnSharesOnRedeemFulfill`](#ERC7540-_burnSharesOnRedeemFulfill-uint256-uint256-)).
+
+<Callout>
+If overridden to return a non-zero address, that address must not be able to transfer
+shares (otherwise escrowed shares could be moved before they are burned). Use an unowned
+address such as `address(0xdead)`. Avoid addresses in the precompile reserved range
+(`address(1)` through `address(0x1ff)`, see EIP-7587).
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7540-_isDepositAsync--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_isDepositAsync() → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_isDepositAsync--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns `true` if the deposit flow is asynchronous (Request-based). When `false`, [`ERC7540.deposit`](#ERC7540-deposit-uint256-address-address-) and
+[`ERC7540.mint`](#ERC7540-mint-uint256-address-address-) behave as standard synchronous ERC-4626 operations.
+
+Override to return `true` in extensions that provide an async deposit fulfillment strategy.
+
+</div>
+</div>
+
+<a id="ERC7540-_isRedeemAsync--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_isRedeemAsync() → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_isRedeemAsync--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns `true` if the redeem flow is asynchronous (Request-based). When `false`, [`ERC7540.withdraw`](#ERC7540-withdraw-uint256-address-address-) and
+[`ERC7540.redeem`](#ERC7540-redeem-uint256-address-address-) behave as standard synchronous ERC-4626 operations.
+
+Override to return `true` in extensions that provide an async redeem fulfillment strategy.
+
+</div>
+</div>
+
+<a id="ERC7540-_pendingDepositRequest-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_pendingDepositRequest(uint256, address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_pendingDepositRequest-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the amount of assets in Pending state for `controller` with the given `requestId`.
+
+</div>
+</div>
+
+<a id="ERC7540-_claimableDepositRequest-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_claimableDepositRequest(uint256, address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_claimableDepositRequest-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the amount of assets in Claimable state for `controller` with the given `requestId`.
+
+</div>
+</div>
+
+<a id="ERC7540-_pendingRedeemRequest-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_pendingRedeemRequest(uint256, address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_pendingRedeemRequest-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the amount of shares in Pending state for `controller` with the given `requestId`.
+
+</div>
+</div>
+
+<a id="ERC7540-_claimableRedeemRequest-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_claimableRedeemRequest(uint256, address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_claimableRedeemRequest-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the amount of shares in Claimable state for `controller` with the given `requestId`.
+
+</div>
+</div>
+
+<a id="ERC7540-_consumeClaimableDeposit-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_consumeClaimableDeposit(uint256, address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_consumeClaimableDeposit-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Consumes `assets` worth of a Claimable deposit for `controller` and returns the corresponding
+number of shares. Called by [`ERC7540.deposit`](#ERC7540-deposit-uint256-address-address-) (three-argument overload) in async mode.
+
+<Callout>
+In async mode, this function may be susceptible to the inflation attack vector described in
+[ERC-4626 security considerations](https://docs.openzeppelin.com/contracts/5.x/erc4626#inflation-attack)
+if the shares are freed automatically (e.g. after a certain time period). Consider using [`ERC7540._decimalsOffset`](#ERC7540-_decimalsOffset--)
+to mitigate this risk.
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7540-_consumeClaimableMint-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_consumeClaimableMint(uint256, address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_consumeClaimableMint-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Consumes `shares` worth of a Claimable deposit for `controller` and returns the corresponding
+number of assets. Called by [`ERC7540.mint`](#ERC7540-mint-uint256-address-address-) (three-argument overload) in async mode.
+
+</div>
+</div>
+
+<a id="ERC7540-_consumeClaimableWithdraw-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_consumeClaimableWithdraw(uint256, address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_consumeClaimableWithdraw-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Consumes `assets` worth of a Claimable redeem for `controller` and returns the corresponding
+number of shares. Called by [`ERC7540.withdraw`](#ERC7540-withdraw-uint256-address-address-) in async mode.
+
+</div>
+</div>
+
+<a id="ERC7540-_consumeClaimableRedeem-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_consumeClaimableRedeem(uint256, address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_consumeClaimableRedeem-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Consumes `shares` worth of a Claimable redeem for `controller` and returns the corresponding
+number of assets. Called by [`ERC7540.redeem`](#ERC7540-redeem-uint256-address-address-) in async mode.
+
+</div>
+</div>
+
+<a id="ERC7540-_asyncMaxDeposit-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_asyncMaxDeposit(address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_asyncMaxDeposit-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the maximum assets that can be claimed via [`ERC7540.deposit`](#ERC7540-deposit-uint256-address-address-) for an async `owner`.
+
+</div>
+</div>
+
+<a id="ERC7540-_asyncMaxMint-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_asyncMaxMint(address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_asyncMaxMint-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the maximum shares that can be claimed via [`ERC7540.mint`](#ERC7540-mint-uint256-address-address-) for an async `owner`.
+
+</div>
+</div>
+
+<a id="ERC7540-_asyncMaxWithdraw-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_asyncMaxWithdraw(address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_asyncMaxWithdraw-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the maximum assets that can be claimed via [`ERC7540.withdraw`](#ERC7540-withdraw-uint256-address-address-) for an async `owner`.
+
+</div>
+</div>
+
+<a id="ERC7540-_asyncMaxRedeem-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_asyncMaxRedeem(address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540-_asyncMaxRedeem-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the maximum shares that can be claimed via [`ERC7540.redeem`](#ERC7540-redeem-uint256-address-address-) for an async `owner`.
+
+</div>
+</div>
+
+<a id="ERC7540-ERC4626ExceededMaxDeposit-address-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC4626ExceededMaxDeposit(address receiver, uint256 assets, uint256 max)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7540-ERC4626ExceededMaxDeposit-address-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Attempted to deposit more assets than the max amount for `receiver`.
+
+</div>
+</div>
+
+<a id="ERC7540-ERC4626ExceededMaxMint-address-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC4626ExceededMaxMint(address receiver, uint256 shares, uint256 max)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7540-ERC4626ExceededMaxMint-address-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Attempted to mint more shares than the max amount for `receiver`.
+
+</div>
+</div>
+
+<a id="ERC7540-ERC4626ExceededMaxWithdraw-address-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC4626ExceededMaxWithdraw(address owner, uint256 assets, uint256 max)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7540-ERC4626ExceededMaxWithdraw-address-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Attempted to withdraw more assets than the max amount for `owner`.
+
+</div>
+</div>
+
+<a id="ERC7540-ERC4626ExceededMaxRedeem-address-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC4626ExceededMaxRedeem(address owner, uint256 shares, uint256 max)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7540-ERC4626ExceededMaxRedeem-address-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Attempted to redeem more shares than the max amount for `owner`.
+
+</div>
+</div>
+
+<a id="ERC7540-ERC7540InvalidOperator-address-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7540InvalidOperator(address controller, address operator)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7540-ERC7540InvalidOperator-address-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The `operator` is not the caller or an approved operator of the `controller`.
+
+</div>
+</div>
+
+<a id="ERC7540-ERC7540SyncDeposit--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7540SyncDeposit()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7540-ERC7540SyncDeposit--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+A deposit Request was attempted but [`ERC7540._isDepositAsync`](#ERC7540-_isDepositAsync--) returns `false`.
+
+</div>
+</div>
+
+<a id="ERC7540-ERC7540AsyncDeposit--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7540AsyncDeposit()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7540-ERC7540AsyncDeposit--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+A synchronous deposit preview was attempted but [`ERC7540._isDepositAsync`](#ERC7540-_isDepositAsync--) returns `true`.
+
+</div>
+</div>
+
+<a id="ERC7540-ERC7540SyncRedeem--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7540SyncRedeem()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7540-ERC7540SyncRedeem--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+A redeem Request was attempted but [`ERC7540._isRedeemAsync`](#ERC7540-_isRedeemAsync--) returns `false`.
+
+</div>
+</div>
+
+<a id="ERC7540-ERC7540AsyncRedeem--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7540AsyncRedeem()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7540-ERC7540AsyncRedeem--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+A synchronous redeem preview was attempted but [`ERC7540._isRedeemAsync`](#ERC7540-_isRedeemAsync--) returns `true`.
+
+</div>
+</div>
+
+<a id="ERC7540-ERC7540MissingAsync--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7540MissingAsync()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7540-ERC7540MissingAsync--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Neither [`ERC7540._isDepositAsync`](#ERC7540-_isDepositAsync--) nor [`ERC7540._isRedeemAsync`](#ERC7540-_isRedeemAsync--) returns `true`.
+
+</div>
+</div>
+
+<a id="ERC7540-ERC7540UnauthorizedMintSharesOnDepositFulfill--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7540UnauthorizedMintSharesOnDepositFulfill()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7540-ERC7540UnauthorizedMintSharesOnDepositFulfill--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Invalid attempt at minting shares on a deposit fulfill when configuration mints them during claim.
+
+</div>
+</div>
+
+<a id="ERC7540-ERC7540UnauthorizedBurnSharesOnRedeemFulfill--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7540UnauthorizedBurnSharesOnRedeemFulfill()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7540-ERC7540UnauthorizedBurnSharesOnRedeemFulfill--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Invalid attempt at burning shares on a redeem fulfill when configuration burns them during request.
+
+</div>
+</div>
+
+<a id="ERC7540AdminDeposit"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC7540AdminDeposit` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-community-contracts/blob/v0.0.1/contracts/token/ERC20/extensions/ERC7540AdminDeposit.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/community-contracts/contracts/token/ERC20/extensions/ERC7540AdminDeposit.sol";
+```
+
+Admin-controlled (operator-triggered) fulfillment strategy for asynchronous deposits.
+
+Extends [`ERC7540`](#ERC7540) with a deposit flow where a privileged caller explicitly transitions requests
+from Pending to Claimable by calling [`ERC7540AdminDeposit._fulfillDeposit`](#ERC7540AdminDeposit-_fulfillDeposit-uint256-uint256-address-). The caller provides both the `assets`
+amount and the corresponding `shares`, giving the fulfiller explicit control over the exchange rate.
+
+This is the most flexible fulfillment model. Epoch-based batch settlement, FIFO queues, and
+cross-chain oracle-gated settlement can all be composed on top.
+
+Production equivalents include
+[USDai](https://github.com/usdai-foundation/usdai-contracts/blob/main/src/StakedUSDai.sol),
+[Nest (Plume)](https://github.com/plumenetwork/nest-protocol/blob/main/contracts/NestVaultCore.sol),
+[MetaVault](https://github.com/turingcapitalgroup/metaVault/blob/main/src/MetaVault.sol), and
+[Centrifuge](https://github.com/centrifuge/protocol/blob/main/src/vaults/AsyncVault.sol).
+
+All requests share `requestId = 0` (per-controller accounting only).
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [_isDepositAsync()](#ERC7540AdminDeposit-_isDepositAsync--)
+- [_requestDeposit(assets, controller, owner, requestId)](#ERC7540AdminDeposit-_requestDeposit-uint256-address-address-uint256-)
+- [_fulfillDeposit(assets, shares, controller)](#ERC7540AdminDeposit-_fulfillDeposit-uint256-uint256-address-)
+- [_consumeClaimableDeposit(assets, controller)](#ERC7540AdminDeposit-_consumeClaimableDeposit-uint256-address-)
+- [_consumeClaimableMint(shares, controller)](#ERC7540AdminDeposit-_consumeClaimableMint-uint256-address-)
+- [_pendingDepositRequest(, controller)](#ERC7540AdminDeposit-_pendingDepositRequest-uint256-address-)
+- [_claimableDepositRequest(, controller)](#ERC7540AdminDeposit-_claimableDepositRequest-uint256-address-)
+- [_asyncMaxDeposit(owner)](#ERC7540AdminDeposit-_asyncMaxDeposit-address-)
+- [_asyncMaxMint(owner)](#ERC7540AdminDeposit-_asyncMaxMint-address-)
+<details>
+<summary>ERC7540</summary>
+
+- [supportsInterface(interfaceId)](#ERC7540-supportsInterface-bytes4-)
+- [isOperator(controller, operator)](#ERC7540-isOperator-address-address-)
+- [setOperator(operator, approved)](#ERC7540-setOperator-address-bool-)
+- [_setOperator(controller, operator, approved)](#ERC7540-_setOperator-address-address-bool-)
+- [_checkOperatorOrController(async, controller, operator)](#ERC7540-_checkOperatorOrController-bool-address-address-)
+- [decimals()](#ERC7540-decimals--)
+- [asset()](#ERC7540-asset--)
+- [share()](#ERC7540-share--)
+- [vault(asset_)](#ERC7540-vault-address-)
+- [totalAssets()](#ERC7540-totalAssets--)
+- [totalSupply()](#ERC7540-totalSupply--)
+- [pendingDepositRequest(requestId, controller)](#ERC7540-pendingDepositRequest-uint256-address-)
+- [claimableDepositRequest(requestId, controller)](#ERC7540-claimableDepositRequest-uint256-address-)
+- [pendingRedeemRequest(requestId, controller)](#ERC7540-pendingRedeemRequest-uint256-address-)
+- [claimableRedeemRequest(requestId, controller)](#ERC7540-claimableRedeemRequest-uint256-address-)
+- [totalPendingDepositAssets()](#ERC7540-totalPendingDepositAssets--)
+- [totalPendingRedeemShares()](#ERC7540-totalPendingRedeemShares--)
+- [convertToShares(assets)](#ERC7540-convertToShares-uint256-)
+- [convertToAssets(shares)](#ERC7540-convertToAssets-uint256-)
+- [maxDeposit(owner)](#ERC7540-maxDeposit-address-)
+- [maxMint(owner)](#ERC7540-maxMint-address-)
+- [maxWithdraw(owner)](#ERC7540-maxWithdraw-address-)
+- [maxRedeem(owner)](#ERC7540-maxRedeem-address-)
+- [previewDeposit(assets)](#ERC7540-previewDeposit-uint256-)
+- [previewMint(shares)](#ERC7540-previewMint-uint256-)
+- [previewWithdraw(assets)](#ERC7540-previewWithdraw-uint256-)
+- [previewRedeem(shares)](#ERC7540-previewRedeem-uint256-)
+- [requestDeposit(assets, controller, owner)](#ERC7540-requestDeposit-uint256-address-address-)
+- [deposit(assets, receiver)](#ERC7540-deposit-uint256-address-)
+- [deposit(assets, receiver, controller)](#ERC7540-deposit-uint256-address-address-)
+- [mint(shares, receiver)](#ERC7540-mint-uint256-address-)
+- [mint(shares, receiver, controller)](#ERC7540-mint-uint256-address-address-)
+- [requestRedeem(shares, controller, owner)](#ERC7540-requestRedeem-uint256-address-address-)
+- [withdraw(assets, receiver, ownerOrController)](#ERC7540-withdraw-uint256-address-address-)
+- [redeem(shares, receiver, ownerOrController)](#ERC7540-redeem-uint256-address-address-)
+- [_convertToShares(assets, rounding)](#ERC7540-_convertToShares-uint256-enum-Math-Rounding-)
+- [_convertToAssets(shares, rounding)](#ERC7540-_convertToAssets-uint256-enum-Math-Rounding-)
+- [_mintSharesOnDepositFulfill(assets, shares)](#ERC7540-_mintSharesOnDepositFulfill-uint256-uint256-)
+- [_deposit(callerOrController, receiver, assets, shares)](#ERC7540-_deposit-address-address-uint256-uint256-)
+- [_requestRedeem(shares, controller, owner, requestId)](#ERC7540-_requestRedeem-uint256-address-address-uint256-)
+- [_burnSharesOnRedeemFulfill(, shares)](#ERC7540-_burnSharesOnRedeemFulfill-uint256-uint256-)
+- [_withdraw(caller, receiver, owner, assets, shares)](#ERC7540-_withdraw-address-address-address-uint256-uint256-)
+- [_transferIn(from, assets)](#ERC7540-_transferIn-address-uint256-)
+- [_transferOut(to, assets)](#ERC7540-_transferOut-address-uint256-)
+- [_decimalsOffset()](#ERC7540-_decimalsOffset--)
+- [_depositShareOrigin()](#ERC7540-_depositShareOrigin--)
+- [_redeemShareDestination()](#ERC7540-_redeemShareDestination--)
+- [_isRedeemAsync()](#ERC7540-_isRedeemAsync--)
+- [_pendingRedeemRequest(, )](#ERC7540-_pendingRedeemRequest-uint256-address-)
+- [_claimableRedeemRequest(, )](#ERC7540-_claimableRedeemRequest-uint256-address-)
+- [_consumeClaimableWithdraw(, )](#ERC7540-_consumeClaimableWithdraw-uint256-address-)
+- [_consumeClaimableRedeem(, )](#ERC7540-_consumeClaimableRedeem-uint256-address-)
+- [_asyncMaxWithdraw()](#ERC7540-_asyncMaxWithdraw-address-)
+- [_asyncMaxRedeem()](#ERC7540-_asyncMaxRedeem-address-)
+
+</details>
+<details>
+<summary>ERC20</summary>
+
+- [name()](#ERC20-name--)
+- [symbol()](#ERC20-symbol--)
+- [balanceOf(account)](#ERC20-balanceOf-address-)
+- [transfer(to, value)](#ERC20-transfer-address-uint256-)
+- [allowance(owner, spender)](#ERC20-allowance-address-address-)
+- [approve(spender, value)](#ERC20-approve-address-uint256-)
+- [transferFrom(from, to, value)](#ERC20-transferFrom-address-address-uint256-)
+- [_transfer(from, to, value)](#ERC20-_transfer-address-address-uint256-)
+- [_update(from, to, value)](#ERC20-_update-address-address-uint256-)
+- [_mint(account, value)](#ERC20-_mint-address-uint256-)
+- [_burn(account, value)](#ERC20-_burn-address-uint256-)
+- [_approve(owner, spender, value)](#ERC20-_approve-address-address-uint256-)
+- [_approve(owner, spender, value, emitEvent)](#ERC20-_approve-address-address-uint256-bool-)
+- [_spendAllowance(owner, spender, value)](#ERC20-_spendAllowance-address-address-uint256-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+- [DepositClaimable(controller, requestId, assets, shares)](#ERC7540AdminDeposit-DepositClaimable-address-uint256-uint256-uint256-)
+<details>
+<summary>IERC4626</summary>
+
+- [Deposit(sender, owner, assets, shares)](#IERC4626-Deposit-address-address-uint256-uint256-)
+- [Withdraw(sender, receiver, owner, assets, shares)](#IERC4626-Withdraw-address-address-address-uint256-uint256-)
+
+</details>
+<details>
+<summary>IERC20</summary>
+
+- [Transfer(from, to, value)](#IERC20-Transfer-address-address-uint256-)
+- [Approval(owner, spender, value)](#IERC20-Approval-address-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Redeem</summary>
+
+- [RedeemRequest(controller, owner, requestId, sender, shares)](#IERC7540Redeem-RedeemRequest-address-address-uint256-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Deposit</summary>
+
+- [DepositRequest(controller, owner, requestId, sender, assets)](#IERC7540Deposit-DepositRequest-address-address-uint256-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Operator</summary>
+
+- [OperatorSet(controller, operator, approved)](#IERC7540Operator-OperatorSet-address-address-bool-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [ERC7540DepositInsufficientPendingAssets(assets, pendingAssets)](#ERC7540AdminDeposit-ERC7540DepositInsufficientPendingAssets-uint256-uint256-)
+<details>
+<summary>ERC7540</summary>
+
+- [ERC4626ExceededMaxDeposit(receiver, assets, max)](#ERC7540-ERC4626ExceededMaxDeposit-address-uint256-uint256-)
+- [ERC4626ExceededMaxMint(receiver, shares, max)](#ERC7540-ERC4626ExceededMaxMint-address-uint256-uint256-)
+- [ERC4626ExceededMaxWithdraw(owner, assets, max)](#ERC7540-ERC4626ExceededMaxWithdraw-address-uint256-uint256-)
+- [ERC4626ExceededMaxRedeem(owner, shares, max)](#ERC7540-ERC4626ExceededMaxRedeem-address-uint256-uint256-)
+- [ERC7540InvalidOperator(controller, operator)](#ERC7540-ERC7540InvalidOperator-address-address-)
+- [ERC7540SyncDeposit()](#ERC7540-ERC7540SyncDeposit--)
+- [ERC7540AsyncDeposit()](#ERC7540-ERC7540AsyncDeposit--)
+- [ERC7540SyncRedeem()](#ERC7540-ERC7540SyncRedeem--)
+- [ERC7540AsyncRedeem()](#ERC7540-ERC7540AsyncRedeem--)
+- [ERC7540MissingAsync()](#ERC7540-ERC7540MissingAsync--)
+- [ERC7540UnauthorizedMintSharesOnDepositFulfill()](#ERC7540-ERC7540UnauthorizedMintSharesOnDepositFulfill--)
+- [ERC7540UnauthorizedBurnSharesOnRedeemFulfill()](#ERC7540-ERC7540UnauthorizedBurnSharesOnRedeemFulfill--)
+
+</details>
+<details>
+<summary>IERC20Errors</summary>
+
+- [ERC20InsufficientBalance(sender, balance, needed)](#IERC20Errors-ERC20InsufficientBalance-address-uint256-uint256-)
+- [ERC20InvalidSender(sender)](#IERC20Errors-ERC20InvalidSender-address-)
+- [ERC20InvalidReceiver(receiver)](#IERC20Errors-ERC20InvalidReceiver-address-)
+- [ERC20InsufficientAllowance(spender, allowance, needed)](#IERC20Errors-ERC20InsufficientAllowance-address-uint256-uint256-)
+- [ERC20InvalidApprover(approver)](#IERC20Errors-ERC20InvalidApprover-address-)
+- [ERC20InvalidSpender(spender)](#IERC20Errors-ERC20InvalidSpender-address-)
+
+</details>
+</div>
+</div>
+
+<a id="ERC7540AdminDeposit-_isDepositAsync--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_isDepositAsync() → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540AdminDeposit-_isDepositAsync--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns `true` if the deposit flow is asynchronous (Request-based). When `false`, [`ERC7540.deposit`](#ERC7540-deposit-uint256-address-address-) and
+[`ERC7540.mint`](#ERC7540-mint-uint256-address-address-) behave as standard synchronous ERC-4626 operations.
+
+Override to return `true` in extensions that provide an async deposit fulfillment strategy.
+
+</div>
+</div>
+
+<a id="ERC7540AdminDeposit-_requestDeposit-uint256-address-address-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_requestDeposit(uint256 assets, address controller, address owner, uint256 requestId) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540AdminDeposit-_requestDeposit-uint256-address-address-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Records per-controller pending state before delegating to [`ERC7540._requestDeposit`](#ERC7540-_requestDeposit-uint256-address-address-uint256-).
+
+</div>
+</div>
+
+<a id="ERC7540AdminDeposit-_fulfillDeposit-uint256-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_fulfillDeposit(uint256 assets, uint256 shares, address controller)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540AdminDeposit-_fulfillDeposit-uint256-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Fulfills a pending deposit request by transitioning it from Pending to Claimable state.
+
+The caller provides both `assets` and `shares`, locking the exchange rate at fulfillment time.
+The fulfiller should ensure the vault's `totalAssets()` already reflects the deposited assets
+(e.g. after deploying them to a yield source) to avoid diluting existing holders.
+
+Emits a [`ERC7540AdminDeposit.DepositClaimable`](#ERC7540AdminDeposit-DepositClaimable-address-uint256-uint256-uint256-) event.
+
+Requirements:
+
+* `assets` must not exceed the pending deposit amount for the `controller`.
+
+<Callout>
+Multiple fulfillments with different exchange rates will blend into a weighted average.
+For example, fulfilling 50 assets → 100 shares (2:1) then 50 assets → 25 shares (0.5:1) produces
+claimableAssets=100 and claimableShares=125. A partial claim of 50 assets yields
+`mulDiv(50, 125, 100) = 62` shares: the weighted average rate, not either original rate.
+Integrators expecting per-fulfillment rate isolation should use a different strategy (e.g. epochs).
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7540AdminDeposit-_consumeClaimableDeposit-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_consumeClaimableDeposit(uint256 assets, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540AdminDeposit-_consumeClaimableDeposit-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Consumes `assets` from the claimable deposit and returns the proportional shares (rounded down).
+
+</div>
+</div>
+
+<a id="ERC7540AdminDeposit-_consumeClaimableMint-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_consumeClaimableMint(uint256 shares, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540AdminDeposit-_consumeClaimableMint-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Consumes `shares` from the claimable deposit and returns the proportional assets (rounded up).
+
+</div>
+</div>
+
+<a id="ERC7540AdminDeposit-_pendingDepositRequest-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_pendingDepositRequest(uint256, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540AdminDeposit-_pendingDepositRequest-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the amount of assets in Pending state for `controller` with the given `requestId`.
+
+</div>
+</div>
+
+<a id="ERC7540AdminDeposit-_claimableDepositRequest-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_claimableDepositRequest(uint256, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540AdminDeposit-_claimableDepositRequest-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the amount of assets in Claimable state for `controller` with the given `requestId`.
+
+</div>
+</div>
+
+<a id="ERC7540AdminDeposit-_asyncMaxDeposit-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_asyncMaxDeposit(address owner) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540AdminDeposit-_asyncMaxDeposit-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the maximum assets that can be claimed via [`ERC7540.deposit`](#ERC7540-deposit-uint256-address-address-) for an async `owner`.
+
+</div>
+</div>
+
+<a id="ERC7540AdminDeposit-_asyncMaxMint-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_asyncMaxMint(address owner) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540AdminDeposit-_asyncMaxMint-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the maximum shares that can be claimed via [`ERC7540.mint`](#ERC7540-mint-uint256-address-address-) for an async `owner`.
+
+</div>
+</div>
+
+<a id="ERC7540AdminDeposit-DepositClaimable-address-uint256-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">DepositClaimable(address indexed controller, uint256 indexed requestId, uint256 assets, uint256 shares)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="#ERC7540AdminDeposit-DepositClaimable-address-uint256-uint256-uint256-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when a deposit request transitions from Pending to Claimable.
+
+</div>
+</div>
+
+<a id="ERC7540AdminDeposit-ERC7540DepositInsufficientPendingAssets-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7540DepositInsufficientPendingAssets(uint256 assets, uint256 pendingAssets)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7540AdminDeposit-ERC7540DepositInsufficientPendingAssets-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The `assets` to fulfill exceeds the `pendingAssets` for the controller.
+
+</div>
+</div>
+
+<a id="ERC7540AdminRedeem"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC7540AdminRedeem` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-community-contracts/blob/v0.0.1/contracts/token/ERC20/extensions/ERC7540AdminRedeem.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/community-contracts/contracts/token/ERC20/extensions/ERC7540AdminRedeem.sol";
+```
+
+Admin-controlled (operator-triggered) fulfillment strategy for asynchronous redemptions.
+
+Extends [`ERC7540`](#ERC7540) with a redeem flow where a privileged caller explicitly transitions requests
+from Pending to Claimable by calling [`ERC7540AdminRedeem._fulfillRedeem`](#ERC7540AdminRedeem-_fulfillRedeem-uint256-uint256-address-). The caller provides both the `shares`
+amount and the corresponding `assets`, giving the fulfiller explicit control over the exchange rate.
+
+The fulfiller must ensure the vault holds enough underlying assets before calling [`ERC7540AdminRedeem._fulfillRedeem`](#ERC7540AdminRedeem-_fulfillRedeem-uint256-uint256-address-).
+Asset sourcing (unwinding positions, bridging cross-chain, etc.) is application-specific and is
+not part of this contract.
+
+Production equivalents include
+[USDai](https://github.com/usdai-foundation/usdai-contracts/blob/main/src/StakedUSDai.sol),
+[Nest (Plume)](https://github.com/plumenetwork/nest-protocol/blob/main/contracts/NestVaultCore.sol),
+[MetaVault](https://github.com/turingcapitalgroup/metaVault/blob/main/src/MetaVault.sol), and
+[Centrifuge](https://github.com/centrifuge/protocol/blob/main/src/vaults/AsyncVault.sol).
+
+All requests share `requestId = 0` (per-controller accounting only).
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [_isRedeemAsync()](#ERC7540AdminRedeem-_isRedeemAsync--)
+- [_requestRedeem(shares, controller, owner, requestId)](#ERC7540AdminRedeem-_requestRedeem-uint256-address-address-uint256-)
+- [_fulfillRedeem(shares, assets, controller)](#ERC7540AdminRedeem-_fulfillRedeem-uint256-uint256-address-)
+- [_consumeClaimableWithdraw(assets, controller)](#ERC7540AdminRedeem-_consumeClaimableWithdraw-uint256-address-)
+- [_consumeClaimableRedeem(shares, controller)](#ERC7540AdminRedeem-_consumeClaimableRedeem-uint256-address-)
+- [_pendingRedeemRequest(, controller)](#ERC7540AdminRedeem-_pendingRedeemRequest-uint256-address-)
+- [_claimableRedeemRequest(, controller)](#ERC7540AdminRedeem-_claimableRedeemRequest-uint256-address-)
+- [_asyncMaxWithdraw(owner)](#ERC7540AdminRedeem-_asyncMaxWithdraw-address-)
+- [_asyncMaxRedeem(owner)](#ERC7540AdminRedeem-_asyncMaxRedeem-address-)
+<details>
+<summary>ERC7540</summary>
+
+- [supportsInterface(interfaceId)](#ERC7540-supportsInterface-bytes4-)
+- [isOperator(controller, operator)](#ERC7540-isOperator-address-address-)
+- [setOperator(operator, approved)](#ERC7540-setOperator-address-bool-)
+- [_setOperator(controller, operator, approved)](#ERC7540-_setOperator-address-address-bool-)
+- [_checkOperatorOrController(async, controller, operator)](#ERC7540-_checkOperatorOrController-bool-address-address-)
+- [decimals()](#ERC7540-decimals--)
+- [asset()](#ERC7540-asset--)
+- [share()](#ERC7540-share--)
+- [vault(asset_)](#ERC7540-vault-address-)
+- [totalAssets()](#ERC7540-totalAssets--)
+- [totalSupply()](#ERC7540-totalSupply--)
+- [pendingDepositRequest(requestId, controller)](#ERC7540-pendingDepositRequest-uint256-address-)
+- [claimableDepositRequest(requestId, controller)](#ERC7540-claimableDepositRequest-uint256-address-)
+- [pendingRedeemRequest(requestId, controller)](#ERC7540-pendingRedeemRequest-uint256-address-)
+- [claimableRedeemRequest(requestId, controller)](#ERC7540-claimableRedeemRequest-uint256-address-)
+- [totalPendingDepositAssets()](#ERC7540-totalPendingDepositAssets--)
+- [totalPendingRedeemShares()](#ERC7540-totalPendingRedeemShares--)
+- [convertToShares(assets)](#ERC7540-convertToShares-uint256-)
+- [convertToAssets(shares)](#ERC7540-convertToAssets-uint256-)
+- [maxDeposit(owner)](#ERC7540-maxDeposit-address-)
+- [maxMint(owner)](#ERC7540-maxMint-address-)
+- [maxWithdraw(owner)](#ERC7540-maxWithdraw-address-)
+- [maxRedeem(owner)](#ERC7540-maxRedeem-address-)
+- [previewDeposit(assets)](#ERC7540-previewDeposit-uint256-)
+- [previewMint(shares)](#ERC7540-previewMint-uint256-)
+- [previewWithdraw(assets)](#ERC7540-previewWithdraw-uint256-)
+- [previewRedeem(shares)](#ERC7540-previewRedeem-uint256-)
+- [requestDeposit(assets, controller, owner)](#ERC7540-requestDeposit-uint256-address-address-)
+- [deposit(assets, receiver)](#ERC7540-deposit-uint256-address-)
+- [deposit(assets, receiver, controller)](#ERC7540-deposit-uint256-address-address-)
+- [mint(shares, receiver)](#ERC7540-mint-uint256-address-)
+- [mint(shares, receiver, controller)](#ERC7540-mint-uint256-address-address-)
+- [requestRedeem(shares, controller, owner)](#ERC7540-requestRedeem-uint256-address-address-)
+- [withdraw(assets, receiver, ownerOrController)](#ERC7540-withdraw-uint256-address-address-)
+- [redeem(shares, receiver, ownerOrController)](#ERC7540-redeem-uint256-address-address-)
+- [_convertToShares(assets, rounding)](#ERC7540-_convertToShares-uint256-enum-Math-Rounding-)
+- [_convertToAssets(shares, rounding)](#ERC7540-_convertToAssets-uint256-enum-Math-Rounding-)
+- [_requestDeposit(assets, controller, owner, requestId)](#ERC7540-_requestDeposit-uint256-address-address-uint256-)
+- [_mintSharesOnDepositFulfill(assets, shares)](#ERC7540-_mintSharesOnDepositFulfill-uint256-uint256-)
+- [_deposit(callerOrController, receiver, assets, shares)](#ERC7540-_deposit-address-address-uint256-uint256-)
+- [_burnSharesOnRedeemFulfill(, shares)](#ERC7540-_burnSharesOnRedeemFulfill-uint256-uint256-)
+- [_withdraw(caller, receiver, owner, assets, shares)](#ERC7540-_withdraw-address-address-address-uint256-uint256-)
+- [_transferIn(from, assets)](#ERC7540-_transferIn-address-uint256-)
+- [_transferOut(to, assets)](#ERC7540-_transferOut-address-uint256-)
+- [_decimalsOffset()](#ERC7540-_decimalsOffset--)
+- [_depositShareOrigin()](#ERC7540-_depositShareOrigin--)
+- [_redeemShareDestination()](#ERC7540-_redeemShareDestination--)
+- [_isDepositAsync()](#ERC7540-_isDepositAsync--)
+- [_pendingDepositRequest(, )](#ERC7540-_pendingDepositRequest-uint256-address-)
+- [_claimableDepositRequest(, )](#ERC7540-_claimableDepositRequest-uint256-address-)
+- [_consumeClaimableDeposit(, )](#ERC7540-_consumeClaimableDeposit-uint256-address-)
+- [_consumeClaimableMint(, )](#ERC7540-_consumeClaimableMint-uint256-address-)
+- [_asyncMaxDeposit()](#ERC7540-_asyncMaxDeposit-address-)
+- [_asyncMaxMint()](#ERC7540-_asyncMaxMint-address-)
+
+</details>
+<details>
+<summary>ERC20</summary>
+
+- [name()](#ERC20-name--)
+- [symbol()](#ERC20-symbol--)
+- [balanceOf(account)](#ERC20-balanceOf-address-)
+- [transfer(to, value)](#ERC20-transfer-address-uint256-)
+- [allowance(owner, spender)](#ERC20-allowance-address-address-)
+- [approve(spender, value)](#ERC20-approve-address-uint256-)
+- [transferFrom(from, to, value)](#ERC20-transferFrom-address-address-uint256-)
+- [_transfer(from, to, value)](#ERC20-_transfer-address-address-uint256-)
+- [_update(from, to, value)](#ERC20-_update-address-address-uint256-)
+- [_mint(account, value)](#ERC20-_mint-address-uint256-)
+- [_burn(account, value)](#ERC20-_burn-address-uint256-)
+- [_approve(owner, spender, value)](#ERC20-_approve-address-address-uint256-)
+- [_approve(owner, spender, value, emitEvent)](#ERC20-_approve-address-address-uint256-bool-)
+- [_spendAllowance(owner, spender, value)](#ERC20-_spendAllowance-address-address-uint256-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+- [RedeemClaimable(controller, requestId, assets, shares)](#ERC7540AdminRedeem-RedeemClaimable-address-uint256-uint256-uint256-)
+<details>
+<summary>IERC4626</summary>
+
+- [Deposit(sender, owner, assets, shares)](#IERC4626-Deposit-address-address-uint256-uint256-)
+- [Withdraw(sender, receiver, owner, assets, shares)](#IERC4626-Withdraw-address-address-address-uint256-uint256-)
+
+</details>
+<details>
+<summary>IERC20</summary>
+
+- [Transfer(from, to, value)](#IERC20-Transfer-address-address-uint256-)
+- [Approval(owner, spender, value)](#IERC20-Approval-address-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Redeem</summary>
+
+- [RedeemRequest(controller, owner, requestId, sender, shares)](#IERC7540Redeem-RedeemRequest-address-address-uint256-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Deposit</summary>
+
+- [DepositRequest(controller, owner, requestId, sender, assets)](#IERC7540Deposit-DepositRequest-address-address-uint256-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Operator</summary>
+
+- [OperatorSet(controller, operator, approved)](#IERC7540Operator-OperatorSet-address-address-bool-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [ERC7540RedeemInsufficientPendingShares(shares, pendingShares)](#ERC7540AdminRedeem-ERC7540RedeemInsufficientPendingShares-uint256-uint256-)
+<details>
+<summary>ERC7540</summary>
+
+- [ERC4626ExceededMaxDeposit(receiver, assets, max)](#ERC7540-ERC4626ExceededMaxDeposit-address-uint256-uint256-)
+- [ERC4626ExceededMaxMint(receiver, shares, max)](#ERC7540-ERC4626ExceededMaxMint-address-uint256-uint256-)
+- [ERC4626ExceededMaxWithdraw(owner, assets, max)](#ERC7540-ERC4626ExceededMaxWithdraw-address-uint256-uint256-)
+- [ERC4626ExceededMaxRedeem(owner, shares, max)](#ERC7540-ERC4626ExceededMaxRedeem-address-uint256-uint256-)
+- [ERC7540InvalidOperator(controller, operator)](#ERC7540-ERC7540InvalidOperator-address-address-)
+- [ERC7540SyncDeposit()](#ERC7540-ERC7540SyncDeposit--)
+- [ERC7540AsyncDeposit()](#ERC7540-ERC7540AsyncDeposit--)
+- [ERC7540SyncRedeem()](#ERC7540-ERC7540SyncRedeem--)
+- [ERC7540AsyncRedeem()](#ERC7540-ERC7540AsyncRedeem--)
+- [ERC7540MissingAsync()](#ERC7540-ERC7540MissingAsync--)
+- [ERC7540UnauthorizedMintSharesOnDepositFulfill()](#ERC7540-ERC7540UnauthorizedMintSharesOnDepositFulfill--)
+- [ERC7540UnauthorizedBurnSharesOnRedeemFulfill()](#ERC7540-ERC7540UnauthorizedBurnSharesOnRedeemFulfill--)
+
+</details>
+<details>
+<summary>IERC20Errors</summary>
+
+- [ERC20InsufficientBalance(sender, balance, needed)](#IERC20Errors-ERC20InsufficientBalance-address-uint256-uint256-)
+- [ERC20InvalidSender(sender)](#IERC20Errors-ERC20InvalidSender-address-)
+- [ERC20InvalidReceiver(receiver)](#IERC20Errors-ERC20InvalidReceiver-address-)
+- [ERC20InsufficientAllowance(spender, allowance, needed)](#IERC20Errors-ERC20InsufficientAllowance-address-uint256-uint256-)
+- [ERC20InvalidApprover(approver)](#IERC20Errors-ERC20InvalidApprover-address-)
+- [ERC20InvalidSpender(spender)](#IERC20Errors-ERC20InvalidSpender-address-)
+
+</details>
+</div>
+</div>
+
+<a id="ERC7540AdminRedeem-_isRedeemAsync--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_isRedeemAsync() → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540AdminRedeem-_isRedeemAsync--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns `true` if the redeem flow is asynchronous (Request-based). When `false`, [`ERC7540.withdraw`](#ERC7540-withdraw-uint256-address-address-) and
+[`ERC7540.redeem`](#ERC7540-redeem-uint256-address-address-) behave as standard synchronous ERC-4626 operations.
+
+Override to return `true` in extensions that provide an async redeem fulfillment strategy.
+
+</div>
+</div>
+
+<a id="ERC7540AdminRedeem-_requestRedeem-uint256-address-address-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_requestRedeem(uint256 shares, address controller, address owner, uint256 requestId) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540AdminRedeem-_requestRedeem-uint256-address-address-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Records per-controller pending state before delegating to [`ERC7540._requestRedeem`](#ERC7540-_requestRedeem-uint256-address-address-uint256-).
+
+</div>
+</div>
+
+<a id="ERC7540AdminRedeem-_fulfillRedeem-uint256-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_fulfillRedeem(uint256 shares, uint256 assets, address controller)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540AdminRedeem-_fulfillRedeem-uint256-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Fulfills a pending redeem request by transitioning it from Pending to Claimable state.
+
+The caller provides both `shares` and `assets`, locking the exchange rate at fulfillment time.
+The fulfiller must ensure the vault holds enough underlying assets to cover the `assets` amount
+before calling this function.
+
+Emits a [`ERC7540AdminRedeem.RedeemClaimable`](#ERC7540AdminRedeem-RedeemClaimable-address-uint256-uint256-uint256-) event.
+
+Requirements:
+
+* `shares` must not exceed the pending redeem amount for the `controller`.
+
+</div>
+</div>
+
+<a id="ERC7540AdminRedeem-_consumeClaimableWithdraw-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_consumeClaimableWithdraw(uint256 assets, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540AdminRedeem-_consumeClaimableWithdraw-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Consumes `assets` from the claimable redeem and returns the proportional shares (rounded up).
+
+</div>
+</div>
+
+<a id="ERC7540AdminRedeem-_consumeClaimableRedeem-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_consumeClaimableRedeem(uint256 shares, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540AdminRedeem-_consumeClaimableRedeem-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Consumes `shares` from the claimable redeem and returns the proportional assets (rounded down).
+
+</div>
+</div>
+
+<a id="ERC7540AdminRedeem-_pendingRedeemRequest-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_pendingRedeemRequest(uint256, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540AdminRedeem-_pendingRedeemRequest-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the amount of shares in Pending state for `controller` with the given `requestId`.
+
+</div>
+</div>
+
+<a id="ERC7540AdminRedeem-_claimableRedeemRequest-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_claimableRedeemRequest(uint256, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540AdminRedeem-_claimableRedeemRequest-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the amount of shares in Claimable state for `controller` with the given `requestId`.
+
+</div>
+</div>
+
+<a id="ERC7540AdminRedeem-_asyncMaxWithdraw-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_asyncMaxWithdraw(address owner) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540AdminRedeem-_asyncMaxWithdraw-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the maximum assets that can be claimed via [`ERC7540.withdraw`](#ERC7540-withdraw-uint256-address-address-) for an async `owner`.
+
+</div>
+</div>
+
+<a id="ERC7540AdminRedeem-_asyncMaxRedeem-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_asyncMaxRedeem(address owner) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540AdminRedeem-_asyncMaxRedeem-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the maximum shares that can be claimed via [`ERC7540.redeem`](#ERC7540-redeem-uint256-address-address-) for an async `owner`.
+
+</div>
+</div>
+
+<a id="ERC7540AdminRedeem-RedeemClaimable-address-uint256-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">RedeemClaimable(address indexed controller, uint256 indexed requestId, uint256 assets, uint256 shares)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="#ERC7540AdminRedeem-RedeemClaimable-address-uint256-uint256-uint256-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when a redeem request transitions from Pending to Claimable.
+
+</div>
+</div>
+
+<a id="ERC7540AdminRedeem-ERC7540RedeemInsufficientPendingShares-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7540RedeemInsufficientPendingShares(uint256 shares, uint256 pendingShares)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7540AdminRedeem-ERC7540RedeemInsufficientPendingShares-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The `shares` to fulfill exceeds the `pendingShares` for the controller.
+
+</div>
+</div>
+
+<a id="ERC7540DelayDeposit"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC7540DelayDeposit` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-community-contracts/blob/v0.0.1/contracts/token/ERC20/extensions/ERC7540DelayDeposit.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/community-contracts/contracts/token/ERC20/extensions/ERC7540DelayDeposit.sol";
+```
+
+Time-delay fulfillment strategy for asynchronous deposits.
+
+Extends [`ERC7540`](#ERC7540) with a deposit flow where requests become **permissionlessly claimable** after a
+configurable waiting period. No privileged fulfiller is needed — once the delay elapses, the
+controller (or any keeper) can claim. The exchange rate is computed at claim time using the vault's
+live [`ERC7540.convertToShares`](#ERC7540-convertToShares-uint256-).
+
+Production equivalents (redeem side):
+[BeefySonic](https://github.com/beefyfinance/beefy-sonic/blob/main/contracts/BeefySonic.sol),
+[MagmaV2](https://github.com/MagmaStaking/contracts-public/blob/live/src/MagmaV2.sol),
+[Tangle](https://github.com/tangle-network/tnt-core/blob/main/src/staking/LiquidDelegationVault.sol).
+
+Requests are tracked using `Checkpoints-Trace208`, storing cumulative deposit amounts keyed by
+their maturity timepoint. The `requestId` returned by [`ERC7540.requestDeposit`](#ERC7540-requestDeposit-uint256-address-address-) equals the absolute
+timestamp at which the request becomes claimable (`clock() + depositDelay(controller)`).
+
+Override [`ERC7540DelayDeposit.depositDelay`](#ERC7540DelayDeposit-depositDelay-address-) to customize the waiting period (default: 1 hour) and [`ERC20Collateral.clock`](#ERC20Collateral-clock--) to
+change the time source (default: `block.timestamp`).
+
+<Callout>
+This module does not support temporary share custody through [`ERC7540._depositShareOrigin`](#ERC7540-_depositShareOrigin--). The constructor
+tries to enforce that property, but the check may be insufficient if [`ERC7540._depositShareOrigin`](#ERC7540-_depositShareOrigin--) reads from
+storage that is not yet initialized when the parent's constructor runs
+</Callout>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [constructor()](#ERC7540DelayDeposit-constructor--)
+- [clock()](#ERC7540DelayDeposit-clock--)
+- [CLOCK_MODE()](#ERC7540DelayDeposit-CLOCK_MODE--)
+- [depositDelay()](#ERC7540DelayDeposit-depositDelay-address-)
+- [_isDepositAsync()](#ERC7540DelayDeposit-_isDepositAsync--)
+- [_requestDeposit(assets, controller, owner, )](#ERC7540DelayDeposit-_requestDeposit-uint256-address-address-uint256-)
+- [_consumeClaimableDeposit(assets, controller)](#ERC7540DelayDeposit-_consumeClaimableDeposit-uint256-address-)
+- [_consumeClaimableMint(shares, controller)](#ERC7540DelayDeposit-_consumeClaimableMint-uint256-address-)
+- [_pendingDepositRequest(requestId, controller)](#ERC7540DelayDeposit-_pendingDepositRequest-uint256-address-)
+- [_claimableDepositRequest(requestId, controller)](#ERC7540DelayDeposit-_claimableDepositRequest-uint256-address-)
+- [_asyncMaxDeposit(owner)](#ERC7540DelayDeposit-_asyncMaxDeposit-address-)
+- [_asyncMaxMint(owner)](#ERC7540DelayDeposit-_asyncMaxMint-address-)
+- [_readyDepositAt(owner, timepoint)](#ERC7540DelayDeposit-_readyDepositAt-address-uint48-)
+<details>
+<summary>ERC7540</summary>
+
+- [supportsInterface(interfaceId)](#ERC7540-supportsInterface-bytes4-)
+- [isOperator(controller, operator)](#ERC7540-isOperator-address-address-)
+- [setOperator(operator, approved)](#ERC7540-setOperator-address-bool-)
+- [_setOperator(controller, operator, approved)](#ERC7540-_setOperator-address-address-bool-)
+- [_checkOperatorOrController(async, controller, operator)](#ERC7540-_checkOperatorOrController-bool-address-address-)
+- [decimals()](#ERC7540-decimals--)
+- [asset()](#ERC7540-asset--)
+- [share()](#ERC7540-share--)
+- [vault(asset_)](#ERC7540-vault-address-)
+- [totalAssets()](#ERC7540-totalAssets--)
+- [totalSupply()](#ERC7540-totalSupply--)
+- [pendingDepositRequest(requestId, controller)](#ERC7540-pendingDepositRequest-uint256-address-)
+- [claimableDepositRequest(requestId, controller)](#ERC7540-claimableDepositRequest-uint256-address-)
+- [pendingRedeemRequest(requestId, controller)](#ERC7540-pendingRedeemRequest-uint256-address-)
+- [claimableRedeemRequest(requestId, controller)](#ERC7540-claimableRedeemRequest-uint256-address-)
+- [totalPendingDepositAssets()](#ERC7540-totalPendingDepositAssets--)
+- [totalPendingRedeemShares()](#ERC7540-totalPendingRedeemShares--)
+- [convertToShares(assets)](#ERC7540-convertToShares-uint256-)
+- [convertToAssets(shares)](#ERC7540-convertToAssets-uint256-)
+- [maxDeposit(owner)](#ERC7540-maxDeposit-address-)
+- [maxMint(owner)](#ERC7540-maxMint-address-)
+- [maxWithdraw(owner)](#ERC7540-maxWithdraw-address-)
+- [maxRedeem(owner)](#ERC7540-maxRedeem-address-)
+- [previewDeposit(assets)](#ERC7540-previewDeposit-uint256-)
+- [previewMint(shares)](#ERC7540-previewMint-uint256-)
+- [previewWithdraw(assets)](#ERC7540-previewWithdraw-uint256-)
+- [previewRedeem(shares)](#ERC7540-previewRedeem-uint256-)
+- [requestDeposit(assets, controller, owner)](#ERC7540-requestDeposit-uint256-address-address-)
+- [deposit(assets, receiver)](#ERC7540-deposit-uint256-address-)
+- [deposit(assets, receiver, controller)](#ERC7540-deposit-uint256-address-address-)
+- [mint(shares, receiver)](#ERC7540-mint-uint256-address-)
+- [mint(shares, receiver, controller)](#ERC7540-mint-uint256-address-address-)
+- [requestRedeem(shares, controller, owner)](#ERC7540-requestRedeem-uint256-address-address-)
+- [withdraw(assets, receiver, ownerOrController)](#ERC7540-withdraw-uint256-address-address-)
+- [redeem(shares, receiver, ownerOrController)](#ERC7540-redeem-uint256-address-address-)
+- [_convertToShares(assets, rounding)](#ERC7540-_convertToShares-uint256-enum-Math-Rounding-)
+- [_convertToAssets(shares, rounding)](#ERC7540-_convertToAssets-uint256-enum-Math-Rounding-)
+- [_mintSharesOnDepositFulfill(assets, shares)](#ERC7540-_mintSharesOnDepositFulfill-uint256-uint256-)
+- [_deposit(callerOrController, receiver, assets, shares)](#ERC7540-_deposit-address-address-uint256-uint256-)
+- [_requestRedeem(shares, controller, owner, requestId)](#ERC7540-_requestRedeem-uint256-address-address-uint256-)
+- [_burnSharesOnRedeemFulfill(, shares)](#ERC7540-_burnSharesOnRedeemFulfill-uint256-uint256-)
+- [_withdraw(caller, receiver, owner, assets, shares)](#ERC7540-_withdraw-address-address-address-uint256-uint256-)
+- [_transferIn(from, assets)](#ERC7540-_transferIn-address-uint256-)
+- [_transferOut(to, assets)](#ERC7540-_transferOut-address-uint256-)
+- [_decimalsOffset()](#ERC7540-_decimalsOffset--)
+- [_depositShareOrigin()](#ERC7540-_depositShareOrigin--)
+- [_redeemShareDestination()](#ERC7540-_redeemShareDestination--)
+- [_isRedeemAsync()](#ERC7540-_isRedeemAsync--)
+- [_pendingRedeemRequest(, )](#ERC7540-_pendingRedeemRequest-uint256-address-)
+- [_claimableRedeemRequest(, )](#ERC7540-_claimableRedeemRequest-uint256-address-)
+- [_consumeClaimableWithdraw(, )](#ERC7540-_consumeClaimableWithdraw-uint256-address-)
+- [_consumeClaimableRedeem(, )](#ERC7540-_consumeClaimableRedeem-uint256-address-)
+- [_asyncMaxWithdraw()](#ERC7540-_asyncMaxWithdraw-address-)
+- [_asyncMaxRedeem()](#ERC7540-_asyncMaxRedeem-address-)
+
+</details>
+<details>
+<summary>ERC20</summary>
+
+- [name()](#ERC20-name--)
+- [symbol()](#ERC20-symbol--)
+- [balanceOf(account)](#ERC20-balanceOf-address-)
+- [transfer(to, value)](#ERC20-transfer-address-uint256-)
+- [allowance(owner, spender)](#ERC20-allowance-address-address-)
+- [approve(spender, value)](#ERC20-approve-address-uint256-)
+- [transferFrom(from, to, value)](#ERC20-transferFrom-address-address-uint256-)
+- [_transfer(from, to, value)](#ERC20-_transfer-address-address-uint256-)
+- [_update(from, to, value)](#ERC20-_update-address-address-uint256-)
+- [_mint(account, value)](#ERC20-_mint-address-uint256-)
+- [_burn(account, value)](#ERC20-_burn-address-uint256-)
+- [_approve(owner, spender, value)](#ERC20-_approve-address-address-uint256-)
+- [_approve(owner, spender, value, emitEvent)](#ERC20-_approve-address-address-uint256-bool-)
+- [_spendAllowance(owner, spender, value)](#ERC20-_spendAllowance-address-address-uint256-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+<details>
+<summary>IERC4626</summary>
+
+- [Deposit(sender, owner, assets, shares)](#IERC4626-Deposit-address-address-uint256-uint256-)
+- [Withdraw(sender, receiver, owner, assets, shares)](#IERC4626-Withdraw-address-address-address-uint256-uint256-)
+
+</details>
+<details>
+<summary>IERC20</summary>
+
+- [Transfer(from, to, value)](#IERC20-Transfer-address-address-uint256-)
+- [Approval(owner, spender, value)](#IERC20-Approval-address-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Redeem</summary>
+
+- [RedeemRequest(controller, owner, requestId, sender, shares)](#IERC7540Redeem-RedeemRequest-address-address-uint256-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Deposit</summary>
+
+- [DepositRequest(controller, owner, requestId, sender, assets)](#IERC7540Deposit-DepositRequest-address-address-uint256-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Operator</summary>
+
+- [OperatorSet(controller, operator, approved)](#IERC7540Operator-OperatorSet-address-address-bool-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [ERC7540DelayInvalidDepositShareOrigin()](#ERC7540DelayDeposit-ERC7540DelayInvalidDepositShareOrigin--)
+<details>
+<summary>ERC7540</summary>
+
+- [ERC4626ExceededMaxDeposit(receiver, assets, max)](#ERC7540-ERC4626ExceededMaxDeposit-address-uint256-uint256-)
+- [ERC4626ExceededMaxMint(receiver, shares, max)](#ERC7540-ERC4626ExceededMaxMint-address-uint256-uint256-)
+- [ERC4626ExceededMaxWithdraw(owner, assets, max)](#ERC7540-ERC4626ExceededMaxWithdraw-address-uint256-uint256-)
+- [ERC4626ExceededMaxRedeem(owner, shares, max)](#ERC7540-ERC4626ExceededMaxRedeem-address-uint256-uint256-)
+- [ERC7540InvalidOperator(controller, operator)](#ERC7540-ERC7540InvalidOperator-address-address-)
+- [ERC7540SyncDeposit()](#ERC7540-ERC7540SyncDeposit--)
+- [ERC7540AsyncDeposit()](#ERC7540-ERC7540AsyncDeposit--)
+- [ERC7540SyncRedeem()](#ERC7540-ERC7540SyncRedeem--)
+- [ERC7540AsyncRedeem()](#ERC7540-ERC7540AsyncRedeem--)
+- [ERC7540MissingAsync()](#ERC7540-ERC7540MissingAsync--)
+- [ERC7540UnauthorizedMintSharesOnDepositFulfill()](#ERC7540-ERC7540UnauthorizedMintSharesOnDepositFulfill--)
+- [ERC7540UnauthorizedBurnSharesOnRedeemFulfill()](#ERC7540-ERC7540UnauthorizedBurnSharesOnRedeemFulfill--)
+
+</details>
+<details>
+<summary>IERC20Errors</summary>
+
+- [ERC20InsufficientBalance(sender, balance, needed)](#IERC20Errors-ERC20InsufficientBalance-address-uint256-uint256-)
+- [ERC20InvalidSender(sender)](#IERC20Errors-ERC20InvalidSender-address-)
+- [ERC20InvalidReceiver(receiver)](#IERC20Errors-ERC20InvalidReceiver-address-)
+- [ERC20InsufficientAllowance(spender, allowance, needed)](#IERC20Errors-ERC20InsufficientAllowance-address-uint256-uint256-)
+- [ERC20InvalidApprover(approver)](#IERC20Errors-ERC20InvalidApprover-address-)
+- [ERC20InvalidSpender(spender)](#IERC20Errors-ERC20InvalidSpender-address-)
+
+</details>
+</div>
+</div>
+
+<a id="ERC7540DelayDeposit-constructor--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">constructor()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540DelayDeposit-constructor--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="ERC7540DelayDeposit-clock--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">clock() → uint48</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540DelayDeposit-clock--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Clock used for flagging checkpoints. Can be overridden to implement timestamp based checkpoints (and voting).
+
+</div>
+</div>
+
+<a id="ERC7540DelayDeposit-CLOCK_MODE--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">CLOCK_MODE() → string</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540DelayDeposit-CLOCK_MODE--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Description of the clock
+
+</div>
+</div>
+
+<a id="ERC7540DelayDeposit-depositDelay-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">depositDelay(address) → uint48</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540DelayDeposit-depositDelay-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the delay duration before a deposit request becomes claimable. Defaults to 1 hour.
+
+<Callout>
+For any given `controller`, the maturity timepoint `clock() + depositDelay(controller)` MUST
+be non-decreasing across successive [`ERC7540.requestDeposit`](#ERC7540-requestDeposit-uint256-address-address-) calls. Overrides that shrink the delay faster
+than `clock()` advances will cause new requests to revert until the previous maturity is reached.
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7540DelayDeposit-_isDepositAsync--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_isDepositAsync() → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540DelayDeposit-_isDepositAsync--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns `true` if the deposit flow is asynchronous (Request-based). When `false`, [`ERC7540.deposit`](#ERC7540-deposit-uint256-address-address-) and
+[`ERC7540.mint`](#ERC7540-mint-uint256-address-address-) behave as standard synchronous ERC-4626 operations.
+
+Override to return `true` in extensions that provide an async deposit fulfillment strategy.
+
+</div>
+</div>
+
+<a id="ERC7540DelayDeposit-_requestDeposit-uint256-address-address-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_requestDeposit(uint256 assets, address controller, address owner, uint256) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540DelayDeposit-_requestDeposit-uint256-address-address-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Pushes a new cumulative checkpoint at the maturity timepoint and delegates to
+[`ERC7540._requestDeposit`](#ERC7540-_requestDeposit-uint256-address-address-uint256-) with the timepoint as `requestId`.
+
+</div>
+</div>
+
+<a id="ERC7540DelayDeposit-_consumeClaimableDeposit-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_consumeClaimableDeposit(uint256 assets, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540DelayDeposit-_consumeClaimableDeposit-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Consumes `assets` from claimable deposits, returns proportional shares (rounded down).
+
+Requirements:
+
+* [`ERC7540.maxMint`](#ERC7540-maxMint-address-) must not be 0 for `controller`. Panics with division by zero otherwise.
+
+</div>
+</div>
+
+<a id="ERC7540DelayDeposit-_consumeClaimableMint-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_consumeClaimableMint(uint256 shares, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540DelayDeposit-_consumeClaimableMint-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Consumes `shares` from claimable deposits, returns proportional assets (rounded up).
+
+</div>
+</div>
+
+<a id="ERC7540DelayDeposit-_pendingDepositRequest-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_pendingDepositRequest(uint256 requestId, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540DelayDeposit-_pendingDepositRequest-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the assets in Pending state for a specific `requestId` (timepoint).
+A request is pending only if its timepoint is strictly in the future.
+
+</div>
+</div>
+
+<a id="ERC7540DelayDeposit-_claimableDepositRequest-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_claimableDepositRequest(uint256 requestId, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540DelayDeposit-_claimableDepositRequest-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the assets in Claimable state for a specific `requestId` (timepoint).
+A request is claimable once its timepoint has elapsed and the assets haven't been claimed yet.
+
+</div>
+</div>
+
+<a id="ERC7540DelayDeposit-_asyncMaxDeposit-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_asyncMaxDeposit(address owner) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540DelayDeposit-_asyncMaxDeposit-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the total claimable assets across all matured timepoints for `owner`.
+
+</div>
+</div>
+
+<a id="ERC7540DelayDeposit-_asyncMaxMint-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_asyncMaxMint(address owner) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540DelayDeposit-_asyncMaxMint-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the share-equivalent of [`ERC7540._asyncMaxDeposit`](#ERC7540-_asyncMaxDeposit-address-) (rounded down).
+
+</div>
+</div>
+
+<a id="ERC7540DelayDeposit-_readyDepositAt-address-uint48-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_readyDepositAt(address owner, uint48 timepoint) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540DelayDeposit-_readyDepositAt-address-uint48-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal helper: fetch the amount that is expected to be claimable at a given timepoint, if any.
+Any amount that has already been claimed is taken into consideration.
+
+</div>
+</div>
+
+<a id="ERC7540DelayDeposit-ERC7540DelayInvalidDepositShareOrigin--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7540DelayInvalidDepositShareOrigin()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7540DelayDeposit-ERC7540DelayInvalidDepositShareOrigin--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Triggered if [`ERC7540._depositShareOrigin`](#ERC7540-_depositShareOrigin--) is not address(0), as this is not supported by this module.
+
+</div>
+</div>
+
+<a id="ERC7540DelayRedeem"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC7540DelayRedeem` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-community-contracts/blob/v0.0.1/contracts/token/ERC20/extensions/ERC7540DelayRedeem.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/community-contracts/contracts/token/ERC20/extensions/ERC7540DelayRedeem.sol";
+```
+
+Time-delay fulfillment strategy for asynchronous redemptions.
+
+Extends [`ERC7540`](#ERC7540) with a redeem flow where requests become **permissionlessly claimable** after a
+configurable waiting period. No privileged fulfiller is needed — once the delay elapses, the
+controller (or any keeper) can claim. The exchange rate is computed at claim time using the vault's
+live [`ERC7540.convertToAssets`](#ERC7540-convertToAssets-uint256-).
+
+Production equivalents:
+[BeefySonic](https://github.com/beefyfinance/beefy-sonic/blob/main/contracts/BeefySonic.sol) (protocol-dictated SFC unbonding),
+[MagmaV2](https://github.com/MagmaStaking/contracts-public/blob/live/src/MagmaV2.sol) (admin-configurable delay),
+[Tangle](https://github.com/tangle-network/tnt-core/blob/main/src/staking/LiquidDelegationVault.sol) (protocol-dictated).
+
+Requests are tracked using `Checkpoints-Trace208`, storing cumulative redeem amounts keyed by
+their maturity timepoint. The `requestId` returned by [`ERC7540.requestRedeem`](#ERC7540-requestRedeem-uint256-address-address-) equals the absolute
+timestamp at which the request becomes claimable (`clock() + redeemDelay(controller)`).
+
+Override [`ERC7540DelayRedeem.redeemDelay`](#ERC7540DelayRedeem-redeemDelay-address-) to customize the waiting period (default: 1 hour) and [`ERC20Collateral.clock`](#ERC20Collateral-clock--) to
+change the time source (default: `block.timestamp`).
+
+<Callout>
+This module does not support temporary share custody through [`ERC7540._redeemShareDestination`](#ERC7540-_redeemShareDestination--). The constructor
+tries to enforce that property, but the check may be insufficient if [`ERC7540._redeemShareDestination`](#ERC7540-_redeemShareDestination--) reads from
+storage that is not yet initialized when the parent's constructor runs.
+</Callout>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [constructor()](#ERC7540DelayRedeem-constructor--)
+- [clock()](#ERC7540DelayRedeem-clock--)
+- [CLOCK_MODE()](#ERC7540DelayRedeem-CLOCK_MODE--)
+- [redeemDelay()](#ERC7540DelayRedeem-redeemDelay-address-)
+- [_isRedeemAsync()](#ERC7540DelayRedeem-_isRedeemAsync--)
+- [_requestRedeem(shares, controller, owner, )](#ERC7540DelayRedeem-_requestRedeem-uint256-address-address-uint256-)
+- [_consumeClaimableWithdraw(assets, controller)](#ERC7540DelayRedeem-_consumeClaimableWithdraw-uint256-address-)
+- [_consumeClaimableRedeem(shares, controller)](#ERC7540DelayRedeem-_consumeClaimableRedeem-uint256-address-)
+- [_pendingRedeemRequest(requestId, controller)](#ERC7540DelayRedeem-_pendingRedeemRequest-uint256-address-)
+- [_claimableRedeemRequest(requestId, controller)](#ERC7540DelayRedeem-_claimableRedeemRequest-uint256-address-)
+- [_asyncMaxWithdraw(owner)](#ERC7540DelayRedeem-_asyncMaxWithdraw-address-)
+- [_asyncMaxRedeem(owner)](#ERC7540DelayRedeem-_asyncMaxRedeem-address-)
+- [_readyRedeemAt(owner, timepoint)](#ERC7540DelayRedeem-_readyRedeemAt-address-uint48-)
+<details>
+<summary>ERC7540</summary>
+
+- [supportsInterface(interfaceId)](#ERC7540-supportsInterface-bytes4-)
+- [isOperator(controller, operator)](#ERC7540-isOperator-address-address-)
+- [setOperator(operator, approved)](#ERC7540-setOperator-address-bool-)
+- [_setOperator(controller, operator, approved)](#ERC7540-_setOperator-address-address-bool-)
+- [_checkOperatorOrController(async, controller, operator)](#ERC7540-_checkOperatorOrController-bool-address-address-)
+- [decimals()](#ERC7540-decimals--)
+- [asset()](#ERC7540-asset--)
+- [share()](#ERC7540-share--)
+- [vault(asset_)](#ERC7540-vault-address-)
+- [totalAssets()](#ERC7540-totalAssets--)
+- [totalSupply()](#ERC7540-totalSupply--)
+- [pendingDepositRequest(requestId, controller)](#ERC7540-pendingDepositRequest-uint256-address-)
+- [claimableDepositRequest(requestId, controller)](#ERC7540-claimableDepositRequest-uint256-address-)
+- [pendingRedeemRequest(requestId, controller)](#ERC7540-pendingRedeemRequest-uint256-address-)
+- [claimableRedeemRequest(requestId, controller)](#ERC7540-claimableRedeemRequest-uint256-address-)
+- [totalPendingDepositAssets()](#ERC7540-totalPendingDepositAssets--)
+- [totalPendingRedeemShares()](#ERC7540-totalPendingRedeemShares--)
+- [convertToShares(assets)](#ERC7540-convertToShares-uint256-)
+- [convertToAssets(shares)](#ERC7540-convertToAssets-uint256-)
+- [maxDeposit(owner)](#ERC7540-maxDeposit-address-)
+- [maxMint(owner)](#ERC7540-maxMint-address-)
+- [maxWithdraw(owner)](#ERC7540-maxWithdraw-address-)
+- [maxRedeem(owner)](#ERC7540-maxRedeem-address-)
+- [previewDeposit(assets)](#ERC7540-previewDeposit-uint256-)
+- [previewMint(shares)](#ERC7540-previewMint-uint256-)
+- [previewWithdraw(assets)](#ERC7540-previewWithdraw-uint256-)
+- [previewRedeem(shares)](#ERC7540-previewRedeem-uint256-)
+- [requestDeposit(assets, controller, owner)](#ERC7540-requestDeposit-uint256-address-address-)
+- [deposit(assets, receiver)](#ERC7540-deposit-uint256-address-)
+- [deposit(assets, receiver, controller)](#ERC7540-deposit-uint256-address-address-)
+- [mint(shares, receiver)](#ERC7540-mint-uint256-address-)
+- [mint(shares, receiver, controller)](#ERC7540-mint-uint256-address-address-)
+- [requestRedeem(shares, controller, owner)](#ERC7540-requestRedeem-uint256-address-address-)
+- [withdraw(assets, receiver, ownerOrController)](#ERC7540-withdraw-uint256-address-address-)
+- [redeem(shares, receiver, ownerOrController)](#ERC7540-redeem-uint256-address-address-)
+- [_convertToShares(assets, rounding)](#ERC7540-_convertToShares-uint256-enum-Math-Rounding-)
+- [_convertToAssets(shares, rounding)](#ERC7540-_convertToAssets-uint256-enum-Math-Rounding-)
+- [_requestDeposit(assets, controller, owner, requestId)](#ERC7540-_requestDeposit-uint256-address-address-uint256-)
+- [_mintSharesOnDepositFulfill(assets, shares)](#ERC7540-_mintSharesOnDepositFulfill-uint256-uint256-)
+- [_deposit(callerOrController, receiver, assets, shares)](#ERC7540-_deposit-address-address-uint256-uint256-)
+- [_burnSharesOnRedeemFulfill(, shares)](#ERC7540-_burnSharesOnRedeemFulfill-uint256-uint256-)
+- [_withdraw(caller, receiver, owner, assets, shares)](#ERC7540-_withdraw-address-address-address-uint256-uint256-)
+- [_transferIn(from, assets)](#ERC7540-_transferIn-address-uint256-)
+- [_transferOut(to, assets)](#ERC7540-_transferOut-address-uint256-)
+- [_decimalsOffset()](#ERC7540-_decimalsOffset--)
+- [_depositShareOrigin()](#ERC7540-_depositShareOrigin--)
+- [_redeemShareDestination()](#ERC7540-_redeemShareDestination--)
+- [_isDepositAsync()](#ERC7540-_isDepositAsync--)
+- [_pendingDepositRequest(, )](#ERC7540-_pendingDepositRequest-uint256-address-)
+- [_claimableDepositRequest(, )](#ERC7540-_claimableDepositRequest-uint256-address-)
+- [_consumeClaimableDeposit(, )](#ERC7540-_consumeClaimableDeposit-uint256-address-)
+- [_consumeClaimableMint(, )](#ERC7540-_consumeClaimableMint-uint256-address-)
+- [_asyncMaxDeposit()](#ERC7540-_asyncMaxDeposit-address-)
+- [_asyncMaxMint()](#ERC7540-_asyncMaxMint-address-)
+
+</details>
+<details>
+<summary>ERC20</summary>
+
+- [name()](#ERC20-name--)
+- [symbol()](#ERC20-symbol--)
+- [balanceOf(account)](#ERC20-balanceOf-address-)
+- [transfer(to, value)](#ERC20-transfer-address-uint256-)
+- [allowance(owner, spender)](#ERC20-allowance-address-address-)
+- [approve(spender, value)](#ERC20-approve-address-uint256-)
+- [transferFrom(from, to, value)](#ERC20-transferFrom-address-address-uint256-)
+- [_transfer(from, to, value)](#ERC20-_transfer-address-address-uint256-)
+- [_update(from, to, value)](#ERC20-_update-address-address-uint256-)
+- [_mint(account, value)](#ERC20-_mint-address-uint256-)
+- [_burn(account, value)](#ERC20-_burn-address-uint256-)
+- [_approve(owner, spender, value)](#ERC20-_approve-address-address-uint256-)
+- [_approve(owner, spender, value, emitEvent)](#ERC20-_approve-address-address-uint256-bool-)
+- [_spendAllowance(owner, spender, value)](#ERC20-_spendAllowance-address-address-uint256-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+<details>
+<summary>IERC4626</summary>
+
+- [Deposit(sender, owner, assets, shares)](#IERC4626-Deposit-address-address-uint256-uint256-)
+- [Withdraw(sender, receiver, owner, assets, shares)](#IERC4626-Withdraw-address-address-address-uint256-uint256-)
+
+</details>
+<details>
+<summary>IERC20</summary>
+
+- [Transfer(from, to, value)](#IERC20-Transfer-address-address-uint256-)
+- [Approval(owner, spender, value)](#IERC20-Approval-address-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Redeem</summary>
+
+- [RedeemRequest(controller, owner, requestId, sender, shares)](#IERC7540Redeem-RedeemRequest-address-address-uint256-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Deposit</summary>
+
+- [DepositRequest(controller, owner, requestId, sender, assets)](#IERC7540Deposit-DepositRequest-address-address-uint256-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Operator</summary>
+
+- [OperatorSet(controller, operator, approved)](#IERC7540Operator-OperatorSet-address-address-bool-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [ERC7540DelayInvalidRedeemShareDestination()](#ERC7540DelayRedeem-ERC7540DelayInvalidRedeemShareDestination--)
+<details>
+<summary>ERC7540</summary>
+
+- [ERC4626ExceededMaxDeposit(receiver, assets, max)](#ERC7540-ERC4626ExceededMaxDeposit-address-uint256-uint256-)
+- [ERC4626ExceededMaxMint(receiver, shares, max)](#ERC7540-ERC4626ExceededMaxMint-address-uint256-uint256-)
+- [ERC4626ExceededMaxWithdraw(owner, assets, max)](#ERC7540-ERC4626ExceededMaxWithdraw-address-uint256-uint256-)
+- [ERC4626ExceededMaxRedeem(owner, shares, max)](#ERC7540-ERC4626ExceededMaxRedeem-address-uint256-uint256-)
+- [ERC7540InvalidOperator(controller, operator)](#ERC7540-ERC7540InvalidOperator-address-address-)
+- [ERC7540SyncDeposit()](#ERC7540-ERC7540SyncDeposit--)
+- [ERC7540AsyncDeposit()](#ERC7540-ERC7540AsyncDeposit--)
+- [ERC7540SyncRedeem()](#ERC7540-ERC7540SyncRedeem--)
+- [ERC7540AsyncRedeem()](#ERC7540-ERC7540AsyncRedeem--)
+- [ERC7540MissingAsync()](#ERC7540-ERC7540MissingAsync--)
+- [ERC7540UnauthorizedMintSharesOnDepositFulfill()](#ERC7540-ERC7540UnauthorizedMintSharesOnDepositFulfill--)
+- [ERC7540UnauthorizedBurnSharesOnRedeemFulfill()](#ERC7540-ERC7540UnauthorizedBurnSharesOnRedeemFulfill--)
+
+</details>
+<details>
+<summary>IERC20Errors</summary>
+
+- [ERC20InsufficientBalance(sender, balance, needed)](#IERC20Errors-ERC20InsufficientBalance-address-uint256-uint256-)
+- [ERC20InvalidSender(sender)](#IERC20Errors-ERC20InvalidSender-address-)
+- [ERC20InvalidReceiver(receiver)](#IERC20Errors-ERC20InvalidReceiver-address-)
+- [ERC20InsufficientAllowance(spender, allowance, needed)](#IERC20Errors-ERC20InsufficientAllowance-address-uint256-uint256-)
+- [ERC20InvalidApprover(approver)](#IERC20Errors-ERC20InvalidApprover-address-)
+- [ERC20InvalidSpender(spender)](#IERC20Errors-ERC20InvalidSpender-address-)
+
+</details>
+</div>
+</div>
+
+<a id="ERC7540DelayRedeem-constructor--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">constructor()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540DelayRedeem-constructor--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="ERC7540DelayRedeem-clock--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">clock() → uint48</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540DelayRedeem-clock--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Clock used for flagging checkpoints. Can be overridden to implement timestamp based checkpoints (and voting).
+
+</div>
+</div>
+
+<a id="ERC7540DelayRedeem-CLOCK_MODE--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">CLOCK_MODE() → string</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540DelayRedeem-CLOCK_MODE--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Description of the clock
+
+</div>
+</div>
+
+<a id="ERC7540DelayRedeem-redeemDelay-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">redeemDelay(address) → uint48</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7540DelayRedeem-redeemDelay-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the delay duration before a redeem request becomes claimable. Defaults to 1 hour.
+
+<Callout>
+For any given `controller`, the maturity timepoint `clock() + redeemDelay(controller)` MUST
+be non-decreasing across successive [`ERC7540.requestRedeem`](#ERC7540-requestRedeem-uint256-address-address-) calls. Overrides that shrink the delay faster
+than `clock()` advances will cause new requests to revert until the previous maturity is reached.
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7540DelayRedeem-_isRedeemAsync--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_isRedeemAsync() → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540DelayRedeem-_isRedeemAsync--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns `true` if the redeem flow is asynchronous (Request-based). When `false`, [`ERC7540.withdraw`](#ERC7540-withdraw-uint256-address-address-) and
+[`ERC7540.redeem`](#ERC7540-redeem-uint256-address-address-) behave as standard synchronous ERC-4626 operations.
+
+Override to return `true` in extensions that provide an async redeem fulfillment strategy.
+
+</div>
+</div>
+
+<a id="ERC7540DelayRedeem-_requestRedeem-uint256-address-address-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_requestRedeem(uint256 shares, address controller, address owner, uint256) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540DelayRedeem-_requestRedeem-uint256-address-address-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Pushes a new cumulative checkpoint at the maturity timepoint and delegates to
+[`ERC7540._requestRedeem`](#ERC7540-_requestRedeem-uint256-address-address-uint256-) with the timepoint as `requestId`.
+
+</div>
+</div>
+
+<a id="ERC7540DelayRedeem-_consumeClaimableWithdraw-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_consumeClaimableWithdraw(uint256 assets, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540DelayRedeem-_consumeClaimableWithdraw-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Consumes `assets` from claimable redeems, returns proportional shares (rounded up).
+
+</div>
+</div>
+
+<a id="ERC7540DelayRedeem-_consumeClaimableRedeem-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_consumeClaimableRedeem(uint256 shares, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540DelayRedeem-_consumeClaimableRedeem-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Consumes `shares` from claimable redeems, returns proportional assets (rounded down).
+
+</div>
+</div>
+
+<a id="ERC7540DelayRedeem-_pendingRedeemRequest-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_pendingRedeemRequest(uint256 requestId, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540DelayRedeem-_pendingRedeemRequest-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the shares in Pending state for a specific `requestId` (timepoint).
+A request is pending only if its timepoint is strictly in the future.
+
+</div>
+</div>
+
+<a id="ERC7540DelayRedeem-_claimableRedeemRequest-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_claimableRedeemRequest(uint256 requestId, address controller) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540DelayRedeem-_claimableRedeemRequest-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the shares in Claimable state for a specific `requestId` (timepoint).
+A request is claimable once its timepoint has elapsed and the shares haven't been claimed yet.
+
+</div>
+</div>
+
+<a id="ERC7540DelayRedeem-_asyncMaxWithdraw-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_asyncMaxWithdraw(address owner) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540DelayRedeem-_asyncMaxWithdraw-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the asset-equivalent of [`ERC7540._asyncMaxRedeem`](#ERC7540-_asyncMaxRedeem-address-) (rounded down).
+
+</div>
+</div>
+
+<a id="ERC7540DelayRedeem-_asyncMaxRedeem-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_asyncMaxRedeem(address owner) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540DelayRedeem-_asyncMaxRedeem-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the total claimable shares across all matured timepoints for `owner`.
+
+</div>
+</div>
+
+<a id="ERC7540DelayRedeem-_readyRedeemAt-address-uint48-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_readyRedeemAt(address owner, uint48 timepoint) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540DelayRedeem-_readyRedeemAt-address-uint48-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal helper: fetch the amount that is expected to be claimable at a given timepoint, if any.
+Any amount that has already been claimed is taken into consideration.
+
+</div>
+</div>
+
+<a id="ERC7540DelayRedeem-ERC7540DelayInvalidRedeemShareDestination--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7540DelayInvalidRedeemShareDestination()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7540DelayRedeem-ERC7540DelayInvalidRedeemShareDestination--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Triggered if [`ERC7540._redeemShareDestination`](#ERC7540-_redeemShareDestination--) is not address(0), as this is not supported by this module.
+
+</div>
+</div>
+
+<a id="ERC7540SyncDeposit"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC7540SyncDeposit` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-community-contracts/blob/v0.0.1/contracts/token/ERC20/extensions/ERC7540SyncDeposit.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/community-contracts/contracts/token/ERC20/extensions/ERC7540SyncDeposit.sol";
+```
+
+Module for enabling synchronous behavior (ERC-4626) for the deposit flow of an ERC-7540 vault.
+
+Note that an ERC-7540 vault is required to have at least one flow operating in asynchronous mode, so this module
+cannot be combined with [`ERC7540SyncRedeem`](#ERC7540SyncRedeem).
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [_isDepositAsync()](#ERC7540SyncDeposit-_isDepositAsync--)
+- [_consumeClaimableDeposit(, )](#ERC7540SyncDeposit-_consumeClaimableDeposit-uint256-address-)
+- [_consumeClaimableMint(, )](#ERC7540SyncDeposit-_consumeClaimableMint-uint256-address-)
+- [_pendingDepositRequest(, )](#ERC7540SyncDeposit-_pendingDepositRequest-uint256-address-)
+- [_claimableDepositRequest(, )](#ERC7540SyncDeposit-_claimableDepositRequest-uint256-address-)
+- [_asyncMaxDeposit()](#ERC7540SyncDeposit-_asyncMaxDeposit-address-)
+- [_asyncMaxMint()](#ERC7540SyncDeposit-_asyncMaxMint-address-)
+<details>
+<summary>ERC7540</summary>
+
+- [supportsInterface(interfaceId)](#ERC7540-supportsInterface-bytes4-)
+- [isOperator(controller, operator)](#ERC7540-isOperator-address-address-)
+- [setOperator(operator, approved)](#ERC7540-setOperator-address-bool-)
+- [_setOperator(controller, operator, approved)](#ERC7540-_setOperator-address-address-bool-)
+- [_checkOperatorOrController(async, controller, operator)](#ERC7540-_checkOperatorOrController-bool-address-address-)
+- [decimals()](#ERC7540-decimals--)
+- [asset()](#ERC7540-asset--)
+- [share()](#ERC7540-share--)
+- [vault(asset_)](#ERC7540-vault-address-)
+- [totalAssets()](#ERC7540-totalAssets--)
+- [totalSupply()](#ERC7540-totalSupply--)
+- [pendingDepositRequest(requestId, controller)](#ERC7540-pendingDepositRequest-uint256-address-)
+- [claimableDepositRequest(requestId, controller)](#ERC7540-claimableDepositRequest-uint256-address-)
+- [pendingRedeemRequest(requestId, controller)](#ERC7540-pendingRedeemRequest-uint256-address-)
+- [claimableRedeemRequest(requestId, controller)](#ERC7540-claimableRedeemRequest-uint256-address-)
+- [totalPendingDepositAssets()](#ERC7540-totalPendingDepositAssets--)
+- [totalPendingRedeemShares()](#ERC7540-totalPendingRedeemShares--)
+- [convertToShares(assets)](#ERC7540-convertToShares-uint256-)
+- [convertToAssets(shares)](#ERC7540-convertToAssets-uint256-)
+- [maxDeposit(owner)](#ERC7540-maxDeposit-address-)
+- [maxMint(owner)](#ERC7540-maxMint-address-)
+- [maxWithdraw(owner)](#ERC7540-maxWithdraw-address-)
+- [maxRedeem(owner)](#ERC7540-maxRedeem-address-)
+- [previewDeposit(assets)](#ERC7540-previewDeposit-uint256-)
+- [previewMint(shares)](#ERC7540-previewMint-uint256-)
+- [previewWithdraw(assets)](#ERC7540-previewWithdraw-uint256-)
+- [previewRedeem(shares)](#ERC7540-previewRedeem-uint256-)
+- [requestDeposit(assets, controller, owner)](#ERC7540-requestDeposit-uint256-address-address-)
+- [deposit(assets, receiver)](#ERC7540-deposit-uint256-address-)
+- [deposit(assets, receiver, controller)](#ERC7540-deposit-uint256-address-address-)
+- [mint(shares, receiver)](#ERC7540-mint-uint256-address-)
+- [mint(shares, receiver, controller)](#ERC7540-mint-uint256-address-address-)
+- [requestRedeem(shares, controller, owner)](#ERC7540-requestRedeem-uint256-address-address-)
+- [withdraw(assets, receiver, ownerOrController)](#ERC7540-withdraw-uint256-address-address-)
+- [redeem(shares, receiver, ownerOrController)](#ERC7540-redeem-uint256-address-address-)
+- [_convertToShares(assets, rounding)](#ERC7540-_convertToShares-uint256-enum-Math-Rounding-)
+- [_convertToAssets(shares, rounding)](#ERC7540-_convertToAssets-uint256-enum-Math-Rounding-)
+- [_requestDeposit(assets, controller, owner, requestId)](#ERC7540-_requestDeposit-uint256-address-address-uint256-)
+- [_mintSharesOnDepositFulfill(assets, shares)](#ERC7540-_mintSharesOnDepositFulfill-uint256-uint256-)
+- [_deposit(callerOrController, receiver, assets, shares)](#ERC7540-_deposit-address-address-uint256-uint256-)
+- [_requestRedeem(shares, controller, owner, requestId)](#ERC7540-_requestRedeem-uint256-address-address-uint256-)
+- [_burnSharesOnRedeemFulfill(, shares)](#ERC7540-_burnSharesOnRedeemFulfill-uint256-uint256-)
+- [_withdraw(caller, receiver, owner, assets, shares)](#ERC7540-_withdraw-address-address-address-uint256-uint256-)
+- [_transferIn(from, assets)](#ERC7540-_transferIn-address-uint256-)
+- [_transferOut(to, assets)](#ERC7540-_transferOut-address-uint256-)
+- [_decimalsOffset()](#ERC7540-_decimalsOffset--)
+- [_depositShareOrigin()](#ERC7540-_depositShareOrigin--)
+- [_redeemShareDestination()](#ERC7540-_redeemShareDestination--)
+- [_isRedeemAsync()](#ERC7540-_isRedeemAsync--)
+- [_pendingRedeemRequest(, )](#ERC7540-_pendingRedeemRequest-uint256-address-)
+- [_claimableRedeemRequest(, )](#ERC7540-_claimableRedeemRequest-uint256-address-)
+- [_consumeClaimableWithdraw(, )](#ERC7540-_consumeClaimableWithdraw-uint256-address-)
+- [_consumeClaimableRedeem(, )](#ERC7540-_consumeClaimableRedeem-uint256-address-)
+- [_asyncMaxWithdraw()](#ERC7540-_asyncMaxWithdraw-address-)
+- [_asyncMaxRedeem()](#ERC7540-_asyncMaxRedeem-address-)
+
+</details>
+<details>
+<summary>ERC20</summary>
+
+- [name()](#ERC20-name--)
+- [symbol()](#ERC20-symbol--)
+- [balanceOf(account)](#ERC20-balanceOf-address-)
+- [transfer(to, value)](#ERC20-transfer-address-uint256-)
+- [allowance(owner, spender)](#ERC20-allowance-address-address-)
+- [approve(spender, value)](#ERC20-approve-address-uint256-)
+- [transferFrom(from, to, value)](#ERC20-transferFrom-address-address-uint256-)
+- [_transfer(from, to, value)](#ERC20-_transfer-address-address-uint256-)
+- [_update(from, to, value)](#ERC20-_update-address-address-uint256-)
+- [_mint(account, value)](#ERC20-_mint-address-uint256-)
+- [_burn(account, value)](#ERC20-_burn-address-uint256-)
+- [_approve(owner, spender, value)](#ERC20-_approve-address-address-uint256-)
+- [_approve(owner, spender, value, emitEvent)](#ERC20-_approve-address-address-uint256-bool-)
+- [_spendAllowance(owner, spender, value)](#ERC20-_spendAllowance-address-address-uint256-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+<details>
+<summary>IERC4626</summary>
+
+- [Deposit(sender, owner, assets, shares)](#IERC4626-Deposit-address-address-uint256-uint256-)
+- [Withdraw(sender, receiver, owner, assets, shares)](#IERC4626-Withdraw-address-address-address-uint256-uint256-)
+
+</details>
+<details>
+<summary>IERC20</summary>
+
+- [Transfer(from, to, value)](#IERC20-Transfer-address-address-uint256-)
+- [Approval(owner, spender, value)](#IERC20-Approval-address-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Redeem</summary>
+
+- [RedeemRequest(controller, owner, requestId, sender, shares)](#IERC7540Redeem-RedeemRequest-address-address-uint256-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Deposit</summary>
+
+- [DepositRequest(controller, owner, requestId, sender, assets)](#IERC7540Deposit-DepositRequest-address-address-uint256-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Operator</summary>
+
+- [OperatorSet(controller, operator, approved)](#IERC7540Operator-OperatorSet-address-address-bool-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+<details>
+<summary>ERC7540</summary>
+
+- [ERC4626ExceededMaxDeposit(receiver, assets, max)](#ERC7540-ERC4626ExceededMaxDeposit-address-uint256-uint256-)
+- [ERC4626ExceededMaxMint(receiver, shares, max)](#ERC7540-ERC4626ExceededMaxMint-address-uint256-uint256-)
+- [ERC4626ExceededMaxWithdraw(owner, assets, max)](#ERC7540-ERC4626ExceededMaxWithdraw-address-uint256-uint256-)
+- [ERC4626ExceededMaxRedeem(owner, shares, max)](#ERC7540-ERC4626ExceededMaxRedeem-address-uint256-uint256-)
+- [ERC7540InvalidOperator(controller, operator)](#ERC7540-ERC7540InvalidOperator-address-address-)
+- [ERC7540SyncDeposit()](#ERC7540-ERC7540SyncDeposit--)
+- [ERC7540AsyncDeposit()](#ERC7540-ERC7540AsyncDeposit--)
+- [ERC7540SyncRedeem()](#ERC7540-ERC7540SyncRedeem--)
+- [ERC7540AsyncRedeem()](#ERC7540-ERC7540AsyncRedeem--)
+- [ERC7540MissingAsync()](#ERC7540-ERC7540MissingAsync--)
+- [ERC7540UnauthorizedMintSharesOnDepositFulfill()](#ERC7540-ERC7540UnauthorizedMintSharesOnDepositFulfill--)
+- [ERC7540UnauthorizedBurnSharesOnRedeemFulfill()](#ERC7540-ERC7540UnauthorizedBurnSharesOnRedeemFulfill--)
+
+</details>
+<details>
+<summary>IERC20Errors</summary>
+
+- [ERC20InsufficientBalance(sender, balance, needed)](#IERC20Errors-ERC20InsufficientBalance-address-uint256-uint256-)
+- [ERC20InvalidSender(sender)](#IERC20Errors-ERC20InvalidSender-address-)
+- [ERC20InvalidReceiver(receiver)](#IERC20Errors-ERC20InvalidReceiver-address-)
+- [ERC20InsufficientAllowance(spender, allowance, needed)](#IERC20Errors-ERC20InsufficientAllowance-address-uint256-uint256-)
+- [ERC20InvalidApprover(approver)](#IERC20Errors-ERC20InvalidApprover-address-)
+- [ERC20InvalidSpender(spender)](#IERC20Errors-ERC20InvalidSpender-address-)
+
+</details>
+</div>
+</div>
+
+<a id="ERC7540SyncDeposit-_isDepositAsync--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_isDepositAsync() → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540SyncDeposit-_isDepositAsync--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns `true` if the deposit flow is asynchronous (Request-based). When `false`, [`ERC7540.deposit`](#ERC7540-deposit-uint256-address-address-) and
+[`ERC7540.mint`](#ERC7540-mint-uint256-address-address-) behave as standard synchronous ERC-4626 operations.
+
+Override to return `true` in extensions that provide an async deposit fulfillment strategy.
+
+</div>
+</div>
+
+<a id="ERC7540SyncDeposit-_consumeClaimableDeposit-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_consumeClaimableDeposit(uint256, address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540SyncDeposit-_consumeClaimableDeposit-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Consumes `assets` from the claimable deposit and returns the proportional shares (rounded down).
+
+</div>
+</div>
+
+<a id="ERC7540SyncDeposit-_consumeClaimableMint-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_consumeClaimableMint(uint256, address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540SyncDeposit-_consumeClaimableMint-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Consumes `shares` from the claimable deposit and returns the proportional assets (rounded up).
+
+</div>
+</div>
+
+<a id="ERC7540SyncDeposit-_pendingDepositRequest-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_pendingDepositRequest(uint256, address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540SyncDeposit-_pendingDepositRequest-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the amount of assets in Pending state for `controller` with the given `requestId`.
+
+</div>
+</div>
+
+<a id="ERC7540SyncDeposit-_claimableDepositRequest-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_claimableDepositRequest(uint256, address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540SyncDeposit-_claimableDepositRequest-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the amount of assets in Claimable state for `controller` with the given `requestId`.
+
+</div>
+</div>
+
+<a id="ERC7540SyncDeposit-_asyncMaxDeposit-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_asyncMaxDeposit(address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540SyncDeposit-_asyncMaxDeposit-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the maximum assets that can be claimed via [`ERC7540.deposit`](#ERC7540-deposit-uint256-address-address-) for an async `owner`.
+
+</div>
+</div>
+
+<a id="ERC7540SyncDeposit-_asyncMaxMint-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_asyncMaxMint(address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540SyncDeposit-_asyncMaxMint-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the maximum shares that can be claimed via [`ERC7540.mint`](#ERC7540-mint-uint256-address-address-) for an async `owner`.
+
+</div>
+</div>
+
+<a id="ERC7540SyncRedeem"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC7540SyncRedeem` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-community-contracts/blob/v0.0.1/contracts/token/ERC20/extensions/ERC7540SyncRedeem.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/community-contracts/contracts/token/ERC20/extensions/ERC7540SyncRedeem.sol";
+```
+
+Module for enabling synchronous behavior (ERC-4626) for the redeem flow of an ERC-7540 vault.
+
+Note that an ERC-7540 vault is required to have at least one flow operating in asynchronous mode, so this module
+cannot be combined with [`ERC7540SyncDeposit`](#ERC7540SyncDeposit).
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [_isRedeemAsync()](#ERC7540SyncRedeem-_isRedeemAsync--)
+- [_consumeClaimableWithdraw(, )](#ERC7540SyncRedeem-_consumeClaimableWithdraw-uint256-address-)
+- [_consumeClaimableRedeem(, )](#ERC7540SyncRedeem-_consumeClaimableRedeem-uint256-address-)
+- [_pendingRedeemRequest(, )](#ERC7540SyncRedeem-_pendingRedeemRequest-uint256-address-)
+- [_claimableRedeemRequest(, )](#ERC7540SyncRedeem-_claimableRedeemRequest-uint256-address-)
+- [_asyncMaxWithdraw()](#ERC7540SyncRedeem-_asyncMaxWithdraw-address-)
+- [_asyncMaxRedeem()](#ERC7540SyncRedeem-_asyncMaxRedeem-address-)
+<details>
+<summary>ERC7540</summary>
+
+- [supportsInterface(interfaceId)](#ERC7540-supportsInterface-bytes4-)
+- [isOperator(controller, operator)](#ERC7540-isOperator-address-address-)
+- [setOperator(operator, approved)](#ERC7540-setOperator-address-bool-)
+- [_setOperator(controller, operator, approved)](#ERC7540-_setOperator-address-address-bool-)
+- [_checkOperatorOrController(async, controller, operator)](#ERC7540-_checkOperatorOrController-bool-address-address-)
+- [decimals()](#ERC7540-decimals--)
+- [asset()](#ERC7540-asset--)
+- [share()](#ERC7540-share--)
+- [vault(asset_)](#ERC7540-vault-address-)
+- [totalAssets()](#ERC7540-totalAssets--)
+- [totalSupply()](#ERC7540-totalSupply--)
+- [pendingDepositRequest(requestId, controller)](#ERC7540-pendingDepositRequest-uint256-address-)
+- [claimableDepositRequest(requestId, controller)](#ERC7540-claimableDepositRequest-uint256-address-)
+- [pendingRedeemRequest(requestId, controller)](#ERC7540-pendingRedeemRequest-uint256-address-)
+- [claimableRedeemRequest(requestId, controller)](#ERC7540-claimableRedeemRequest-uint256-address-)
+- [totalPendingDepositAssets()](#ERC7540-totalPendingDepositAssets--)
+- [totalPendingRedeemShares()](#ERC7540-totalPendingRedeemShares--)
+- [convertToShares(assets)](#ERC7540-convertToShares-uint256-)
+- [convertToAssets(shares)](#ERC7540-convertToAssets-uint256-)
+- [maxDeposit(owner)](#ERC7540-maxDeposit-address-)
+- [maxMint(owner)](#ERC7540-maxMint-address-)
+- [maxWithdraw(owner)](#ERC7540-maxWithdraw-address-)
+- [maxRedeem(owner)](#ERC7540-maxRedeem-address-)
+- [previewDeposit(assets)](#ERC7540-previewDeposit-uint256-)
+- [previewMint(shares)](#ERC7540-previewMint-uint256-)
+- [previewWithdraw(assets)](#ERC7540-previewWithdraw-uint256-)
+- [previewRedeem(shares)](#ERC7540-previewRedeem-uint256-)
+- [requestDeposit(assets, controller, owner)](#ERC7540-requestDeposit-uint256-address-address-)
+- [deposit(assets, receiver)](#ERC7540-deposit-uint256-address-)
+- [deposit(assets, receiver, controller)](#ERC7540-deposit-uint256-address-address-)
+- [mint(shares, receiver)](#ERC7540-mint-uint256-address-)
+- [mint(shares, receiver, controller)](#ERC7540-mint-uint256-address-address-)
+- [requestRedeem(shares, controller, owner)](#ERC7540-requestRedeem-uint256-address-address-)
+- [withdraw(assets, receiver, ownerOrController)](#ERC7540-withdraw-uint256-address-address-)
+- [redeem(shares, receiver, ownerOrController)](#ERC7540-redeem-uint256-address-address-)
+- [_convertToShares(assets, rounding)](#ERC7540-_convertToShares-uint256-enum-Math-Rounding-)
+- [_convertToAssets(shares, rounding)](#ERC7540-_convertToAssets-uint256-enum-Math-Rounding-)
+- [_requestDeposit(assets, controller, owner, requestId)](#ERC7540-_requestDeposit-uint256-address-address-uint256-)
+- [_mintSharesOnDepositFulfill(assets, shares)](#ERC7540-_mintSharesOnDepositFulfill-uint256-uint256-)
+- [_deposit(callerOrController, receiver, assets, shares)](#ERC7540-_deposit-address-address-uint256-uint256-)
+- [_requestRedeem(shares, controller, owner, requestId)](#ERC7540-_requestRedeem-uint256-address-address-uint256-)
+- [_burnSharesOnRedeemFulfill(, shares)](#ERC7540-_burnSharesOnRedeemFulfill-uint256-uint256-)
+- [_withdraw(caller, receiver, owner, assets, shares)](#ERC7540-_withdraw-address-address-address-uint256-uint256-)
+- [_transferIn(from, assets)](#ERC7540-_transferIn-address-uint256-)
+- [_transferOut(to, assets)](#ERC7540-_transferOut-address-uint256-)
+- [_decimalsOffset()](#ERC7540-_decimalsOffset--)
+- [_depositShareOrigin()](#ERC7540-_depositShareOrigin--)
+- [_redeemShareDestination()](#ERC7540-_redeemShareDestination--)
+- [_isDepositAsync()](#ERC7540-_isDepositAsync--)
+- [_pendingDepositRequest(, )](#ERC7540-_pendingDepositRequest-uint256-address-)
+- [_claimableDepositRequest(, )](#ERC7540-_claimableDepositRequest-uint256-address-)
+- [_consumeClaimableDeposit(, )](#ERC7540-_consumeClaimableDeposit-uint256-address-)
+- [_consumeClaimableMint(, )](#ERC7540-_consumeClaimableMint-uint256-address-)
+- [_asyncMaxDeposit()](#ERC7540-_asyncMaxDeposit-address-)
+- [_asyncMaxMint()](#ERC7540-_asyncMaxMint-address-)
+
+</details>
+<details>
+<summary>ERC20</summary>
+
+- [name()](#ERC20-name--)
+- [symbol()](#ERC20-symbol--)
+- [balanceOf(account)](#ERC20-balanceOf-address-)
+- [transfer(to, value)](#ERC20-transfer-address-uint256-)
+- [allowance(owner, spender)](#ERC20-allowance-address-address-)
+- [approve(spender, value)](#ERC20-approve-address-uint256-)
+- [transferFrom(from, to, value)](#ERC20-transferFrom-address-address-uint256-)
+- [_transfer(from, to, value)](#ERC20-_transfer-address-address-uint256-)
+- [_update(from, to, value)](#ERC20-_update-address-address-uint256-)
+- [_mint(account, value)](#ERC20-_mint-address-uint256-)
+- [_burn(account, value)](#ERC20-_burn-address-uint256-)
+- [_approve(owner, spender, value)](#ERC20-_approve-address-address-uint256-)
+- [_approve(owner, spender, value, emitEvent)](#ERC20-_approve-address-address-uint256-bool-)
+- [_spendAllowance(owner, spender, value)](#ERC20-_spendAllowance-address-address-uint256-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+<details>
+<summary>IERC4626</summary>
+
+- [Deposit(sender, owner, assets, shares)](#IERC4626-Deposit-address-address-uint256-uint256-)
+- [Withdraw(sender, receiver, owner, assets, shares)](#IERC4626-Withdraw-address-address-address-uint256-uint256-)
+
+</details>
+<details>
+<summary>IERC20</summary>
+
+- [Transfer(from, to, value)](#IERC20-Transfer-address-address-uint256-)
+- [Approval(owner, spender, value)](#IERC20-Approval-address-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Redeem</summary>
+
+- [RedeemRequest(controller, owner, requestId, sender, shares)](#IERC7540Redeem-RedeemRequest-address-address-uint256-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Deposit</summary>
+
+- [DepositRequest(controller, owner, requestId, sender, assets)](#IERC7540Deposit-DepositRequest-address-address-uint256-address-uint256-)
+
+</details>
+<details>
+<summary>IERC7540Operator</summary>
+
+- [OperatorSet(controller, operator, approved)](#IERC7540Operator-OperatorSet-address-address-bool-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+<details>
+<summary>ERC7540</summary>
+
+- [ERC4626ExceededMaxDeposit(receiver, assets, max)](#ERC7540-ERC4626ExceededMaxDeposit-address-uint256-uint256-)
+- [ERC4626ExceededMaxMint(receiver, shares, max)](#ERC7540-ERC4626ExceededMaxMint-address-uint256-uint256-)
+- [ERC4626ExceededMaxWithdraw(owner, assets, max)](#ERC7540-ERC4626ExceededMaxWithdraw-address-uint256-uint256-)
+- [ERC4626ExceededMaxRedeem(owner, shares, max)](#ERC7540-ERC4626ExceededMaxRedeem-address-uint256-uint256-)
+- [ERC7540InvalidOperator(controller, operator)](#ERC7540-ERC7540InvalidOperator-address-address-)
+- [ERC7540SyncDeposit()](#ERC7540-ERC7540SyncDeposit--)
+- [ERC7540AsyncDeposit()](#ERC7540-ERC7540AsyncDeposit--)
+- [ERC7540SyncRedeem()](#ERC7540-ERC7540SyncRedeem--)
+- [ERC7540AsyncRedeem()](#ERC7540-ERC7540AsyncRedeem--)
+- [ERC7540MissingAsync()](#ERC7540-ERC7540MissingAsync--)
+- [ERC7540UnauthorizedMintSharesOnDepositFulfill()](#ERC7540-ERC7540UnauthorizedMintSharesOnDepositFulfill--)
+- [ERC7540UnauthorizedBurnSharesOnRedeemFulfill()](#ERC7540-ERC7540UnauthorizedBurnSharesOnRedeemFulfill--)
+
+</details>
+<details>
+<summary>IERC20Errors</summary>
+
+- [ERC20InsufficientBalance(sender, balance, needed)](#IERC20Errors-ERC20InsufficientBalance-address-uint256-uint256-)
+- [ERC20InvalidSender(sender)](#IERC20Errors-ERC20InvalidSender-address-)
+- [ERC20InvalidReceiver(receiver)](#IERC20Errors-ERC20InvalidReceiver-address-)
+- [ERC20InsufficientAllowance(spender, allowance, needed)](#IERC20Errors-ERC20InsufficientAllowance-address-uint256-uint256-)
+- [ERC20InvalidApprover(approver)](#IERC20Errors-ERC20InvalidApprover-address-)
+- [ERC20InvalidSpender(spender)](#IERC20Errors-ERC20InvalidSpender-address-)
+
+</details>
+</div>
+</div>
+
+<a id="ERC7540SyncRedeem-_isRedeemAsync--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_isRedeemAsync() → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540SyncRedeem-_isRedeemAsync--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns `true` if the redeem flow is asynchronous (Request-based). When `false`, [`ERC7540.withdraw`](#ERC7540-withdraw-uint256-address-address-) and
+[`ERC7540.redeem`](#ERC7540-redeem-uint256-address-address-) behave as standard synchronous ERC-4626 operations.
+
+Override to return `true` in extensions that provide an async redeem fulfillment strategy.
+
+</div>
+</div>
+
+<a id="ERC7540SyncRedeem-_consumeClaimableWithdraw-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_consumeClaimableWithdraw(uint256, address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540SyncRedeem-_consumeClaimableWithdraw-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Consumes `assets` from the claimable redeem and returns the proportional shares (rounded up).
+
+</div>
+</div>
+
+<a id="ERC7540SyncRedeem-_consumeClaimableRedeem-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_consumeClaimableRedeem(uint256, address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540SyncRedeem-_consumeClaimableRedeem-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Consumes `shares` from the claimable redeem and returns the proportional assets (rounded down).
+
+</div>
+</div>
+
+<a id="ERC7540SyncRedeem-_pendingRedeemRequest-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_pendingRedeemRequest(uint256, address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540SyncRedeem-_pendingRedeemRequest-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the amount of shares in Pending state for `controller` with the given `requestId`.
+
+</div>
+</div>
+
+<a id="ERC7540SyncRedeem-_claimableRedeemRequest-uint256-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_claimableRedeemRequest(uint256, address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540SyncRedeem-_claimableRedeemRequest-uint256-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the amount of shares in Claimable state for `controller` with the given `requestId`.
+
+</div>
+</div>
+
+<a id="ERC7540SyncRedeem-_asyncMaxWithdraw-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_asyncMaxWithdraw(address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540SyncRedeem-_asyncMaxWithdraw-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the maximum assets that can be claimed via [`ERC7540.withdraw`](#ERC7540-withdraw-uint256-address-address-) for an async `owner`.
+
+</div>
+</div>
+
+<a id="ERC7540SyncRedeem-_asyncMaxRedeem-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_asyncMaxRedeem(address) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7540SyncRedeem-_asyncMaxRedeem-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the maximum shares that can be claimed via [`ERC7540.redeem`](#ERC7540-redeem-uint256-address-address-) for an async `owner`.
+
+</div>
+</div>
+
 <a id="OnTokenTransferAdapter"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">

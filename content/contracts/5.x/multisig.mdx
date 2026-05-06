@@ -8,7 +8,7 @@ Popular implementations like [Safe](https://safe.global/) (formerly Gnosis Safe)
 
 ## Beyond Standard Signature Verification
 
-As discussed in the [accounts section](./accounts#signature-validation), the standard approach for smart contracts to verify signatures is [ERC-1271](https://eips.ethereum.org/EIPS/eip-1271), which defines an `isValidSignature(hash, signature)`. However, it is limited in two important ways:
+As discussed in the [accounts section](accounts#signature_validation), the standard approach for smart contracts to verify signatures is [ERC-1271](https://eips.ethereum.org/EIPS/eip-1271), which defines an `isValidSignature(hash, signature)`. However, it is limited in two important ways:
 
 1. It assumes the signer has an EVM address
 2. It treats the signer as a single identity
@@ -35,16 +35,16 @@ The [`SignerERC7913`](/contracts/5.x/api/utils#SignerERC7913) contract allows a 
 
 pragma solidity ^0.8.24;
 
-import {Account} from "@openzeppelin/community-contracts/account/Account.sol";
+import {Account} from "@openzeppelin/contracts/account/Account.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
-import {ERC7739} from "@openzeppelin/community-contracts/utils/cryptography/signers/ERC7739.sol";
-import {ERC7821} from "@openzeppelin/community-contracts/account/extensions/ERC7821.sol";
+import {ERC7739} from "@openzeppelin/contracts/utils/cryptography/signers/draft-ERC7739.sol";
+import {ERC7821} from "@openzeppelin/contracts/account/extensions/draft-ERC7821.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import {SignerERC7913} from "@openzeppelin/community-contracts/utils/cryptography/signers/SignerERC7913.sol";
+import {SignerERC7913} from "@openzeppelin/contracts/utils/cryptography/signers/SignerERC7913.sol";
 
-contract MyAccountERC7913 is Account, SignerERC7913, ERC7739, ERC7821, ERC721Holder, ERC1155Holder, Initializable {
+contract MyAccountERC7913 is Account, EIP712, SignerERC7913, ERC7739, ERC7821, ERC721Holder, ERC1155Holder, Initializable {
     constructor() EIP712("MyAccount7913", "1") {}
 
     function initialize(bytes memory signer) public initializer {
@@ -80,17 +80,18 @@ The [`MultiSignerERC7913`](/contracts/5.x/api/utils/cryptography#MultiSignerERC7
 
 pragma solidity ^0.8.27;
 
-import {Account} from "@openzeppelin/community-contracts/account/Account.sol";
+import {Account} from "@openzeppelin/contracts/account/Account.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
-import {ERC7739} from "@openzeppelin/community-contracts/utils/cryptography/signers/ERC7739.sol";
-import {ERC7821} from "@openzeppelin/community-contracts/account/extensions/ERC7821.sol";
+import {ERC7739} from "@openzeppelin/contracts/utils/cryptography/signers/draft-ERC7739.sol";
+import {ERC7821} from "@openzeppelin/contracts/account/extensions/draft-ERC7821.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import {MultiSignerERC7913} from "@openzeppelin/community-contracts/utils/cryptography/signers/MultiSignerERC7913.sol";
+import {MultiSignerERC7913} from "@openzeppelin/contracts/utils/cryptography/signers/MultiSignerERC7913.sol";
 
 contract MyAccountMultiSigner is
     Account,
+    EIP712,
     MultiSignerERC7913,
     ERC7739,
     ERC7821,
@@ -148,17 +149,18 @@ For more sophisticated governance structures, the [`MultiSignerERC7913Weighted`]
 
 pragma solidity ^0.8.27;
 
-import {Account} from "@openzeppelin/community-contracts/account/Account.sol";
+import {Account} from "@openzeppelin/contracts/account/Account.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
-import {ERC7739} from "@openzeppelin/community-contracts/utils/cryptography/signers/ERC7739.sol";
-import {ERC7821} from "@openzeppelin/community-contracts/account/extensions/ERC7821.sol";
+import {ERC7739} from "@openzeppelin/contracts/utils/cryptography/signers/draft-ERC7739.sol";
+import {ERC7821} from "@openzeppelin/contracts/account/extensions/draft-ERC7821.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import {MultiSignerERC7913Weighted} from "@openzeppelin/community-contracts/utils/cryptography/signers/MultiSignerERC7913Weighted.sol";
+import {MultiSignerERC7913Weighted} from "@openzeppelin/contracts/utils/cryptography/signers/MultiSignerERC7913Weighted.sol";
 
 contract MyAccountMultiSignerWeighted is
     Account,
+    EIP712,
     MultiSignerERC7913Weighted,
     ERC7739,
     ERC7821,
@@ -229,29 +231,29 @@ The example below demonstrates setting up a 2-of-3 multisig account with differe
 function setupMultisigAccount() external {
     // Create signers using different types of keys
     bytes memory ecdsaSigner = alice; // EOA address (20 bytes)
-
+    
     // P256 signer with format: verifier || pubKey
     bytes memory p256Signer = abi.encodePacked(
         p256Verifier,
         bobP256PublicKeyX,
         bobP256PublicKeyY
     );
-
+    
     // RSA signer with format: verifier || pubKey
     bytes memory rsaSigner = abi.encodePacked(
         rsaVerifier,
         abi.encode(charlieRSAPublicKeyE, charlieRSAPublicKeyN)
     );
-
+    
     // Create array of signers
     bytes[] memory signers = new bytes[](3);
     signers[0] = ecdsaSigner;
     signers[1] = p256Signer;
     signers[2] = rsaSigner;
-
+    
     // Set threshold to 2 (2-of-3 multisig)
     uint256 threshold = 2;
-
+    
     // Initialize the account
     myMultisigAccount.initialize(signers, threshold);
 }
@@ -267,16 +269,16 @@ function setupWeightedMultisigAccount() external {
     signers[0] = ecdsaSigner;
     signers[1] = p256Signer;
     signers[2] = rsaSigner;
-
+    
     // Assign weights to signers (Alice:1, Bob:2, Charlie:3)
     uint256[] memory weights = new uint256[](3);
     weights[0] = 1;
     weights[1] = 2;
     weights[2] = 3;
-
+    
     // Set threshold to 4 (requires at least Bob+Charlie or all three)
     uint256 threshold = 4;
-
+    
     // Initialize the weighted account
     myWeightedMultisigAccount.initialize(signers, weights, threshold);
 }
@@ -305,6 +307,7 @@ Where:
 * `signatures` is an array of the individual signatures corresponding to each signer
 
 <Callout>
+
 
 To avoid duplicate signers, the contract uses `keccak256` to generate a unique id for each signer. When providing a multisignature, the `signers` array should be sorted in ascending order by `keccak256`, and the `signatures` array must match the order of their corresponding signers.
 

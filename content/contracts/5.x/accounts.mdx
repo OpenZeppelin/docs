@@ -4,16 +4,16 @@ title: Smart Accounts
 
 OpenZeppelin provides a simple [`Account`](/contracts/5.x/api/account#Account) implementation including only the basic logic to handle user operations in compliance with ERC-4337. Developers who want to build their own account can leverage it to bootstrap custom implementations.
 
-User operations are validated using an [`AbstractSigner`](/contracts/5.x/api/utils#AbstractSigner), which requires to implement the internal [`_rawSignatureValidation`](/contracts/5.x/api/utils#AbstractSigner-_rawSignatureValidation-bytes32-bytes-) function, of which we offer a set of implementations to cover a wide customization range. This is the lowest-level signature validation layer and is used to wrap other validation methods like the Account’s [`validateUserOp`](/contracts/5.x/api/account#Account-validateUserOp-struct-PackedUserOperation-bytes32-uint256-).
+User operations are validated using an [`AbstractSigner`](/contracts/5.x/api/utils/cryptography#AbstractSigner), which requires implementing the internal [`_rawSignatureValidation`](/contracts/5.x/api/utils/cryptography#AbstractSigner-_rawSignatureValidation-bytes32-bytes-) function, of which we offer a set of implementations to cover a wide customization range. This is the lowest-level signature validation layer and is used to wrap other validation methods like the Account’s [`validateUserOp`](/contracts/5.x/api/account#Account-validateUserOp-struct-PackedUserOperation-bytes32-uint256-).
 
 ## Setting up an account
 
-To setup an account, you can either start configuring it using our Wizard and selecting a predefined validation scheme, or bring your own logic and start by inheriting [`Account`](/contracts/5.x/api/account#Account) from scratch.
+To set up an account, you can either start configuring it using our Wizard and selecting a predefined validation scheme, or bring your own logic and start by inheriting [`Account`](/contracts/5.x/api/account#Account) from scratch. 
 
 <OZWizard tab="Account" version="5.5.0" />
 
 <Callout>
-Accounts don’t support [ERC-721](./erc721) and [ERC-1155](./erc1155) tokens natively since these require the receiving address to implement an acceptance check. It is recommended to inherit [ERC721Holder](/contracts/5.x/api/token/ERC721#ERC721Holder), [ERC1155Holder](/contracts/5.x/api/token/ERC1155#ERC1155Holder) to include these checks in your account.
+Accounts don’t support [ERC-721](erc721) and [ERC-1155](erc1155) tokens natively since these require the receiving address to implement an acceptance check. It is recommended to inherit [ERC721Holder](/contracts/5.x/api/token/ERC721#ERC721Holder), [ERC1155Holder](/contracts/5.x/api/token/ERC1155#ERC1155Holder) to include these checks in your account.
 </Callout>
 
 ### Selecting a signer
@@ -23,9 +23,9 @@ Since the minimum requirement of [`Account`](/contracts/5.x/api/account#Account)
 * [`SignerECDSA`](/contracts/5.x/api/utils/cryptography#SignerECDSA): Verifies signatures produced by regular EVM Externally Owned Accounts (EOAs).
 * [`SignerP256`](/contracts/5.x/api/utils/cryptography#SignerP256): Validates signatures using the secp256r1 curve, common for World Wide Web Consortium (W3C) standards such as FIDO keys, passkeys or secure enclaves.
 * [`SignerRSA`](/contracts/5.x/api/utils/cryptography#SignerRSA): Verifies signatures of traditional PKI systems and X.509 certificates.
-* [`SignerERC7702`](/contracts/5.x/api/utils/cryptography#SignerERC7702): Checks EOA signatures delegated to this signer using [EIP-7702 authorizations](https://eips.ethereum.org/EIPS/eip-7702#set-code-transaction)
+* [`SignerEIP7702`](/contracts/5.x/api/utils/cryptography#SignerEIP7702): Checks EOA signatures delegated to this signer using [EIP-7702 authorizations](https://eips.ethereum.org/EIPS/eip-7702#set-code-transaction)
 * [`SignerERC7913`](/contracts/5.x/api/utils/cryptography#SignerERC7913): Verifies generalized signatures following [ERC-7913](https://eips.ethereum.org/EIPS/eip-7913).
-* [`SignerZKEmail`](https://docs.openzeppelin.com/community-contracts/0.0.1/api/utils#SignerZKEmail): Enables email-based authentication for smart contracts using zero knowledge proofs of email authority signatures.
+* [`SignerZKEmail`](https://docs.openzeppelin.com/community-contracts/0.0.1/api/utils/cryptography#SignerZKEmail): Enables email-based authentication for smart contracts using zero-knowledge proofs of email authority signatures.
 * [`MultiSignerERC7913`](/contracts/5.x/api/utils/cryptography#MultiSignerERC7913): Allows using multiple ERC-7913 signers with a threshold-based signature verification system.
 * [`MultiSignerERC7913Weighted`](/contracts/5.x/api/utils/cryptography#MultiSignerERC7913Weighted): Overrides the threshold mechanism of [`MultiSignerERC7913`](/contracts/5.x/api/utils/cryptography#MultiSignerERC7913), offering different weights per signer.
 
@@ -35,7 +35,7 @@ Given [`SignerERC7913`](/contracts/5.x/api/utils/cryptography#SignerERC7913) pro
 
 #### Accounts factory
 
-The first time you send an user operation, your account will be created deterministically (i.e. its code and address can be predicted) using the the `initCode` field in the UserOperation. This field contains both the address of a smart contract (the factory) and the data required to call it and create your smart account.
+The first time you send a user operation, your account will be created deterministically (i.e. its code and address can be predicted) using the `initCode` field in the UserOperation. This field contains both the address of a smart contract (the factory) and the data required to call it and create your smart account.
 
 Suggestively, you can create your own account factory using the [Clones library](/contracts/5.x/api/proxy#Clones), taking advantage of decreased deployment costs and account address predictability.
 
@@ -50,7 +50,7 @@ Most smart accounts are deployed by a factory, the best practice is to create [m
 ```solidity
 import {Account} from "@openzeppelin/community-contracts/account/Account.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import {SignerECDSA} from "@openzeppelin/community-contracts/utils/cryptography/SignerECDSA.sol";
+import {SignerECDSA} from "@openzeppelin/contracts/utils/cryptography/signers/SignerECDSA.sol";
 
 contract MyAccount is Initializable, Account, SignerECDSA, ... {
     // ...
@@ -82,12 +82,12 @@ function isValidSignature(bytes32 hash, bytes calldata signature) public view ov
 ```
 
 <Callout type='warn'>
-We recommend using [ERC7739](/contracts/5.x/api/utils/cryptography#ERC7739) to avoid replayability across accounts. This defensive rehashing mechanism that prevents signatures for this account to be replayed in another account controlled by the same signer. See [ERC-7739 signatures](#erc_7739_signatures).
+We recommend using [ERC7739](/contracts/5.x/api/utils/cryptography#ERC7739) to avoid replayability across accounts. This defensive rehashing mechanism prevents signatures for this account from being replayed in another account controlled by the same signer. See [ERC-7739 signatures](accounts#erc_7739_signatures).
 </Callout>
 
 ### Batched execution
 
-Batched execution allows accounts to execute multiple calls in a single transaction, which is particularly useful for bundling operations that need to be atomic. This is especially valuable in the context of account abstraction where you want to minimize the number of user operations and associated gas costs. [`ERC-7821`](/contracts/5.x/api/account#ERC7821) standard provides a minimal interface for batched execution.
+Batched execution allows accounts to execute multiple calls in a single transaction, which is particularly useful for bundling operations that need to be atomic. This is especially valuable in the context of account abstraction where you want to minimize the number of user operations and associated gas costs. [`ERC-7821`](/contracts/5.x/api/account#ERC7821) standard provides a minimal interface for batched execution. 
 
 The library implementation supports a single batch mode (`0x01000000000000000000`) and allows accounts to execute multiple calls atomically. The standard includes access control through the [`_erc7821AuthorizedExecutor`](/contracts/5.x/api/account#ERC7821-_erc7821AuthorizedExecutor-address-bytes32-bytes-) function, which by default only allows the contract itself to execute batches.
 
@@ -96,9 +96,9 @@ Here’s an example of how to use batched execution using EIP-7702:
 ```solidity
 import {Account} from "@openzeppelin/community-contracts/account/Account.sol";
 import {ERC7821} from "@openzeppelin/community-contracts/account/extensions/draft-ERC7821.sol";
-import {SignerERC7702} from "@openzeppelin/community-contracts/utils/cryptography/SignerERC7702.sol";
+import {SignerEIP7702} from "@openzeppelin/contracts/utils/cryptography/signers/SignerEIP7702.sol";
 
-contract MyAccount is Account, SignerERC7702, ERC7821 {
+contract MyAccount is Account, SignerEIP7702, ERC7821 {
     // Override to allow the entrypoint to execute batches
     function _erc7821AuthorizedExecutor(
         address caller,
@@ -115,7 +115,7 @@ The batched execution data follows a specific format that includes the calls to 
 To encode an ERC-7821 batch, you can use [viem](https://viem.sh/)'s utilities:
 
 ```typescript
-// CALL_TYPE_BATCH, EXEC_TYPE_DEFAULT, ..., selector, payload
+// CALL_TYPE_BATCH, EXEC_TYPE_DEFAULT, ..., selector, payload 
 const mode = encodePacked(
   ["bytes1", "bytes1", "bytes4", "bytes4", "bytes22"],
   ["0x01", "0x00", "0x00000000", "0x00000000", "0x00000000000000000000000000000000000000000000"]
@@ -152,7 +152,7 @@ const userOpData = encodeFunctionData({
 
 ## Bundle a `UserOperation`
 
-[UserOperations](./account-abstraction#useroperation) are a powerful abstraction layer that enable more sophisticated transaction capabilities compared to traditional Ethereum transactions. To get started, you’ll need to an account, which you can get by [deploying a factory](#accounts_factory) for your implementation.
+[UserOperations](account-abstraction#useroperation) are a powerful abstraction layer that enable more sophisticated transaction capabilities compared to traditional Ethereum transactions. To get started, you’ll need an account, which you can get by [deploying a factory](accounts#accounts_factory) for your implementation.
 
 ### Preparing a UserOp
 
@@ -300,7 +300,7 @@ Using `getUserOpHash` directly may provide a poorer user experience as users see
 
 ### Sending the UserOp
 
-Finally, to send the user operation you can call `handleOps` on the Entrypoint contract and set yourself as the `beneficiary`.
+Finally, to send the user operation you can call `handleOps` on the Entrypoint contract and set yourself as the `beneficiary`. 
 
 ```typescript
 // Send the UserOperation
@@ -337,23 +337,23 @@ A common security practice to prevent user operation [replayability across smart
 
 The problem with this approach is that the user might be prompted by the wallet provider to sign an [obfuscated message](https://x.com/howydev/status/1780353754333634738), which is a phishing vector that may lead to a user losing its assets.
 
-To prevent this, developers may use [`ERC7739Signer`](./api/account#ERC7739Signer), a utility that implements [`IERC1271`](./api/interfaces#IERC1271) for smart contract signatures with a defensive rehashing mechanism based on a [nested EIP-712 approach](https://github.com/frangio/eip712-wrapper-for-eip1271) to wrap the signature request in a context where there’s clearer information for the end user.
+To prevent this, developers may use [`ERC7739Signer`](api:account#ERC7739Signer), a utility that implements [`IERC1271`](api:interfaces#IERC1271) for smart contract signatures with a defensive rehashing mechanism based on a [nested EIP-712 approach](https://github.com/frangio/eip712-wrapper-for-eip1271) to wrap the signature request in a context where there’s clearer information for the end user.
 
 ### EIP-7702 Delegation
 
 [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702) lets EOAs delegate to smart contracts while keeping their original signing key. This creates a hybrid account that works like an EOA for signing but has smart contract features. Protocols don’t need major changes to support EIP-7702 since they already handle both EOAs and smart contracts (see [SignatureChecker](/contracts/5.x/api/utils/cryptography#SignatureChecker)).
 
-The signature verification stays compatible: delegated EOAs are treated as contracts using ERC-1271, making it easy to redelegate to a contract with ERC-1271 support with little overhead by reusing the validation mechanism of the account.
+The signature verification stays compatible: delegated EOAs are treated as contracts using ERC-1271, making it easy to redelegate to a contract with ERC-1271 support with little overhead by reusing the validation mechanism of the account. 
 
 <Callout>
-Learn more about delegating to an ERC-7702 account in our [EOA Delegation](./eoa-delegation) section.
+Learn more about delegating to an EIP-7702 account in our [EOA Delegation](eoa-delegation) section.
 </Callout>
 
 ### ERC-7579 Modules
 
 Smart accounts have evolved to embrace modularity as a design principle, with popular implementations like [Safe, Pimlico, Rhinestone, Etherspot and many others](https://erc7579.com/#supporters) agreeing on ERC-7579 as the standard for module interoperability. This standardization enables accounts to extend their functionality through external contracts while maintaining compatibility across different implementations.
 
-OpenZeppelin Contracts provides both the building blocks for creating ERC-7579-compliant modules and an [`AccountERC7579`](/contracts/5.x/api/account#AccountERC7579) implementation that supports installing and managing these modules.
+OpenZeppelin Contracts provides both the building blocks for creating ERC-7579-compliant modules and an [`AccountERC7579`](/contracts/5.x/api/account#AccountERC7579) implementation that supports installing and managing these modules. 
 
 <Callout>
 Learn more in our [account modules](https://docs.openzeppelin.com/community-contracts/0.0.1/account-modules) section.

@@ -36,7 +36,7 @@ When using a timelock with your Governor contract, you can use either OpenZeppel
 
 [Tally](https://www.tally.xyz) is a full-fledged application for user owned on-chain governance. It comprises a voting dashboard, proposal creation wizard, real time research and analysis, and educational content.
 
-For all of these options, the Governor will be compatible with Tally: users will be able to create proposals, see voting periods and delays following [IERC6372](/contracts/5.x/api/interfaces#IERC6372), visualize voting power and advocates, navigate proposals, and cast votes. For proposal creation in particular, projects can also use [Defender Transaction Proposals](/defender/module/transaction-proposals) as an alternative interface.
+For all of these options, the Governor will be compatible with Tally: users will be able to create proposals, see voting periods and delays following [IERC6372](/contracts/5.x/api/interfaces#IERC6372), visualize voting power and advocates, navigate proposals, and cast votes. For proposal creation in particular, projects can also use [Defender Transaction Proposals](https://docs.openzeppelin.com/defender/module/actions#transaction-proposals-reference) as an alternative interface.
 
 In the rest of this guide, we will focus on a fresh deploy of the vanilla OpenZeppelin Governor features without concern for compatibility with GovernorAlpha or Bravo.
 
@@ -94,7 +94,12 @@ TimelockController uses an AccessControl setup that we need to understand in ord
 
 * The Proposer role is in charge of queueing operations: this is the role the Governor instance should be granted, and it should likely be the only proposer in the system.
 * The Executor role is in charge of executing already available operations: we can assign this role to the special zero address to allow anyone to execute (if operations can be particularly time sensitive, the Governor should be made Executor instead).
+* The Canceller role can cancel queued operations in the timelock: the Governor should hold this role for proposal cancellations to work after queuing. If the Governor is set as a proposer at deployment, it will automatically receive the Canceller role as well.
 * Lastly, there is the Admin role, which can grant and revoke the two previous roles: this is a very sensitive role that will be granted automatically to the timelock itself, and optionally to a second account, which can be used for ease of setup but should promptly renounce the role.
+
+<Callout type='warn'>
+Granting additional proposers or cancellers besides the Governor is risky. They can execute operations as the timelock (bypassing governance) and cancel approved proposals, potentially causing a denial of service attack against governance.
+</Callout>
 
 ## Proposal Lifecycle
 
@@ -106,7 +111,7 @@ A proposal is a sequence of actions that the Governor contract will perform if i
 
 Let’s say we want to create a proposal to give a team a grant, in the form of ERC-20 tokens from the governance treasury. This proposal will consist of a single action where the target is the ERC-20 token, calldata is the encoded function call `transfer(<team wallet>, <grant amount>)`, and with 0 ETH attached.
 
-Generally a proposal will be created with the help of an interface such as Tally or [Defender Proposals](/defender/module/transaction-proposals). Here we will show how to create the proposal using Ethers.js.
+Generally a proposal will be created with the help of an interface such as Tally or [Defender Proposals](https://docs.openzeppelin.com/defender/module/actions#transaction-proposals-reference). Here we will show how to create the proposal using Ethers.js.
 
 First we get all the parameters necessary for the proposal action.
 
@@ -165,7 +170,7 @@ await governor.queue(
 
 This will cause the Governor to interact with the timelock contract and queue the actions for execution after the required delay.
 
-After enough time has passed (according to the timelock parameters), the proposal can be executed. If there was no timelock to begin with, this step can be ran immediately after the proposal succeeds.
+After enough time has passed (according to the timelock parameters), the proposal can be executed. If there was no timelock to begin with, this step can be run immediately after the proposal succeeds.
 
 ```javascript
 await governor.execute(
@@ -202,7 +207,7 @@ The Governor will automatically detect the clock mode used by the token and adap
 pragma solidity ^0.8.20;
 
 import {Governor} from "@openzeppelin/contracts/governance/Governor.sol";
-import {GovernorCountingSimple} from "@openzeppelin/contracts/governance/compatibility/GovernorCountingSimple.sol";
+import {GovernorCountingSimple} from "@openzeppelin/contracts/governance/extensions/GovernorCountingSimple.sol";
 import {GovernorVotes} from "@openzeppelin/contracts/governance/extensions/GovernorVotes.sol";
 import {GovernorVotesQuorumFraction} from "@openzeppelin/contracts/governance/extensions/GovernorVotesQuorumFraction.sol";
 import {GovernorTimelockControl} from "@openzeppelin/contracts/governance/extensions/GovernorTimelockControl.sol";

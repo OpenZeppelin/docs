@@ -21,6 +21,7 @@ function parseArgs() {
 		examplesOutputDir: "examples",
 		skipTemplateInject: false,
 		preGenerated: null,
+		guidesOutputDir: null,
 	};
 
 	for (let i = 0; i < args.length; i++) {
@@ -58,6 +59,10 @@ function parseArgs() {
 			case "-p":
 				options.preGenerated = args[++i];
 				break;
+			case "--guides-output":
+			case "-g":
+				options.guidesOutputDir = args[++i];
+				break;
 			default:
 				console.error(`Unknown option: ${arg}`);
 				showHelp();
@@ -81,6 +86,7 @@ Options:
   -a, --api-output <dir>     API documentation output directory (default: content/contracts/5.x/api)
   -e, --examples-output <dir> Examples output directory (default: examples)
   -p, --pre-generated <path> Path within repo containing pre-generated MDX files (skips docgen)
+  -g, --guides-output <dir>  Convert .adoc guides from docs/modules/ROOT/pages/ to MDX into <dir>
   --skip-template-inject     Skip injecting canonical templates (use source repo's own)
   -h, --help                 Show this help message
 
@@ -128,28 +134,26 @@ async function injectTemplates(tempDir, options) {
 	console.log("📋 Injecting canonical MDX templates...");
 
 	const templatesTarget = path.join(tempDir, "docs", "templates-md");
-	const configTarget = path.join(tempDir, "docs", "config-md.js");
+	// Overwrite the cloned repo's docs/config.js with our canonical config.
+	// The cloned repo's hardhat config and prepare-docs.sh scripts both load
+	// `./docs/config`, so this single overwrite covers both paths without
+	// needing a separate config-md.js write or a hardhat-config regex patch.
+	const configTarget = path.join(tempDir, "docs", "config.js");
 
-	// Copy canonical templates
 	await fs.mkdir(templatesTarget, { recursive: true });
 	await copyDirRecursive(
 		path.join(DOCGEN_DIR, "templates-md"),
 		templatesTarget,
 	);
 
-	// Copy canonical config (as config-md.js and also overwrite config.js
-	// so prepare-docs.sh scripts that read config.js directly still work)
 	await fs.copyFile(path.join(DOCGEN_DIR, "config-md.js"), configTarget);
-	const configJsTarget = path.join(tempDir, "docs", "config.js");
-	await fs.copyFile(path.join(DOCGEN_DIR, "config-md.js"), configJsTarget);
 
-	// Customize API_DOCS_PATH in helpers.js
-	// API_DOCS_PATH is the URL path (strip content/ prefix from the file path)
+	// Customize API_DOCS_PATH in helpers.js (URL path = file path minus content/)
 	const apiDocsPath = apiOutputDir.replace(/^content\//, "");
 	const helpersPath = path.join(templatesTarget, "helpers.js");
 	let helpers = await fs.readFile(helpersPath, "utf8");
 	helpers = helpers.replace(
-		/const API_DOCS_PATH = '[^']+'/,
+		/const API_DOCS_PATH = ['"][^'"]+['"]/,
 		`const API_DOCS_PATH = '${apiDocsPath}'`,
 	);
 	await fs.writeFile(helpersPath, helpers, "utf8");
@@ -159,17 +163,14 @@ async function injectTemplates(tempDir, options) {
 	const contractPath = path.join(templatesTarget, "contract.hbs");
 	let contract = await fs.readFile(contractPath, "utf8");
 
-	// Update GitHub link: just replace the org/repo part, keep v{{oz-version}} for versioned repos
 	contract = contract.replace(
 		/OpenZeppelin\/openzeppelin-contracts/g,
 		`${repoInfo.org}/${repoInfo.repo}`,
 	);
 
-	// Update import path: the canonical template has @openzeppelin/{{absolutePath}}
-	// where absolutePath starts with "contracts/...". For the main contracts repo
-	// this produces @openzeppelin/contracts/token/... which is correct.
-	// For community-contracts, we need @openzeppelin/community-contracts/contracts/token/...
-	// So only patch if the package name isn't just "contracts"
+	// Canonical template has @openzeppelin/{{absolutePath}} with absolutePath
+	// starting "contracts/...". For openzeppelin-contracts that's correct;
+	// other packages (e.g. community-contracts) need their package name prepended.
 	if (packageName !== "contracts") {
 		contract = contract.replace(
 			/import "@openzeppelin\/\{\{/,
@@ -183,32 +184,6 @@ async function injectTemplates(tempDir, options) {
 	console.log(
 		`  ✓ Import path set to @openzeppelin/${packageName}/`,
 	);
-
-	// Patch hardhat config to use config-md
-	const hardhatConfigPaths = [
-		path.join(tempDir, "hardhat.config.js"),
-		path.join(tempDir, "hardhat.config.ts"),
-	];
-
-	for (const configPath of hardhatConfigPaths) {
-		try {
-			let config = await fs.readFile(configPath, "utf8");
-			if (config.includes("require('./docs/config')")) {
-				config = config.replace(
-					"require('./docs/config')",
-					"require('./docs/config-md')",
-				);
-				await fs.writeFile(configPath, config, "utf8");
-				console.log(`  ✓ Patched ${path.basename(configPath)} to use config-md`);
-			} else if (config.includes("require('./docs/config-md')")) {
-				console.log(
-					`  ✓ ${path.basename(configPath)} already uses config-md`,
-				);
-			}
-		} catch {
-			// Config file doesn't exist, skip
-		}
-	}
 }
 
 async function generateApiDocs(options) {
@@ -220,6 +195,7 @@ async function generateApiDocs(options) {
 		examplesOutputDir,
 		skipTemplateInject,
 		preGenerated,
+		guidesOutputDir,
 	} = options;
 
 	console.log("🔄 Generating OpenZeppelin API documentation...");
@@ -230,6 +206,9 @@ async function generateApiDocs(options) {
 		console.log(`📋 Mode: pre-generated (source path: ${preGenerated})`);
 	} else {
 		console.log(`📂 Examples Output: ${examplesOutputDir}`);
+	}
+	if (guidesOutputDir) {
+		console.log(`📖 Guides Output: ${guidesOutputDir}`);
 	}
 
 	try {
@@ -350,6 +329,11 @@ async function generateApiDocs(options) {
 			await fs.writeFile(indexPath, indexBackup, "utf8");
 		}
 
+		// Convert AsciiDoc guides (docs/modules/ROOT/pages) to MDX
+		if (guidesOutputDir) {
+			await convertGuides(tempDir, guidesOutputDir, apiOutputDir);
+		}
+
 		// Clean up temporary directory
 		console.log("🧹 Cleaning up...");
 		await fs.rm(tempDir, { recursive: true, force: true });
@@ -359,6 +343,43 @@ async function generateApiDocs(options) {
 	} catch (error) {
 		console.error("❌ Error generating API documentation:", error.message);
 		process.exit(1);
+	}
+}
+
+async function convertGuides(tempDir, guidesOutputDir, apiOutputDir) {
+	const guidesPath = path.join(tempDir, "docs", "modules", "ROOT", "pages");
+
+	try {
+		await fs.access(guidesPath);
+	} catch {
+		console.log(`ℹ️  No guides at ${guidesPath}, skipping conversion`);
+		return;
+	}
+
+	console.log("📖 Converting AsciiDoc guides to MDX...");
+	const apiRoute = apiOutputDir.replace(/^content\//, "");
+	const scriptPath = path.join(__dirname, "convert-adoc.js");
+
+	execFileSync("node", [scriptPath, guidesPath, apiRoute], {
+		stdio: "inherit",
+	});
+
+	await fs.mkdir(guidesOutputDir, { recursive: true });
+	await copyMdxRecursive(guidesPath, guidesOutputDir);
+	console.log(`✅ Guides copied to ${guidesOutputDir}`);
+}
+
+async function copyMdxRecursive(srcDir, destDir) {
+	const entries = await fs.readdir(srcDir, { withFileTypes: true });
+	for (const entry of entries) {
+		const srcPath = path.join(srcDir, entry.name);
+		const destPath = path.join(destDir, entry.name);
+		if (entry.isDirectory()) {
+			await fs.mkdir(destPath, { recursive: true });
+			await copyMdxRecursive(srcPath, destPath);
+		} else if (entry.isFile() && entry.name.endsWith(".mdx")) {
+			await fs.copyFile(srcPath, destPath);
+		}
 	}
 }
 

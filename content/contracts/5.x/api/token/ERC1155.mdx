@@ -13,7 +13,6 @@ Additionally there are multiple custom extensions, including:
 
 * designation of addresses that can pause token transfers for all users ([`ERC1155Pausable`](#ERC1155Pausable)).
 * destruction of own tokens ([`ERC1155Burnable`](#ERC1155Burnable)).
-* crosschain bridging of tokens through ERC-7786 gateways ([`ERC1155Crosschain`](#ERC1155Crosschain)).
 
 <Callout>
 This core set of contracts is designed to be unopinionated, allowing developers to access the internal functions in ERC-1155 (such as [`_mint`](#ERC1155-_mint-address-uint256-uint256-bytes-)) and expose them as external functions in the way they prefer.
@@ -31,11 +30,9 @@ This core set of contracts is designed to be unopinionated, allowing developers 
 
 ## Extensions
 
-[`ERC1155Burnable`](#ERC1155Burnable)
-
-[`ERC1155Crosschain`](#ERC1155Crosschain)
-
 [`ERC1155Pausable`](#ERC1155Pausable)
+
+[`ERC1155Burnable`](#ERC1155Burnable)
 
 [`ERC1155Supply`](#ERC1155Supply)
 
@@ -1107,211 +1104,6 @@ own tokens and those that they have been approved to use.
 </div>
 </div>
 <div className="px-4">
-
-</div>
-</div>
-
-<a id="ERC1155Crosschain"></a>
-
-<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
-
-## `ERC1155Crosschain` 
-
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC1155/extensions/ERC1155Crosschain.sol">
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
-</a>
-
-</div>
-
-```solidity
-import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Crosschain.sol";
-```
-
-Extension of [`ERC1155`](#ERC1155) that makes it natively cross-chain using the ERC-7786 based [`BridgeMultiToken`](/contracts/5.x/api/crosschain#BridgeMultiToken).
-
-This extension makes the token compatible with:
-* [`ERC1155Crosschain`](#ERC1155Crosschain) instances on other chains,
-* [`ERC1155`](#ERC1155) instances on other chains that are bridged using [`BridgeERC1155`](/contracts/5.x/api/crosschain#BridgeERC1155),
-
-<div className="bg-secondary p-4 rounded-md mb-6">
-<h3 style={{ marginTop: "0"}}>Functions</h3>
-<div className="font-mono">
-- [crosschainTransferFrom(from, to, id, value)](#ERC1155Crosschain-crosschainTransferFrom-address-bytes-uint256-uint256-)
-- [crosschainTransferFrom(from, to, ids, values)](#ERC1155Crosschain-crosschainTransferFrom-address-bytes-uint256---uint256---)
-- [_onSend(from, ids, values)](#ERC1155Crosschain-_onSend-address-uint256---uint256---)
-- [_onReceive(to, ids, values)](#ERC1155Crosschain-_onReceive-address-uint256---uint256---)
-<details>
-<summary>BridgeMultiToken</summary>
-
-- [_crosschainTransfer(from, to, ids, values)](#BridgeMultiToken-_crosschainTransfer-address-bytes-uint256---uint256---)
-- [_processMessage(, receiveId, , payload)](#BridgeMultiToken-_processMessage-address-bytes32-bytes-bytes-)
-
-</details>
-<details>
-<summary>CrosschainLinked</summary>
-
-- [getLink(chain)](#CrosschainLinked-getLink-bytes-)
-- [_setLink(gateway, counterpart, allowOverride)](#CrosschainLinked-_setLink-address-bytes-bool-)
-- [_sendMessageToCounterpart(chain, payload, attributes)](#CrosschainLinked-_sendMessageToCounterpart-bytes-bytes-bytes---)
-- [_isAuthorizedGateway(instance, sender)](#CrosschainLinked-_isAuthorizedGateway-address-bytes-)
-
-</details>
-<details>
-<summary>ERC7786Recipient</summary>
-
-- [receiveMessage(receiveId, sender, payload)](#ERC7786Recipient-receiveMessage-bytes32-bytes-bytes-)
-
-</details>
-<details>
-<summary>ERC1155</summary>
-
-- [supportsInterface(interfaceId)](#ERC1155-supportsInterface-bytes4-)
-- [uri()](#ERC1155-uri-uint256-)
-- [balanceOf(account, id)](#ERC1155-balanceOf-address-uint256-)
-- [balanceOfBatch(accounts, ids)](#ERC1155-balanceOfBatch-address---uint256---)
-- [setApprovalForAll(operator, approved)](#ERC1155-setApprovalForAll-address-bool-)
-- [isApprovedForAll(account, operator)](#ERC1155-isApprovedForAll-address-address-)
-- [safeTransferFrom(from, to, id, value, data)](#ERC1155-safeTransferFrom-address-address-uint256-uint256-bytes-)
-- [safeBatchTransferFrom(from, to, ids, values, data)](#ERC1155-safeBatchTransferFrom-address-address-uint256---uint256---bytes-)
-- [_checkAuthorized(operator, owner)](#ERC1155-_checkAuthorized-address-address-)
-- [_update(from, to, ids, values)](#ERC1155-_update-address-address-uint256---uint256---)
-- [_updateWithAcceptanceCheck(from, to, ids, values, data)](#ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-)
-- [_updateWithAcceptanceCheck(from, to, ids, values, data, batch)](#ERC1155-_updateWithAcceptanceCheck-address-address-uint256---uint256---bytes-bool-)
-- [_safeTransferFrom(from, to, id, value, data)](#ERC1155-_safeTransferFrom-address-address-uint256-uint256-bytes-)
-- [_safeBatchTransferFrom(from, to, ids, values, data)](#ERC1155-_safeBatchTransferFrom-address-address-uint256---uint256---bytes-)
-- [_setURI(newuri)](#ERC1155-_setURI-string-)
-- [_mint(to, id, value, data)](#ERC1155-_mint-address-uint256-uint256-bytes-)
-- [_mintBatch(to, ids, values, data)](#ERC1155-_mintBatch-address-uint256---uint256---bytes-)
-- [_burn(from, id, value)](#ERC1155-_burn-address-uint256-uint256-)
-- [_burnBatch(from, ids, values)](#ERC1155-_burnBatch-address-uint256---uint256---)
-- [_setApprovalForAll(owner, operator, approved)](#ERC1155-_setApprovalForAll-address-address-bool-)
-
-</details>
-</div>
-</div>
-
-<div className="bg-secondary p-4 rounded-md mb-6">
-<h3 style={{ marginTop: "0"}}>Events</h3>
-<div className="font-mono">
-<details>
-<summary>BridgeMultiToken</summary>
-
-- [CrosschainMultiTokenTransferSent(sendId, from, to, ids, values)](#BridgeMultiToken-CrosschainMultiTokenTransferSent-bytes32-address-bytes-uint256---uint256---)
-- [CrosschainMultiTokenTransferReceived(receiveId, from, to, ids, values)](#BridgeMultiToken-CrosschainMultiTokenTransferReceived-bytes32-bytes-address-uint256---uint256---)
-
-</details>
-<details>
-<summary>CrosschainLinked</summary>
-
-- [LinkRegistered(gateway, counterpart)](#CrosschainLinked-LinkRegistered-address-bytes-)
-
-</details>
-<details>
-<summary>IERC1155</summary>
-
-- [TransferSingle(operator, from, to, id, value)](#IERC1155-TransferSingle-address-address-address-uint256-uint256-)
-- [TransferBatch(operator, from, to, ids, values)](#IERC1155-TransferBatch-address-address-address-uint256---uint256---)
-- [ApprovalForAll(account, operator, approved)](#IERC1155-ApprovalForAll-address-address-bool-)
-- [URI(value, id)](#IERC1155-URI-string-uint256-)
-
-</details>
-</div>
-</div>
-
-<div className="bg-secondary p-4 rounded-md mb-6">
-<h3 style={{ marginTop: "0"}}>Errors</h3>
-<div className="font-mono">
-<details>
-<summary>CrosschainLinked</summary>
-
-- [LinkAlreadyRegistered(chain)](#CrosschainLinked-LinkAlreadyRegistered-bytes-)
-
-</details>
-<details>
-<summary>ERC7786Recipient</summary>
-
-- [ERC7786RecipientUnauthorizedGateway(gateway, sender)](#ERC7786Recipient-ERC7786RecipientUnauthorizedGateway-address-bytes-)
-
-</details>
-<details>
-<summary>IERC1155Errors</summary>
-
-- [ERC1155InsufficientBalance(sender, balance, needed, tokenId)](#IERC1155Errors-ERC1155InsufficientBalance-address-uint256-uint256-uint256-)
-- [ERC1155InvalidSender(sender)](#IERC1155Errors-ERC1155InvalidSender-address-)
-- [ERC1155InvalidReceiver(receiver)](#IERC1155Errors-ERC1155InvalidReceiver-address-)
-- [ERC1155MissingApprovalForAll(operator, owner)](#IERC1155Errors-ERC1155MissingApprovalForAll-address-address-)
-- [ERC1155InvalidApprover(approver)](#IERC1155Errors-ERC1155InvalidApprover-address-)
-- [ERC1155InvalidOperator(operator)](#IERC1155Errors-ERC1155InvalidOperator-address-)
-- [ERC1155InvalidArrayLength(idsLength, valuesLength)](#IERC1155Errors-ERC1155InvalidArrayLength-uint256-uint256-)
-
-</details>
-</div>
-</div>
-
-<a id="ERC1155Crosschain-crosschainTransferFrom-address-bytes-uint256-uint256-"></a>
-
-<div className="border rounded-md mb-4">
-<div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">crosschainTransferFrom(address from, bytes to, uint256 id, uint256 value) → bytes32</p>
-<div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">public</p>
-<a className="peer" data-card href="#ERC1155Crosschain-crosschainTransferFrom-address-bytes-uint256-uint256-">#</a>
-</div>
-</div>
-<div className="px-4">
-
-TransferFrom variant of [`ERC1155Crosschain.crosschainTransferFrom`](#ERC1155Crosschain-crosschainTransferFrom-address-bytes-uint256---uint256---), using ERC1155 allowance from the sender to the caller.
-
-</div>
-</div>
-
-<a id="ERC1155Crosschain-crosschainTransferFrom-address-bytes-uint256---uint256---"></a>
-
-<div className="border rounded-md mb-4">
-<div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">crosschainTransferFrom(address from, bytes to, uint256[] ids, uint256[] values) → bytes32</p>
-<div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">public</p>
-<a className="peer" data-card href="#ERC1155Crosschain-crosschainTransferFrom-address-bytes-uint256---uint256---">#</a>
-</div>
-</div>
-<div className="px-4">
-
-TransferFrom variant of [`ERC1155Crosschain.crosschainTransferFrom`](#ERC1155Crosschain-crosschainTransferFrom-address-bytes-uint256---uint256---), using ERC1155 allowance from the sender to the caller.
-
-</div>
-</div>
-
-<a id="ERC1155Crosschain-_onSend-address-uint256---uint256---"></a>
-
-<div className="border rounded-md mb-4">
-<div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">_onSend(address from, uint256[] ids, uint256[] values)</p>
-<div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="#ERC1155Crosschain-_onSend-address-uint256---uint256---">#</a>
-</div>
-</div>
-<div className="px-4">
-
-"Locking" tokens is achieved through burning
-
-</div>
-</div>
-
-<a id="ERC1155Crosschain-_onReceive-address-uint256---uint256---"></a>
-
-<div className="border rounded-md mb-4">
-<div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">_onReceive(address to, uint256[] ids, uint256[] values)</p>
-<div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="#ERC1155Crosschain-_onReceive-address-uint256---uint256---">#</a>
-</div>
-</div>
-<div className="px-4">
-
-"Unlocking" tokens is achieved through minting
 
 </div>
 </div>

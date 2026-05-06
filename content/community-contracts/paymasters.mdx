@@ -13,28 +13,28 @@ To enable sponsorship, users sign their user operations including a special fiel
 The [`PaymasterSigner`](/community-contracts/api/account#PaymasterSigner) implements signature-based sponsorship via authorization signatures, allowing designated paymaster signers to authorize and sponsor specific user operations without requiring users to hold native ETH.
 
 <Callout>
-Learn more about [signers](/contracts/5.x/accounts#selecting-a-signer) to explore different approaches to user operation sponsorship via signatures.
+Learn more about [signers](accounts#selecting_a_signer) to explore different approaches to user operation sponsorship via signatures.
 </Callout>
 
 <include cwd lang='solidity'>./examples/account/paymaster/PaymasterECDSASigner.sol</include>
 
 <Callout>
-Use [`ERC4337Utils`](/contracts/5.x/api/account#ERC4337Utils) to facilitate the access to paymaster-related fields of the userOp (e.g. `paymasterData`, `paymasterVerificationGasLimit`)
+Use [`ERC4337Utils`](https://docs.openzeppelin.com/contracts/5.x/api/account#ERC4337Utils) to facilitate the access to paymaster-related fields of the userOp (e.g. `paymasterData`, `paymasterVerificationGasLimit`)
 </Callout>
 
 To implement signature-based sponsorship, you’ll first need to deploy the paymaster contract. This contract will hold the ETH used to pay for user operations and verify signatures from your authorized signer. After deployment, you must fund the paymaster with ETH to cover gas costs for the operations it will sponsor:
 
 ```typescript
 // Fund the paymaster with ETH
-await eoaClient.sendTransaction(
+await eoaClient.sendTransaction({
   to: paymasterECDSASigner.address,
   value: parseEther("0.01"),
-  data: encodeFunctionData(
+  data: encodeFunctionData({
     abi: paymasterECDSASigner.abi,
     functionName: "deposit",
     args: [],
-  ),
-);
+  }),
+});
 ```
 
 <Callout type='warn'>
@@ -52,30 +52,30 @@ const paymasterVerificationGasLimit = 100_000n;
 const paymasterPostOpGasLimit = 300_000n;
 
 // Sign using EIP-712 typed data
-const paymasterSignature = await signer.signTypedData(
-  domain:
+const paymasterSignature = await signer.signTypedData({
+  domain: {
     chainId: await signerClient.getChainId(),
     name: "MyPaymasterECDSASigner",
     verifyingContract: paymasterECDSASigner.address,
     version: "1",
-  ,
-  types:
+  },
+  types: {
     UserOperationRequest: [
-       name: "sender", type: "address" ,
-       name: "nonce", type: "uint256" ,
-       name: "initCode", type: "bytes" ,
-       name: "callData", type: "bytes" ,
-       name: "accountGasLimits", type: "bytes32" ,
-       name: "preVerificationGas", type: "uint256" ,
-       name: "gasFees", type: "bytes32" ,
-       name: "paymasterVerificationGasLimit", type: "uint256" ,
-       name: "paymasterPostOpGasLimit", type: "uint256" ,
-       name: "validAfter", type: "uint48" ,
-       name: "validUntil", type: "uint48" ,
+      { name: "sender", type: "address" },
+      { name: "nonce", type: "uint256" },
+      { name: "initCode", type: "bytes" },
+      { name: "callData", type: "bytes" },
+      { name: "accountGasLimits", type: "bytes32" },
+      { name: "preVerificationGas", type: "uint256" },
+      { name: "gasFees", type: "bytes32" },
+      { name: "paymasterVerificationGasLimit", type: "uint256" },
+      { name: "paymasterPostOpGasLimit", type: "uint256" },
+      { name: "validAfter", type: "uint48" },
+      { name: "validUntil", type: "uint48" },
     ],
-  ,
+  },
   primaryType: "UserOperationRequest",
-  message:
+  message: {
     sender: userOp.sender,
     nonce: userOp.nonce,
     initCode: userOp.initCode,
@@ -87,8 +87,8 @@ const paymasterSignature = await signer.signTypedData(
     paymasterPostOpGasLimit,
     validAfter,
     validUntil,
-  ,
-);
+  },
+});
 ```
 
 The time window (`validAfter` and `validUntil`) prevents replay attacks and allows you to limit how long the signature remains valid. Once signed, the paymaster data needs to be formatted and attached to the user operation:
@@ -119,12 +119,12 @@ With the paymaster data attached, the user operation can now be signed by the ac
 const signedUserOp = await signUserOp(entrypoint, userOp);
 
 // Submit to the EntryPoint contract
-const userOpReceipt = await eoaClient.writeContract(
-  abi: EntrypointV08Abi,
+const userOpReceipt = await eoaClient.writeContract({
+  abi: EntrypointV09Abi,
   address: entrypoint.address,
   functionName: "handleOps",
   args: [[signedUserOp], beneficiary.address],
-);
+});
 ```
 
 Behind the scenes, the EntryPoint will call the paymaster’s `validatePaymasterUserOp` function, which verifies the signature and time window. If valid, the paymaster commits to paying for the operation’s gas costs, and the EntryPoint executes the operation.
@@ -137,9 +137,9 @@ While signature-based sponsorship is useful for many applications, sometimes you
 function _fetchDetails(
     PackedUserOperation calldata userOp,
     bytes32 userOpHash
-) internal view override returns (uint256 validationData, IERC20 token, uint256 tokenPrice)
+) internal view override returns (uint256 validationData, IERC20 token, uint256 tokenPrice) {
     // Implement logic to fetch the token and token price from the userOp
-
+}
 ```
 
 ### Using Oracles
@@ -205,7 +205,7 @@ The `PaymasterUSDCChainlink` contract uses specific Chainlink price feeds (ETH/U
 As you can see, a `_fetchOracleDetails` function is specified to fetch the token price that will be used as a reference for calculating the final ERC-20 payment. One can fetch and process price data from Chainlink oracles to determine the exchange rate between the price of a concrete ERC-20 and ETH. An example with USDC would be:
 
 1. Fetch the current `ETH/USD` and `USDC/USD` prices from their respective oracles.
-2. Calculate the `USDC/ETH` exchange rate using the formula: `USDC/ETH = (USDC/USD) / (ETH/USD)`. This gives us how many USDC tokens are needed to buy 1 ETH
+2. Calculate the `USDC/ETH` exchange rate using the formula: `USDC/ETH = (USDC/USD) / (ETH/USD)`. This gives us how many USDC tokens are needed to buy 1 ETH 
 
 <Callout>
 The price of the ERC-20 must be scaled by [`_tokenPriceDenominator`](/community-contracts/api/account#PaymasterERC20-_tokenPriceDenominator--).
@@ -214,7 +214,7 @@ The price of the ERC-20 must be scaled by [`_tokenPriceDenominator`](/community-
 Here’s how an implementation of `_fetchOracleDetails` would look like using this approach:
 
 <Callout>
-Use [`ERC4337Utils.combineValidationData`](/contracts/5.x/api/account#ERC4337Utils-combineValidationData-uint256-uint256-) to merge two `validationData` values.
+Use [`ERC4337Utils.combineValidationData`](https://docs.openzeppelin.com/contracts/5.x/api/account#ERC4337Utils-combineValidationData-uint256-uint256-) to merge two `validationData` values.
 </Callout>
 
 ```solidity
@@ -273,7 +273,6 @@ function _fetchPrice(
     ) {
         return (ERC4337Utils.SIG_VALIDATION_FAILED, 0);
     }
-
     return (ERC4337Utils.SIG_VALIDATION_SUCCESS, price_);
 }
 ```
@@ -311,12 +310,12 @@ For the rest, you can sign the user operation as you would normally do once the 
 const signedUserOp = await signUserOp(entrypoint, userOp);
 
 // Submit to the EntryPoint contract
-const userOpReceipt = await eoaClient.writeContract(
-  abi: EntrypointV08Abi,
+const userOpReceipt = await eoaClient.writeContract({
+  abi: EntrypointV09Abi,
   address: entrypoint.address,
   functionName: "handleOps",
   args: [[signedUserOp], beneficiary.address],
-);
+});
 ```
 
 <Callout type='warn'>
@@ -347,7 +346,7 @@ To implement guarantor functionality, your paymaster needs to extend the Paymast
 ```solidity
 function _fetchGuarantor(
     PackedUserOperation calldata userOp
-) internal view override returns (address guarantor){
+) internal view override returns (address guarantor) {
     // Implement logic to fetch and validate the guarantor from userOp
 }
 ```
@@ -356,9 +355,9 @@ Let’s create a guarantor-enabled paymaster by extending our previous example:
 
 ```solidity
 contract PaymasterUSDCGuaranteed is EIP712, PaymasterERC20Guarantor, Ownable {
-
+    
     // Keep the same oracle code as before...
-
+    
     bytes32 private constant GUARANTEED_USER_OPERATION_TYPEHASH =
         keccak256(
             "GuaranteedUserOperation(address sender,uint256 nonce,bytes initCode,bytes callData,bytes32 accountGasLimits,uint256 preVerificationGas,bytes32 gasFees,bytes paymasterData)"
@@ -374,27 +373,27 @@ contract PaymasterUSDCGuaranteed is EIP712, PaymasterERC20Guarantor, Ownable {
         PackedUserOperation calldata userOp
     ) internal view override returns (address guarantor) {
         bytes calldata paymasterData = userOp.paymasterData();
-
+        
         // Check guarantor data (should be at least 22 bytes: 20 for address + 2 for sig length)
         // If no guarantor specified, return early
         if (paymasterData.length < 22 || guarantor == address(0)) {
             return address(0);
         }
-
-        guarantor = address(bytes20(paymasterData[:20]));
+        
+        guarantor = address(bytes20(paymasterData[:20]));  
         uint16 guarantorSigLength = uint16(bytes2(paymasterData[20:22]));
-
+        
         // Ensure the signature fits in the data
         if (paymasterData.length < 22 + guarantorSigLength) {
             return address(0);
         }
-
+        
         bytes calldata guarantorSignature = paymasterData[22:22 + guarantorSigLength];
-
+        
         // Validate the guarantor's signature
         bytes32 structHash = _getGuaranteedOperationStructHash(userOp);
         bytes32 hash = _hashTypedDataV4(structHash);
-
+        
         return SignatureChecker.isValidSignatureNow(
             guarantor,
             hash,
@@ -426,27 +425,27 @@ With this implementation, a guarantor would sign a user operation to authorize b
 
 ```typescript
 // Sign the user operation with the guarantor
-const guarantorSignature = await guarantor.signTypedData(
-  domain:
+const guarantorSignature = await guarantor.signTypedData({
+  domain: {
     chainId: await guarantorClient.getChainId(),
     name: "PaymasterUSDCGuaranteed",
     verifyingContract: paymasterUSDC.address,
     version: "1",
-  ,
-  types:
+  },
+  types: {
     GuaranteedUserOperation: [
-       name: "sender", type: "address" ,
-       name: "nonce", type: "uint256" ,
-       name: "initCode", type: "bytes" ,
-       name: "callData", type: "bytes" ,
-       name: "accountGasLimits", type: "bytes32" ,
-       name: "preVerificationGas", type: "uint256" ,
-       name: "gasFees", type: "bytes32" ,
-       name: "paymasterData", type: "bytes"
+      { name: "sender", type: "address" },
+      { name: "nonce", type: "uint256" },
+      { name: "initCode", type: "bytes" },
+      { name: "callData", type: "bytes" },
+      { name: "accountGasLimits", type: "bytes32" },
+      { name: "preVerificationGas", type: "uint256" },
+      { name: "gasFees", type: "bytes32" },
+      { name: "paymasterData", type: "bytes" }
     ]
-  ,
+  },
   primaryType: "GuaranteedUserOperation",
-  message:
+  message: {
     sender: userOp.sender,
     nonce: userOp.nonce,
     initCode: userOp.initCode,
@@ -455,8 +454,8 @@ const guarantorSignature = await guarantor.signTypedData(
     preVerificationGas: userOp.preVerificationGas,
     gasFees: userOp.gasFees,
     paymasterData: guarantorAddress // Just the guarantor address
-  ,
-);
+  },
+});
 ```
 
 Then, we include the guarantor’s address and its signature in the paymaster data:
@@ -474,8 +473,8 @@ userOp.paymasterAndData = encodePacked(
     encodePacked(
       ["address", "bytes2", "bytes"],
       [
-        guarantorAddress,
-        toHex(guarantorSignature.replace("0x", "").length / 2,  size: 2 ),
+        guarantorAddress, 
+        toHex(guarantorSignature.replace("0x", "").length / 2, { size: 2 }),
         guarantorSignature
       ]
     )

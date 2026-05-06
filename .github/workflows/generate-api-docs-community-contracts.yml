@@ -96,8 +96,13 @@ jobs:
             fi
           fi
 
+          # Section directory holds the guides + changelog (parent of api/)
+          SECTION_DIR="${OUTPUT_DIR%/api}"
+
           echo "📂 Output directory: $OUTPUT_DIR"
+          echo "📂 Section directory: $SECTION_DIR"
           echo "output-dir=$OUTPUT_DIR" >> $GITHUB_OUTPUT
+          echo "section-dir=$SECTION_DIR" >> $GITHUB_OUTPUT
 
       - name: Generate API Documentation
         run: |
@@ -106,7 +111,19 @@ jobs:
           node scripts/generate-api-docs.js \
             --repo "${{ env.SOURCE_REPO_URL }}" \
             --branch "${{ inputs.tag_name }}" \
-            --api-output "${{ steps.config.outputs.output-dir }}"
+            --api-output "${{ steps.config.outputs.output-dir }}" \
+            --guides-output "${{ steps.config.outputs.section-dir }}"
+
+      - name: Setup changelog-from-release
+        run: |
+          go install github.com/rhysd/changelog-from-release/v3@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Update changelog
+        run: |
+          node scripts/generate-changelog.js \
+            "${{ env.SOURCE_REPO }}" \
+            "${{ steps.config.outputs.section-dir }}"
 
       - name: Validate generated documentation
         run: |
@@ -129,7 +146,7 @@ jobs:
             BRANCH_NAME=$(echo "$BRANCH_NAME" | sed 's/\//-/g' | sed 's/OpenZeppelin-//g')
 
             git checkout -b "$BRANCH_NAME"
-            git add .
+            git add content/ examples/
             git commit -m "📚 Update API docs for ${{ env.SOURCE_REPO }} ${{ inputs.tag_name }}
 
             - Repository: ${{ env.SOURCE_REPO }}
@@ -157,7 +174,10 @@ jobs:
 
             Auto-generated via workflow_dispatch" \
                      --base main \
-                     --head "$BRANCH_NAME" || echo "⚠️  Pull Request creation failed"
+                     --head "$BRANCH_NAME" || {
+              echo "::error::Pull Request creation failed for ${{ env.SOURCE_REPO }} ${{ inputs.tag_name }}"
+              exit 1
+            }
 
             echo "✅ Pull Request created successfully"
             echo "pr-created=true" >> $GITHUB_OUTPUT
