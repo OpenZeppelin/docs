@@ -8,11 +8,11 @@ title: "EOA Delegation"
 * Sponsoring transactions for other users.
 * Implementing privilege de-escalation (e.g., sub-keys with limited permissions)
 
-This section walks you through the process of delegating an EOA to a contract following [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702). This allows you to use your EOA’s private key to sign and execute operations with custom execution logic. Combined with [ERC-4337](https://eips.ethereum.org/EIPS/eip-4337) infrastructure, users can achieve gas sponsoring through [paymasters](/community-contracts/paymasters).
+This section walks you through the process of delegating an EOA to a contract following [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702). This allows you to use your EOA’s private key to sign and execute operations with custom execution logic. Combined with [ERC-4337](https://eips.ethereum.org/EIPS/eip-4337) infrastructure, users can achieve gas sponsoring through [paymasters](https://docs.openzeppelin.com/community-contracts/paymasters).
 
 ## Delegating execution
 
-EIP-7702 enables EOAs to delegate their execution capabilities to smart contracts, effectively bridging the gap between traditional and [Smart Accounts](accounts). The [`SignerEIP7702`](/contracts/5.x/api/utils/cryptography) utility facilitates this delegation by verifying signatures against the EOA’s address (`address(this)`), making it easier to implement EIP-7702 in smart contract accounts.
+EIP-7702 enables EOAs to delegate their execution capabilities to smart contracts, effectively bridging the gap between traditional and [Smart Accounts](/contracts/5.x/accounts). The [`SignerEIP7702`](/contracts/5.x/api/utils/cryptography) utility facilitates this delegation by verifying signatures against the EOA’s address (`address(this)`), making it easier to implement EIP-7702 in smart contract accounts.
 
 <include cwd lang='solidity'>./examples/account/MyAccountEIP7702.sol</include>
 
@@ -84,7 +84,7 @@ To remove the delegation and restore your EOA to its original state, you can sen
 When changing an account’s delegation, ensure the newly delegated code is purposely designed and tested as an upgrade to the old one. To ensure safe migration between delegate contracts, use namespaced storage that avoids accidental collisions following ERC-7201. 
 
 <Callout type='warn'>
-Updating the delegation designator may render your EOA unusable due to potential storage collisions. We recommend following similar practices to those of [writing upgradeable smart contracts](/upgrades-plugins/writing-upgradeable).
+Updating the delegation designator may render your EOA unusable due to potential storage collisions. We recommend following similar practices to those of [writing upgradeable smart contracts](https://docs.openzeppelin.com/upgrades-plugins/writing-upgradeable).
 </Callout>
 
 ## Using with ERC-4337
@@ -95,7 +95,7 @@ The ability to set code to execute logic on an EOA allows users to leverage ERC-
 
 Once your EOA is delegated to an ERC-4337 compatible account, you can send user operations through the entry point contract. The user operation includes all the necessary fields for execution, including gas limits, fees, and the actual call data to execute. The entry point will validate the operation and execute it in the context of your delegated account.
 
-Similar to how [sending a UserOp](accounts#bundle-a-useroperation) is achieved for factory accounts, here’s how you can construct a UserOp for an EOA who’s delegated to an [`Account`](/contracts/5.x/api/account#Account) contract.
+Similar to how [sending a UserOp](/contracts/5.x/accounts#bundle_a_useroperation) is achieved for factory accounts, here’s how you can construct a UserOp for an EOA who’s delegated to an [`Account`](/contracts/5.x/api/account#Account) contract.
 
 ```typescript
 const userOp = {

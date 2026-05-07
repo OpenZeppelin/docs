@@ -2,7 +2,7 @@
 title: "ERC-4626"
 ---
 
-[ERC-4626](https://eips.ethereum.org/EIPS/eip-4626) is an extension of [ERC-20](erc20) that proposes a standard interface for token vaults. This standard interface can be used by widely different contracts (including lending markets, aggregators, and intrinsically interest bearing tokens), which brings a number of subtleties. Navigating these potential issues is essential to implementing a compliant and composable token vault.
+[ERC-4626](https://eips.ethereum.org/EIPS/eip-4626) is an extension of [ERC-20](/contracts/5.x/erc20) that proposes a standard interface for token vaults. This standard interface can be used by widely different contracts (including lending markets, aggregators, and intrinsically interest bearing tokens), which brings a number of subtleties. Navigating these potential issues is essential to implementing a compliant and composable token vault.
 
 We provide a base implementation of ERC-4626 that includes a simple vault. This contract is designed in a way that allows developers to easily re-configure the vault’s behavior, with minimal overrides, while staying compliant. In this guide, we will discuss some security considerations that affect ERC-4626. We will also discuss common customizations of the vault.
 
@@ -63,7 +63,7 @@ In math that gives:
 | $0$ | $0$ | - | after attacker’s deposit |
 | $a_0$ | $a_0$ | $1$ | after attacker’s donation |
 
-This means a deposit of $u$ will give $\fracu \times a_0a_0 + a_1$ shares.
+This means a deposit of $u$ will give $\frac{u \times a_0}{a_0 + a_1}$ shares.
 
 For the attacker to dilute that deposit to 0 shares, causing the user to lose all its deposit, it must ensure that
 
@@ -73,7 +73,7 @@ For the attacker to dilute that deposit to 0 shares, causing the user to lose al
 
 Using $a_0 = 1$ and $a_1 = u$ is enough. So the attacker only needs $u+1$ assets to perform a successful attack.
 
-It is easy to generalize the above results to scenarios where the attacker is going after a smaller fraction of the user’s deposit. In order to target $\fracun$, the user needs to suffer rounding of a similar fraction, which means the user must receive at most $n$ shares. This results in:
+It is easy to generalize the above results to scenarios where the attacker is going after a smaller fraction of the user’s deposit. In order to target $\frac{u}{n}$, the user needs to suffer rounding of a similar fraction, which means the user must receive at most $n$ shares. This results in:
 
 ```math
 \frac{u \times a_0}{a_0+a_1} < n \iff \frac{u}{n} < 1 + \frac{a_1}{a_0}
@@ -103,7 +103,7 @@ Following the previous math definitions, we have:
 | $1$ | $10^\delta$ | $10^\delta$ | after attacker’s deposit |
 | $1+a_0$ | $10^\delta \times (1+a_0)$ | $10^\delta$ | after attacker’s donation |
 
-One important thing to note is that the attacker only owns a fraction $\fraca_01 + a_0$ of the shares, so when doing the donation, he will only be able to recover that fraction $\fraca_1 \times a_01 + a_0$ of the donation. The remaining $\fraca_11+a_0$ are captured by the vault.
+One important thing to note is that the attacker only owns a fraction $\frac{a_0}{1 + a_0}$ of the shares, so when doing the donation, he will only be able to recover that fraction $\frac{a_1 \times a_0}{1 + a_0}$ of the donation. The remaining $\frac{a_1}{1+a_0}$ are captured by the vault.
 
 ```math
 \mathit{loss} = \frac{a_1}{1+a_0}

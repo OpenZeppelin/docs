@@ -95,29 +95,36 @@ async function convertAdocFiles(directory, apiRoute = "contracts/5.x/api") {
 				"[$1]($2)",
 			);
 
-			// Strip .adoc extensions and prefix bare same-module slugs with `./`
-			// so the link validator resolves them against the current page.
-			// Skip absolute paths, anchors, protocol URLs, and Antora `module::`
-			// cross-module xrefs (handled below).
+			// Strip .adoc extensions and rewrite bare same-module slugs to absolute
+			// site paths. Relative `./foo` would resolve correctly from a page like
+			// /<route>/access-control but NOT from the index (/<route>), so use
+			// absolute paths everywhere. Drop trailing /index for index pages.
+			// Skip absolute paths, explicit relatives, anchors, protocol URLs, and
+			// Antora `module::` cross-module xrefs (handled below).
+			const guideRoute = apiRoute.replace(/\/api$/, "");
 			mdContent = mdContent.replace(
 				/\]\(([^)]+)\.adoc([^)]*)\)/g,
 				(_match, slug, rest) => {
 					if (
 						slug.startsWith("/") ||
 						slug.startsWith("./") ||
+						slug.startsWith("../") ||
 						slug.startsWith("#") ||
 						slug.includes("://") ||
 						slug.includes("::")
 					) {
 						return `](${slug}${rest})`;
 					}
-					return `](./${slug}${rest})`;
+					const path = slug === "index" ? "" : `/${slug}`;
+					return `](/${guideRoute}${path}${rest})`;
 				},
 			);
 
 			// Resolve Antora cross-module xrefs that downdoc leaves as-is.
 			// e.g. `xref:contracts::accounts.adoc#X[Y]` becomes `[Y](contracts::accounts#X)`
 			// after the steps above. Map them to absolute site paths per module.
+			// Drop trailing /index for index pages so the URL resolves to the
+			// section root rather than the literal /index slug.
 			const moduleBases = {
 				contracts: "/contracts/5.x",
 				"community-contracts": "/community-contracts",
@@ -132,7 +139,12 @@ async function convertAdocFiles(directory, apiRoute = "contracts/5.x/api") {
 					const base = moduleBases[mod];
 					if (!base) return match;
 					const subPath = submod ? `/${submod}` : "";
-					return `](${base}${subPath}/${rest})`;
+					const restPath = rest === "index"
+						? ""
+						: rest.startsWith("index#")
+							? rest.slice("index".length)
+							: `/${rest}`;
+					return `](${base}${subPath}${restPath})`;
 				},
 			);
 
