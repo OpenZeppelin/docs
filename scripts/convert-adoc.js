@@ -188,22 +188,36 @@ async function convertAdocFiles(directory, apiRoute = "contracts/5.x/api") {
 			mdContent = mdContent.replace(/<dl>/g, "");
 			mdContent = mdContent.replace(/<\/dl>/g, "");
 
-			// Fix AsciiDoc monospace formatting (++ to backticks)
-			// Handle ++text++ -> `text`
-			mdContent = mdContent.replace(/\+\+([^+]+)\+\+/g, "`$1`");
+			// AsciiDoc passthrough `+name+` that downdoc preserved inside backticks
+			// (e.g. ``+IERC7984Receiver+``) — strip the leading/trailing + signs.
+			// Run before the code-aware split below so we can match across the
+			// backticks; restricted to identifier-like content so legitimate
+			// `a + b` style code is left alone.
+			mdContent = mdContent.replace(/`\+([^\s`+]+)\+`/g, "`$1`");
 
-			// Fix any remaining ++ that might be standalone
-			mdContent = mdContent.replace(/\+\+/g, "");
+			// AsciiDoc inline mailto: `mailto:URL[label]` → `[label](mailto:URL)`
+			// Run before the code-aware split since mailto in code blocks is
+			// rare and would render fine either way.
+			mdContent = mdContent.replace(
+				/mailto:([^\s[]+)\[([^\]]+)\]/g,
+				"[$2](mailto:$1)",
+			);
 
-			// Escape bare < that aren't HTML/JSX tag starts (e.g., "<1 share",
-			// "< 0x80") to prevent MDX parse errors. Skip code blocks and
-			// inline code — content there is rendered verbatim, so escaping
-			// would corrupt it (e.g. `<4.6 to >=4.6`).
-			const ltSplit = mdContent.split(/(```[\s\S]*?```|`[^`\n]*`)/g);
-			mdContent = ltSplit
-				.map((part, idx) =>
-					idx % 2 === 1 ? part : part.replace(/(<)(\s+\w|\d)/g, "&lt;$2"),
-				)
+			// Code-aware processing: skip triple-backtick blocks and inline code.
+			// Inside non-code regions:
+			//  - ++text++ → `text` (AsciiDoc passthrough monospace, single-line,
+			//    identifier-like content so we don't mangle Solidity ++i in code
+			//    blocks that downdoc may have left fenced incorrectly)
+			//  - bare < before digit/whitespace-word → &lt; (MDX-safe, e.g.
+			//    "<1 share", "< 0x80")
+			const codeSplit = mdContent.split(/(```[\s\S]*?```|`[^`\n]*`)/g);
+			mdContent = codeSplit
+				.map((part, idx) => {
+					if (idx % 2 === 1) return part;
+					return part
+						.replace(/\+\+([^+\n]+)\+\+/g, "`$1`")
+						.replace(/(<)(\s+\w|\d)/g, "&lt;$2");
+				})
 				.join("");
 			// Extract title
 			const headerMatch = mdContent.match(/^#+\s+(.+)$/m);
