@@ -127,7 +127,7 @@ function derivePackageName(repoName) {
 }
 
 async function injectTemplates(tempDir, options) {
-	const { contractsRepo, apiOutputDir } = options;
+	const { contractsRepo, contractsBranch, apiOutputDir } = options;
 	const repoInfo = extractRepoInfo(contractsRepo);
 	const packageName = derivePackageName(repoInfo.repo);
 
@@ -168,13 +168,25 @@ async function injectTemplates(tempDir, options) {
 		`${repoInfo.org}/${repoInfo.repo}`,
 	);
 
+	// Use the actual cloned ref for GitHub source links (master for repos
+	// without releases, the tag for tagged runs). Avoids 404s like
+	// /blob/v0.0.1/... when community-contracts package.json has a placeholder
+	// version that doesn't correspond to an actual tag.
+	contract = contract.replace(
+		/blob\/v\{\{oz-version\}\}/g,
+		`blob/${contractsBranch}`,
+	);
+
 	// Canonical template has @openzeppelin/{{absolutePath}} with absolutePath
-	// starting "contracts/...". For openzeppelin-contracts that's correct;
-	// other packages (e.g. community-contracts) need their package name prepended.
+	// starting "contracts/...". For openzeppelin-contracts that's correct
+	// (npm package is `@openzeppelin/contracts`, file path keeps the prefix).
+	// For other packages (community-contracts, confidential-contracts), the
+	// npm package is published with `contracts/` as the package root, so the
+	// import skips that prefix — strip it via the strip-contracts-prefix helper.
 	if (packageName !== "contracts") {
 		contract = contract.replace(
-			/import "@openzeppelin\/\{\{/,
-			`import "@openzeppelin/${packageName}/{{`,
+			/import "@openzeppelin\/\{\{__item_context\.file\.absolutePath\}\}";/g,
+			`import "@openzeppelin/${packageName}/{{strip-contracts-prefix __item_context.file.absolutePath}}";`,
 		);
 	}
 	await fs.writeFile(contractPath, contract, "utf8");

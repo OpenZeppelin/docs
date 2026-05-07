@@ -47,6 +47,14 @@ module.exports['reset-function-counts'] = function () {
 };
 
 module.exports.eq = (a, b) => a === b;
+
+// Strip the leading "contracts/" segment from a path. Used to derive the npm
+// import specifier for non-`contracts` packages, where the file is published
+// at the package root (e.g. @openzeppelin/community-contracts/account/X.sol)
+// but the source lives at contracts/account/X.sol in the repo.
+module.exports['strip-contracts-prefix'] = function (p) {
+  return typeof p === 'string' ? p.replace(/^contracts\//, '') : p;
+};
 module.exports['starts-with'] = (str, prefix) => str && str.startsWith(prefix);
 
 // Process natspec content with {REF} and link replacement
