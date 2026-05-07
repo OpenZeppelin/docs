@@ -98,6 +98,27 @@ async function convertAdocFiles(directory, apiRoute = "contracts/5.x/api") {
 			// Fix .adoc internal links to .mdx
 			mdContent = mdContent.replace(/\]\(([^)]+)\.adoc([^)]*)\)/g, "]($1$2)");
 
+			// Resolve Antora cross-module xrefs that downdoc leaves as-is.
+			// e.g. `xref:contracts::accounts.adoc#X[Y]` becomes `[Y](contracts::accounts#X)`
+			// after the steps above. Map them to absolute site paths per module.
+			const moduleBases = {
+				contracts: "/contracts/5.x",
+				"community-contracts": "/community-contracts",
+				"confidential-contracts": "/confidential-contracts",
+				"upgrades-plugins": "/upgrades-plugins",
+				defender: "/defender",
+				learn: "/contracts/5.x/learn",
+			};
+			mdContent = mdContent.replace(
+				/\]\(([a-z-]+)::(?:([a-z-]+):)?([^)]+)\)/g,
+				(match, mod, submod, rest) => {
+					const base = moduleBases[mod];
+					if (!base) return match;
+					const subPath = submod ? `/${submod}` : "";
+					return `](${base}${subPath}/${rest})`;
+				},
+			);
+
 			// Fix curly bracket file references {filename} -> filename, but preserve braces in code blocks
 			const parts = mdContent.split(/(```[\s\S]*?```)/g);
 			mdContent = parts
