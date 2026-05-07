@@ -119,17 +119,19 @@ async function convertAdocFiles(directory, apiRoute = "contracts/5.x/api") {
 				},
 			);
 
-			// Fix curly bracket file references {filename} -> filename, but preserve braces in code blocks
-			const parts = mdContent.split(/(```[\s\S]*?```)/g);
+			// Fix curly bracket file references {filename} -> filename, but preserve
+			// braces in code blocks and in math regions ($...$ / $$...$$) so LaTeX
+			// like `\frac{u}{n}` survives.
+			const parts = mdContent.split(
+				/(```[\s\S]*?```|\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/g,
+			);
 			mdContent = parts
 				.map((part, index) => {
-					// Every odd index is a code block (```...```)
+					// Every odd index is a preserved region (code block or math).
 					if (index % 2 === 1) {
-						return part; // Preserve code blocks as-is
-					} else {
-						// Remove curly brackets from non-code-block parts only
-						return part.replace(/\{([^}]+)\}/g, "$1");
+						return part;
 					}
+					return part.replace(/\{([^}]+)\}/g, "$1");
 				})
 				.join("");
 
@@ -260,17 +262,17 @@ function processFile(filePath) {
 		}
 
 		const content = fsSync.readFileSync(filePath, "utf8");
-		// Split content by code blocks and process non-code-block parts only
-		const parts = content.split(/(```[\s\S]*?```)/g);
+		// Split content by code blocks and math regions, process the rest.
+		const parts = content.split(
+			/(```[\s\S]*?```|\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/g,
+		);
 		const modifiedContent = parts
 			.map((part, index) => {
-				// Every odd index is a code block (```...```)
+				// Every odd index is a preserved region (code block or math).
 				if (index % 2 === 1) {
-					return part; // Preserve code blocks as-is
-				} else {
-					// Remove curly brackets from non-code-block parts
-					return part.replace(/[{}]/g, "");
+					return part;
 				}
+				return part.replace(/[{}]/g, "");
 			})
 			.join("");
 
