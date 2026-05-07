@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
-const fs = require("fs").promises;
-const fsSync = require("fs");
-const path = require("path");
-const { execSync } = require("child_process");
-const { glob } = require("glob");
+import { promises as fs } from "node:fs";
+import fsSync from "node:fs";
+import path from "node:path";
+import { execSync } from "node:child_process";
+import { glob } from "glob";
 
 async function convertAdocFiles(directory, apiRoute = "contracts/5.x/api") {
 	if (!directory) {
@@ -95,20 +95,72 @@ async function convertAdocFiles(directory, apiRoute = "contracts/5.x/api") {
 				"[$1]($2)",
 			);
 
-			// Fix .adoc internal links to .mdx
-			mdContent = mdContent.replace(/\]\(([^)]+)\.adoc([^)]*)\)/g, "]($1$2)");
+			// Strip .adoc extensions and rewrite bare same-module slugs to absolute
+			// site paths. Relative `./foo` would resolve correctly from a page like
+			// /<route>/access-control but NOT from the index (/<route>), so use
+			// absolute paths everywhere. Drop trailing /index for index pages.
+			// Skip absolute paths, explicit relatives, anchors, protocol URLs, and
+			// Antora `module::` cross-module xrefs (handled below).
+			const guideRoute = apiRoute.replace(/\/api$/, "");
+			mdContent = mdContent.replace(
+				/\]\(([^)]+)\.adoc([^)]*)\)/g,
+				(_match, slug, rest) => {
+					if (
+						slug.startsWith("/") ||
+						slug.startsWith("./") ||
+						slug.startsWith("../") ||
+						slug.startsWith("#") ||
+						slug.includes("://") ||
+						slug.includes("::")
+					) {
+						return `](${slug}${rest})`;
+					}
+					const path = slug === "index" ? "" : `/${slug}`;
+					return `](/${guideRoute}${path}${rest})`;
+				},
+			);
 
-			// Fix curly bracket file references {filename} -> filename, but preserve braces in code blocks
-			const parts = mdContent.split(/(```[\s\S]*?```)/g);
+			// Resolve Antora cross-module xrefs that downdoc leaves as-is.
+			// e.g. `xref:contracts::accounts.adoc#X[Y]` becomes `[Y](contracts::accounts#X)`
+			// after the steps above. Map them to absolute site paths per module.
+			// Drop trailing /index for index pages so the URL resolves to the
+			// section root rather than the literal /index slug.
+			const moduleBases = {
+				contracts: "/contracts/5.x",
+				"community-contracts": "/community-contracts",
+				"confidential-contracts": "/confidential-contracts",
+				"upgrades-plugins": "/upgrades-plugins",
+				defender: "/defender",
+				learn: "/contracts/5.x/learn",
+			};
+			mdContent = mdContent.replace(
+				/\]\(([a-z-]+)::(?:([a-z-]+):)?([^)]+)\)/g,
+				(match, mod, submod, rest) => {
+					const base = moduleBases[mod];
+					if (!base) return match;
+					const subPath = submod ? `/${submod}` : "";
+					const restPath = rest === "index"
+						? ""
+						: rest.startsWith("index#")
+							? rest.slice("index".length)
+							: `/${rest}`;
+					return `](${base}${subPath}${restPath})`;
+				},
+			);
+
+			// Fix curly bracket file references {filename} -> filename, but preserve
+			// braces in code blocks and in math regions ($...$ / $$...$$) so LaTeX
+			// like `\frac{u}{n}` survives.
+			const parts = mdContent.split(
+				/(```[\s\S]*?```|\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/g,
+			);
 			mdContent = parts
 				.map((part, index) => {
-					// Every odd index is a code block (```...```)
+					// Every odd index is a preserved region (code block or math).
 					if (index % 2 === 1) {
-						return part; // Preserve code blocks as-is
-					} else {
-						// Remove curly brackets from non-code-block parts only
-						return part.replace(/\{([^}]+)\}/g, "$1");
+						return part;
 					}
+					return part.replace(/\{([^}]+)\}/g, "$1");
 				})
 				.join("");
 
@@ -167,12 +219,37 @@ async function convertAdocFiles(directory, apiRoute = "contracts/5.x/api") {
 			mdContent = mdContent.replace(/<dl>/g, "");
 			mdContent = mdContent.replace(/<\/dl>/g, "");
 
-			// Fix AsciiDoc monospace formatting (++ to backticks)
-			// Handle ++text++ -> `text`
-			mdContent = mdContent.replace(/\+\+([^+]+)\+\+/g, "`$1`");
+			// AsciiDoc passthrough `+name+` that downdoc preserved inside backticks
+			// (e.g. ``+IERC7984Receiver+``) — strip the leading/trailing + signs.
+			// Run before the code-aware split below so we can match across the
+			// backticks; restricted to identifier-like content so legitimate
+			// `a + b` style code is left alone.
+			mdContent = mdContent.replace(/`\+([^\s`+]+)\+`/g, "`$1`");
 
-			// Fix any remaining ++ that might be standalone
-			mdContent = mdContent.replace(/\+\+/g, "");
+			// AsciiDoc inline mailto: `mailto:URL[label]` → `[label](mailto:URL)`
+			// Run before the code-aware split since mailto in code blocks is
+			// rare and would render fine either way.
+			mdContent = mdContent.replace(
+				/mailto:([^\s[]+)\[([^\]]+)\]/g,
+				"[$2](mailto:$1)",
+			);
+
+			// Code-aware processing: skip triple-backtick blocks and inline code.
+			// Inside non-code regions:
+			//  - ++text++ → `text` (AsciiDoc passthrough monospace, single-line,
+			//    identifier-like content so we don't mangle Solidity ++i in code
+			//    blocks that downdoc may have left fenced incorrectly)
+			//  - bare < before digit/whitespace-word → &lt; (MDX-safe, e.g.
+			//    "<1 share", "< 0x80")
+			const codeSplit = mdContent.split(/(```[\s\S]*?```|`[^`\n]*`)/g);
+			mdContent = codeSplit
+				.map((part, idx) => {
+					if (idx % 2 === 1) return part;
+					return part
+						.replace(/\+\+([^+\n]+)\+\+/g, "`$1`")
+						.replace(/(<)(\s+\w|\d)/g, "&lt;$2");
+				})
+				.join("");
 			// Extract title
 			const headerMatch = mdContent.match(/^#+\s+(.+)$/m);
 			const title = headerMatch ? headerMatch[1].trim() : filename;
@@ -182,9 +259,10 @@ async function convertAdocFiles(directory, apiRoute = "contracts/5.x/api") {
 				.replace(/^#+\s+.+$/m, "")
 				.replace(/^\n+/, "");
 
-			// Create MDX with frontmatter
+			// Create MDX with frontmatter — JSON.stringify quotes and escapes
+			// the title so colons (e.g. "ERC-7540: ...") don't break YAML parsing.
 			const mdxContent = `---
-title: ${title}
+title: ${JSON.stringify(title)}
 ---
 
 ${contentWithoutFirstH1}`;
@@ -213,17 +291,17 @@ function processFile(filePath) {
 		}
 
 		const content = fsSync.readFileSync(filePath, "utf8");
-		// Split content by code blocks and process non-code-block parts only
-		const parts = content.split(/(```[\s\S]*?```)/g);
+		// Split content by code blocks and math regions, process the rest.
+		const parts = content.split(
+			/(```[\s\S]*?```|\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/g,
+		);
 		const modifiedContent = parts
 			.map((part, index) => {
-				// Every odd index is a code block (```...```)
+				// Every odd index is a preserved region (code block or math).
 				if (index % 2 === 1) {
-					return part; // Preserve code blocks as-is
-				} else {
-					// Remove curly brackets from non-code-block parts
-					return part.replace(/[{}]/g, "");
+					return part;
 				}
+				return part.replace(/[{}]/g, "");
 			})
 			.join("");
 

@@ -1,5 +1,5 @@
 ---
-title: Utilities
+title: "Utilities"
 ---
 
 The OpenZeppelin Contracts provide a ton of useful utilities that you can use in your project. For a complete list, check out the [API Reference](/contracts/5.x/api/utils).
@@ -9,7 +9,7 @@ Here are some of the more popular ones.
 
 ### Checking Signatures On-Chain
 
-At a high level, signatures are a set of cryptographic algorithms that allow for a _signer_ to prove himself owner of a _private key_ used to authorize a piece of information (generally a transaction or `UserOperation`). Natively, the EVM supports the Elliptic Curve Digital Signature Algorithm ([ECDSA](https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm)) using the secp256k1 curve, however other signature algorithms such as P256 and RSA are supported.
+At a high level, signatures are a set of cryptographic algorithms that allow for a _signer_ to prove himself as the owner of a _private key_ used to authorize a piece of information (generally a transaction or `UserOperation`). Natively, the EVM supports the Elliptic Curve Digital Signature Algorithm ([ECDSA](https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm)) using the secp256k1 curve, however other signature algorithms such as P256 and RSA are supported.
 
 #### Ethereum Signatures (secp256k1)
 
@@ -47,8 +47,8 @@ function _verify(
     bytes32 s,
     bytes32 qx,
     bytes32 qy
-) internal pure returns (bool) {
-    return data.verify(data, r, s, qx, qy);
+) internal view returns (bool) {
+    return data.verify(r, s, qx, qy);
 }
 ```
 
@@ -63,9 +63,9 @@ function _verify(
     bytes32 s,
     bytes32 qx,
     bytes32 qy
-) internal pure returns (bool) {
+) internal view returns (bool) {
     // Will only call the precompile at address(0x100)
-    return data.verifyNative(data, r, s, qx, qy);
+    return data.verifyNative(r, s, qx, qy);
 }
 ```
 
@@ -187,7 +187,7 @@ For an on-chain Merkle Tree, see the [`MerkleTree`](/contracts/5.x/api/utils#Mer
 
 ## Introspection
 
-In Solidity, it’s frequently helpful to know whether or not a contract supports an interface you’d like to use. ERC-165 is a standard that helps do runtime interface detection. Contracts provide helpers both for implementing ERC-165 in your contracts and querying other contracts:
+In Solidity, it’s frequently helpful to know whether or not a contract supports an interface you’d like to use. ERC-165 is a standard that enables runtime interface detection. Contracts provide helpers both for implementing ERC-165 in your contracts and querying other contracts:
 
 * [`IERC165`](/contracts/5.x/api/utils#IERC165) — this is the ERC-165 interface that defines [`supportsInterface`](/contracts/5.x/api/utils#IERC165-supportsInterface-bytes4-). When implementing ERC-165, you’ll conform to this interface.
 * [`ERC165`](/contracts/5.x/api/utils#ERC165) — inherit this contract if you’d like to support interface detection using a lookup table in contract storage. You can register interfaces using [`_registerInterface(bytes4)`](/contracts/5.x/api/utils#ERC165-_registerInterface-bytes4-): check out example usage as part of the ERC-721 implementation.
@@ -252,7 +252,7 @@ While working with different data types that might require casting, you can use 
 
 ## Structures
 
-Some use cases require more powerful data structures than arrays and mappings offered natively in Solidity. Contracts provides these libraries for enhanced data structure management:
+Some use cases require more powerful data structures than the arrays and mappings offered natively in Solidity. These contracts provide libraries for enhanced data structure management:
 
 * [`BitMaps`](/contracts/5.x/api/utils#BitMaps): Store packed booleans in storage.
 * [`Checkpoints`](/contracts/5.x/api/utils#Checkpoints): Checkpoint values with built-in lookups.
@@ -260,7 +260,7 @@ Some use cases require more powerful data structures than arrays and mappings of
 * [`EnumerableSet`](/contracts/5.x/api/utils#EnumerableSet): A [set](https://en.wikipedia.org/wiki/Set_(abstract_data_type)) with enumeration capabilities.
 * [`EnumerableMap`](/contracts/5.x/api/utils#EnumerableMap): A `mapping` variant with enumeration capabilities.
 * [`MerkleTree`](/contracts/5.x/api/utils#MerkleTree): An on-chain [Merkle Tree](https://wikipedia.org/wiki/Merkle_Tree) with helper functions.
-* [`Heap`](/contracts/5.x/api/utils#Heap.sol): A [binary heap](https://en.wikipedia.org/wiki/Binary_heap) to store elements with priority defined by a compartor function.
+* [`Heap`](/contracts/5.x/api/utils#Heap.sol): A [binary heap](https://en.wikipedia.org/wiki/Binary_heap) to store elements with priority defined by a comparator function.
 
 The `Enumerable*` structures are similar to mappings in that they store and remove elements in constant time and don’t allow for repeated entries, but they also support _enumeration_, which means you can easily query all stored entries both on and off-chain.
 
@@ -290,7 +290,7 @@ function push(bytes32 leaf) public /* onlyOwner */ {
 
 The library also supports custom hashing functions, which can be passed as an extra parameter to the [`push`](/contracts/5.x/api/utils#MerkleTree-push-struct-MerkleTree-Bytes32PushTree-bytes32-) and [`setup`](/contracts/5.x/api/utils#MerkleTree-setup-struct-MerkleTree-Bytes32PushTree-uint8-bytes32-) functions.
 
-Using custom hashing functions is a sensitive operation. After setup, it requires to keep using the same hashing function for every new value pushed to the tree to avoid corrupting the tree. For this reason, it’s a good practice to keep your hashing function static in your implementation contract as follows:
+Using custom hashing functions is a sensitive operation. After setup, it requires continuing to use the same hashing function for every new value pushed to the tree to avoid corrupting the tree. For this reason, it’s a good practice to keep your hashing function static in your implementation contract as follows:
 
 ```solidity
 using MerkleTree for MerkleTree.Bytes32PushTree;
@@ -318,9 +318,9 @@ A [binary heap](https://en.wikipedia.org/wiki/Binary_heap) is a data structure t
 
 To define what is most important in a heap, these frequently take comparator functions that tell the binary heap whether a value has more relevance than another.
 
-OpenZeppelin Contracts implements a Heap data structure with the properties of a binary heap. The heap uses the [`lt`](/contracts/5.x/api/utils/cryptography#Comparators-lt-uint256-uint256-) function by default but allows to customize its comparator.
+OpenZeppelin Contracts implements a Heap data structure with the properties of a binary heap. The heap uses the [`lt`](/contracts/5.x/api/utils#Comparators-lt-uint256-uint256-) function by default but allows to customize its comparator.
 
-When using a custom comparator, it's recommended to wrap your function to avoid the possibility of mistakenly using a different comparator function:
+When using a custom comparator, it’s recommended to wrap your function to avoid the possibility of mistakenly using a different comparator function:
 
 ```solidity
 function pop(Uint256Heap storage self) internal returns (uint256) {
@@ -340,9 +340,9 @@ function replace(Uint256Heap storage self, uint256 newValue) internal returns (u
 
 ### Packing
 
-The storage in the EVM is shaped in chunks of 32 bytes, each of this chunks is known as a _slot_, and can hold multiple values together as long as these values don't exceed its size. These properties of the storage allow for a technique known as _packing_, that consists of placing values together on a single storage slot to reduce the costs associated to reading and writing to multiple slots instead of just one.
+The storage in the EVM is shaped in chunks of 32 bytes, each of these chunks is known as a _slot_, and can hold multiple values together as long as these values don’t exceed 32 bytes. This property allows for a technique known as _packing_--placing values together in a single storage slot to reduce the costs associated with reading and writing these values.
 
-Commonly, developers pack values using structs that place values together so they fit better in storage. However, this approach requires to load such struct from either calldata or memory. Although sometimes necessary, it may be useful to pack values in a single slot and treat it as a packed value without involving calldata or memory.
+Commonly, developers pack values using structs that place values together so they fit better in storage. However, this approach requires loading such struct from either calldata or memory. Although sometimes necessary, it may be useful to pack values in a single slot and treat it as a packed value without involving calldata or memory.
 
 The [`Packing`](/contracts/5.x/api/utils#Packing) library is a set of utilities for packing values that fit in 32 bytes. The library includes 3 main functionalities:
 
@@ -369,7 +369,7 @@ function _unpack(bytes32 pack) external pure returns (address, bytes4, uint64) {
 
 ### Storage Slots
 
-Solidity allocates a storage pointer for each variable declared in a contract. However, there are cases when it's required to access storage pointers that can't be derived by using regular Solidity.
+Solidity allocates a storage pointer for each variable declared in a contract. However, there are cases when it’s required to access storage pointers that can’t be derived by using regular Solidity.
 For those cases, the [`StorageSlot`](/contracts/5.x/api/utils#StorageSlot) library allows for manipulating storage slots directly.
 
 ```solidity
@@ -428,15 +428,16 @@ Here is an example to send JSON Metadata through a Base64 Data URI using an ERC-
 
 ### Multicall
 
-The `Multicall` abstract contract comes with a `multicall` function that bundles together multiple calls in a single external call. With it, external accounts may perform atomic operations comprising several function calls. This is not only useful for EOAs to make multiple calls in a single transaction, it's also a way to revert a previous call if a later one fails.
+The `Multicall` abstract contract comes with a `multicall` function that bundles together multiple calls in a single external call. With it, external accounts may perform atomic operations comprising several function calls. This is not only useful for EOAs to make multiple calls in a single transaction, it’s also a way to revert a previous call if a later one fails.
 
 Consider this dummy contract:
 
 <include cwd lang='solidity'>./examples/utilities/Multicall.sol</include>
 
 This is how to call the `multicall` function using Ethers.js, allowing `foo` and `bar` to be called in a single transaction:
-
 ```javascript
+// scripts/foobar.js
+
 const instance = await ethers.deployContract("Box");
 
 await instance.multicall([
@@ -445,16 +446,57 @@ await instance.multicall([
 ]);
 ```
 
+### Low-level Calls
+
+The [`LowLevelCall`](/contracts/5.x/api/utils#LowLevelCall) library provides low-level external calls with fixed-size return data handling, protecting against return bombing attacks where callees allocate excessive memory.
+
+The library efficiently handles return data up to 64 bytes, allowing you to ignore it entirely or extract 1-2 `bytes32` values:
+
+```solidity
+using LowLevelCall for address;
+
+function example(address target, bytes memory data) internal {
+    bool success;
+    bytes32 result1;
+    bytes32 result2;
+
+    // Ignore return data
+    success = target.callNoReturn(data);
+
+    // Extract single 32-byte value
+    (success, result1, ) = target.callReturn64Bytes(data);
+
+    // Extract two 32-byte values
+    (success, result1, result2) = target.callReturn64Bytes(data);
+}
+```
+
+You can also check return data size before processing:
+
+```solidity
+function checkReturnSize(address target, bytes memory data) internal returns (uint256 value, uint256 otherValue) {
+    (bool success, bytes32 result1, bytes32 result2) = target.callReturn64Bytes(data);
+
+    if (!success || LowLevelCall.returnDataSize() < 32) {
+        return (0, 0);
+    } else if (LowLevelCall.returnDataSize() < 64) {
+        return (uint256(result1), 0);
+    } else {
+        return (uint256(result1), uint256(result2));
+    }
+}
+```
+
 ### Memory
 
 The [`Memory`](/contracts/5.x/api/utils#Memory) library provides functions for advanced use cases that require granular memory management. A common use case is to avoid unnecessary memory expansion costs when performing repeated operations that allocate memory in a loop. Consider the following example:
 
 ```solidity
 function processMultipleItems(uint256[] memory items) internal {
-    for (uint256 i = 0; i < items.length; i++) {
-        bytes memory tempData = abi.encode(items[i], block.timestamp);
-        // Process tempData...
-    }
+  for (uint256 i = 0; i < items.length; i++) {
+    bytes memory tempData = abi.encode(items[i], block.timestamp);
+    // Process tempData...
+  }
 }
 ```
 
@@ -462,26 +504,26 @@ Note that each iteration allocates new memory for `tempData`, causing the memory
 
 ```solidity
 function processMultipleItems(uint256[] memory items) internal {
-    Memory.Pointer ptr = Memory.getFreeMemoryPointer(); // Cache pointer
-    for (uint256 i = 0; i < items.length; i++) {
-        bytes memory tempData = abi.encode(items[i], block.timestamp);
-        // Process tempData...
-        Memory.setFreeMemoryPointer(ptr); // Reset pointer for reuse
-    }
+  Memory.Pointer ptr = Memory.getFreeMemoryPointer(); // Cache pointer
+  for (uint256 i = 0; i < items.length; i++) {
+    bytes memory tempData = abi.encode(items[i], block.timestamp);
+    // Process tempData...
+    Memory.unsafeSetFreeMemoryPointer(ptr); // Reset pointer for reuse
+  }
 }
 ```
 
 This way, memory allocated for `tempData` in each iteration is reused, significantly reducing memory expansion costs when processing many items.
 
 <Callout type='warn'>
-Only use these functions after carefully confirming they're necessary. By default, Solidity handles memory safely. Using this library without understanding memory layout and safety may be dangerous. See the [memory layout](https://docs.soliditylang.org/en/v0.8.20/internals/layout_in_memory.html) and [memory safety](https://docs.soliditylang.org/en/v0.8.20/assembly.html#memory-safety) documentation for details.
+Only use these functions after carefully confirming they’re necessary. By default, Solidity handles memory safely. Using this library without understanding memory layout and safety may be dangerous. See the [memory layout](https://docs.soliditylang.org/en/v0.8.20/internals/layout_in_memory.html) and [memory safety](https://docs.soliditylang.org/en/v0.8.20/assembly.html#memory-safety) documentation for details.
 </Callout>
 
 ### Historical Block Hashes
 
-[`Blockhash`](/contracts/5.x/api/utils#Blockhash) provides L2 protocol developers with extended access to historical block hashes beyond Ethereum's native 256-block limit. By leveraging [EIP-2935](https://eips.ethereum.org/EIPS/eip-2935)'s history storage contract, the library enables access to block hashes up to 8,191 blocks in the past, making it invaluable for L2 fraud proofs and state verification systems.
+[`Blockhash`](/contracts/5.x/api/utils#Blockhash) provides L2 protocol developers with extended access to historical block hashes beyond Ethereum’s native 256-block limit. By leveraging [EIP-2935](https://eips.ethereum.org/EIPS/eip-2935)'s history storage contract, the library enables access to block hashes up to 8,191 blocks in the past, making it invaluable for L2 fraud proofs and state verification systems.
 
-The library seamlessly combines native `BLOCKHASH` opcode access for recent blocks (≤256) with EIP-2935 history storage queries for older blocks (257-8,191). It handles edge cases gracefully by returning zero for future blocks or those beyond the history window, matching the EVM's behavior. The implementation uses gas-efficient assembly for static calls to the history storage contract.
+The library seamlessly combines native `BLOCKHASH` opcode access for recent blocks (≤256) with EIP-2935 history storage queries for older blocks (257-8,191). It handles edge cases gracefully by returning zero for future blocks or those beyond the history window, matching the EVM’s behavior. The implementation uses gas-efficient assembly for static calls to the history storage contract.
 
 ```solidity
 contract L1Inbox {
@@ -504,11 +546,11 @@ The [`Time`](/contracts/5.x/api/utils#Time) library provides helpers for manipul
 One of its key features is the `Delay` type, which represents a duration that can automatically change its value at a specified point in the future while maintaining delay guarantees. For example, when reducing a delay value (e.g., from 7 days to 1 day), the change only takes effect after the difference between the old and new delay (i.e. a 6 days) or a minimum setback period, preventing an attacker who gains admin access from immediately reducing security timeouts and executing sensitive operations. This is particularly useful for governance and security mechanisms where timelock periods need to be enforced.
 
 Consider this example for using and safely updating Delays:
-
 ```solidity
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import Time from "contracts/utils/types/Time.sol";
+import {Time} from "contracts/utils/types/Time.sol";
 
 contract MyDelayedContract {
     using Time for *;
@@ -558,9 +600,10 @@ contract MyDelayedContract {
 }
 ```
 
-This pattern is used extensively in OpenZeppelin's [AccessManager](/contracts/5.x/api/access#AccessManager) for implementing secure time-based access control. For example, when changing an admin delay:
+This pattern is used extensively in OpenZeppelin’s [AccessManager](/contracts/5.x/api/access#AccessManager) for implementing secure time-based access control. For example, when changing an admin delay:
 
 ```solidity
+// From AccessManager.sol
 function _setTargetAdminDelay(address target, uint32 newDelay) internal virtual {
     uint48 effect;
     (_targets[target].adminDelay, effect) = _targets[target].adminDelay.withUpdate(
