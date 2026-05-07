@@ -95,8 +95,25 @@ async function convertAdocFiles(directory, apiRoute = "contracts/5.x/api") {
 				"[$1]($2)",
 			);
 
-			// Fix .adoc internal links to .mdx
-			mdContent = mdContent.replace(/\]\(([^)]+)\.adoc([^)]*)\)/g, "]($1$2)");
+			// Strip .adoc extensions and prefix bare same-module slugs with `./`
+			// so the link validator resolves them against the current page.
+			// Skip absolute paths, anchors, protocol URLs, and Antora `module::`
+			// cross-module xrefs (handled below).
+			mdContent = mdContent.replace(
+				/\]\(([^)]+)\.adoc([^)]*)\)/g,
+				(_match, slug, rest) => {
+					if (
+						slug.startsWith("/") ||
+						slug.startsWith("./") ||
+						slug.startsWith("#") ||
+						slug.includes("://") ||
+						slug.includes("::")
+					) {
+						return `](${slug}${rest})`;
+					}
+					return `](./${slug}${rest})`;
+				},
+			);
 
 			// Resolve Antora cross-module xrefs that downdoc leaves as-is.
 			// e.g. `xref:contracts::accounts.adoc#X[Y]` becomes `[Y](contracts::accounts#X)`
