@@ -3,23 +3,23 @@ title: Fixed-Point Math
 ---
 
 <Callout type="warn">
-The example code snippets used in this guide are experimental and have not been audited. They simply help exemplify usage of the OpenZeppelin Sui Package.
+The example code snippets used in this guide are experimental and have not been audited. They are meant to illustrate usage of the OpenZeppelin Sui Package.
 </Callout>
 
-The `openzeppelin_fp_math` package adds two decimal fixed-point types with 9 decimals of precision, matching Sui's native coin precision (`10^9`). It is the right tool whenever you need real-valued arithmetic — prices, fees, rates, ratios, balance deltas — without giving up determinism or onchain auditability.
+The `openzeppelin_fp_math` package adds two decimal fixed-point types with 9 decimals of precision, matching Sui's native coin precision (`10^9`). It is the right tool whenever you need real-valued arithmetic such as prices, fees, rates, ratios, and balance deltas, without giving up determinism or onchain auditability.
 
 The package complements `openzeppelin_math`, which covers integer arithmetic. Use `openzeppelin_math` when your values are whole numbers; reach for `openzeppelin_fp_math` when fractional values are part of the protocol.
 
 ## Why a 9-decimal scale
 
 - Matches Sui's native coin decimals, so converting between token amounts and fixed-point values is straightforward.
-- Decimal scale is intuitive for humans, UIs, and offchain systems — `1.5` is `1_500_000_000`, no binary fixed-point surprises.
+- Decimal scale is intuitive for humans, UIs, and offchain systems. `1.5` is `1_500_000_000`, with no binary fixed-point surprises.
 - Fits in `u128`, keeping storage and arithmetic light compared to `u256`-based decimal types.
 
 ## The two types
 
-- [`UD30x9`](/contracts-sui/1.x/api/fixed-point#ud30x9) — unsigned. Decimal range from `0` to roughly `3.4 × 10^29`.
-- [`SD29x9`](/contracts-sui/1.x/api/fixed-point#sd29x9) — signed (two's complement). Decimal range from roughly `-1.7 × 10^29` to `1.7 × 10^29`. Useful for balance deltas, signed adjustments, and any quantity that can dip below zero.
+- [`UD30x9`](/contracts-sui/1.x/api/fixed-point#ud30x9): unsigned. Decimal range from `0` to roughly `3.4 × 10^29`.
+- [`SD29x9`](/contracts-sui/1.x/api/fixed-point#sd29x9): signed (two's complement). Decimal range from roughly `-1.7 × 10^29` to `1.7 × 10^29`. Useful for balance deltas, signed adjustments, and any quantity that can dip below zero.
 
 The names encode the layout: `UD30x9` uses up to 30 integer digits with 9 fractional digits, `SD29x9` is the signed counterpart with one bit reserved for the sign. Both fit in 16 bytes of storage, so swapping `u128` for either type costs nothing in storage or arithmetic budget.
 
@@ -100,11 +100,11 @@ public fun settle(amount: ud30x9::UD30x9): u64 {
 
 ## Choosing a function
 
-- `mul`, `div` — round toward zero. Equivalent to `mul_trunc`, `div_trunc`. Use as the default when rounding direction does not matter.
-- `mul_trunc`, `div_trunc` — round toward zero (truncate). Use when you want to spell the rounding direction out at the call site.
-- `mul_away`, `div_away` — round away from zero when inexact. Use for fees, slippage caps, and protocol-side accounting where rounding should never favor the user against the protocol.
-- `unchecked_add`, `unchecked_sub` — wrap modulo `2^128` instead of aborting on overflow/underflow. Use only when you have already proved the operation is safe and you want to avoid the abort path; otherwise prefer `add` / `sub`.
-- `pow` — approximate, biased toward zero, and not associative under truncation. Reasonable for small, integer exponents over typical fixed-point ranges; verify expected behavior at your application's exponent and operand magnitudes before relying on it.
+- `mul`, `div`: round toward zero. Equivalent to `mul_trunc`, `div_trunc`. Use as the default when rounding direction does not matter.
+- `mul_trunc`, `div_trunc`: round toward zero (truncate). Use when you want to spell the rounding direction out at the call site.
+- `mul_away`, `div_away`: round away from zero when inexact. Use for fees, slippage caps, and protocol-side accounting where rounding should never favor the user against the protocol.
+- `unchecked_add`, `unchecked_sub`: wrap modulo `2^128` instead of aborting on overflow/underflow. Use only when you have already proved the operation is safe and you want to avoid the abort path. Otherwise prefer `add` / `sub`.
+- `pow`: approximate, biased toward zero, and not associative under truncation. Reasonable for small, integer exponents over typical fixed-point ranges. Verify expected behavior at your application's exponent and operand magnitudes before relying on it.
 
 For `SD29x9` specifically, prefer `mod` (Euclidean, always non-negative) over `rem` (truncating, sign follows dividend) unless your protocol explicitly wants the truncating variant.
 
@@ -116,12 +116,12 @@ For `SD29x9` specifically, prefer `mod` (Euclidean, always non-negative) over `r
 
 ## Why fixed-point on-chain
 
-Move has no native fractional type. Real-valued protocol math — prices, fees, interest rates, signed balance deltas — has to be encoded in integers. The naive approach is to scale by a power of two ("Q-notation": Q64.64, Q96, Q128, etc.) and use bit shifts. That works, but it has two persistent drawbacks:
+Move has no native fractional type. Real-valued protocol math (prices, fees, interest rates, signed balance deltas) has to be encoded in integers. The naive approach is to scale by a power of two ("Q-notation": Q64.64, Q96, Q128, etc.) and use bit shifts. That works, but it has two persistent drawbacks:
 
 1. **Binary scales misalign with the units protocols actually report.** Token amounts, exchange rates, and oracle prices are quoted as decimals. Converting to and from a binary scale at every boundary creates rounding seams that are easy to get wrong and hard to audit.
 2. **Bit-shift arithmetic puts the rounding decision in the operator instead of the call site.** A `>>` is silent. A `mul_div`-shaped helper makes the rounding direction visible. The Cetus exploit hinged on a `checked_shl`-shaped function that silently passed a value it should have rejected; the same class of bug is harder to write when rounding is a named choice at every call site.
 
-`openzeppelin_fp_math` picks **decimal** fixed-point with **9 decimals** (`10^9`) — the same precision Sui uses for native coin amounts. `1.5` is `1_500_000_000`, `0.000_000_001` is `1`. Conversions between token amounts and fixed-point values become a single multiply or divide by `10^9`, with no bit-pattern reasoning involved.
+`openzeppelin_fp_math` picks **decimal** fixed-point with **9 decimals** (`10^9`), matching the precision Sui uses for native coin amounts. `1.5` is `1_500_000_000`, `0.000_000_001` is `1`. Conversions between token amounts and fixed-point values become a single multiply or divide by `10^9`, with no bit-pattern reasoning involved.
 
 The package complements `openzeppelin_math`: integer arithmetic stays in `openzeppelin_math`, fractional arithmetic lives here. They use the same explicit-rounding philosophy.
 
@@ -129,7 +129,7 @@ The package complements `openzeppelin_math`: integer arithmetic stays in `openze
 
 The package draws a sharp line between two kinds of "convert this number to fixed-point" operations. Mixing them up is the most common way to introduce a `10^9`-sized bug, so it is worth getting clear on before writing any arithmetic.
 
-### Casting — preserves raw scaled bits
+### Casting (preserves raw scaled bits)
 
 Casting reinterprets a value that is **already in fixed-point form**. It does not multiply or divide by `10^9`.
 
@@ -139,7 +139,7 @@ The core cast helpers live on the `sd29x9` and `ud30x9` modules:
 use openzeppelin_fp_math::{sd29x9, ud30x9};
 
 let one = ud30x9::wrap(1_000_000_000); // 1.0
-let raw = ud30x9::wrap(42);            // 0.000000042 — NOT 42.0
+let raw = ud30x9::wrap(42);            // 0.000000042, NOT 42.0
 
 let positive_one = sd29x9::wrap(1_000_000_000, false); // 1.0
 let small_negative = sd29x9::wrap(42, true);           // -0.000000042
@@ -157,15 +157,15 @@ let roundtrip = signed.into_UD30x9();         // 42.0 as UD30x9
 
 Use casting when your input is already fixed-point bits (e.g., loaded from storage, returned by another fixed-point function, or hand-encoded in a constant).
 
-### Converting — applies or removes the `10^9` scale
+### Converting (applies or removes the `10^9` scale)
 
 Converting changes between **whole-integer** semantics and **fixed-point** semantics. Use the `*_convert` modules for this.
 
 ```move
 use openzeppelin_fp_math::{sd29x9_convert, ud30x9_convert};
 
-let whole = ud30x9_convert::from_u128(42); // 42.0 — multiplies by 10^9
-let back = whole.to_u128_trunc();          // 42  — divides by 10^9, truncates fractional
+let whole = ud30x9_convert::from_u128(42); // 42.0, multiplies by 10^9
+let back = whole.to_u128_trunc();          // 42, divides by 10^9, truncates fractional
 
 let delta = sd29x9_convert::from_u128(5, true); // -5.0
 let (magnitude, is_negative) = delta.to_parts_trunc();
@@ -207,7 +207,7 @@ Like `openzeppelin_math`, this package treats rounding as a protocol decision. B
 
 | Function pair | Rounding | When to use |
 |---|---|---|
-| `mul`, `mul_trunc` | toward zero | Default. The two are aliases — pick `mul_trunc` if you want the rounding direction visible at the call site. |
+| `mul`, `mul_trunc` | toward zero | Default. The two are aliases. Pick `mul_trunc` if you want the rounding direction visible at the call site. |
 | `mul_away` | away from zero | Fees, slippage caps, anywhere the protocol should never undercharge or under-reserve. |
 | `div`, `div_trunc` | toward zero | Default for division. Same alias relationship as `mul`. |
 | `div_away` | away from zero | When the divisor is user-supplied or quote-related and the protocol must bound itself conservatively. |
@@ -217,12 +217,12 @@ The same vault-lifecycle logic from the integer-math guide applies here, just wi
 ```move
 use openzeppelin_fp_math::ud30x9::UD30x9;
 
-/// Convert tokens to shares — round toward zero so the vault keeps the dust.
+/// Convert tokens to shares, rounding toward zero so the vault keeps the dust.
 public fun deposit_shares(amount: UD30x9, total_assets: UD30x9, total_supply: UD30x9): UD30x9 {
     amount.mul_trunc(total_supply).div_trunc(total_assets)
 }
 
-/// Convert shares to tokens — round toward zero so the vault keeps the dust.
+/// Convert shares to tokens, rounding toward zero so the vault keeps the dust.
 public fun withdraw_assets(shares: UD30x9, total_assets: UD30x9, total_supply: UD30x9): UD30x9 {
     shares.mul_trunc(total_assets).div_trunc(total_supply)
 }
@@ -232,7 +232,7 @@ Both directions truncate toward zero, so the vault never gives away fractional r
 
 ### When `_trunc` and `_away` differ
 
-`mul` and `mul_trunc` differ only when the exact mathematical product cannot be represented in 9 decimals. For values that already fit cleanly, `mul_trunc(x, y) == mul_away(x, y)`. The choice only matters at the precision boundary — which, in fee-and-rate land, is exactly where it matters most.
+`mul` and `mul_trunc` differ only when the exact mathematical product cannot be represented in 9 decimals. For values that already fit cleanly, `mul_trunc(x, y) == mul_away(x, y)`. The choice only matters at the precision boundary, which in fee-and-rate land is exactly where it matters most.
 
 `div_away` is the helper you want for inverse-rate conversions. `1.0 / 3.0` is `0.333333333` with `div_trunc` and `0.333333334` with `div_away`. If your protocol owes the user some fraction of `x / 3`, rounding down on each individual settlement systematically under-pays the user.
 
@@ -240,9 +240,9 @@ Both directions truncate toward zero, so the vault never gives away fractional r
 
 Unlike `openzeppelin_math`, the fixed-point package does **not** return `Option<T>` from arithmetic. It aborts. The error constants come in three families:
 
-- **`EOverflow`** — the result exceeds the representable range of the target type.
-- **`EUnderflow`** — applies to `UD30x9::sub` only. Subtraction would produce a negative value, which is unrepresentable in an unsigned type.
-- **`EDivideByZero`** — applies to `div`, `div_trunc`, `div_away`, `mod`, and `rem`.
+- **`EOverflow`**: the result exceeds the representable range of the target type.
+- **`EUnderflow`**: applies to `UD30x9::sub` only. Subtraction would produce a negative value, which is unrepresentable in an unsigned type.
+- **`EDivideByZero`**: applies to `div`, `div_trunc`, `div_away`, `mod`, and `rem`.
 
 There are also the unchecked-add and unchecked-subtract escape hatches, plus `unchecked_lshift` / `unchecked_rshift` on `UD30x9`. They wrap modulo `2^128` instead of aborting.
 
@@ -275,7 +275,7 @@ public fun try_add(x: UD30x9, y: UD30x9): Option<UD30x9> {
 
 ## Comparison and equality
 
-Comparison operators on `UD30x9` and `SD29x9` work how you would expect — `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `is_zero` — with one subtle point on the signed type:
+Comparison operators on `UD30x9` and `SD29x9` work as you would expect (`eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `is_zero`). There is one subtle point on the signed type:
 
 ```move
 use openzeppelin_fp_math::sd29x9;
@@ -286,7 +286,7 @@ let b = sd29x9::wrap(0, true);
 let same = a.eq(b); // true
 ```
 
-`SD29x9::wrap` rejects "negative zero" by mapping `(0, true)` and `(0, false)` to the same underlying bits, so equality on zeros behaves as expected. If you ever construct an `SD29x9` from raw bits via the package-internal `from_bits`, this normalization does not happen — but `from_bits` is not part of the public API surface, so most callers never encounter it.
+`SD29x9::wrap` rejects "negative zero" by mapping `(0, true)` and `(0, false)` to the same underlying bits, so equality on zeros behaves as expected. If you ever construct an `SD29x9` from raw bits via the package-internal `from_bits`, this normalization does not happen, but `from_bits` is not part of the public API surface, so most callers never encounter it.
 
 ## Cross-type casts
 
@@ -310,7 +310,7 @@ Each direction has a `try_into_*` counterpart that returns `Option<T>` instead o
 
 ## Bitwise operations on `UD30x9`
 
-`UD30x9` exposes a full set of bitwise helpers — `and`, `and2`, `or`, `xor`, `not`, plus `lshift` / `rshift` and their `unchecked_*` siblings. `SD29x9` does **not** expose bitwise operations, on purpose: bit-twiddling on a two's complement representation is rarely what protocol authors mean.
+`UD30x9` exposes a full set of bitwise helpers: `and`, `and2`, `or`, `xor`, `not`, plus `lshift` / `rshift` and their `unchecked_*` siblings. `SD29x9` does **not** expose bitwise operations, on purpose: bit-twiddling on a two's complement representation is rarely what protocol authors mean.
 
 The most common use for these is packing flags or scale-shifting raw bit patterns inside a fixed-point pipeline:
 
@@ -320,7 +320,7 @@ use openzeppelin_fp_math::ud30x9;
 // Mask to keep only the low 64 bits of the raw representation.
 let truncated = ud30x9::wrap(some_value).and(0xFFFFFFFFFFFFFFFF);
 
-// Shift the raw representation right by 9 bits — note this is a bit shift,
+// Shift the raw representation right by 9 bits. Note: this is a bit shift,
 // not a divide-by-2^9, and not a divide-by-10^9.
 let shifted = ud30x9::wrap(some_value).rshift(9);
 ```
@@ -348,7 +348,7 @@ In practice:
 use openzeppelin_fp_math::{ud30x9, ud30x9_convert};
 
 let two = ud30x9_convert::from_u128(2);
-let eight = two.pow(3); // 8.0 — exact for whole-number bases.
+let eight = two.pow(3); // 8.0, exact for whole-number bases.
 
 let half = ud30x9::wrap(500_000_000); // 0.5
 let q = half.pow(20); // ≈ 0.000000953... but truncation may bias the result.
@@ -364,9 +364,9 @@ For small integer exponents over operands that are not far from `1.0`, `pow` is 
 
 `SD29x9::min()` returns `-2^127`. There is no representable `+2^127`, so several operations abort when called on `min()`:
 
-- `abs(min())` — aborts with `EOverflow`.
-- `negate(min())` — aborts with `EOverflow`.
-- `wrap(2^127, true)` is fine (it produces `min`); but `wrap(2^127, false)` aborts with `EOverflow`. There is no way to construct `min` via `wrap`; use `min()` directly.
+- `abs(min())`: aborts with `EOverflow`.
+- `negate(min())`: aborts with `EOverflow`.
+- `wrap(2^127, true)` is fine (it produces `min`), but `wrap(2^127, false)` aborts with `EOverflow`. There is no way to construct `min` via `wrap`. Use `min()` directly.
 
 Most protocol code never sees `min()`. If your design naturally produces values near the signed-integer boundary, plan for it explicitly:
 
@@ -387,8 +387,8 @@ public fun safe_negate(x: sd29x9::SD29x9): sd29x9::SD29x9 {
 
 `UD30x9::mod` is straightforward: it is the unsigned remainder, always non-negative. `SD29x9` exposes **two** remainder functions because the signed semantics differ:
 
-- **`rem(x, y)`** — truncating remainder. The magnitude is `abs(x) % abs(y)`, and the sign of the result follows the dividend `x`. `rem(-7, 3) = -1`.
-- **`mod(x, y)`** — Euclidean remainder. Always non-negative; satisfies `0 <= mod(x, y) < abs(y)`. `mod(-7, 3) = 2`.
+- **`rem(x, y)`**: truncating remainder. The magnitude is `abs(x) % abs(y)`, and the sign of the result follows the dividend `x`. `rem(-7, 3) = -1`.
+- **`mod(x, y)`**: Euclidean remainder. Always non-negative. Satisfies `0 <= mod(x, y) < abs(y)`. `mod(-7, 3) = 2`.
 
 Most protocol code wants `mod` (Euclidean), because it gives a stable representative of the residue class regardless of the dividend's sign. `rem` is the right choice when you specifically want the remainder to follow the sign of the dividend (e.g., to preserve sign in a pipeline of signed adjustments).
 
@@ -435,7 +435,7 @@ public fun quote_swap_with_fee(
     let effective_in = amount_in.sub(fee);
 
     // Constant-product output, rounded toward zero (in the user's favor as the
-    // taker, against the user as a fee recipient — model your protocol explicitly).
+    // taker, against the user as a fee recipient. Model your protocol explicitly).
     reserve_out.mul_trunc(effective_in).div_trunc(reserve_in.add(effective_in))
 }
 
