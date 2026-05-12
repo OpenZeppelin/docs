@@ -1,0 +1,120 @@
+---
+title: "dApp 1: Sui Marketplace Reference"
+---
+
+<Callout type="warn">
+This is a reference build. The repository linked from this page is experimental and has not been audited. It exists to demonstrate Sui-native patterns and showcase how OpenZeppelin Sui packages compose with real application code.
+</Callout>
+
+A fullstack reference build of an on-chain marketplace on Sui. Items are priced in USD cents and settled in any oracle-registered currency via [Pyth](https://pyth.network/), with safe arithmetic at the contract layer handled by [`openzeppelin_math`](/contracts-sui/1.x/math). The repo demonstrates how Sui's object model, capability pattern, phantom types, and Programmable Transaction Blocks compose into production-shaped application code.
+
+## Educational assets
+
+This page is one of three places to learn the marketplace. Pick the one that matches what you're after:
+
+- **[GitHub repository](https://github.com/OpenZeppelin/openzeppelin-sui-marketplace)** — clone-and-run source. The README walks through localnet and testnet quickstarts, configuration, and the bootstrap scripts. Start here if you want to actually run the code.
+- **[In-repo walkthrough](https://github.com/OpenZeppelin/openzeppelin-sui-marketplace/tree/main/docs)** — a 23-chapter linear path inside the repo's `docs/` folder. Covers mental model, contracts, oracle integration, UI flows, testing, security, and troubleshooting. Reach for this when you want to understand how a particular subsystem works.
+- **[Video walkthrough](https://youtu.be/n53w3IGLnf8)** — embedded below. ~18 minutes covering architecture, code, and a live transaction flow on testnet.
+
+## Video walkthrough
+
+<iframe width="100%" height="450" src="https://www.youtube.com/embed/n53w3IGLnf8" title="Sui Marketplace Fullstack Example: Move, Pyth, and OpenZeppelin Math Libraries" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+
+## Architecture
+
+![Repository and module structure: Next.js UI → PTB Builder + CLI Scripts → oracle_market Move package with five modules, plus external dependencies on openzeppelin_math, Pyth, and Sui Framework.](/contracts-sui/dapp-1-marketplace/frame-1-architecture.png)
+
+The repository is a pnpm workspace organized in three layers. At the bottom sits the `oracle_market` Move package — five single-responsibility modules: `shop` (orchestrator and capability gate), `listing` (item metadata and `ShopItem<T>` receipts), `discount` (fixed and percent rules with redemption caps), `currency` (Pyth integration and safe price math), and `events`. Around it, a TypeScript orchestration layer composes Programmable Transaction Blocks via the `@mysten/sui` SDK, and a Next.js UI sits on top.
+
+The Move package depends on [`openzeppelin_math`](/contracts-sui/1.x/math) for its arithmetic primitives — `mul_div` with explicit rounding direction and overflow-as-`Option<T>` handling. Pyth and the Sui framework round out the on-chain dependencies.
+
+## Object model
+
+![Object model and ownership: Shop is a shared object with three typed Tables (accepted_currencies, listings, discounts); Shop Owner holds an owned ShopOwnerCap that gates admin actions; Pyth's PriceInfoObject is a separate shared object read by reference; Buyers receive an owned phantom-typed ShopItem receipt.](/contracts-sui/dapp-1-marketplace/frame-2-object-model.png)
+
+State is split across four object kinds. The `Shop` is a single shared root with three typed Tables (`accepted_currencies` keyed by `TypeName`, `listings`, and `discounts`) hung off its `UID` as dynamic fields. Authority lives in the owned `ShopOwnerCap` — every admin function takes `&ShopOwnerCap` as an argument, and the `shop_id` field binds the cap to one specific shop. Pyth's `PriceInfoObject` is an external shared object read by immutable reference during settlement. When a purchase completes, the buyer receives an owned `ShopItem<phantom T>` receipt.
+
+The receipt carries a phantom type parameter — `T` is part of the type identity at compile time but adds zero runtime bytes. `ShopItem<ConcertTicket>` and `ShopItem<DigitalPass>` are distinct types that downstream contracts can consume by signature alone, without trusting the issuing shop's continued state. The receipt has `key, store` and crucially no `drop`: it's a linear resource the compiler refuses to silently lose.
+
+## Purchase flow
+
+![Buyer Purchase PTB — atomic transaction with four steps: pyth::update_price_feeds (step 0), shop::buy_item_with_discount (step 1), transfer of the bike receipt to the buyer (step 2), and transfer of the USDC change to the buyer (step 3). Step 0 always runs before step 1, making stale-oracle attacks structurally impossible.](/contracts-sui/dapp-1-marketplace/frame-3-purchase-ptb.png)
+
+Every purchase composes into a single Programmable Transaction Block. Step 0 pushes a fresh Pyth attestation on-chain — the off-chain Hermes service produces a guardian-signed VAA that Pyth's on-chain verifier validates. Step 1 reads that same `PriceInfoObject` (now fresh) and runs `shop::buy_item_with_discount`. Steps 2 and 3 transfer the minted `ShopItem<T>` receipt and any change back to the buyer. All four execute atomically — either every step succeeds or the entire transaction reverts.
+
+The settlement math itself defends against oracle uncertainty: the contract uses Pyth's lower bound (`mantissa - confidence`, the `mu - sigma` of the reported price), aborts when the confidence interval is too wide relative to the price, and applies dual-bound guardrails on freshness and confidence (sellers set caps; buyers can tighten via overrides but never loosen). The final price-to-coin conversion uses [`openzeppelin_math::u128::mul_div`](/contracts-sui/1.x/math) with explicit `rounding::up()` — overflow surfaces as an explicit transaction abort rather than silent corruption.
+
+The PTB structure is what makes this safe. There is no transaction order in which `buy_item` runs against a stale feed, because step 0 is unconditionally the prior call in the same atomic block.
+
+## Quickstart
+
+The repo's [README](https://github.com/OpenZeppelin/openzeppelin-sui-marketplace) walks through the full localnet and testnet workflows. The short version:
+
+```bash
+git clone https://github.com/OpenZeppelin/openzeppelin-sui-marketplace
+cd openzeppelin-sui-marketplace
+pnpm install
+
+# Configure packages/dapp/.env with your owner (and buyer for localnet) keys
+cp packages/dapp/.env.example packages/dapp/.env
+# ...edit .env per the README...
+
+# Localnet (one-command bootstrap)
+pnpm script chain:localnet:start --with-faucet   # in another terminal
+pnpm bootstrap:localnet
+pnpm ui dev
+
+# Testnet (uses the canonical OpenZeppelin-deployed package)
+pnpm bootstrap:testnet
+pnpm ui dev
+```
+
+The bootstrap scripts handle mock-coin publishing, Pyth feed setup, oracle-market publishing (localnet only), shop seeding, and writing the resulting IDs into `packages/ui/.env.local` automatically. See the [README](https://github.com/OpenZeppelin/openzeppelin-sui-marketplace#localnet-quickstart) for the full breakdown.
+
+## Key code paths
+
+Pointers to the Move source if you want to read the patterns directly:
+
+| Pattern | File | Notes |
+| --- | --- | --- |
+| One-time witness + `init` | [`shop.move`](https://github.com/OpenZeppelin/openzeppelin-sui-marketplace/blob/main/packages/dapp/contracts/oracle-market/sources/shop.move) (lines ~106–111) | Publish-time `Publisher` claim |
+| Capability pattern | [`shop.move`](https://github.com/OpenZeppelin/openzeppelin-sui-marketplace/blob/main/packages/dapp/contracts/oracle-market/sources/shop.move) (lines ~117–122) | `ShopOwnerCap` struct, `shop_id` binding |
+| Shared `Shop` with typed Tables | [`shop.move`](https://github.com/OpenZeppelin/openzeppelin-sui-marketplace/blob/main/packages/dapp/contracts/oracle-market/sources/shop.move) (lines ~125–140) | `accepted_currencies` keyed by `TypeName` |
+| Phantom-typed receipt | [`listing.move`](https://github.com/OpenZeppelin/openzeppelin-sui-marketplace/blob/main/packages/dapp/contracts/oracle-market/sources/listing.move) (lines ~46–59) | `ShopItem<phantom T>` with `key, store` and no `drop` |
+| Oracle identity assertion | [`shop.move`](https://github.com/OpenZeppelin/openzeppelin-sui-marketplace/blob/main/packages/dapp/contracts/oracle-market/sources/shop.move) (lines ~815–830) | `assert_price_info_identity!` macro |
+| Conservative price mantissa | [`currency.move`](https://github.com/OpenZeppelin/openzeppelin-sui-marketplace/blob/main/packages/dapp/contracts/oracle-market/sources/currency.move) (lines ~259–269) | Lower-bound settlement |
+| `openzeppelin_math::mul_div` usage | [`currency.move`](https://github.com/OpenZeppelin/openzeppelin-sui-marketplace/blob/main/packages/dapp/contracts/oracle-market/sources/currency.move) (lines ~230–235) | Explicit rounding + overflow abort |
+| PTB construction | [`buy.ts`](https://github.com/OpenZeppelin/openzeppelin-sui-marketplace/blob/main/packages/domain/core/src/flows/buy.ts) | `maybeUpdatePythPriceFeed` + `buildBuyTransaction` |
+
+## New to Move and Sui?
+
+If you're new to Move, the patterns above lean on a few language-level concepts worth reading up on first. The repo assumes familiarity with these:
+
+- **Sui's object model** — owned vs shared objects, the `UID` type, parallel execution semantics. See [Sui Object Model](https://docs.sui.io/concepts/object-model).
+- **Move abilities** — `key`, `store`, `copy`, `drop`. The marketplace's `ShopItem<T>` deliberately has no `drop` (it's a linear resource). See [Move abilities](https://move-book.com/reference/abilities.html).
+- **Generics and phantom type parameters** — `ShopItem<phantom T>` uses a generic parameter that exists only at compile time. See [phantom type parameters](https://move-book.com/move-basics/struct.html#phantom-type-parameters) in The Move Book.
+- **Programmable Transaction Blocks (PTBs)** — Sui's atomic, multi-call transaction primitive. The marketplace's purchase flow composes a Pyth update and the buy into one PTB. See [Programmable Transaction Blocks](https://docs.sui.io/concepts/transactions/prog-txn-blocks).
+- **TypeName and runtime type identity** — used as the key for the marketplace's accepted-currency registry. See [`std::type_name`](https://move-book.com/programmability/type-reflection.html).
+
+Broader references:
+
+- [Sui Move Concepts](https://docs.sui.io/concepts/sui-move-concepts) — the official Sui-flavored Move primer
+- [The Move Book](https://move-book.com/) — language reference, syntax, and stdlib coverage
+- [Sui by Example](https://examples.sui.io/) — short, focused snippets for common patterns
+- [Pyth on Sui](https://docs.pyth.network/price-feeds/use-real-time-data/sui) — oracle integration specifics
+
+## Related OpenZeppelin packages
+
+| Package | Where it shows up in the marketplace |
+| --- | --- |
+| [`openzeppelin_math`](/contracts-sui/1.x/math) | Live in `currency.move` for the price quote — `mul_div` with `rounding::up()` plus overflow handling. See the [Math Walkthrough](/contracts-sui/1.x/learn/math-walkthrough) for a deeper dive into the rounding-as-a-protocol-decision pattern. |
+| [`openzeppelin_access`](/contracts-sui/1.x/access) | Future migration target. The current `ShopOwnerCap` is a hand-rolled capability; `openzeppelin_access::ownable` provides the same pattern with standardized two-step transfer, renounce, and event emission. See the [Access Walkthrough](/contracts-sui/1.x/learn/access-walkthrough) for the wrapping and transfer policy details. |
+
+## Where to go next
+
+- **Read and run the repo.** Start with the [README](https://github.com/OpenZeppelin/openzeppelin-sui-marketplace) and follow either the localnet or testnet quickstart.
+- **Inspect the Move source.** The five modules in `oracle-market/sources/` are short enough to read in one sitting. Each pattern in the table above maps to a specific file and line range.
+- **[Watch the video walkthrough.](https://youtu.be/n53w3IGLnf8)** Embedded above — covers the architecture, code, and a live transaction flow on testnet.
+- **Fork it.** The repo is meant to be a starting point. Fork, strip out what you don't need, and adapt the patterns to your own protocol.
+
+For questions or feedback, open an issue on the [GitHub repository](https://github.com/OpenZeppelin/openzeppelin-sui-marketplace/issues) or the [OpenZeppelin contracts-sui repo](https://github.com/OpenZeppelin/contracts-sui).
