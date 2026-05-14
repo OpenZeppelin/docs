@@ -8,7 +8,7 @@ This page documents the public API of `openzeppelin_access` for OpenZeppelin Con
 
 <APIGithubLinkHeader
   moduleName="access_control"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/b30fe928b55f38754b05f02117c598cf8d53316a/contracts/access/sources/access_control.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/af86a0ec4bbbc05b6ec5205b034a4456561c5545/contracts/access/sources/access_control.move"
 />
 
 ```move
@@ -16,6 +16,8 @@ use openzeppelin_access::access_control;
 ```
 
 Role-based access control registry for Sui Move packages. The root role is the consumer module's One-Time Witness (OTW), and managed roles must be defined in the same module as the root role.
+
+The registry must be created from a module `init` during the first publish of the package that defines `RootRole`. Package upgrades do not run `init` for newly-added modules.
 
 The module supports ordinary role grants and revocations, typed `Auth<Role>` proofs, delayed root-role transfer, delayed root-role renounce, and delayed changes to the root-operation delay.
 
@@ -32,7 +34,7 @@ Functions
 - [`new(otw, default_admin_delay_ms, ctx)`](#access_control-new)
 - [`has_role(ac, account)`](#access_control-has_role)
 - [`get_role_admin(ac)`](#access_control-get_role_admin)
-- [`assert_role(ac, account)`](#access_control-assert_role)
+- [`assert_has_role(ac, account)`](#access_control-assert_has_role)
 - [`grant_role(ac, account, ctx)`](#access_control-grant_role)
 - [`revoke_role(ac, account, ctx)`](#access_control-revoke_role)
 - [`renounce_role(ac, account, ctx)`](#access_control-renounce_role)
@@ -143,6 +145,8 @@ Creates the registry for the consumer module. `RootRole` must be a genuine OTW, 
 
 The caller is responsible for sharing, embedding, or otherwise positioning the returned `AccessControl<RootRole>` registry.
 
+The expected call site is the consumer module's `init`, which only runs on the package's first publish. To adopt AccessControl from an already-published protocol, publish a new package that initializes its own registry.
+
 Aborts with `ENotOneTimeWitness` if `otw` is not an OTW.
 
 Aborts with `EDelayTooLarge` if `default_admin_delay_ms` exceeds `max_default_admin_delay_ms()`.
@@ -162,11 +166,13 @@ Returns whether `account` currently holds `Role`. Returns `false` for roles that
   kind="public"
 >
 Returns the admin role for `Role`, defaulting to the protected root role when no role data exists yet.
+
+Aborts with `EForeignRole` if `Role` is not defined in the same module as `RootRole`.
 </APIItem>
 
 <APIItem
-  functionSignature="assert_role<RootRole, Role>(ac: &AccessControl<RootRole>, account: address)"
-  id="access_control-assert_role"
+  functionSignature="assert_has_role<RootRole, Role>(ac: &AccessControl<RootRole>, account: address)"
+  id="access_control-assert_has_role"
   kind="public"
 >
 Checks that `account` holds `Role`.
