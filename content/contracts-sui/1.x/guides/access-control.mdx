@@ -8,7 +8,7 @@ The example code snippets used in this guide are experimental and have not been 
 
 The `access_control` module provides role-based authorization for Sui Move packages. It is designed for protocols that need more than one privileged actor: admins, operators, guardians, treasurers, keepers, or governance executors.
 
-At a high level, your package defines the roles, publishes one access-control registry for those roles, and uses that registry to check who can perform privileged actions.
+At a high level, your package defines role marker types, publishes an `AccessControl` registry for those roles, and uses `Auth<Role>` values minted by that registry to authorize privileged actions.
 
 ```mermaid
 flowchart LR
@@ -26,6 +26,10 @@ The module has two important constraints:
 
 These constraints make `Auth<Role>` useful as a typed proof. If a function receives `&Auth<TreasurerRole>`, it can trust that the transaction sender held `TreasurerRole` when the auth value was minted in that PTB.
 
+## Prerequisites
+
+Before following this guide, it helps to be familiar with Sui Move One-Time Witnesses (OTWs), shared objects, and programmable transaction blocks (PTBs). The examples reference those concepts throughout.
+
 ## Add the dependency
 
 Add the access package to `Move.toml`:
@@ -41,21 +45,65 @@ Then import the module from your Move code:
 use openzeppelin_access::access_control::{Self, AccessControl, Auth};
 ```
 
-## Implementing a new module
+## Default Pattern: Standalone Access Registry
 
-This example builds a shared treasury controlled by roles:
+For new packages, publish `AccessControl` as its own shared object and pass it directly in PTBs. This keeps role management in the OpenZeppelin module, while protected functions only need an `&Auth<Role>` parameter.
 
-- `TREASURY` is the module OTW and the root role.
-- `TreasuryAdminRole` can grant and revoke operational roles.
-- `TreasurerRole` can spend funds.
-- `PauserRole` can pause or unpause operations.
+The protected object does not store the registry. PTBs mint an auth value from the registry, then pass that auth value to the protected function.
+
+```mermaid
+flowchart LR
+    Registry["Standalone AccessControl&lt;ROLES&gt;"]
+    Treasury["Protected Treasury"]
+    Market["Protected Market"]
+    User["Signer"]
+    Auth["Auth&lt;Role&gt;"]
+
+    User -->|"new_auth<Role>"| Registry
+    Registry -->|"mints"| Auth
+    Auth -->|"authorizes"| Treasury
+    Auth -->|"authorizes"| Market
+```
+
+### Define roles
+
+Put the root role and all managed role marker types in one module. Here, `ROLES` is the OTW and root role type. It is not a collection object; it anchors the singleton `AccessControl<ROLES>` registry.
+
+```move
+module my_protocol::roles;
+
+use openzeppelin_access::access_control;
+
+public struct ROLES has drop {}
+
+public struct TreasuryAdminRole {}
+public struct TreasurerRole {}
+public struct PauserRole {}
+public struct OperatorRole {}
+
+const DEFAULT_ADMIN_DELAY_MS: u64 = 24 * 60 * 60 * 1_000;
+
+fun init(otw: ROLES, ctx: &mut TxContext) {
+    let mut access = access_control::new(otw, DEFAULT_ADMIN_DELAY_MS, ctx);
+
+    access.grant_role<_, TreasuryAdminRole>(ctx.sender(), ctx);
+    access.set_role_admin<_, TreasurerRole, TreasuryAdminRole>(ctx);
+    access.set_role_admin<_, PauserRole, TreasuryAdminRole>(ctx);
+    access.set_role_admin<_, OperatorRole, TreasuryAdminRole>(ctx);
+
+    transfer::public_share_object(access);
+}
+```
+
+### Protect protocol objects
+
+Protected modules import role types and accept `&Auth<Role>` in privileged functions. They do not store the registry, expose role-management wrappers, or check registry object IDs. `AccessControl<ROLES>` is unique for the `ROLES` OTW, and `Auth<TreasurerRole>` can only be minted by that registry.
 
 ```move
 module my_protocol::treasury;
 
-use openzeppelin_access::access_control::{Self, AccessControl, Auth};
-
-// === Errors ===
+use my_protocol::roles::{PauserRole, TreasurerRole, TreasuryAdminRole};
+use openzeppelin_access::access_control::Auth;
 
 #[error(code = 0)]
 const EPaused: vector<u8> = "Treasury operations are paused";
@@ -63,60 +111,21 @@ const EPaused: vector<u8> = "Treasury operations are paused";
 #[error(code = 1)]
 const EInsufficientBalance: vector<u8> = "Treasury balance is too low";
 
-// === One-Time Witness ===
-
-public struct TREASURY has drop {}
-
-// === Role Types ===
-
-public struct TreasuryAdminRole {}
-public struct TreasurerRole {}
-public struct PauserRole {}
-
-// === Constants ===
-
-const DEFAULT_ADMIN_DELAY_MS: u64 = 24 * 60 * 60 * 1_000;
-
-// === Protocol Object ===
-
 public struct Treasury has key, store {
     id: UID,
-    access: AccessControl<TREASURY>,
     balance: u64,
     fee_bps: u64,
     paused: bool,
 }
 
-// === Init ===
-
-fun init(otw: TREASURY, ctx: &mut TxContext) {
-    let access = access_control::new(otw, DEFAULT_ADMIN_DELAY_MS, ctx);
-    let mut treasury = Treasury {
+fun init(ctx: &mut TxContext) {
+    transfer::share_object(Treasury {
         id: object::new(ctx),
-        access,
         balance: 0,
         fee_bps: 0,
         paused: false,
-    };
-
-    treasury.access.grant_role<_, TreasuryAdminRole>(ctx.sender(), ctx);
-    treasury.access.set_role_admin<_, TreasurerRole, TreasuryAdminRole>(ctx);
-    treasury.access.set_role_admin<_, PauserRole, TreasuryAdminRole>(ctx);
-
-    transfer::share_object(treasury);
+    });
 }
-
-// === Access Getters ===
-
-public fun borrow_access(treasury: &Treasury): &AccessControl<TREASURY> {
-    &treasury.access
-}
-
-public fun borrow_access_mut(treasury: &mut Treasury): &mut AccessControl<TREASURY> {
-    &mut treasury.access
-}
-
-// === Business Actions ===
 
 public fun deposit(treasury: &mut Treasury, amount: u64) {
     treasury.balance = treasury.balance + amount;
@@ -136,58 +145,160 @@ public fun unpause(treasury: &mut Treasury, _: &Auth<PauserRole>) {
     treasury.paused = false;
 }
 
-// === Getters ===
+public fun set_fee_bps(treasury: &mut Treasury, fee_bps: u64, _: &Auth<TreasuryAdminRole>) {
+    treasury.fee_bps = fee_bps;
+}
 
 public fun balance(treasury: &Treasury): u64 { treasury.balance }
 
 public fun is_paused(treasury: &Treasury): bool { treasury.paused }
 ```
 
-This embeds `AccessControl<TREASURY>` inside the shared treasury object. That is a good default when the registry only protects that one protocol object.
-
-The public access getters let PTBs compose your protocol module with `access_control` calls from the OpenZeppelin package. The module does not need thin forwarding functions for role management unless your protocol wants to add domain-specific checks or events around those operations.
-
-### Using one registry for several objects
-
-If the same roles protect several shared objects, keep the registry as its own shared object instead of embedding it in one protected object. The protected objects can be defined in the same module or in different modules that import the role types.
-
-Assume a separate `my_protocol::roles` module defines `ROLES` and `OperatorRole`, creates `AccessControl<ROLES>` during `init`, and shares that registry. When more than one protected object can exist, store the trusted registry ID in each protected object and check it in protected functions:
+The same registry can protect other modules too:
 
 ```move
 module my_protocol::market;
 
-use my_protocol::roles::{ROLES, OperatorRole};
-use openzeppelin_access::access_control::{AccessControl, Auth};
-use sui::object::{Self, ID};
-
-#[error(code = 0)]
-const EWrongRegistry: vector<u8> = "Market is bound to a different access registry";
+use my_protocol::roles::OperatorRole;
+use openzeppelin_access::access_control::Auth;
 
 public struct Market has key, store {
     id: UID,
-    access_id: ID,
     settled_rounds: u64,
 }
 
-public fun new_market(access: &AccessControl<ROLES>, ctx: &mut TxContext) {
+fun init(ctx: &mut TxContext) {
     transfer::share_object(Market {
         id: object::new(ctx),
-        access_id: object::id(access),
         settled_rounds: 0,
     });
 }
 
-public fun settle(
-    market: &mut Market,
-    access: &AccessControl<ROLES>,
-    _: &Auth<OperatorRole>,
-) {
-    assert!(market.access_id == object::id(access), EWrongRegistry);
+public fun settle(market: &mut Market, _: &Auth<OperatorRole>) {
     market.settled_rounds = market.settled_rounds + 1;
 }
 ```
 
-The PTB passes both the shared registry and the protected object. Here, `$ACCESS_REGISTRY` is the shared `AccessControl<ROLES>` object and `$MARKET` is a market created with that registry:
+Define a separate root role type and registry only when a group of objects needs independent administration.
+
+## Publish and Bootstrap
+
+Publishing the package runs each module initializer. In this walkthrough, that creates the shared `AccessControl<ROLES>`, the shared `Treasury`, and the shared `Market`. The publisher receives the root role and `TreasuryAdminRole`.
+
+```mermaid
+sequenceDiagram
+    participant Publisher
+    participant Publish as Package publish
+    participant Roles as roles::init
+    participant Treasury as treasury::init
+    participant Market as market::init
+    Publisher->>Publish: sui client publish
+    Publish->>Roles: init(ROLES)
+    Roles->>Roles: create AccessControl<ROLES>
+    Roles->>Roles: grant root role and TreasuryAdminRole
+    Publish->>Treasury: init()
+    Publish->>Market: init()
+    Roles-->>Publish: shared AccessControl object
+    Treasury-->>Publish: shared Treasury object
+    Market-->>Publish: shared Market object
+    Publish-->>Publisher: package and object IDs
+```
+
+Publish the package:
+
+```bash
+sui client publish
+```
+
+Record the package and object IDs from the publish output. Set `$ACCESS` to the published OpenZeppelin access package address on your target network:
+
+```bash
+export PACKAGE=0x...
+export ACCESS=0x...
+export ACCESS_REGISTRY=0x...
+export TREASURY=0x...
+export MARKET=0x...
+export PUBLISHER=0x...
+export OPS_ADMIN=0x...
+export TREASURER=0x...
+export GUARDIAN=0x...
+export OPERATOR=0x...
+```
+
+After publishing, grant an operational admin and optionally renounce the publisher's day-to-day admin role. The publisher keeps the root role until a delayed root transfer is completed.
+
+Run this PTB from the publisher account, because `renounce_role` can only renounce the sender's own role.
+
+```bash
+sui client ptb \
+  --move-call $ACCESS::access_control::grant_role \
+    "<$PACKAGE::roles::ROLES,$PACKAGE::roles::TreasuryAdminRole>" \
+    @$ACCESS_REGISTRY \
+    @$OPS_ADMIN \
+  --move-call $ACCESS::access_control::renounce_role \
+    "<$PACKAGE::roles::ROLES,$PACKAGE::roles::TreasuryAdminRole>" \
+    @$ACCESS_REGISTRY \
+    @$PUBLISHER
+```
+
+Run the next PTB from `$OPS_ADMIN` to grant the roles used by the protected functions:
+
+```bash
+sui client ptb \
+  --move-call $ACCESS::access_control::grant_role \
+    "<$PACKAGE::roles::ROLES,$PACKAGE::roles::TreasurerRole>" \
+    @$ACCESS_REGISTRY \
+    @$TREASURER \
+  --move-call $ACCESS::access_control::grant_role \
+    "<$PACKAGE::roles::ROLES,$PACKAGE::roles::PauserRole>" \
+    @$ACCESS_REGISTRY \
+    @$GUARDIAN \
+  --move-call $ACCESS::access_control::grant_role \
+    "<$PACKAGE::roles::ROLES,$PACKAGE::roles::OperatorRole>" \
+    @$ACCESS_REGISTRY \
+    @$OPERATOR
+```
+
+## Interact with Protected Functions
+
+For functions that take `&Auth<Role>`, mint the auth value and use it in the same PTB. The auth value has `drop` only, so it is a temporary proof for the current transaction, not an object that can be stored or transferred.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Registry as AccessControl
+    participant Treasury
+    User->>Registry: new_auth<TreasurerRole>(registry)
+    Registry-->>User: Auth<TreasurerRole>
+    User->>Treasury: spend(treasury, amount, auth)
+```
+
+Treasurer spending from `$TREASURER`:
+
+```bash
+sui client ptb \
+  --move-call $ACCESS::access_control::new_auth \
+    "<$PACKAGE::roles::ROLES,$PACKAGE::roles::TreasurerRole>" \
+    @$ACCESS_REGISTRY \
+  --assign treasurer_auth \
+  --move-call $PACKAGE::treasury::spend \
+    @$TREASURY \
+    4000000000 \
+    treasurer_auth
+```
+
+Guardian pausing from `$GUARDIAN`:
+
+```bash
+sui client ptb \
+  --move-call $ACCESS::access_control::new_auth \
+    "<$PACKAGE::roles::ROLES,$PACKAGE::roles::PauserRole>" \
+    @$ACCESS_REGISTRY \
+  --assign pauser_auth \
+  --move-call $PACKAGE::treasury::pause @$TREASURY pauser_auth
+```
+
+Operator settling a market from `$OPERATOR`:
 
 ```bash
 sui client ptb \
@@ -195,152 +306,52 @@ sui client ptb \
     "<$PACKAGE::roles::ROLES,$PACKAGE::roles::OperatorRole>" \
     @$ACCESS_REGISTRY \
   --assign operator_auth \
-  --move-call $PACKAGE::market::settle @$MARKET @$ACCESS_REGISTRY operator_auth \
-  --gas-budget 10000000
+  --move-call $PACKAGE::market::settle @$MARKET operator_auth
 ```
 
-## Publish and bootstrap
-
-Publishing runs `init`, creates the treasury, and makes the publisher the root role holder. The same transaction also grants `TreasuryAdminRole` to the publisher and configures the role hierarchy.
-
-```mermaid
-sequenceDiagram
-    participant Publisher
-    participant Package as Package init
-    participant Treasury
-    Publisher->>Package: sui client publish
-    Package->>Treasury: new AccessControl<TREASURY>
-    Package->>Treasury: grant TreasuryAdminRole to publisher
-    Package->>Treasury: set operational role admins
-    Package-->>Publisher: shared Treasury object ID
-```
-
-Publish the package:
-
-```bash
-sui client publish --gas-budget 100000000
-```
-
-Record the package and treasury object IDs from the publish output, and set `$ACCESS` to the published OpenZeppelin access package address on your target network:
-
-```bash
-export PACKAGE=0x...
-export ACCESS=0x...
-export TREASURY=0x...
-export PUBLISHER=0x...
-export OPS_ADMIN=0x...
-export TREASURER=0x...
-export GUARDIAN=0x...
-```
-
-Grant an operational admin, then optionally renounce the deployer's day-to-day admin role. The deployer keeps the root role until a delayed root transfer is completed.
-
-Run this PTB from the publisher account, because `renounce_role` can only renounce the sender's own role.
+One auth value can be reused across multiple calls in the same PTB when those calls require the same role:
 
 ```bash
 sui client ptb \
-  --move-call $PACKAGE::treasury::borrow_access_mut @$TREASURY \
-  --assign access \
-  --move-call $ACCESS::access_control::grant_role \
-    "<$PACKAGE::treasury::TREASURY,$PACKAGE::treasury::TreasuryAdminRole>" \
-    access \
-    @$OPS_ADMIN \
-  --move-call $ACCESS::access_control::renounce_role \
-    "<$PACKAGE::treasury::TREASURY,$PACKAGE::treasury::TreasuryAdminRole>" \
-    access \
-    @$PUBLISHER \
-  --gas-budget 10000000
-```
-
-Run the next PTB from `$OPS_ADMIN` to grant operational roles:
-
-```bash
-sui client ptb \
-  --move-call $PACKAGE::treasury::borrow_access_mut @$TREASURY \
-  --assign access \
-  --move-call $ACCESS::access_control::grant_role \
-    "<$PACKAGE::treasury::TREASURY,$PACKAGE::treasury::TreasurerRole>" \
-    access \
-    @$TREASURER \
-  --move-call $ACCESS::access_control::grant_role \
-    "<$PACKAGE::treasury::TREASURY,$PACKAGE::treasury::PauserRole>" \
-    access \
-    @$GUARDIAN \
-  --gas-budget 10000000
-```
-
-## Interacting with protected functions
-
-For functions that take `&Auth<Role>`, create the auth value and use it in the same PTB. The auth value has `drop` only, so it is a temporary proof for the current transaction, not an object that can be stored or transferred.
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant Registry as AccessControl
-    participant Treasury
-    User->>Registry: new_auth<TreasurerRole>
-    Registry-->>User: Auth<TreasurerRole>
-    User->>Treasury: spend(amount, &auth)
-```
-
-Treasurer spending from `$TREASURER`:
-
-```bash
-sui client ptb \
-  --move-call $PACKAGE::treasury::borrow_access @$TREASURY \
-  --assign access \
   --move-call $ACCESS::access_control::new_auth \
-    "<$PACKAGE::treasury::TREASURY,$PACKAGE::treasury::TreasurerRole>" \
-    access \
-  --assign treasurer_auth \
-  --move-call $PACKAGE::treasury::spend \
-    @$TREASURY \
-    4000000000 \
-    treasurer_auth \
-  --gas-budget 10000000
-```
-
-Guardian pausing from `$GUARDIAN`:
-
-```bash
-sui client ptb \
-  --move-call $PACKAGE::treasury::borrow_access @$TREASURY \
-  --assign access \
-  --move-call $ACCESS::access_control::new_auth \
-    "<$PACKAGE::treasury::TREASURY,$PACKAGE::treasury::PauserRole>" \
-    access \
+    "<$PACKAGE::roles::ROLES,$PACKAGE::roles::PauserRole>" \
+    @$ACCESS_REGISTRY \
   --assign pauser_auth \
   --move-call $PACKAGE::treasury::pause @$TREASURY pauser_auth \
-  --gas-budget 10000000
+  --move-call $PACKAGE::treasury::unpause @$TREASURY pauser_auth
 ```
 
-The `borrow_access` getter returns a reference to the embedded registry, so PTBs can compose your protocol module with `access_control::new_auth` from the OpenZeppelin package directly.
+For new functions, prefer `Auth<Role>`. It makes authorization explicit in the function type and lets one proof authorize multiple calls in the same PTB.
 
-For existing functions, `assert_has_role` can be simpler than introducing new `Auth<Role>` parameters because it does not change the function signature:
+Use `assert_has_role` when authorization must stay inside the function body. This is useful for signature-preserving upgrades, or when a function accepts either of two roles, requires two roles, or chooses the required role from function state before it checks `ctx.sender()`.
 
-```move
-public fun set_fee_bps(treasury: &mut Treasury, fee_bps: u64, ctx: &mut TxContext) {
-    treasury.access.assert_has_role<_, TreasuryAdminRole>(ctx.sender());
-    treasury.fee_bps = fee_bps;
-}
-```
+## When Wrappers Are Needed
 
-Use `Auth<Role>` for new functions when you want authorization to be explicit in the function type and reusable across multiple calls in the same PTB. Use `assert_has_role` when you are retrofitting an existing entrypoint and want the smallest API change.
+The standalone registry pattern assumes the registry is passed directly to PTBs. Wrappers are needed when the registry is stored inside another object and cannot be passed as its own PTB input.
 
-`assert_has_role` is also useful when authorization is more complex than a single proof parameter. For example, a function can accept either of two roles, require two roles, or choose the required role from function state before it checks `ctx.sender()`.
+The main case is an upgrade to an already-published package. Public function signatures cannot be changed, but existing functions may already receive a `Config`, `State`, or similar object. In that layout, store `AccessControl` under that object, borrow it internally, and use `assert_has_role` without changing the public API.
 
-## Upgrading an existing package
+Only add wrappers in new packages when you intentionally want a domain-specific access API. Otherwise, keep PTBs calling OpenZeppelin directly.
+
+When the registry is embedded, PTBs cannot access it directly:
+
+- PTBs cannot project a private field such as `treasury.access`.
+- A Move call that returns `&AccessControl<...>` cannot be assigned as a PTB command result and reused by the next command.
+
+Expose wrapper functions from the module that owns the field. The upgrade section below uses a dynamic object field under an existing `Config`.
+
+## Upgrading an Existing Package
 
 Access control can be integrated with an already-published package, but the role root must come from a newly published package. Do not add a new roles module to the existing package and expect its `init` to create the registry during an upgrade. Sui does not run `init` for modules added by package upgrades, so that module will not receive its OTW and cannot initialize `AccessControl`.
 
-The upgrade-friendly pattern uses two packages:
+For existing packages, the usual path uses two packages:
 
 - A new roles package that defines `ROLES` and role marker types, runs `init` on first publish, and creates `AccessControl<ROLES>`.
-- An upgrade to the existing protocol package that imports the roles package, stores the registry as a dynamic object field under an existing protocol object, and calls `assert_has_role` internally.
+- An upgrade to the existing protocol package that imports the roles package, stores the registry as a dynamic object field under an existing protocol object, and exposes wrappers where PTBs need a public boundary.
 
 This works when the function already receives a protocol object that can act as the access anchor, usually an existing `Config` or `State` object. Existing public functions keep their signatures and borrow the registry internally.
 
-This pattern is not possible for an existing public function that has no suitable object parameter from which the upgraded code can discover the registry. In that case, keep the old function behavior, add a new role-gated function with a new signature, and migrate callers to the new entrypoint.
+If an existing public function does not receive a suitable object parameter, upgraded code has no place to discover the registry from. In that case, keep the old function behavior, add a new role-gated function with a new signature, and migrate callers to the new entrypoint.
 
 First publish a new package that owns the root role and role marker types. Its initializer receives the OTW on first publish, creates the registry, and transfers that registry to the publisher for installation. In this example, publish from the address that owns the existing `AdminCap`, or transfer the registry to the `AdminCap` holder before installation.
 
@@ -368,13 +379,13 @@ fun init(otw: ROLES, ctx: &mut TxContext) {
 }
 ```
 
-Then upgrade the existing protocol package that already owns the `Config` type. Add a dependency on the new roles package, store the registry under `Config`, and use `assert_has_role` inside existing functions. The example assumes `Config` and `AdminCap` already existed before the upgrade, with `AdminCap` used for privileged operations.
+Then upgrade the existing protocol package that already owns the `Config` type. Add a dependency on the new roles package, store the registry under `Config`, and expose wrappers for PTBs. The example assumes `Config` and `AdminCap` already existed before the upgrade, with `AdminCap` used for privileged operations.
 
 ```move
 module my_protocol::vault;
 
 use my_protocol_roles::roles::{ROLES, GuardianRole, ProtocolAdminRole};
-use openzeppelin_access::access_control::{AccessControl, Auth};
+use openzeppelin_access::access_control::{Self, AccessControl, Auth};
 use sui::dynamic_object_field as dof;
 
 public struct Config has key, store {
@@ -403,17 +414,29 @@ public fun install_access(
     dof::add(&mut config.id, AccessKey {}, access);
 }
 
-public fun borrow_access(config: &Config): &AccessControl<ROLES> {
+fun access(config: &Config): &AccessControl<ROLES> {
     dof::borrow<AccessKey, AccessControl<ROLES>>(&config.id, AccessKey {})
 }
 
-public fun borrow_access_mut(config: &mut Config): &mut AccessControl<ROLES> {
+fun access_mut(config: &mut Config): &mut AccessControl<ROLES> {
     dof::borrow_mut<AccessKey, AccessControl<ROLES>>(&mut config.id, AccessKey {})
+}
+
+public fun new_auth<Role>(config: &Config, ctx: &mut TxContext): Auth<Role> {
+    access_control::new_auth<ROLES, Role>(access(config), ctx)
+}
+
+public fun grant_role<Role>(config: &mut Config, account: address, ctx: &mut TxContext) {
+    access_control::grant_role<ROLES, Role>(access_mut(config), account, ctx);
+}
+
+public fun has_role<Role>(config: &Config, account: address): bool {
+    access_control::has_role<ROLES, Role>(access(config), account)
 }
 
 // Existing public function: same signature as v1.
 public fun set_fee_bps(config: &mut Config, fee_bps: u64, ctx: &mut TxContext) {
-    config.borrow_access().assert_has_role<_, ProtocolAdminRole>(ctx.sender());
+    access_control::assert_has_role<ROLES, ProtocolAdminRole>(access(config), ctx.sender());
     config.fee_bps = fee_bps;
 }
 
@@ -423,31 +446,32 @@ public fun emergency_pause(vault: &mut Vault, _: &Auth<GuardianRole>) {
 }
 ```
 
-The example has this flow:
+The upgrade flow looks like this:
 
 ```mermaid
 flowchart TB
-    RolesPkg["New roles package<br/>ROLES OTW + role types"] --> OwnedRegistry["Owned AccessControl object<br/>sent to publisher"]
-    V1["Published protocol package<br/>existing Config + AdminCap"] --> Upgrade["Protocol package upgrade"]
-    AdminCap["Existing AdminCap"] --> Install["install_access(config, admin_cap, registry)"]
+    RolesPublish["Publish roles package"] --> OwnedRegistry["Owned AccessControl&lt;ROLES&gt;"]
+    ProtocolUpgrade["Upgrade protocol package"] --> Vault["vault module<br/>wrappers + internal checks"]
+    Config["Existing Config"] --> Install["install_access(config, admin_cap, registry)"]
+    AdminCap["Existing AdminCap"] --> Install
     OwnedRegistry --> Install
-    Upgrade --> Install
-    Install --> ConfigField["Config dynamic object field<br/>AccessControl&lt;ROLES&gt;"]
-    Existing["Existing public functions<br/>same signature"] --> ConfigField
+    Install --> ConfigField["AccessControl&lt;ROLES&gt;<br/>stored under Config"]
+    Vault --> ConfigField
+    ConfigField --> Existing["Existing functions<br/>assert_has_role"]
+    ConfigField --> PTBs["PTBs call wrappers<br/>grant_role / new_auth"]
 ```
 
 Publish the roles package first:
 
 ```bash
-sui client publish --gas-budget 100000000
+sui client publish
 ```
 
-Record the roles package ID and the owned access registry object ID transferred to the publisher. Then upgrade the existing protocol package:
+Record the roles package ID and the owned `AccessControl` object ID transferred to the publisher. Then upgrade the existing protocol package:
 
 ```bash
 sui client upgrade \
-  --upgrade-capability $UPGRADE_CAP \
-  --gas-budget 100000000
+  --upgrade-capability $UPGRADE_CAP
 ```
 
 Record the upgraded protocol package ID, the existing config object ID, and the existing admin-cap object ID. `$ACCESS` is the published OpenZeppelin access package address on your target network:
@@ -468,52 +492,42 @@ Install the registry under the existing config object. This PTB must be signed b
 
 ```bash
 sui client ptb \
-  --move-call $PROTOCOL::vault::install_access @$CONFIG @$ADMIN_CAP @$ACCESS_REGISTRY \
-  --gas-budget 10000000
+  --move-call $PROTOCOL::vault::install_access @$CONFIG @$ADMIN_CAP @$ACCESS_REGISTRY
 ```
 
-Bootstrap roles by borrowing the config-anchored registry and calling OpenZeppelin role-management functions directly. Run this from an address that holds `ProtocolAdminRole`, which is the roles-package publisher in this example.
+Bootstrap roles through the upgraded protocol wrapper. Run this from an address that holds `ProtocolAdminRole`, which is the roles-package publisher in this example.
 
 ```bash
 sui client ptb \
-  --move-call $PROTOCOL::vault::borrow_access_mut @$CONFIG \
-  --assign access \
-  --move-call $ACCESS::access_control::grant_role \
-    "<$ROLES_PACKAGE::roles::ROLES,$ROLES_PACKAGE::roles::OperatorRole>" \
-    access \
+  --move-call $PROTOCOL::vault::grant_role \
+    "<$ROLES_PACKAGE::roles::OperatorRole>" \
+    @$CONFIG \
     @$OPERATOR \
-  --move-call $ACCESS::access_control::grant_role \
-    "<$ROLES_PACKAGE::roles::ROLES,$ROLES_PACKAGE::roles::GuardianRole>" \
-    access \
-    @$GUARDIAN \
-  --gas-budget 10000000
+  --move-call $PROTOCOL::vault::grant_role \
+    "<$ROLES_PACKAGE::roles::GuardianRole>" \
+    @$CONFIG \
+    @$GUARDIAN
 ```
 
 Call a retrofitted function that kept its original signature and now uses `assert_has_role` internally. Run this from a `ProtocolAdminRole` holder:
 
 ```bash
 sui client ptb \
-  --move-call $PROTOCOL::vault::set_fee_bps @$CONFIG 30 \
-  --gas-budget 10000000
+  --move-call $PROTOCOL::vault::set_fee_bps @$CONFIG 30
 ```
 
 Call a new function that uses `Auth<Role>`. Run this from `$GUARDIAN`, because `new_auth` checks that the transaction sender holds `GuardianRole`:
 
 ```bash
 sui client ptb \
-  --move-call $PROTOCOL::vault::borrow_access @$CONFIG \
-  --assign access \
-  --move-call $ACCESS::access_control::new_auth \
-    "<$ROLES_PACKAGE::roles::ROLES,$ROLES_PACKAGE::roles::GuardianRole>" \
-    access \
+  --move-call $PROTOCOL::vault::new_auth \
+    "<$ROLES_PACKAGE::roles::GuardianRole>" \
+    @$CONFIG \
   --assign guardian_auth \
-  --move-call $PROTOCOL::vault::emergency_pause @$VAULT guardian_auth \
-  --gas-budget 10000000
+  --move-call $PROTOCOL::vault::emergency_pause @$VAULT guardian_auth
 ```
 
-The `borrow_access` call returns `&AccessControl<ROLES>` from the dynamic object field. PTBs can pass that returned reference into a later Move call, so `new_auth` can come directly from the OpenZeppelin package.
-
-## Root role operations
+## Root Role Operations
 
 The root role is intentionally harder to change than ordinary roles. It cannot be granted, revoked, or renounced with `grant_role`, `revoke_role`, or `renounce_role`. Use the delayed root-role flows (`begin_default_admin_*`, `accept_default_admin_*`, and `cancel_default_admin_*`) for root transfer, root renounce, and changes to the root-operation delay.
 
@@ -521,12 +535,7 @@ Scheduling a root transfer or a root renounce uses the same pending slot. Starti
 
 Root transfers cannot target `@0x0`, and ordinary role grants also reject `@0x0`. If the goal is to intentionally lock the registry, use the delayed root-renounce flow instead of transferring the root role to the zero address.
 
-The PTBs below use the upgrade example's config-anchored registry:
-
-- Registry getter: `$PROTOCOL::vault::borrow_access_mut @$CONFIG`
-- Root role type: `$ROLES_PACKAGE::roles::ROLES`
-
-If your module embeds `AccessControl` in a different object, expose equivalent access getters over that object and pass the returned reference instead. For the treasury example above, use `$PACKAGE::treasury::borrow_access_mut @$TREASURY` and `<$PACKAGE::treasury::TREASURY>`.
+The PTBs below use the standalone `AccessControl` object from the default pattern. For an upgraded roles package, replace `$PACKAGE::roles::ROLES` with `$ROLES_PACKAGE::roles::ROLES`. If your registry is embedded in another object or stored as a dynamic object field, expose wrappers that call the same `access_control` functions internally.
 
 ```mermaid
 sequenceDiagram
@@ -548,39 +557,30 @@ export CLOCK=0x6
 export NEW_ROOT=0x...
 
 sui client ptb \
-  --move-call $PROTOCOL::vault::borrow_access_mut @$CONFIG \
-  --assign access \
   --move-call $ACCESS::access_control::begin_default_admin_transfer \
-    "<$ROLES_PACKAGE::roles::ROLES>" \
-    access \
+    "<$PACKAGE::roles::ROLES>" \
+    @$ACCESS_REGISTRY \
     @$NEW_ROOT \
-    @$CLOCK \
-  --gas-budget 10000000
+    @$CLOCK
 ```
 
 After the configured delay elapses, the pending root holder accepts:
 
 ```bash
 sui client ptb \
-  --move-call $PROTOCOL::vault::borrow_access_mut @$CONFIG \
-  --assign access \
   --move-call $ACCESS::access_control::accept_default_admin_transfer \
-    "<$ROLES_PACKAGE::roles::ROLES>" \
-    access \
-    @$CLOCK \
-  --gas-budget 10000000
+    "<$PACKAGE::roles::ROLES>" \
+    @$ACCESS_REGISTRY \
+    @$CLOCK
 ```
 
 The current root holder can cancel before acceptance:
 
 ```bash
 sui client ptb \
-  --move-call $PROTOCOL::vault::borrow_access_mut @$CONFIG \
-  --assign access \
   --move-call $ACCESS::access_control::cancel_default_admin_transfer \
-    "<$ROLES_PACKAGE::roles::ROLES>" \
-    access \
-  --gas-budget 10000000
+    "<$PACKAGE::roles::ROLES>" \
+    @$ACCESS_REGISTRY
 ```
 
 ### Renounce the root role
@@ -601,38 +601,29 @@ Schedule the renounce:
 
 ```bash
 sui client ptb \
-  --move-call $PROTOCOL::vault::borrow_access_mut @$CONFIG \
-  --assign access \
   --move-call $ACCESS::access_control::begin_default_admin_renounce \
-    "<$ROLES_PACKAGE::roles::ROLES>" \
-    access \
-    @$CLOCK \
-  --gas-budget 10000000
+    "<$PACKAGE::roles::ROLES>" \
+    @$ACCESS_REGISTRY \
+    @$CLOCK
 ```
 
 After the configured delay elapses, the current root holder finalizes it:
 
 ```bash
 sui client ptb \
-  --move-call $PROTOCOL::vault::borrow_access_mut @$CONFIG \
-  --assign access \
   --move-call $ACCESS::access_control::accept_default_admin_renounce \
-    "<$ROLES_PACKAGE::roles::ROLES>" \
-    access \
-    @$CLOCK \
-  --gas-budget 10000000
+    "<$PACKAGE::roles::ROLES>" \
+    @$ACCESS_REGISTRY \
+    @$CLOCK
 ```
 
 The current root holder can cancel a pending transfer or renounce with the same cancellation call:
 
 ```bash
 sui client ptb \
-  --move-call $PROTOCOL::vault::borrow_access_mut @$CONFIG \
-  --assign access \
   --move-call $ACCESS::access_control::cancel_default_admin_transfer \
-    "<$ROLES_PACKAGE::roles::ROLES>" \
-    access \
-  --gas-budget 10000000
+    "<$PACKAGE::roles::ROLES>" \
+    @$ACCESS_REGISTRY
 ```
 
 ### Change the root-operation delay
@@ -658,48 +649,41 @@ Schedule a delay change:
 export NEW_DEFAULT_ADMIN_DELAY_MS=172800000
 
 sui client ptb \
-  --move-call $PROTOCOL::vault::borrow_access_mut @$CONFIG \
-  --assign access \
   --move-call $ACCESS::access_control::begin_default_admin_delay_change \
-    "<$ROLES_PACKAGE::roles::ROLES>" \
-    access \
+    "<$PACKAGE::roles::ROLES>" \
+    @$ACCESS_REGISTRY \
     $NEW_DEFAULT_ADMIN_DELAY_MS \
-    @$CLOCK \
-  --gas-budget 10000000
+    @$CLOCK
 ```
 
 After `schedule_after_ms`, any signer can apply the scheduled delay change:
 
 ```bash
 sui client ptb \
-  --move-call $PROTOCOL::vault::borrow_access_mut @$CONFIG \
-  --assign access \
   --move-call $ACCESS::access_control::accept_default_admin_delay_change \
-    "<$ROLES_PACKAGE::roles::ROLES>" \
-    access \
-    @$CLOCK \
-  --gas-budget 10000000
+    "<$PACKAGE::roles::ROLES>" \
+    @$ACCESS_REGISTRY \
+    @$CLOCK
 ```
 
 The root holder can cancel a pending delay change before it is applied:
 
 ```bash
 sui client ptb \
-  --move-call $PROTOCOL::vault::borrow_access_mut @$CONFIG \
-  --assign access \
   --move-call $ACCESS::access_control::cancel_default_admin_delay_change \
-    "<$ROLES_PACKAGE::roles::ROLES>" \
-    access \
-  --gas-budget 10000000
+    "<$PACKAGE::roles::ROLES>" \
+    @$ACCESS_REGISTRY
 ```
 
-## Operational checklist
+## Operational Checklist
 
 - Define role marker types in the same module as the OTW that roots the registry.
+- Use a standalone `AccessControl` object by default.
+- Use `Auth<Role>` in new protected functions so access checks stay out of the function body.
+- Use embedded or dynamic-field registries mainly for upgrades where existing public function signatures must stay stable.
 - Grant an operational admin role during `init`; avoid using the root role for daily operations.
 - Use `set_role_admin` to make day-to-day roles administered by an operational admin role.
-- Use `Auth<Role>` for new role-gated functions, especially when multiple protected calls should share one authorization proof in a PTB.
-- Use `assert_has_role` when upgrading existing functions and changing the signature would be disruptive.
+- Use `assert_has_role` when upgrading existing functions or when authorization must be computed inside the function body.
 - Transfer the root role to governance or a multisig through the delayed transfer flow.
 - Renounce the root role only through the delayed renounce flow and only when the protocol is intentionally being locked.
 - Treat delay changes as governance-sensitive operations; existing pending root transfers or renounces keep the delay they were scheduled under.
