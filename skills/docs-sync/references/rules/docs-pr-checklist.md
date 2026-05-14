@@ -65,6 +65,13 @@ within configured rules) or surface it explicitly.
 - [ ] No `#TODO`, `<TODO>`, or template `<PLACEHOLDER>` tokens remain
   unless `automation.fail_on_unresolved_placeholders: false`.
 
+## 6a. Tone
+
+- [ ] Touched docs match `docs.tone`: direct, concise, precise, and
+  security-conscious.
+- [ ] Touched prose avoids filler, repetition, marketing language, and
+  obvious narration.
+
 ## 7. Navigation
 
 - [ ] `<NAV_CONFIG_PATH>` lists every page reachable in the slice.
