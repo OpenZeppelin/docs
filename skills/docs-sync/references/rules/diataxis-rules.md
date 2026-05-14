@@ -67,6 +67,9 @@ security model, and design context.
    first sentence to make the category obvious.
 6. **One outcome per guide. One topic per explanation. One artifact per
    tutorial.** When two outcomes belong together, split the page.
+7. **Source links belong in Reference.** Tutorials, guides, and
+   explanations should link to the related API reference, not directly
+   to source code. API reference owns source links.
 
 ---
 

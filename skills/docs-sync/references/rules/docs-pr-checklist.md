@@ -61,6 +61,7 @@ within configured rules) or surface it explicitly.
 
 - [ ] Internal links inside the slice resolve to existing pages.
 - [ ] Anchors inside the slice resolve to existing ids.
+- [ ] Source-code links appear only in API reference pages.
 - [ ] No `#TODO`, `<TODO>`, or template `<PLACEHOLDER>` tokens remain
   unless `automation.fail_on_unresolved_placeholders: false`.
 
