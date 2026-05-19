@@ -1,5 +1,5 @@
 import { HomeLayout } from "fumadocs-ui/layouts/home";
-import { ArrowDown, SendIcon } from "lucide-react";
+import { ArrowDown, GithubIcon } from "lucide-react";
 import { Footer } from "@/components/footer";
 import {
 	BannerCard,
@@ -313,10 +313,10 @@ export default function HomePage() {
 						/>
 
 						<CommunityCard
-							href="https://t.me/openzeppelin_tg"
-							icon={<SendIcon className="h-6 w-6 sm:h-8 sm:w-8" />}
-							title="Telegram"
-							description="Get quick help and connect with the community in real-time. Ask questions, share updates, and stay informed about the latest OpenZeppelin developments and announcements."
+							href="https://github.com/OpenZeppelin"
+							icon={<GithubIcon className="h-6 w-6 sm:h-8 sm:w-8" />}
+							title="GitHub"
+							description="Browse our repositories, file issues, and open discussions. Report bugs, request features, or jump into the code across OpenZeppelin libraries and tools."
 						/>
 					</div>
 				</div>
