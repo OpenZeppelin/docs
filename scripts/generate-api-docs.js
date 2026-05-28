@@ -134,11 +134,12 @@ async function injectTemplates(tempDir, options) {
 	console.log("📋 Injecting canonical MDX templates...");
 
 	const templatesTarget = path.join(tempDir, "docs", "templates-md");
-	// Overwrite the cloned repo's docs/config.js with our canonical config.
-	// The cloned repo's hardhat config and prepare-docs.sh scripts both load
-	// `./docs/config`, so this single overwrite covers both paths without
-	// needing a separate config-md.js write or a hardhat-config regex patch.
-	const configTarget = path.join(tempDir, "docs", "config.js");
+	// Overwrite the cloned repo's docgen config with our canonical version.
+	// Older branches load `./docs/config.js` (CJS); the hardhat3 branch only
+	// reads `./docs/config.mjs` (ESM) from both hardhat.config.ts and
+	// scripts/prepare-docs.sh. Write both so either loader picks ours up.
+	const configTargetCjs = path.join(tempDir, "docs", "config.js");
+	const configTargetEsm = path.join(tempDir, "docs", "config.mjs");
 
 	await fs.mkdir(templatesTarget, { recursive: true });
 	await copyDirRecursive(
@@ -146,7 +147,8 @@ async function injectTemplates(tempDir, options) {
 		templatesTarget,
 	);
 
-	await fs.copyFile(path.join(DOCGEN_DIR, "config-md.js"), configTarget);
+	await fs.copyFile(path.join(DOCGEN_DIR, "config-md.js"), configTargetCjs);
+	await fs.copyFile(path.join(DOCGEN_DIR, "config-md.mjs"), configTargetEsm);
 
 	// Customize API_DOCS_PATH in helpers.js (URL path = file path minus content/)
 	const apiDocsPath = apiOutputDir.replace(/^content\//, "");
