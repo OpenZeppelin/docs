@@ -69,15 +69,17 @@ The root role is the fallback admin for every role. Because it can recover role 
 - `begin_default_admin_renounce` schedules an intentional lock-in where the current root holder gives up the root role.
 - `accept_default_admin_renounce` finalizes that lock-in after the configured delay.
 - `cancel_default_admin_transfer` cancels either a pending transfer or a pending renounce.
-- `begin_default_admin_delay_change`, `accept_default_admin_delay_change`, and `cancel_default_admin_delay_change` manage the delay itself.
+- `begin_default_admin_delay_change` schedules a delay change.
+- `cancel_default_admin_delay_change` cancels an unelapsed delay change, or materializes an elapsed one.
+- `default_admin_delay_ms(ac, clock)` returns the effective delay.
 
-Role grants and root transfers reject `@0x0`. Use the delayed root-renounce flow when the goal is to intentionally lock the registry.
+Role grants and root transfers reject `@0x0`. Root transfers also reject the current root holder as the target. Use the delayed root-renounce flow when the goal is to intentionally lock the registry.
 
 ## Authorization styles
 
 Use `Auth<Role>` for new functions when you want authorization to be explicit in the function type and reusable across multiple calls in the same PTB.
 
-Because `Auth<Role>` is minted from the singleton registry for that role's home module, protected functions do not need to compare registry object IDs when they receive `&Auth<Role>`.
+Because `Auth<Role>` is minted from the singleton registry for that role's home module, protected functions do not need to compare registry object IDs when they receive `&Auth<Role>`. The proof is a PTB-local snapshot: if the signer renounces the role later in the same PTB, an already minted auth value remains valid.
 
 Use `assert_has_role` when you are retrofitting an existing public function and changing the signature would be disruptive or invalid for package-upgrade compatibility. In that case, the registry is usually stored under an existing `Config` or `State` object and borrowed internally.
 

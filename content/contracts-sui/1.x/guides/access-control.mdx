@@ -24,7 +24,7 @@ The module has two important constraints:
 - The root role must be the module's One-Time Witness (OTW). This pins the registry to the package publish flow.
 - Managed roles must be defined in the same module as the root role. Roles added to that same module in later package upgrades still work because the check uses the package's original ID.
 
-These constraints make `Auth<Role>` useful as a typed proof. If a function receives `&Auth<TreasurerRole>`, it can trust that the transaction sender held `TreasurerRole` when the auth value was minted in that PTB.
+These constraints make `Auth<Role>` useful as a typed proof. If a function receives `&Auth<TreasurerRole>`, it can trust that the transaction sender held `TreasurerRole` when the auth value was minted in that PTB. The proof is a snapshot: if the signer later renounces the role in the same PTB, an already minted auth value remains valid.
 
 ## Prerequisites
 
@@ -261,7 +261,7 @@ sui client ptb \
 
 ## Interact with Protected Functions
 
-For functions that take `&Auth<Role>`, mint the auth value and use it in the same PTB. The auth value has `drop` only, so it is a temporary proof for the current transaction, not an object that can be stored or transferred.
+For functions that take `&Auth<Role>`, mint the auth value and use it in the same PTB. The auth value has `drop` only, so it is a temporary proof for the current transaction, not an object that can be stored or transferred. It proves membership at mint time, not after later same-PTB role changes.
 
 ```mermaid
 sequenceDiagram
@@ -529,11 +529,11 @@ sui client ptb \
 
 ## Root Role Operations
 
-The root role is intentionally harder to change than ordinary roles. It cannot be granted, revoked, or renounced with `grant_role`, `revoke_role`, or `renounce_role`. Use the delayed root-role flows (`begin_default_admin_*`, `accept_default_admin_*`, and `cancel_default_admin_*`) for root transfer, root renounce, and changes to the root-operation delay.
+The root role is intentionally harder to change than ordinary roles. It cannot be granted, revoked, or renounced with `grant_role`, `revoke_role`, or `renounce_role`. Use the delayed root-role flows for root transfer, root renounce, and changes to the root-operation delay.
 
 Scheduling a root transfer or a root renounce uses the same pending slot. Starting one overwrites the other, and `cancel_default_admin_transfer` cancels either pending action.
 
-Root transfers cannot target `@0x0`, and ordinary role grants also reject `@0x0`. If the goal is to intentionally lock the registry, use the delayed root-renounce flow instead of transferring the root role to the zero address.
+Root transfers cannot target `@0x0` or the current root holder. Ordinary role grants also reject `@0x0`. If the goal is to intentionally lock the registry, use the delayed root-renounce flow instead of transferring the root role to the zero address.
 
 The PTBs below use the standalone `AccessControl` object from the default pattern. For an upgraded roles package, replace `$PACKAGE::roles::ROLES` with `$ROLES_PACKAGE::roles::ROLES`. If your registry is embedded in another object or stored as a dynamic object field, expose wrappers that call the same `access_control` functions internally.
 
@@ -553,7 +553,6 @@ sequenceDiagram
 Schedule the transfer from the current root holder:
 
 ```bash
-export CLOCK=0x6
 export NEW_ROOT=0x...
 
 sui client ptb \
@@ -561,7 +560,7 @@ sui client ptb \
     "<$PACKAGE::roles::ROLES>" \
     @$ACCESS_REGISTRY \
     @$NEW_ROOT \
-    @$CLOCK
+    @0x6
 ```
 
 After the configured delay elapses, the pending root holder accepts:
@@ -571,7 +570,7 @@ sui client ptb \
   --move-call $ACCESS::access_control::accept_default_admin_transfer \
     "<$PACKAGE::roles::ROLES>" \
     @$ACCESS_REGISTRY \
-    @$CLOCK
+    @0x6
 ```
 
 The current root holder can cancel before acceptance:
@@ -604,7 +603,7 @@ sui client ptb \
   --move-call $ACCESS::access_control::begin_default_admin_renounce \
     "<$PACKAGE::roles::ROLES>" \
     @$ACCESS_REGISTRY \
-    @$CLOCK
+    @0x6
 ```
 
 After the configured delay elapses, the current root holder finalizes it:
@@ -614,7 +613,7 @@ sui client ptb \
   --move-call $ACCESS::access_control::accept_default_admin_renounce \
     "<$PACKAGE::roles::ROLES>" \
     @$ACCESS_REGISTRY \
-    @$CLOCK
+    @0x6
 ```
 
 The current root holder can cancel a pending transfer or renounce with the same cancellation call:
@@ -632,15 +631,16 @@ sui client ptb \
 
 Delay increases take effect after `min(new_delay_ms, max_delay_increase_wait_ms())`; `max_delay_increase_wait_ms()` is 48 hours. Delay decreases take effect after `current_delay_ms - new_delay_ms`, so the root holder cannot immediately shorten the protection window and schedule a faster root change.
 
+After `schedule_after_ms`, `default_admin_delay_ms(ac, clock)` reports the new effective delay. The stored pending slot is cleared later by the next delay-refreshing root action: `begin_default_admin_transfer`, `begin_default_admin_renounce`, `begin_default_admin_delay_change`, or `cancel_default_admin_delay_change`.
+
 ```mermaid
 sequenceDiagram
     participant Root as Root holder
     participant Registry as AccessControl
-    participant Any as Any signer
     Root->>Registry: begin_default_admin_delay_change(newDelay, clock)
     Registry-->>Registry: records schedule_after_ms
-    Any->>Registry: accept_default_admin_delay_change(clock)
-    Registry-->>Registry: updates default_admin_delay_ms
+    Root->>Registry: later root action(clock)
+    Registry-->>Registry: applies elapsed delay and clears pending slot
 ```
 
 Schedule a delay change:
@@ -653,26 +653,17 @@ sui client ptb \
     "<$PACKAGE::roles::ROLES>" \
     @$ACCESS_REGISTRY \
     $NEW_DEFAULT_ADMIN_DELAY_MS \
-    @$CLOCK
+    @0x6
 ```
 
-After `schedule_after_ms`, any signer can apply the scheduled delay change:
-
-```bash
-sui client ptb \
-  --move-call $ACCESS::access_control::accept_default_admin_delay_change \
-    "<$PACKAGE::roles::ROLES>" \
-    @$ACCESS_REGISTRY \
-    @$CLOCK
-```
-
-The root holder can cancel a pending delay change before it is applied:
+The root holder can cancel a pending delay change before `schedule_after_ms`. After `schedule_after_ms`, the same call materializes the elapsed delay change instead of cancelling it:
 
 ```bash
 sui client ptb \
   --move-call $ACCESS::access_control::cancel_default_admin_delay_change \
     "<$PACKAGE::roles::ROLES>" \
-    @$ACCESS_REGISTRY
+    @$ACCESS_REGISTRY \
+    @0x6
 ```
 
 ## Operational Checklist

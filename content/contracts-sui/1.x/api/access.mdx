@@ -19,7 +19,7 @@ Role-based access control registry for Sui Move packages. The root role is the c
 
 The registry must be created from a module `init` during the first publish of the package that defines `RootRole`. Package upgrades do not run `init` for newly-added modules.
 
-The module supports ordinary role grants and revocations, typed `Auth<Role>` proofs, delayed root-role transfer, delayed root-role renounce, and delayed changes to the root-operation delay.
+The module supports ordinary role grants and revocations, typed `Auth<Role>` proofs, delayed root-role transfer, delayed root-role renounce, and delayed changes to the root-operation delay. Elapsed delay changes are effective for reads and are cleared by the next delay-refreshing root action.
 
 Types
 
@@ -45,13 +45,12 @@ Functions
 - [`accept_default_admin_renounce(ac, clock, ctx)`](#access_control-accept_default_admin_renounce)
 - [`cancel_default_admin_transfer(ac, ctx)`](#access_control-cancel_default_admin_transfer)
 - [`begin_default_admin_delay_change(ac, new_delay_ms, clock, ctx)`](#access_control-begin_default_admin_delay_change)
-- [`accept_default_admin_delay_change(ac, clock, ctx)`](#access_control-accept_default_admin_delay_change)
-- [`cancel_default_admin_delay_change(ac, ctx)`](#access_control-cancel_default_admin_delay_change)
+- [`cancel_default_admin_delay_change(ac, clock, ctx)`](#access_control-cancel_default_admin_delay_change)
 - [`new_auth(ac, ctx)`](#access_control-new_auth)
 - [`auth_addr(auth)`](#access_control-auth_addr)
 - [`protected_root(ac)`](#access_control-protected_root)
 - [`max_default_admin_delay_ms()`](#access_control-max_default_admin_delay_ms)
-- [`default_admin_delay_ms(ac)`](#access_control-default_admin_delay_ms)
+- [`default_admin_delay_ms(ac, clock)`](#access_control-default_admin_delay_ms)
 - [`has_pending_default_admin_transfer(ac)`](#access_control-has_pending_default_admin_transfer)
 - [`is_pending_default_admin_renounce(ac)`](#access_control-is_pending_default_admin_renounce)
 - [`pending_default_admin_new_admin(ac)`](#access_control-pending_default_admin_new_admin)
@@ -87,6 +86,7 @@ Errors
 - [`ENotPendingRenounce`](#access_control-ENotPendingRenounce)
 - [`ENoPendingDelayChange`](#access_control-ENoPendingDelayChange)
 - [`EZeroAddress`](#access_control-EZeroAddress)
+- [`EDefaultAdminTransferToSelf`](#access_control-EDefaultAdminTransferToSelf)
 
 #### Types [!toc] [#access_control-Types]
 
@@ -97,7 +97,7 @@ Errors
 >
 Drop-only typed proof that the transaction sender held `Role` when the proof was minted with `new_auth`.
 
-Because `new_auth` only mints against the singleton registry for `Role`'s home module, consumers can take `&Auth<Role>` as authorization without repeating role checks.
+Because `new_auth` only mints against the singleton registry for `Role`'s home module, consumers can take `&Auth<Role>` as authorization without repeating role checks. The proof is a PTB-local snapshot: if the holder later renounces `Role` in the same PTB, the existing proof remains valid.
 </APIItem>
 
 <APIItem
@@ -123,7 +123,7 @@ Per-role membership and admin-role data.
   id="access_control-PendingAdminTransfer"
   kind="struct"
 >
-Pending root-role action. `new_admin = some(address)` means transfer, while `new_admin = none` means renounce.
+Pending root-role action. `new_admin = some(address)` means transfer, while `new_admin = none` means renounce. Transfer and renounce share one pending slot, so scheduling either one cancels and overwrites the other.
 </APIItem>
 
 <APIItem
@@ -131,7 +131,7 @@ Pending root-role action. `new_admin = some(address)` means transfer, while `new
   id="access_control-PendingDelayChange"
   kind="struct"
 >
-Pending change to `default_admin_delay_ms`, including the new delay and the timestamp after which it can be applied.
+Pending change to `default_admin_delay_ms`, including the new delay and the timestamp after which it becomes effective. The pending slot is cleared later by a delay-refreshing entrypoint.
 </APIItem>
 
 #### Functions [!toc] [#access_control-Functions]
@@ -145,7 +145,7 @@ Creates the registry for the consumer module. `RootRole` must be a genuine OTW, 
 
 The caller is responsible for sharing, embedding, or otherwise positioning the returned `AccessControl<RootRole>` registry.
 
-The expected call site is the consumer module's `init`, which only runs on the package's first publish. To adopt AccessControl from an already-published protocol, publish a new package that initializes its own registry.
+The expected call site is the consumer module's `init`, which only runs on the package's first publish. To adopt `AccessControl` from an already-published protocol, publish a new package that initializes its own registry.
 
 Aborts with `ENotOneTimeWitness` if `otw` is not an OTW.
 
@@ -243,13 +243,15 @@ Aborts with `EUnauthorized` if caller lacks the current admin role of `Role`.
   id="access_control-begin_default_admin_transfer"
   kind="public"
 >
-Schedules a root-role transfer to `new_admin` at `clock.timestamp_ms() + default_admin_delay_ms`.
+Schedules a root-role transfer to `new_admin` at `clock.timestamp_ms()` plus the effective `default_admin_delay_ms`.
 
-Caller must hold the root role. An existing pending transfer or renounce is overwritten.
+Caller must hold the root role. An existing pending transfer or renounce is cancelled and overwritten. If a pending delay change has elapsed, it is applied before the transfer is scheduled.
 
 Aborts with `EUnauthorized` if caller does not hold the root role.
 
 Aborts with `EZeroAddress` if `new_admin` is `@0x0`. Use `begin_default_admin_renounce` to permanently lock the registry.
+
+Aborts with `EDefaultAdminTransferToSelf` if `new_admin` is the current root holder.
 </APIItem>
 
 <APIItem
@@ -275,9 +277,9 @@ Aborts with `EDelayNotElapsed` if the timelock has not elapsed.
   id="access_control-begin_default_admin_renounce"
   kind="public"
 >
-Schedules a root-role renounce at `clock.timestamp_ms() + default_admin_delay_ms`.
+Schedules a root-role renounce at `clock.timestamp_ms()` plus the effective `default_admin_delay_ms`.
 
-Caller must hold the root role. An existing pending transfer or renounce is overwritten.
+Caller must hold the root role. An existing pending transfer or renounce is cancelled and overwritten. If a pending delay change has elapsed, it is applied before the renounce is scheduled.
 
 Aborts with `EUnauthorized` if caller does not hold the root role.
 </APIItem>
@@ -319,7 +321,9 @@ Aborts with `EUnauthorized` if caller does not hold the root role.
 >
 Schedules a change to `default_admin_delay_ms`. Caller must hold the root role, and `new_delay_ms` must not exceed `max_default_admin_delay_ms()`.
 
-Increases wait for `min(new_delay_ms, max_delay_increase_wait_ms())`; decreases wait for `current_delay_ms - new_delay_ms`. An existing pending delay change is overwritten.
+Increases wait for `min(new_delay_ms, max_delay_increase_wait_ms())`; decreases wait for `current_delay_ms - new_delay_ms`; no change waits `0`.
+
+If an existing pending delay change has elapsed, it is applied first. If an existing pending delay change has not elapsed, it is cancelled and overwritten.
 
 Aborts with `EUnauthorized` if caller does not hold the root role.
 
@@ -327,25 +331,13 @@ Aborts with `EDelayTooLarge` if `new_delay_ms` exceeds `max_default_admin_delay_
 </APIItem>
 
 <APIItem
-  functionSignature="accept_default_admin_delay_change<RootRole>(ac: &mut AccessControl<RootRole>, clock: &Clock, ctx: &mut TxContext)"
-  id="access_control-accept_default_admin_delay_change"
-  kind="public"
->
-Applies a pending delay change after `schedule_after_ms`.
-
-No authorization is required at accept time; the root holder authorized the change when scheduling it.
-
-Aborts with `ENoPendingDelayChange` if no delay change is pending.
-
-Aborts with `EDelayNotElapsed` if `schedule_after_ms` has not been reached.
-</APIItem>
-
-<APIItem
-  functionSignature="cancel_default_admin_delay_change<RootRole>(ac: &mut AccessControl<RootRole>, ctx: &mut TxContext)"
+  functionSignature="cancel_default_admin_delay_change<RootRole>(ac: &mut AccessControl<RootRole>, clock: &Clock, ctx: &mut TxContext)"
   id="access_control-cancel_default_admin_delay_change"
   kind="public"
 >
-Cancels a pending delay change. Caller must hold the root role.
+Cancels an unelapsed pending delay change. Caller must hold the root role.
+
+If the pending delay change has already elapsed, this call applies it and clears the pending slot instead of cancelling it.
 
 Aborts with `ENoPendingDelayChange` if no delay change is pending.
 
@@ -358,6 +350,8 @@ Aborts with `EUnauthorized` if caller does not hold the root role.
   kind="public"
 >
 Mints a temporary `Auth<Role>` proof for `ctx.sender()`. Pass it by reference to gated functions in the same PTB.
+
+The proof shows membership at mint time. If the holder later renounces `Role` in the same PTB, the already minted proof still authorizes later calls in that PTB.
 
 Aborts with `EForeignRole` if `Role` is not defined in the same module as `RootRole`.
 
@@ -389,11 +383,13 @@ Returns the maximum allowed root-operation delay: 60 days in milliseconds.
 </APIItem>
 
 <APIItem
-  functionSignature="default_admin_delay_ms<RootRole>(ac: &AccessControl<RootRole>) -> u64"
+  functionSignature="default_admin_delay_ms<RootRole>(ac: &AccessControl<RootRole>, clock: &Clock) -> u64"
   id="access_control-default_admin_delay_ms"
   kind="public"
 >
-Returns the current delay, in milliseconds, for root transfers and root renounces.
+Returns the effective delay, in milliseconds, for root transfers and root renounces.
+
+If a pending delay change has elapsed, this returns the pending new delay even if the stored pending slot has not been cleared yet.
 </APIItem>
 
 <APIItem
@@ -443,7 +439,9 @@ Returns the maximum wait before a scheduled delay increase can take effect: 48 h
   id="access_control-has_pending_default_admin_delay_change"
   kind="public"
 >
-Returns whether a default-admin delay change is pending.
+Returns whether a default-admin delay change is stored as pending.
+
+An elapsed pending change may still return `true` until a delay-refreshing entrypoint clears it. Use `default_admin_delay_ms(ac, clock)` for the effective delay.
 </APIItem>
 
 <APIItem
@@ -452,6 +450,8 @@ Returns whether a default-admin delay change is pending.
   kind="public"
 >
 Returns `some(new_delay_ms)` with the proposed delay if a change is pending. Returns `none` otherwise.
+
+An elapsed pending change may still return `some` until a delay-refreshing entrypoint clears it. Use `default_admin_delay_ms(ac, clock)` for the effective delay.
 </APIItem>
 
 <APIItem
@@ -459,13 +459,17 @@ Returns `some(new_delay_ms)` with the proposed delay if a change is pending. Ret
   id="access_control-pending_default_admin_delay_change_schedule_after_ms"
   kind="public"
 >
-Returns `some(timestamp_ms)` with the timestamp after which a pending delay change can be applied. Returns `none` otherwise.
+Returns `some(timestamp_ms)` with the timestamp after which a pending delay change becomes effective. Returns `none` otherwise.
+
+An elapsed pending change may still return `some` until a delay-refreshing entrypoint clears it. Use `default_admin_delay_ms(ac, clock)` for the effective delay.
 </APIItem>
 
 #### Events [!toc] [#access_control-Events]
 
+Access-control events are generic over `RootRole`, so the event type identifies the registry's root module. The Sui event envelope carries the transaction sender; event payloads do not duplicate it.
+
 <APIItem
-  functionSignature="RoleGranted(role: TypeName, account: address, sender: address)"
+  functionSignature="RoleGranted<RootRole>(role: TypeName, account: address)"
   id="access_control-RoleGranted"
   kind="event"
 >
@@ -477,7 +481,7 @@ The `role` field is a `TypeName` that identifies the defining package address an
 </APIItem>
 
 <APIItem
-  functionSignature="RoleRevoked(role: TypeName, account: address, sender: address)"
+  functionSignature="RoleRevoked<RootRole>(role: TypeName, account: address)"
   id="access_control-RoleRevoked"
   kind="event"
 >
@@ -489,7 +493,7 @@ The `role` field is a `TypeName` that identifies the defining package address an
 </APIItem>
 
 <APIItem
-  functionSignature="RoleAdminChanged(role: TypeName, previous_admin_role: TypeName, new_admin_role: TypeName)"
+  functionSignature="RoleAdminChanged<RootRole>(role: TypeName, previous_admin_role: TypeName, new_admin_role: TypeName)"
   id="access_control-RoleAdminChanged"
   kind="event"
 >
@@ -499,7 +503,7 @@ The `role`, `previous_admin_role`, and `new_admin_role` fields are `TypeName`s.
 </APIItem>
 
 <APIItem
-  functionSignature="DefaultAdminTransferScheduled(new_admin: address, execute_after_ms: u64)"
+  functionSignature="DefaultAdminTransferScheduled<RootRole>(new_admin: address, execute_after_ms: u64)"
   id="access_control-DefaultAdminTransferScheduled"
   kind="event"
 >
@@ -509,7 +513,7 @@ Emitted when a root-role transfer is scheduled by `begin_default_admin_transfer`
 </APIItem>
 
 <APIItem
-  functionSignature="DefaultAdminRenounceScheduled(execute_after_ms: u64)"
+  functionSignature="DefaultAdminRenounceScheduled<RootRole>(execute_after_ms: u64)"
   id="access_control-DefaultAdminRenounceScheduled"
   kind="event"
 >
@@ -519,31 +523,31 @@ Emitted when a root-role renounce is scheduled by `begin_default_admin_renounce`
 </APIItem>
 
 <APIItem
-  functionSignature="DefaultAdminTransferCancelled()"
+  functionSignature="DefaultAdminTransferCancelled<RootRole>()"
   id="access_control-DefaultAdminTransferCancelled"
   kind="event"
 >
-Emitted by `cancel_default_admin_transfer` when a pending root-role transfer or renounce is cancelled.
+Emitted when a pending root-role transfer or renounce is cancelled, either by `cancel_default_admin_transfer` or because a new pending root action overwrites it.
 
 Indexers can correlate this event with the prior `DefaultAdminTransferScheduled` or `DefaultAdminRenounceScheduled` event to identify which pending action was cancelled.
 </APIItem>
 
 <APIItem
-  functionSignature="DefaultAdminDelayChangeScheduled(new_delay_ms: u64, schedule_after_ms: u64)"
+  functionSignature="DefaultAdminDelayChangeScheduled<RootRole>(new_delay_ms: u64, schedule_after_ms: u64)"
   id="access_control-DefaultAdminDelayChangeScheduled"
   kind="event"
 >
 Emitted when a default-admin delay change is scheduled by `begin_default_admin_delay_change`.
 
-`new_delay_ms` is the proposed new delay. `schedule_after_ms` is the earliest timestamp at which `accept_default_admin_delay_change` can apply it.
+`new_delay_ms` is the proposed new delay. `schedule_after_ms` is the timestamp at which it becomes effective.
 </APIItem>
 
 <APIItem
-  functionSignature="DefaultAdminDelayChangeCancelled()"
+  functionSignature="DefaultAdminDelayChangeCancelled<RootRole>()"
   id="access_control-DefaultAdminDelayChangeCancelled"
   kind="event"
 >
-Emitted by `cancel_default_admin_delay_change` when a pending default-admin delay change is cancelled.
+Emitted when an unelapsed pending default-admin delay change is cancelled, either by `cancel_default_admin_delay_change` or because a new pending delay change overwrites it.
 </APIItem>
 
 #### Errors [!toc] [#access_control-Errors]
@@ -585,7 +589,7 @@ Raised when a caller other than the scheduled new root holder tries to accept a 
   id="access_control-EDelayNotElapsed"
   kind="error"
 >
-Raised when `accept_default_admin_transfer`, `accept_default_admin_renounce`, or `accept_default_admin_delay_change` is called before the pending action's timelock has elapsed.
+Raised when `accept_default_admin_transfer` or `accept_default_admin_renounce` is called before the pending action's timelock has elapsed.
 </APIItem>
 
 <APIItem
@@ -617,7 +621,7 @@ Raised when `new` receives a value that is not a genuine OTW.
   id="access_control-EForeignRole"
   kind="error"
 >
-Raised when a write path or `new_auth` uses a role type from a module other than the root role's home module.
+Raised when a role-typed path that enforces the home-module rule uses a role type from a module other than the root role's home module.
 </APIItem>
 
 <APIItem
@@ -633,7 +637,7 @@ Raised when `accept_default_admin_transfer` is called while the pending root act
   id="access_control-ENotPendingRenounce"
   kind="error"
 >
-Raised when `accept_default_admin_renounce` is called while the pending root action is a transfer or there is no pending root action.
+Raised when `accept_default_admin_renounce` is called while the pending root action is a transfer.
 </APIItem>
 
 <APIItem
@@ -641,7 +645,7 @@ Raised when `accept_default_admin_renounce` is called while the pending root act
   id="access_control-ENoPendingDelayChange"
   kind="error"
 >
-Raised when accepting or cancelling a default-admin delay change but no delay change is pending.
+Raised when cancelling a default-admin delay change but no delay change is pending.
 </APIItem>
 
 <APIItem
@@ -652,6 +656,14 @@ Raised when accepting or cancelling a default-admin delay change but no delay ch
 Raised when `grant_role` or `begin_default_admin_transfer` is called with `@0x0` as the target address.
 
 The zero address has no signing key, so a role granted to it can never be exercised and a root transfer scheduled to it can never be accepted.
+</APIItem>
+
+<APIItem
+  functionSignature="EDefaultAdminTransferToSelf"
+  id="access_control-EDefaultAdminTransferToSelf"
+  kind="error"
+>
+Raised when the current root holder schedules a root transfer to itself.
 </APIItem>
 
 ### `two_step_transfer` [toc] [#two_step_transfer]
