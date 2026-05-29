@@ -6,9 +6,9 @@ const os = require('os');
 
 const API_DOCS_PATH = 'contracts/5.x/api';
 
-module.exports['oz-version'] = () => version;
+module.exports.ozVersion = () => version;
 
-module.exports['readme-path'] = opts => {
+module.exports.readmePath = opts => {
   const pageId = opts.data.root.id;
   const basePath = pageId.replace(/\.(adoc|mdx)$/, '');
   return 'contracts/' + basePath + '/README.adoc';
@@ -31,7 +31,7 @@ module.exports.names = params => params?.map(p => p.name).join(', ');
 // Simple function counter for unique IDs
 const functionNameCounts = {};
 
-module.exports['simple-id'] = function (name) {
+module.exports.simpleId = function (name) {
   if (!functionNameCounts[name]) {
     functionNameCounts[name] = 1;
     return name;
@@ -41,7 +41,7 @@ module.exports['simple-id'] = function (name) {
   }
 };
 
-module.exports['reset-function-counts'] = function () {
+module.exports.resetFunctionCounts = function () {
   Object.keys(functionNameCounts).forEach(key => delete functionNameCounts[key]);
   return '';
 };
@@ -52,13 +52,13 @@ module.exports.eq = (a, b) => a === b;
 // import specifier for non-`contracts` packages, where the file is published
 // at the package root (e.g. @openzeppelin/community-contracts/account/X.sol)
 // but the source lives at contracts/account/X.sol in the repo.
-module.exports['strip-contracts-prefix'] = function (p) {
+module.exports.stripContractsPrefix = function (p) {
   return typeof p === 'string' ? p.replace(/^contracts\//, '') : p;
 };
-module.exports['starts-with'] = (str, prefix) => str && str.startsWith(prefix);
+module.exports.startsWith = (str, prefix) => str && str.startsWith(prefix);
 
 // Process natspec content with {REF} and link replacement
-module.exports['process-natspec'] = function (natspec, opts) {
+module.exports.processNatspec = function (natspec, opts) {
   if (!natspec) return '';
 
   const currentPage = opts.data.root.__item_context?.page || opts.data.root.id;
@@ -68,7 +68,7 @@ module.exports['process-natspec'] = function (natspec, opts) {
   return processCallouts(processed); // Add callout processing at the end
 };
 
-module.exports['typed-params'] = params => {
+module.exports.typedParams = params => {
   return params?.map(p => `${p.type}${p.indexed ? ' indexed' : ''}${p.name ? ' ' + p.name : ''}`).join(', ');
 };
 
@@ -497,7 +497,7 @@ module.exports.description = opts => {
   return `Smart contract ${dirName.replace('-', ' ')} utilities and implementations`;
 };
 
-module.exports['with-prelude'] = opts => {
+module.exports.withPrelude = opts => {
   const currentPage = opts.data.root.id;
   const links = getAllLinks(opts.data.site.items, currentPage);
   const contents = opts.fn();
