@@ -1,0 +1,519 @@
+---
+title: ShieldedAccessControl API
+---
+
+This page provides the full ShieldedAccessControl module API.
+
+This module provides a shielded role-based access control (RBAC) mechanism,
+where roles can be used to represent a set of permissions.
+Roles are stored as Merkle tree commitments to avoid disclosing information about role holders.
+Role commitments are created with the following hashing scheme,
+where `‖` denotes concatenation and all values are `Bytes<32>`:
+
+```
+roleCommitment := SHA256( role ‖ accountId ‖ instanceSalt ‖ commitmentDomain )
+
+accountId      := SHA256( secretKey ‖ instanceSalt ‖ accountIdDomain )
+
+roleNullifier  := SHA256( roleCommitment ‖ nullifierDomain )
+
+commitmentDomain := pad(32, "ShieldedAccessControl:commitment")
+accountIdDomain  := pad(32, "ShieldedAccessControl:accountId")
+nullifierDomain  := pad(32, "ShieldedAccessControl:nullifier")
+```
+
+In this RBAC model, role commitments behave like private bearer tokens.
+Possession of a valid, non-revoked role commitment grants authorization.
+Revocation permanently burns the role instance, requiring explicit new issuance under a new account identifier.
+Users must rotate their secret key to generate a new `accountId` to be re-authorized.
+
+A single `secretKey` may be used for all roles within a contract instance.
+This is safe because the `role` identifier is mixed into the commitment (not the `accountId`),
+so different roles produce different commitments and different nullifiers even when the underlying `accountId` is the same.
+
+Roles are referred to by their `Bytes<32>` identifier.
+These should be exposed in the top-level contract and be unique.
+The best way to achieve this is by using `export sealed ledger` hash digests that are initialized in the top-level contract:
+
+```typescript
+import CompactStandardLibrary;
+import "./node_modules/@OpenZeppelin/shieldedAccessControl/src/ShieldedAccessControl"
+  prefix ShieldedAccessControl_;
+
+export sealed ledger MY_ROLE: Bytes<32>;
+
+constructor(instanceSalt: Bytes<32>, defaultAdmin: ShieldedAccessControl_AccountIdentifier) {
+  MY_ROLE = persistentHash<Bytes<32>>(pad(32, "MY_ROLE"));
+  ShieldedAccessControl_initialize(instanceSalt);
+  ShieldedAccessControl__grantRole(ShieldedAccessControl_DEFAULT_ADMIN_ROLE(), defaultAdmin);
+}
+```
+
+To restrict access to a circuit, use [assertOnlyRole](#ShieldedAccessControl-assertOnlyRole):
+
+```typescript
+circuit foo(): [] {
+  ShieldedAccessControl_assertOnlyRole(MY_ROLE as ShieldedAccessControl_RoleIdentifier);
+}
+```
+
+Roles can be granted and revoked dynamically via the [grantRole](#ShieldedAccessControl-grantRole) and [revokeRole](#ShieldedAccessControl-revokeRole) circuits.
+Each role has an associated admin role,
+and only accounts that have a role's admin role can call [grantRole](#ShieldedAccessControl-grantRole) and [revokeRole](#ShieldedAccessControl-revokeRole).
+
+By default, the admin role for all roles is `DEFAULT_ADMIN_ROLE`,
+which means that only accounts with this role will be able to grant or revoke other roles.
+More complex role relationships can be created by using [_setRoleAdmin](#ShieldedAccessControl-_setRoleAdmin).
+
+<Callout type='warn'>
+  The `DEFAULT_ADMIN_ROLE` is also its own admin: it has permission to grant and revoke this role.
+  Extra precautions should be taken to secure accounts that have been granted it.
+</Callout>
+
+<Callout type='info'>
+  For an overview of the module, read the [ShieldedAccessControl guide](../shieldedAccessControl).
+</Callout>
+
+## ShieldedAccessControl [toc] [#ShieldedAccessControl]
+<APIGithubLinkHeader
+    moduleName="ShieldedAccessControl"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/main/contracts/src/access/ShieldedAccessControl.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/shieldedAccessControl/src/ShieldedAccessControl";
+```
+
+---
+
+### Types [toc] [#ShieldedAccessControl-Types]
+### Types [!toc] [#ShieldedAccessControl-Types]
+
+#### UpdateType [toc] [#ShieldedAccessControl-UpdateType]
+#### [!toc] [#ShieldedAccessControl-UpdateType]
+<APIItemCompact
+  circuitSig="enum UpdateType { Grant, Revoke }"
+  kind="enum"
+  id="ShieldedAccessControl-UpdateType"
+>
+  Enum indicating whether a role update is a grant or a revocation.
+</APIItemCompact>
+
+#### RoleCommitment [toc] [#ShieldedAccessControl-RoleCommitment]
+#### [!toc] [#ShieldedAccessControl-RoleCommitment]
+<APIItemCompact
+  circuitSig="new type RoleCommitment = Bytes<32>"
+  kind="type"
+  id="ShieldedAccessControl-RoleCommitment"
+>
+  A Merkle tree leaf committing a `(role, accountId)` pairing. Computed as `SHA256(role, accountId, instanceSalt, commitmentDomain)`.
+</APIItemCompact>
+
+#### RoleIdentifier [toc] [#ShieldedAccessControl-RoleIdentifier]
+#### [!toc] [#ShieldedAccessControl-RoleIdentifier]
+<APIItemCompact
+  circuitSig="new type RoleIdentifier = Bytes<32>"
+  kind="type"
+  id="ShieldedAccessControl-RoleIdentifier"
+>
+  A unique identifier for a role.
+</APIItemCompact>
+
+#### AccountIdentifier [toc] [#ShieldedAccessControl-AccountIdentifier]
+#### [!toc] [#ShieldedAccessControl-AccountIdentifier]
+<APIItemCompact
+  circuitSig="new type AccountIdentifier = Bytes<32>"
+  kind="type"
+  id="ShieldedAccessControl-AccountIdentifier"
+>
+  A privacy-preserving identity commitment. Computed as `SHA256(secretKey, instanceSalt, accountIdDomain)`.
+</APIItemCompact>
+
+#### RoleNullifier [toc] [#ShieldedAccessControl-RoleNullifier]
+#### [!toc] [#ShieldedAccessControl-RoleNullifier]
+<APIItemCompact
+  circuitSig="new type RoleNullifier = Bytes<32>"
+  kind="type"
+  id="ShieldedAccessControl-RoleNullifier"
+>
+  A one-time burn token that permanently invalidates a role commitment on revocation. Computed as `SHA256(roleCommitment, nullifierDomain)`.
+</APIItemCompact>
+
+### Ledger [toc] [#ShieldedAccessControl-Ledger]
+### Ledger [!toc] [#ShieldedAccessControl-Ledger]
+
+#### _operatorRoles [toc] [#ShieldedAccessControl-_operatorRoles]
+#### [!toc] [#ShieldedAccessControl-_operatorRoles]
+<APIItemCompact
+  circuitSig="_operatorRoles: MerkleTree<20, RoleCommitment>"
+  kind="ledger"
+  id="ShieldedAccessControl-_operatorRoles"
+>
+  A Merkle tree of role commitments stored as `SHA256(role | accountId | instanceSalt | commitmentDomain)`.
+  Has a fixed capacity of 2^20 leaf slots.
+</APIItemCompact>
+
+#### _adminRoles [toc] [#ShieldedAccessControl-_adminRoles]
+#### [!toc] [#ShieldedAccessControl-_adminRoles]
+<APIItemCompact
+  circuitSig="_adminRoles: Map<RoleIdentifier, RoleIdentifier>"
+  kind="ledger"
+  id="ShieldedAccessControl-_adminRoles"
+>
+  Mapping from a role identifier to an admin role identifier.
+</APIItemCompact>
+
+#### _roleCommitmentNullifiers [toc] [#ShieldedAccessControl-_roleCommitmentNullifiers]
+#### [!toc] [#ShieldedAccessControl-_roleCommitmentNullifiers]
+<APIItemCompact
+  circuitSig="_roleCommitmentNullifiers: Set<RoleNullifier>"
+  kind="ledger"
+  id="ShieldedAccessControl-_roleCommitmentNullifiers"
+>
+  A set of nullifiers used to prove a role has been revoked.
+</APIItemCompact>
+
+#### _instanceSalt [toc] [#ShieldedAccessControl-_instanceSalt]
+#### [!toc] [#ShieldedAccessControl-_instanceSalt]
+<APIItemCompact
+  circuitSig="_instanceSalt: Bytes<32>"
+  kind="sealed ledger"
+  id="ShieldedAccessControl-_instanceSalt"
+>
+  A per-instance value provided at initialization used to namespace commitments for this contract instance.
+
+  This salt prevents commitment collisions across contracts that might otherwise use the same identifiers or domain parameters.
+  It should be a cryptographically strong random value. It is immutable after initialization.
+</APIItemCompact>
+
+### Witnesses [toc] [#ShieldedAccessControl-Witnesses]
+### Witnesses [!toc] [#ShieldedAccessControl-Witnesses]
+
+#### wit_getRoleCommitmentPath [toc] [#ShieldedAccessControl-wit_getRoleCommitmentPath]
+#### [!toc] [#ShieldedAccessControl-wit_getRoleCommitmentPath]
+<APIItemCompact
+  circuitSig="wit_getRoleCommitmentPath(roleCommitment: RoleCommitment) → MerkleTreePath<20, RoleCommitment>"
+  kind="witness"
+  id="ShieldedAccessControl-wit_getRoleCommitmentPath"
+>
+  Returns a path to a role commitment in the `_operatorRoles` Merkle tree if one exists.
+  Otherwise, returns an invalid path.
+</APIItemCompact>
+
+#### wit_secretKey [toc] [#ShieldedAccessControl-wit_secretKey]
+#### [!toc] [#ShieldedAccessControl-wit_secretKey]
+<APIItemCompact
+  circuitSig="wit_secretKey() → Bytes<32>"
+  kind="witness"
+  id="ShieldedAccessControl-wit_secretKey"
+>
+  Returns the user's secret key used in deriving the shielded account identifier.
+
+  The same key can be used across multiple roles within a contract instance. If a role is
+  revoked and re-granted, a new secret key must be generated to produce a new `accountId`.
+</APIItemCompact>
+
+### Circuits [toc] [#ShieldedAccessControl-Circuits]
+### Circuits [!toc] [#ShieldedAccessControl-Circuits]
+
+#### initialize [toc] [#ShieldedAccessControl-initialize]
+#### [!toc] [#ShieldedAccessControl-initialize]
+<APIItemCompact
+  circuitSig="initialize(instanceSalt: Bytes<32>) → []"
+  kind="circuit"
+  modulePrefix="ShieldedAccessControl"
+>
+  Initializes the contract by storing the `instanceSalt` that acts as a privacy additive
+  for preventing duplicate commitments among other contracts implementing ShieldedAccessControl.
+
+  <Callout type='warn'>
+    The `instanceSalt` must be calculated prior to contract deployment using a cryptographically
+    secure random number generator (e.g. `crypto.getRandomValues()`) to maintain strong privacy guarantees.
+  </Callout>
+
+  Requirements:
+
+  * Contract is not initialized.
+  * `instanceSalt` must not be zero.
+</APIItemCompact>
+
+#### DEFAULT_ADMIN_ROLE [toc] [#ShieldedAccessControl-DEFAULT_ADMIN_ROLE]
+#### [!toc] [#ShieldedAccessControl-DEFAULT_ADMIN_ROLE]
+<APIItemCompact
+  circuitSig="DEFAULT_ADMIN_ROLE() → RoleIdentifier"
+  kind="circuit"
+  modulePrefix="ShieldedAccessControl"
+>
+  The default admin role for all roles. Returns zero bytes (`default<Bytes<32>>`).
+  Only accounts with this role will be able to grant or revoke other roles
+  unless custom admin roles are created via [_setRoleAdmin](#ShieldedAccessControl-_setRoleAdmin).
+</APIItemCompact>
+
+#### assertOnlyRole [toc] [#ShieldedAccessControl-assertOnlyRole]
+#### [!toc] [#ShieldedAccessControl-assertOnlyRole]
+<APIItemCompact
+  circuitSig="assertOnlyRole(role: RoleIdentifier) → []"
+  kind="circuit"
+  modulePrefix="ShieldedAccessControl"
+>
+  Reverts if the caller cannot provide a valid proof of ownership for `role`.
+
+  Disclosures: a Merkle tree path to a role commitment, a role commitment corresponding to a `(role, accountId)` pairing, and a nullifier for the respective role commitment.
+
+  Requirements:
+
+  * Contract is initialized.
+  * Caller must prove ownership of `role`.
+  * Caller must not provide a valid Merkle tree path for a different `(role, accountId)` pairing.
+</APIItemCompact>
+
+#### canProveRole [toc] [#ShieldedAccessControl-canProveRole]
+#### [!toc] [#ShieldedAccessControl-canProveRole]
+<APIItemCompact
+  circuitSig="canProveRole(role: RoleIdentifier) → Boolean"
+  kind="circuit"
+  modulePrefix="ShieldedAccessControl"
+>
+  Returns `true` if the caller proves ownership of `role` and is not revoked. MAY return false for a legitimately credentialed
+  caller if the proving environment supplies an invalid Merkle path. This circuit will never return true for an
+  unauthorized caller.
+
+  Disclosures: a Merkle tree path to a role commitment, a role commitment corresponding to a `(role, accountId)` pairing, and a nullifier for the respective role commitment.
+
+  Requirements:
+
+  * Contract is initialized.
+  * Caller must not provide a valid Merkle tree path for a different `(role, accountId)` pairing.
+</APIItemCompact>
+
+#### grantRole [toc] [#ShieldedAccessControl-grantRole]
+#### [!toc] [#ShieldedAccessControl-grantRole]
+<APIItemCompact
+  circuitSig="grantRole(role: RoleIdentifier, accountId: AccountIdentifier) → []"
+  kind="circuit"
+  stackParams="true"
+  modulePrefix="ShieldedAccessControl"
+>
+  Grants `role` to `accountId` by inserting a role commitment unique to the
+  `(role, accountId)` pairing into the `_operatorRoles` Merkle tree. Duplicate role commitments can be issued
+  so long as they remain unrevoked. Once revoked, a role cannot be re-granted to the same `accountId`. A new
+  `accountId` must be generated to be re-authorized for a revoked `role`.
+
+  Disclosures: a Merkle tree path to a role commitment, a role commitment, a nullifier, and a role identifier.
+
+  Requirements:
+
+  * Contract is initialized.
+  * Caller must prove they are an admin for `role`.
+  * Caller must not provide a valid Merkle tree path for a different `(role, accountId)` pairing.
+  * The `(role, accountId)` pairing must not be already revoked.
+</APIItemCompact>
+
+#### revokeRole [toc] [#ShieldedAccessControl-revokeRole]
+#### [!toc] [#ShieldedAccessControl-revokeRole]
+<APIItemCompact
+  circuitSig="revokeRole(role: RoleIdentifier, accountId: AccountIdentifier) → []"
+  kind="circuit"
+  stackParams="true"
+  modulePrefix="ShieldedAccessControl"
+>
+  Permanently revokes `role` from `accountId` by inserting a role nullifier into the
+  `_roleCommitmentNullifiers` set. Once revoked, a new `accountId` must be generated to be re-authorized for
+  `role`.
+
+  <Callout type='info'>
+    At this time, proofs of non-membership on values in the Merkle tree are not available,
+    so a `(role, accountId)` pairing that does not exist can still be revoked.
+  </Callout>
+
+  Disclosures: a Merkle tree path to a role commitment, a role commitment, a nullifier, and a role identifier.
+
+  Requirements:
+
+  * Contract is initialized.
+  * Caller must prove they are an admin for `role`.
+  * Caller must not provide a valid Merkle tree path for a different `(role, accountId)` pairing.
+  * The `(role, accountId)` pairing must not be already revoked.
+</APIItemCompact>
+
+#### renounceRole [toc] [#ShieldedAccessControl-renounceRole]
+#### [!toc] [#ShieldedAccessControl-renounceRole]
+<APIItemCompact
+  circuitSig="renounceRole(role: RoleIdentifier, accountIdConfirmation: AccountIdentifier) → []"
+  kind="circuit"
+  stackParams="true"
+  modulePrefix="ShieldedAccessControl"
+>
+  Revokes `role` from the calling account by inserting a role nullifier into the
+  `_roleCommitmentNullifiers` set. Once revoked, a new `accountId` must be generated to be
+  re-authorized for `role`.
+
+  Roles are often managed via [grantRole](#ShieldedAccessControl-grantRole) and [revokeRole](#ShieldedAccessControl-revokeRole):
+  this circuit's purpose is to provide a mechanism for accounts to lose their privileges
+  if they are compromised (such as when a trusted device is misplaced).
+
+  Disclosures: a nullifier for the respective role commitment.
+
+  <Callout type='warn'>
+    Outside observers may be able to use timing and pattern analysis to weaken pseudonymity
+    guarantees if `renounceRole` is used in tandem with other on-chain actions.
+  </Callout>
+
+  Requirements:
+
+  * Contract is initialized.
+  * The caller must provide a valid `accountId` for the role.
+  * The `(role, accountId)` pairing must not be already revoked.
+</APIItemCompact>
+
+#### getRoleAdmin [toc] [#ShieldedAccessControl-getRoleAdmin]
+#### [!toc] [#ShieldedAccessControl-getRoleAdmin]
+<APIItemCompact
+  circuitSig="getRoleAdmin(role: RoleIdentifier) → RoleIdentifier"
+  kind="circuit"
+  modulePrefix="ShieldedAccessControl"
+>
+  Returns the admin role that controls `role`. Returns `DEFAULT_ADMIN_ROLE` for
+  roles with no explicitly set admin. Since `DEFAULT_ADMIN_ROLE` is the zero byte array,
+  there is no distinction between a nonexistent `role` and one whose admin is `DEFAULT_ADMIN_ROLE`.
+  See [grantRole](#ShieldedAccessControl-grantRole) and [revokeRole](#ShieldedAccessControl-revokeRole).
+
+  To change a role's admin use [_setRoleAdmin](#ShieldedAccessControl-_setRoleAdmin).
+
+  Disclosures: a role identifier.
+</APIItemCompact>
+
+#### _grantRole [toc] [#ShieldedAccessControl-_grantRole]
+#### [!toc] [#ShieldedAccessControl-_grantRole]
+<APIItemCompact
+  circuitSig="_grantRole(role: RoleIdentifier, accountId: AccountIdentifier) → []"
+  kind="circuit"
+  stackParams="true"
+  modulePrefix="ShieldedAccessControl"
+>
+  Grants `role` to `accountId` by inserting a role commitment unique to the
+  `(role, accountId)` pairing into the `_operatorRoles` Merkle tree.
+
+  Internal circuit without access restriction.
+
+  Disclosures: a role commitment corresponding to a `(role, accountId)` pairing, and a nullifier for the respective role commitment.
+
+  <Callout type='warn'>
+    Exposing this circuit directly in an implementing contract would allow anyone to grant
+    roles without authorization. It must be wrapped with appropriate access control.
+  </Callout>
+
+  <Callout type='warn'>
+    The `_operatorRoles` Merkle tree has a fixed capacity of 2^20 leaf slots.
+    Deployers should monitor slot consumption off-chain. Duplicate grants waste tree capacity
+    but are otherwise benign. A single nullifier invalidates all duplicate commitments.
+    Implementing contracts are responsible for mitigating tree exhaustion risk.
+  </Callout>
+
+  Requirements:
+
+  * Contract is initialized.
+  * The `(role, accountId)` pairing must not be already revoked.
+</APIItemCompact>
+
+#### _revokeRole [toc] [#ShieldedAccessControl-_revokeRole]
+#### [!toc] [#ShieldedAccessControl-_revokeRole]
+<APIItemCompact
+  circuitSig="_revokeRole(role: RoleIdentifier, accountId: AccountIdentifier) → []"
+  kind="circuit"
+  stackParams="true"
+  modulePrefix="ShieldedAccessControl"
+>
+  Permanently revokes `role` from `accountId` by inserting a role nullifier into the
+  `_roleCommitmentNullifiers` set. Once revoked, a new `accountId` must be generated to be re-authorized for
+  `role`.
+
+  Internal circuit without access restriction.
+
+  Disclosures: a nullifier for the respective role commitment.
+
+  <Callout type='warn'>
+    Exposing this circuit directly in an implementing contract would allow anyone to revoke
+    roles without authorization. It must be wrapped with appropriate access control.
+  </Callout>
+
+  Requirements:
+
+  * Contract is initialized.
+  * The `(role, accountId)` pairing must not be already revoked.
+</APIItemCompact>
+
+#### _setRoleAdmin [toc] [#ShieldedAccessControl-_setRoleAdmin]
+#### [!toc] [#ShieldedAccessControl-_setRoleAdmin]
+<APIItemCompact
+  circuitSig="_setRoleAdmin(role: RoleIdentifier, adminId: RoleIdentifier) → []"
+  kind="circuit"
+  modulePrefix="ShieldedAccessControl"
+>
+  Sets `adminId` as `role`'s admin identifier. Users with valid admin identifiers
+  may grant and revoke access to the specified `role`. Internal circuit without access restriction.
+
+  Disclosures: the role identifier and the admin identifier.
+
+  <Callout type='warn'>
+    Exposing this circuit directly in an implementing contract would allow anyone to assign
+    arbitrary admin roles without authorization. It must be wrapped with appropriate access control.
+  </Callout>
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### computeRoleCommitment [toc] [#ShieldedAccessControl-computeRoleCommitment]
+#### [!toc] [#ShieldedAccessControl-computeRoleCommitment]
+<APIItemCompact
+  circuitSig="computeRoleCommitment(role: RoleIdentifier, accountId: AccountIdentifier) → RoleCommitment"
+  kind="circuit"
+  stackParams="true"
+  modulePrefix="ShieldedAccessControl"
+>
+  Computes the role commitment from the given `role` and `accountId`.
+
+  Role Commitment Derivation: `roleCommitment = SHA256(role, accountId, instanceSalt, commitmentDomain)`
+
+  <Callout type='warn'>
+    This circuit does not perform an initialization check. It is only meant to be used as
+    an internal helper. Using this circuit outside of the module may cause undefined behavior
+    and break security guarantees.
+  </Callout>
+</APIItemCompact>
+
+#### computeNullifier [toc] [#ShieldedAccessControl-computeNullifier]
+#### [!toc] [#ShieldedAccessControl-computeNullifier]
+<APIItemCompact
+  circuitSig="computeNullifier(roleCommitment: RoleCommitment) → RoleNullifier"
+  kind="circuit"
+  modulePrefix="ShieldedAccessControl"
+>
+  Computes the role nullifier for a given `roleCommitment`.
+
+  Role Nullifier Derivation: `roleNullifier = SHA256(roleCommitment, nullifierDomain)`
+</APIItemCompact>
+
+#### computeAccountId [toc] [#ShieldedAccessControl-computeAccountId]
+#### [!toc] [#ShieldedAccessControl-computeAccountId]
+<APIItemCompact
+  circuitSig="computeAccountId(secretKey: Bytes<32>, instanceSalt: Bytes<32>) → AccountIdentifier"
+  kind="circuit"
+  stackParams="true"
+  modulePrefix="ShieldedAccessControl"
+>
+  Computes an `accountId` without on-chain state, allowing a user to derive
+  their shielded identity commitment before submitting it in a grant or revoke operation.
+  This is the off-chain counterpart to the internal `_computeAccountId` and produces an identical result
+  given the same inputs.
+
+  ID Derivation: `accountId = SHA256(secretKey, instanceSalt, accountIdDomain)`
+
+  <Callout type='warn'>
+    The `secretKey` parameter is a sensitive secret. Mishandling it can permanently compromise the privacy guarantees of this system.
+    Never log or persist the key in plaintext. Use cryptographically secure randomness to generate keys.
+    Treat key loss as identity loss — a lost key cannot be recovered.
+  </Callout>
+</APIItemCompact>
