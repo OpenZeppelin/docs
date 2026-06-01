@@ -31,6 +31,8 @@ use openzeppelin_access::access_control::{Self, AccessControl, Auth};
 
 The central object is `AccessControl<RootRole>`. For new code, publish it as a standalone shared object and pass it directly in PTBs. Protected functions receive `&Auth<Role>` instead of storing the registry inside the protected object.
 
+The module calls the current root-role holder the `default_admin`. Use `new` when the publisher should start as that holder, or `new_with_admin` when a governance or multisig address should hold it from publish.
+
 ```move
 module my_sui_app::roles;
 
@@ -68,9 +70,10 @@ The root role is the fallback admin for every role. Because it can recover role 
 - `accept_default_admin_transfer` lets the pending holder accept after the configured delay.
 - `begin_default_admin_renounce` schedules an intentional lock-in where the current root holder gives up the root role.
 - `accept_default_admin_renounce` finalizes that lock-in after the configured delay.
-- `cancel_default_admin_transfer` cancels either a pending transfer or a pending renounce.
+- `cancel_default_admin_transfer` cancels either pending action and emits a transfer- or renounce-specific cancellation event.
+- `default_admin` returns the current root-role holder, or `none` after a finalized renounce.
 - `begin_default_admin_delay_change` schedules a delay change.
-- `cancel_default_admin_delay_change` cancels an unelapsed delay change, or materializes an elapsed one.
+- `cancel_default_admin_delay_change` cancels only an active, unelapsed delay change.
 - `default_admin_delay_ms(ac, clock)` returns the effective delay.
 
 Role grants and root transfers reject `@0x0`. Root transfers also reject the current root holder as the target. Use the delayed root-renounce flow when the goal is to intentionally lock the registry.

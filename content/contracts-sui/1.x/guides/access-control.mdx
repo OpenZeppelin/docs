@@ -95,6 +95,8 @@ fun init(otw: ROLES, ctx: &mut TxContext) {
 }
 ```
 
+`new` makes the publisher the initial root-role holder. If a governance or multisig address should hold the root role from publish, use `new_with_admin(otw, initial_admin, DEFAULT_ADMIN_DELAY_MS, ctx)` instead.
+
 ### Protect protocol objects
 
 Protected modules import role types and accept `&Auth<Role>` in privileged functions. They do not store the registry, expose role-management wrappers, or check registry object IDs. `AccessControl<ROLES>` is unique for the `ROLES` OTW, and `Auth<TreasurerRole>` can only be minted by that registry.
@@ -183,7 +185,7 @@ Define a separate root role type and registry only when a group of objects needs
 
 ## Publish and Bootstrap
 
-Publishing the package runs each module initializer. In this walkthrough, that creates the shared `AccessControl<ROLES>`, the shared `Treasury`, and the shared `Market`. The publisher receives the root role and `TreasuryAdminRole`.
+Publishing the package runs each module initializer. In this walkthrough, that creates the shared `AccessControl<ROLES>`, the shared `Treasury`, and the shared `Market`. Because the example uses `new`, the publisher receives the root role and `TreasuryAdminRole`.
 
 ```mermaid
 sequenceDiagram
@@ -227,7 +229,7 @@ export OPERATOR=0x...
 
 After publishing, grant an operational admin and optionally renounce the publisher's day-to-day admin role. The publisher keeps the root role until a delayed root transfer is completed.
 
-Run this PTB from the publisher account, because `renounce_role` can only renounce the sender's own role.
+Run this PTB from the publisher account, because `renounce_role` renounces the sender's own role.
 
 ```bash
 sui client ptb \
@@ -237,8 +239,7 @@ sui client ptb \
     @$OPS_ADMIN \
   --move-call $ACCESS::access_control::renounce_role \
     "<$PACKAGE::roles::ROLES,$PACKAGE::roles::TreasuryAdminRole>" \
-    @$ACCESS_REGISTRY \
-    @$PUBLISHER
+    @$ACCESS_REGISTRY
 ```
 
 Run the next PTB from `$OPS_ADMIN` to grant the roles used by the protected functions:
@@ -531,9 +532,11 @@ sui client ptb \
 
 The root role is intentionally harder to change than ordinary roles. It cannot be granted, revoked, or renounced with `grant_role`, `revoke_role`, or `renounce_role`. Use the delayed root-role flows for root transfer, root renounce, and changes to the root-operation delay.
 
-Scheduling a root transfer or a root renounce uses the same pending slot. Starting one overwrites the other, and `cancel_default_admin_transfer` cancels either pending action.
+Scheduling a root transfer or a root renounce uses the same pending slot. Starting one overwrites the other, and `cancel_default_admin_transfer` cancels either pending action. Cancellation emits `DefaultAdminTransferCancelled` or `DefaultAdminRenounceCancelled` depending on the pending action.
 
 Root transfers cannot target `@0x0` or the current root holder. Ordinary role grants also reject `@0x0`. If the goal is to intentionally lock the registry, use the delayed root-renounce flow instead of transferring the root role to the zero address.
+
+Use `default_admin` to read the current root-role holder. It returns `none` after a finalized root renounce.
 
 The PTBs below use the standalone `AccessControl` object from the default pattern. For an upgraded roles package, replace `$PACKAGE::roles::ROLES` with `$ROLES_PACKAGE::roles::ROLES`. If your registry is embedded in another object or stored as a dynamic object field, expose wrappers that call the same `access_control` functions internally.
 
@@ -631,7 +634,7 @@ sui client ptb \
 
 Delay increases take effect after `min(new_delay_ms, max_delay_increase_wait_ms())`; `max_delay_increase_wait_ms()` is 48 hours. Delay decreases take effect after `current_delay_ms - new_delay_ms`, so the root holder cannot immediately shorten the protection window and schedule a faster root change.
 
-After `schedule_after_ms`, `default_admin_delay_ms(ac, clock)` reports the new effective delay. The stored pending slot is cleared later by the next delay-refreshing root action: `begin_default_admin_transfer`, `begin_default_admin_renounce`, `begin_default_admin_delay_change`, or `cancel_default_admin_delay_change`.
+After `schedule_after_ms`, `default_admin_delay_ms(ac, clock)` reports the new effective delay. The pending-delay getters return `none` because the change is no longer active or cancellable. The stored slot is cleared later by the next delay-refreshing scheduling action: `begin_default_admin_transfer`, `begin_default_admin_renounce`, or `begin_default_admin_delay_change`.
 
 ```mermaid
 sequenceDiagram
@@ -639,7 +642,7 @@ sequenceDiagram
     participant Registry as AccessControl
     Root->>Registry: begin_default_admin_delay_change(newDelay, clock)
     Registry-->>Registry: records schedule_after_ms
-    Root->>Registry: later root action(clock)
+    Root->>Registry: later scheduling action(clock)
     Registry-->>Registry: applies elapsed delay and clears pending slot
 ```
 
@@ -656,7 +659,7 @@ sui client ptb \
     @0x6
 ```
 
-The root holder can cancel a pending delay change before `schedule_after_ms`. After `schedule_after_ms`, the same call materializes the elapsed delay change instead of cancelling it:
+The root holder can cancel a pending delay change before `schedule_after_ms`:
 
 ```bash
 sui client ptb \
@@ -665,6 +668,8 @@ sui client ptb \
     @$ACCESS_REGISTRY \
     @0x6
 ```
+
+After `schedule_after_ms`, the delay change is effective and no longer cancellable; `cancel_default_admin_delay_change` aborts with `ENoPendingDelayChange`.
 
 ## Operational Checklist
 
