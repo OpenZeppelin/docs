@@ -1,0 +1,113 @@
+---
+title: Two-Step Transfer
+---
+
+<Callout type="warn">
+The example code snippets used in this guide are experimental and have not been audited. They simply help exemplify usage of the OpenZeppelin Sui Package.
+</Callout>
+
+The `two_step_transfer` module provides an ownership-transfer wrapper for single-owned privileged objects. A transfer only completes when the designated recipient explicitly accepts it.
+
+## Use cases
+
+Use `two_step_transfer` when:
+
+- The transfer can execute immediately once confirmed.
+- The principal initiating the transfer is a known, controlled key.
+- The risk you are guarding against is human error, such as sending a capability to a wrong or non-existent address.
+
+<Callout type="warn">
+`initiate_transfer` records `ctx.sender()` as the cancel authority. Avoid using this policy directly in shared-object executor flows unless your design explicitly maps signer identity to cancel authority.
+</Callout>
+
+## Import
+
+```move
+use openzeppelin_access::two_step_transfer;
+```
+
+## Step 1: Wrap the capability
+
+```move
+module my_sui_app::admin;
+
+use openzeppelin_access::two_step_transfer;
+
+public struct AdminCap has key, store { id: UID }
+
+/// Wrap and immediately initiate a transfer to `new_admin`.
+/// The wrapper is consumed by `initiate_transfer` and held
+/// inside the shared `PendingOwnershipTransfer` until the
+/// recipient accepts or the initiator cancels.
+public fun wrap_and_transfer(cap: AdminCap, new_admin: address, ctx: &mut TxContext) {
+    let wrapper = two_step_transfer::wrap(cap, ctx);
+    // Emits WrapExecuted
+
+    wrapper.initiate_transfer(new_admin, ctx);
+    // Emits TransferInitiated
+}
+```
+
+`wrap` stores the `AdminCap` inside a `TwoStepTransferWrapper<AdminCap>` and emits a `WrapExecuted` event. Because the wrapper lacks the `store` ability, it cannot be sent via `transfer::public_transfer`. The intended next step is to call `initiate_transfer`, which consumes the wrapper and creates a shared `PendingOwnershipTransfer<AdminCap>` object that both parties can interact with.
+
+## Step 2: Initiate a transfer
+
+`initiate_transfer` consumes the wrapper by value and creates a shared `PendingOwnershipTransfer<AdminCap>` object. The sender's address is recorded as `from` (the cancel authority), and the recipient's address is recorded as `to`.
+
+```move
+/// Called by the current wrapper owner. Consumes the wrapper.
+wrapper.initiate_transfer(new_admin_address, ctx);
+/// Emits TransferInitiated { wrapper_id, from, to }
+```
+
+After this call, the wrapper is held inside the pending request via transfer-to-object. The original owner no longer has it in their scope, but they retain the ability to cancel because their address is recorded as `from`.
+
+The `TransferInitiated` event contains the pending request's ID and the wrapper ID, allowing off-chain indexers to discover the shared `PendingOwnershipTransfer` object for the next step.
+
+## Step 3: Recipient accepts or initiator cancels
+
+The designated recipient calls `accept_transfer` to complete the handoff. This step uses Sui's [transfer-to-object (TTO)](https://docs.sui.io/guides/developer/objects/transfers/transfer-to-object) pattern: the wrapper was transferred to the `PendingOwnershipTransfer` object in Step 2, so the recipient must provide a `Receiving<TwoStepTransferWrapper<AdminCap>>` ticket to claim it.
+
+```move
+/// Called by the address recorded as `to` (new_admin_address).
+/// `request` is the shared PendingOwnershipTransfer<AdminCap> object.
+/// `wrapper_ticket` is the Receiving<TwoStepTransferWrapper<AdminCap>> for the wrapper
+/// that was transferred to the request object.
+two_step_transfer::accept_transfer(request, wrapper_ticket, ctx);
+// Emits TransferAccepted { wrapper_id, from, to }
+```
+
+If the initiator changes their mind before the recipient accepts, they can cancel. The cancel call also requires the `Receiving` ticket for the wrapper:
+
+```move
+/// Called by the address recorded as `from` (the original initiator).
+two_step_transfer::cancel_transfer(request, wrapper_ticket, ctx);
+/// Wrapper is returned to the `from` address.
+```
+
+## Borrowing without unwrapping
+
+The module provides three ways to use the wrapped capability without changing ownership:
+
+```move
+let cap_ref = wrapper.borrow();
+let cap_mut = wrapper.borrow_mut();
+let (cap, borrow_token) = wrapper.borrow_val();
+wrapper.return_val(cap, borrow_token);
+```
+
+`borrow_val` uses a hot-potato guard, so the value must be returned to the same wrapper before the transaction ends.
+
+## Unwrapping
+
+To permanently reclaim the raw capability and destroy the wrapper:
+
+```move
+let admin_cap = wrapper.unwrap(ctx);
+```
+
+This bypasses the transfer flow entirely. Only the current wrapper owner can call it.
+
+## API Reference
+
+For function-level signatures and error codes, see the [Access API reference](/contracts-sui/1.x/api/access#two_step_transfer).

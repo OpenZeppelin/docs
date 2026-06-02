@@ -399,8 +399,9 @@ overall set was approved at G3). Follow
    any) under `<API_REFERENCE_PATH>`.
 2. Regenerate the structured sections (Types, Functions, Events, Errors)
    from the source.
-3. Preserve existing prose that is still accurate; replace prose that no
-   longer matches the source.
+3. Preserve existing prose that is accurate and tone-compliant. Replace
+   prose that no longer matches the source, and trim affected prose that
+   is verbose, repetitive, or indirect.
 4. Honor the entry order from `<LOCAL_DOCS_CONVENTIONS_PATH>` (for Sui:
    description, then Aborts, then Emits, then NOTE/INFO/WARNING).
 5. If a public item has weak or missing source comments, generate only
@@ -444,6 +445,9 @@ For each rewrite (targeted or broad):
 5. Add or update security warnings according to
    `security.warning_style` and `security.require_security_sections_for`
    from config.
+6. Keep touched prose aligned with `docs.tone`: direct, concise,
+   precise, and security-conscious. Remove filler and obvious narration
+   in the sections already being edited.
 
 ---
 
