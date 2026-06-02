@@ -6,163 +6,86 @@ Deploying and operating the stack beyond local development.
 
 <Callout type="warn">
 
-Testnet deployment currently supports the `layerzero` provider only. CCV is local-only for now.
+Testnet supports both providers: `layerzero` (`config/environments/testnet.json`, `ENV=testnet`) and `chainlink_ccv` (`config/environments/testnet-ccv.json`, `ENV=testnet-ccv`). The workflow below uses `ENV=testnet` (LayerZero); for the CCV path substitute `ENV=testnet-ccv`. Mainnet CCV is not yet supported.
 
 </Callout>
 
-## Testnet (LayerZero)
+## Testnet Workflow
 
-- Source: Base Sepolia (`84532`)
-- Destination: Sepolia (`11155111`)
-- Provider: `layerzero`
+### 1. Generate keystores
 
-### Runtime Model
+```bash
+cargo xtask --env testnet generate-signer \
+  --name deployer --name operator-1 --name operator-2 --name operator-3
+
+cargo xtask --env testnet generate-signer \
+  --name signer-1 --name signer-2 --name signer-3
+```
+
+Each command prompts for a passphrase interactively (hidden input, confirmed). Use separate passphrases for operator and relayer keystores. The `--env testnet` flag writes keys under `config/keys/testnet/`, where `config/environments/testnet.json` expects them — without it, keys default to `config/keys/local/` and `make deploy ENV=testnet` will not find them.
+
+Relayer keystores (`signer-1/2/3`) are generated automatically by `make deploy` for any environment if they don't already exist (using `KEYSTORE_PASSPHRASE`). Generating them manually above is optional — it only lets you set the passphrase interactively instead of reading it from `.env.testnet`.
+
+### 2. Configure environment
+
+Copy `.env.example` to `.env.testnet` and fill in the RPC URLs (Base Sepolia source, Sepolia destination) and keystore passphrases. Signer definitions in `config/environments/testnet.json` reference these passphrases.
+
+### 3. Deploy and run
 
 ```bash
 make validate ENV=testnet
 make deploy ENV=testnet
-make refresh-genesis ENV=testnet   # when validation says genesis is stale
-make run-operators ENV=testnet
-make e2e ENV=testnet
-```
-
-| Command | What it does |
-|---------|-------------|
-| `validate` | Read-only checks: config, chain reachability, deployment state, operator state, relayer signer safety |
-| `deploy` | Deploy managed contracts, update `deployments/testnet.json` and `generated/testnet/` |
-| `refresh-genesis` | Refresh settlement genesis without redeploying contracts |
-| `run-operators` | Start non-local operator-side services |
-
-### Environment Inputs
-
-Config lives in `config/environments/testnet.json`:
-- Chain IDs and EIDs
-- Default RPC URLs
-- LayerZero predeploys
-- Symbiotic Core predeploys
-- Relay timing
-
-xtask resolves RPC URLs from the environment JSON first. `SOURCE_RPC_URL` / `DEST_RPC_URL` in `.env` are fallback overrides only.
-
-Required `.env` values:
-
-```bash
-PRIVATE_KEY=0x<deployer key>
-KEYSTORE_PASSPHRASE=<keystore passphrase>
-OPERATOR_1_PRIVATE_KEY=0x<operator 1 key>
-OPERATOR_2_PRIVATE_KEY=0x<operator 2 key>
-OPERATOR_3_PRIVATE_KEY=0x<operator 3 key>
-```
-
-Optional relayer bootstrap inputs:
-
-```bash
-RELAYER_1_PRIVATE_KEY=0x<relayer signer 1 key>
-RELAYER_2_PRIVATE_KEY=0x<relayer signer 2 key>
-RELAYER_3_PRIVATE_KEY=0x<relayer signer 3 key>
-```
-
-Relayer private keys are setup-time inputs only. The steady-state runtime source is the OZ relayer keystore files under `config/oz-relayer/keys/`.
-
-### Workflow
-
-#### 1. Generate keys
-
-```bash
-make setup
-```
-
-<Callout type="warn">
-
-For public testnets: do not use known local/dev keys. Ensure deployer, operators, and relayer signers all have testnet ETH.
-
-</Callout>
-
-#### 2. Validate first
-
-```bash
-make validate ENV=testnet
-```
-
-Catches: missing keys, underfunded accounts, stale genesis, relayer signer issues.
-
-#### 3. Deploy managed contracts
-
-```bash
-make deploy ENV=testnet
-```
-
-Updates `deployments/testnet.json` and `generated/testnet/`.
-
-#### 4. Refresh genesis when needed
-
-```bash
-make refresh-genesis ENV=testnet
-```
-
-Use this instead of redeploying when contracts are already in place and only the settlement header is stale.
-
-#### 5. Start operator services
-
-```bash
-make run-operators ENV=testnet
-```
-
-Starts from `docker-compose.yml` (no `docker-compose.local.yml` overlay):
-- Operators, OZ Monitor, OZ Relayer, Symbiotic relay sidecars
-
-#### 6. Send and verify
-
-```bash
+make refresh-genesis ENV=testnet   # only when validation says genesis is stale
+make start ENV=testnet
 make e2e ENV=testnet MSG="hello"
 ```
 
-### How Testnet Differs From Local
+- `validate` runs read-only checks against config, RPC reachability, deployment state, operator state, and relayer signer safety.
+- `deploy` deploys managed contracts and regenerates `deployments/testnet.json` and `generated/testnet/`.
+- `refresh-genesis` repairs stale settlement genesis without redeploying contracts.
+- `start` detects the environment type and starts the appropriate services.
 
-| Area | Local | Testnet |
-|------|-------|---------|
-| Entrypoint | `make start` | `make deploy` + `make run-operators` |
-| Chains | Local Anvil | Base Sepolia + Sepolia |
-| LayerZero endpoints | Local mocks | Predeployed |
-| Symbiotic Core | Deployed fresh | Predeployed on destination |
-| Genesis refresh | Folded into startup | Explicit `make refresh-genesis` when stale |
-| Compose files | `docker-compose.yml` + `docker-compose.local.yml` | `docker-compose.yml` only |
-| Operator registration | Auto-impersonate | Separate step (real chains) |
+By default, the LayerZero testnet config also deploys the starter `ExampleOApp`, so `make e2e ENV=testnet` remains part of the main workflow.
 
-### Testnet Architecture
+If you want provider infrastructure only, set `layerzero.oapp.enabled` to `false` in `config/environments/testnet.json` before deploying. `validate` will still pass, but `make send` and `make e2e` will be unavailable.
 
-```text
-Base Sepolia (84532)                     Sepolia (11155111)
---------------------                     -------------------
-LZ V2 Endpoint (pre-deployed)           LZ V2 Endpoint (pre-deployed)
-DVN.assignJob()                          DVN.submitProof() -> Settlement
-TestOApp.send()                          TestOApp.lzReceive()
-                                         Driver, KeyRegistry, VotingPowers
+## Required Inputs
 
-         OZ Monitor -> Operators -> Symbiotic Relays -> OZ Relayer
-                          (local Docker containers)
+Testnet settings live in `config/environments/<env>.json`. `.env.<env>` must provide:
+
+```bash
+DEPLOYER_PASSPHRASE=<deployer keystore passphrase>
+OPERATOR_1_PASSPHRASE=<operator-1 keystore passphrase>
+OPERATOR_2_PASSPHRASE=<operator-2 keystore passphrase>
+OPERATOR_3_PASSPHRASE=<operator-3 keystore passphrase>
+KEYSTORE_PASSPHRASE=<relayer keystore passphrase>   # used by OZ Relayer at runtime
 ```
 
-### Testnet Troubleshooting
+Operator and deployer passphrases are resolved by `xtask` via the `signers` config. `KEYSTORE_PASSPHRASE` is read directly by the OZ Relayer container to decrypt relayer keystores at runtime.
 
-**`validation failed: genesis stale`** -- Run `make refresh-genesis ENV=testnet`.
+## Operational Notes
 
-**`insufficient funds for gas`** -- Fund the deployer address from `PRIVATE_KEY`.
+- Local uses `make chains && make deploy && make start`; testnet uses `make deploy ENV=testnet` plus `make start ENV=testnet`.
+- Testnet uses `docker-compose.yml` only, not the local overlay.
+- Canonical deployment addresses always live in `deployments/<env>.json`.
 
-**Sidecars fail with RPC rate limits** -- Three sidecars syncing at once can overwhelm weak testnet RPC plans. Use higher-throughput RPCs or temporarily reduce sidecar count.
+## Sidecar Image Compatibility
 
-**Keys look drained immediately** -- Do not use known local/dev keys on public testnets. Regenerate with `make setup`.
+The Symbiotic relay sidecar (`symbioticfi/relay`) is still in release-candidate phase. The pinned version in `docker-compose.yml` and the `RELAY_IMAGE` default in `xtask/src/genesis.rs` must stay in sync. Known states observed during integration:
 
-**Fresh relay deploys on shared testnet** -- Most fragile path. Prefer reusing existing environment and `make refresh-genesis` for stale-genesis repair.
+| Tag | Status | Notes |
+| --- | --- | --- |
+| `1.0.1-rc4` | works | Current pin. First image where aggregation produces proofs against real mainnet. |
+| `1.0.1-rc3.0.20260507060511-...` | broken | Starts cleanly but the aggregator never produces proofs even with full quorum signing. |
+| `1.0.1-20260326074346-da0bce8ba949` | broken on non-local | Panics at config init with an `errors.As` target-type bug when multiple chains are configured. Local works because the codepath differs. |
 
-## Mainnet
+If you bump the tag, run a full testnet e2e first and verify proofs are aggregated end-to-end. The `1.0.1` GA tag has not yet shipped from Symbiotic — track upstream releases before promoting any tag past `rc4`.
 
-Not yet supported. Key differences from testnet will include:
-- Hardware security for BLS keys
-- Distributed operators (not co-located containers)
-- OZ-hosted services
-- Configurable quorum thresholds
+## Common Deployment Failures
 
-## Address Management
+- `validation failed: genesis stale`: run `make refresh-genesis ENV=<env>`.
+- `insufficient funds for gas`: fund the deployer account from the deployer keystore address.
+- Sidecars hit RPC rate limits: use stronger RPCs or reduce sidecar load temporarily.
+- Keys look drained immediately: do not reuse known local/dev keys on public networks.
 
-All deployment addresses are canonical in `deployments/<env>.json`. This file is updated by `make deploy` and read by all runtime components.
+For runtime failures after deployment, see [Troubleshooting](/symbiotic/troubleshooting).

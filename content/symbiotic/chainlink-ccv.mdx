@@ -2,15 +2,15 @@
 title: Chainlink CCV
 ---
 
-Symbiotic-secured Cross-Chain Verifier (CCV) for Chainlink CCIP-compatible message verification.
+Symbiotic-secured Cross-Chain Verifier for Chainlink CCIP-compatible message verification.
 
 ## Overview
 
-The CCV provider implements a Symbiotic-backed verifier compatible with Chainlink's CCIP CCV interface. When a message is sent through an OnRamp-compatible contract, a `CCIPMessageSent` event is emitted. Operators build a CCV payload, collect BLS attestations via Symbiotic relay sidecars, and the relayer submits the proof to `OffRamp.execute(...)` on the destination chain. The OffRamp calls `SymbioticCCV.verifyMessage(...)` for each message, and success is confirmed when `MessageExecuted(messageId)` is emitted.
+The CCV provider watches `CCIPMessageSent` events, builds the verifier payload, collects BLS attestations through Symbiotic relay sidecars, and submits execution calldata to the destination OffRamp path. Success is confirmed when the destination emits `MessageExecuted(messageId)`.
 
 <Callout>
 
-This template supports the **Symbiotic CCV variant** only. The Chainlink auxiliary devenv stack (aggregator, indexer, verifier, executor) is not required.
+This template supports the Symbiotic CCV path only. The Chainlink auxiliary devenv stack is not required.
 
 </Callout>
 
@@ -31,7 +31,7 @@ sequenceDiagram
     OnRamp-->>Monitor: CCIPMessageSent event
     Monitor->>Operators: HMAC webhook
     Operators->>Operators: build CCV payload + Merkle tree
-    Operators->>Relay: sign Merkle root (BLS)
+    Operators->>Relay: sign Merkle root
     Relay-->>Operators: aggregated signature
     Operators->>Relayer: OffRamp.execute calldata
     Relayer->>OffRamp: execute(message, ccvs, verifierResults)
@@ -40,49 +40,44 @@ sequenceDiagram
     OffRamp-->>OffRamp: emit MessageExecuted(messageId)
 ```
 
-## Code Pointers
+## Contracts and Code
 
 ### Contracts
 
-- `contracts/src/ccv/SymbioticCCV.sol` -- CCV verifier implementation (`verifyMessage`, `forwardToVerifier`)
-- `contracts/src/ccv/interfaces/` -- CCV interface definitions (`ICrossChainVerifierV1`, etc.)
-- `contracts/src/ccv/libraries/` -- CCV encoding and helper libraries
-- `contracts/src/symbiotic/Settlement.sol` -- BLS signature verification and quorum enforcement
-- `contracts/src/symbiotic/KeyRegistry.sol` -- Operator BLS public key registry
-- `contracts/src/symbiotic/Driver.sol` -- Epoch and genesis management
+- `contracts/src/ccv/SymbioticCCV.sol`
+- `contracts/src/ccv/interfaces/`
+- `contracts/src/ccv/libraries/`
+- `contracts/src/symbiotic/Settlement.sol`
+- `contracts/src/symbiotic/KeyRegistry.sol`
+- `contracts/src/symbiotic/Driver.sol`
 
-### Operator (Rust)
+### Operator
 
-- `operator/src/provider/chainlink_ccv.rs` -- Decodes `CCIPMessageSent` events, builds CCV payloads
-- `operator/src/provider/mod.rs` -- `Provider` trait and registration
+- `operator/src/provider/chainlink_ccv.rs`
+- `operator/src/provider/mod.rs`
 
-### Config Templates
+### Monitor Templates
 
-- `config/templates/oz-monitor/monitors/ccip_message_sent.json` -- Monitor job for `CCIPMessageSent` events
+- `config/templates/oz-monitor/monitors/ccip_message_sent.json`
 
 ## Configuration
 
-Select CCV as the active provider:
+Select CCV in `config/environments/<env>.json`:
 
 ```json
-// config/environments/<env>.json
 {
   "activeProvider": "chainlink_ccv"
 }
 ```
 
-Chain config is shared across providers — chain IDs from `chains.source.chainId` and `chains.destination.chainId` are used as CCIP chain selectors at runtime.
+CCIP chain selectors come from `chains.source.ccipChainSelector` and `chains.destination.ccipChainSelector`, which are required for non-local environments. They can be overridden at runtime via the `CCV_SOURCE_CHAIN_SELECTOR` / `CCV_DEST_CHAIN_SELECTOR` environment variables. For local Anvil only (chainId `31337`), the selector falls back to `chainId` when `ccipChainSelector` is unset.
 
-Address resolution for CCV scripts:
+Address resolution order:
 
-1. `CCV_*` environment variables (highest priority)
+1. `CCV_*` environment variables
 2. `deployments/<env>.json`
 
-CCV settlement addresses in deployment state:
-
-- Destination: `destination.chainlinkCcv.settlement` in `deployments/<env>.json`
-
-Available `CCV_*` override variables:
+Available overrides:
 
 | Variable | Description |
 |----------|-------------|
@@ -90,42 +85,9 @@ Available `CCV_*` override variables:
 | `CCV_DEST_ADDRESS` | SymbioticCCV on destination chain |
 | `CCV_SOURCE_ONRAMP_ADDRESS` | Source OnRamp-compatible contract |
 | `CCV_DEST_OFFRAMP_ADDRESS` | Destination OffRamp submit target |
+| `CCV_SOURCE_CHAIN_SELECTOR` | Override the source CCIP chain selector |
+| `CCV_DEST_CHAIN_SELECTOR` | Override the destination CCIP chain selector |
 
-## Usage
+Local and testnet are supported (testnet uses the `testnet-ccv` environment: `config/environments/testnet-ccv.json` and `deployments/testnet-ccv.json`, run via `ENV=testnet-ccv`); mainnet is not yet supported for CCV. `make watch` only succeeds once destination `MessageExecuted(messageId)` is observed.
 
-```bash
-# Select chainlink_ccv provider in config/environments/local.json
-# "activeProvider": "chainlink_ccv"
-
-# Start the stack
-make start
-
-# Send a test message
-make send MSG="hello"
-
-# Watch until MessageExecuted on destination
-make watch
-
-# Or run both
-make e2e
-```
-
-`make send` sends through the source mock `OnRamp.sendMessage(...)`, emitting `CCIPMessageSent`.
-
-`make watch` succeeds only when `MessageExecuted(messageId)` is found on the destination chain (not just relayer submission).
-
-See [CLI Reference](/symbiotic/cli) for full command options.
-
-## Deployment Status
-
-| Environment | Status |
-|-------------|--------|
-| Local | Supported (Symbiotic-only mock path) |
-| Testnet | Not yet |
-| Mainnet | Not yet |
-
-## Common Issues
-
-- **EpochTooStale revert (0xf5ab0d81)** -- Settlement epoch data is stale. Refresh genesis or tune epoch timing. See [Troubleshooting](/symbiotic/troubleshooting#epochtoostale-revert-0xf5ab0d81).
-- **Watch does not reach success** -- CCV requires destination `MessageExecuted(messageId)`, not just relayer submission. See [Troubleshooting](/symbiotic/troubleshooting#watch-does-not-reach-success).
-- **Submission fails at estimate-gas** -- Common causes: stale epoch, incorrect CCV addresses, settlement not initialized. See [Troubleshooting](/symbiotic/troubleshooting#submission-fails-at-estimate-gas).
+See [Setup](/symbiotic/setup) and [CLI & API Reference](/symbiotic/cli) for operation.

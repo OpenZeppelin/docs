@@ -2,11 +2,11 @@
 title: LayerZero
 ---
 
-Symbiotic-secured DVN (Decentralized Verifier Network) for LayerZero V2 cross-chain messaging.
+Symbiotic-secured DVN for LayerZero V2 cross-chain messaging.
 
 ## Overview
 
-The LayerZero provider implements a DVN that uses Symbiotic shared security to verify cross-chain messages. When a message is sent through LayerZero's `SendUln302`, the DVN contract emits a `JobAssigned` event. Operators batch these jobs into Merkle trees, collect BLS signatures through Symbiotic relay sidecars, and submit the signed proof to the destination DVN contract. The destination DVN verifies the BLS quorum via the Settlement contract and forwards verification to LayerZero's `ReceiveUln302`.
+The LayerZero provider watches `JobAssigned` events emitted by the `SymbioticLayerZeroDVN` source DVN (whose `assignJob` function is called by `SendUln302`), batches them into Merkle trees, collects BLS attestations through Symbiotic relay sidecars, and submits proofs to the destination DVN. The destination DVN verifies the quorum via Settlement and forwards verification into `ReceiveUln302`.
 
 ## Message Flow
 
@@ -28,7 +28,7 @@ sequenceDiagram
     DVN_S-->>Monitor: JobAssigned event
     Monitor->>Operators: HMAC webhook
     Operators->>Operators: batch into Merkle tree
-    Operators->>Relay: sign Merkle root (BLS)
+    Operators->>Relay: sign Merkle root
     Relay-->>Operators: aggregated signature
     Operators->>Relayer: submitProof calldata
     Relayer->>DVN_D: submitProof(root, proof, signatures)
@@ -37,42 +37,41 @@ sequenceDiagram
     DVN_D->>RecvUln: verify()
 ```
 
-## Code Pointers
+## Contracts and Code
 
 ### Contracts
 
-- `contracts/src/SymbioticLayerZeroDVN.sol` -- DVN contract handling `assignJob` (source) and `submitProof` (destination)
-- `contracts/src/symbiotic/Settlement.sol` -- BLS signature verification and quorum enforcement
-- `contracts/src/symbiotic/KeyRegistry.sol` -- Operator BLS public key registry
-- `contracts/src/symbiotic/VotingPowers.sol` -- Operator voting power tracking
-- `contracts/src/symbiotic/Driver.sol` -- Epoch and genesis management
-- `contracts/src/examples/TestOApp.sol` -- Test application for sending/receiving messages
+- `contracts/src/SymbioticLayerZeroDVN.sol`
+- `contracts/src/symbiotic/Settlement.sol`
+- `contracts/src/symbiotic/KeyRegistry.sol`
+- `contracts/src/symbiotic/VotingPowers.sol`
+- `contracts/src/symbiotic/Driver.sol`
+- `contracts/src/examples/ExampleOApp.sol`
 
-### Operator (Rust)
+### Operator
 
-- `operator/src/provider/layerzero.rs` -- Decodes `JobAssigned` events, stores messages
-- `operator/src/provider/mod.rs` -- `Provider` trait and registration
-- `operator/src/crypto/mod.rs` -- Merkle tree construction, DVN leaf hashing
-- `operator/src/signer/mod.rs` -- Batches messages, requests BLS signatures
-- `operator/src/relay_submitter/mod.rs` -- Submits signed proofs via OZ Relayer
+- `operator/src/provider/layerzero.rs`
+- `operator/src/provider/mod.rs`
+- `operator/src/crypto/mod.rs`
+- `operator/src/signer/mod.rs`
+- `operator/src/relay_submitter/mod.rs`
 
-### Config Templates
+### Monitor Templates
 
-- `config/templates/oz-monitor/monitors/layerzero_job_assigned.json` -- Monitor job for `JobAssigned` events
-- `config/templates/oz-monitor/triggers/webhook_layerzero.json` -- Webhook trigger template
+- `config/templates/oz-monitor/monitors/layerzero_job_assigned.json`
+- `config/templates/oz-monitor/triggers/webhook_layerzero.json`
 
 ## Configuration
 
-Select LayerZero as the active provider:
+Select LayerZero in `config/environments/<env>.json`:
 
 ```json
-// config/environments/<env>.json
 {
   "activeProvider": "layerzero"
 }
 ```
 
-Chain config is shared across providers and lives at the top level:
+Shared chain config:
 
 | Field | Description |
 |-------|-------------|
@@ -81,7 +80,7 @@ Chain config is shared across providers and lives at the top level:
 | `chains.source.eid` | LayerZero endpoint ID for source |
 | `chains.destination.eid` | LayerZero endpoint ID for destination |
 
-LayerZero predeploys (testnet/mainnet) go in `chains.<role>.predeploys.layerzero`:
+LayerZero predeploys for non-local environments live under `chains.<role>.predeploys.layerzero`:
 
 ```json
 {
@@ -94,35 +93,25 @@ LayerZero predeploys (testnet/mainnet) go in `chains.<role>.predeploys.layerzero
 }
 ```
 
-`make deploy` and `make start` use these values to generate runtime configs (`destination_chains`, `chain_relayers`, `eid_to_chain_id`) under `generated/<env>/`. Validation fails if chain IDs/EIDs drift from the generated deployment state.
+`make deploy` and `make start` use these values to generate the runtime chain maps under `generated/<env>/`.
 
-## Usage
+The template also manages a starter OApp by default:
 
-```bash
-# Select layerzero provider in config/environments/local.json
-# "activeProvider": "layerzero"
-
-# Start the stack
-make start
-
-# Send a test message
-make send MSG="hello"
-
-# Watch until destination verification
-make watch
-
-# Or run both in one shot
-make e2e
+```json
+{
+  "layerzero": {
+    "oapp": {
+      "enabled": true
+    }
+  }
+}
 ```
 
-`make send` sends through `TestOApp.send(...)` which calls `SendUln302`, triggering `DVN.assignJob()`.
+- `true`: deploy and wire `ExampleOApp` on both chains
+- `false`: skip the starter OApp and run LayerZero in provider-only mode
 
-`make watch` succeeds when destination target verification is observed on-chain.
+Starter OApp deployments are published under `deployments/<env>.json` at `layerzero.oapp.source` and `layerzero.oapp.destination`.
 
-See [CLI Reference](/symbiotic/cli) for full command options.
+Provider validation does not require the starter OApp to exist. Disabling it only removes the `make send` and `make e2e` demo flow for that environment.
 
-## Common Issues
-
-- **Message stuck at "Processing"** -- BLS signatures not aggregating. Check sidecar health and operator key registration. See [Troubleshooting](/symbiotic/troubleshooting#bls-signatures-not-aggregating).
-- **Quorum not reached** -- All 3 operators must be running and receiving the same events. See [Troubleshooting](/symbiotic/troubleshooting#quorum-not-reached).
-- **submitProof reverts** -- Check that the OZ Relayer address is authorized as a submitter on the DVN contract, and that Settlement has correct operator keys. See [Troubleshooting](/symbiotic/troubleshooting#layerzero-issues).
+Local and testnet are supported. See [Setup](/symbiotic/setup), [Deployment](/symbiotic/deployment), and [CLI & API Reference](/symbiotic/cli) for operation.
