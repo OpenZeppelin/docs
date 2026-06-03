@@ -187,6 +187,23 @@ All `docs.*` paths in config are **relative to `<DOCS_REPO_PATH>`**. Never
 hard-code absolute filesystem paths in config, prompts, reports, or
 generated docs.
 
+## Tone and prose
+
+Generated or touched docs must follow `docs.tone` from config. For the
+contracts-sui slice this means direct, concise, precise, and
+security-conscious.
+
+When editing prose:
+
+- Prefer short sentences and concrete nouns.
+- Remove filler, marketing language, repetition, and obvious narration.
+- State behavior directly before caveats or rationale.
+- Keep security warnings specific: exact risk, exact condition, exact
+  mitigation.
+- Do not rewrite untouched working sections just for tone. When a
+  section is already being edited, make the affected prose match the
+  tone.
+
 ## Reference Files
 
 Read only what the run needs:

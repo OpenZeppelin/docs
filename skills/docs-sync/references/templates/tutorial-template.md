@@ -135,9 +135,10 @@ PASS    [ 0 ] my_first_oz::my_first_oz_tests::happy_path
   not ready to evaluate tradeoffs yet.
 - **Checkpoints earn trust.** Every 1–3 steps, give the reader a way to
   confirm they are still on the rails.
-- **Match `docs.tone` from config.** Default: *clear, precise,
-  security-conscious*. In tutorials this means: encouraging, but with
-  honest security warnings inline rather than postponed.
+- **Match `docs.tone` from config.** Default: *direct, concise,
+  precise, security-conscious*. In tutorials this means short,
+  action-first steps with honest security warnings inline rather than
+  postponed.
 
 ## Where to put the file
 

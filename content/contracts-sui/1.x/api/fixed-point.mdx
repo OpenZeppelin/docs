@@ -15,7 +15,7 @@ Each type has a base module that holds the arithmetic, comparison, and bitwise f
 
 <APIGithubLinkHeader
   moduleName="ud30x9"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.1.0/math/fixed_point/sources/ud30x9/ud30x9.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.2.0/math/fixed_point/sources/ud30x9/ud30x9.move"
 />
 
 ```move
@@ -96,7 +96,7 @@ Returns the raw `u128` bits of a `UD30x9` value.
 
 <APIGithubLinkHeader
   moduleName="ud30x9_base"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.1.0/math/fixed_point/sources/ud30x9/ud30x9_base.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.2.0/math/fixed_point/sources/ud30x9/ud30x9_base.move"
 />
 
 ```move
@@ -107,7 +107,7 @@ Arithmetic, comparison, and bitwise functions for `UD30x9`. All entries are expo
 
 Functions
 
-- Arithmetic: [`add`](#ud30x9_base-add), [`sub`](#ud30x9_base-sub), [`mul`](#ud30x9_base-mul), [`mul_trunc`](#ud30x9_base-mul_trunc), [`mul_away`](#ud30x9_base-mul_away), [`div`](#ud30x9_base-div), [`div_trunc`](#ud30x9_base-div_trunc), [`div_away`](#ud30x9_base-div_away), [`mod`](#ud30x9_base-mod), [`pow`](#ud30x9_base-pow), [`abs`](#ud30x9_base-abs), [`ceil`](#ud30x9_base-ceil), [`floor`](#ud30x9_base-floor), [`unchecked_add`](#ud30x9_base-unchecked_add), [`unchecked_sub`](#ud30x9_base-unchecked_sub)
+- Arithmetic: [`add`](#ud30x9_base-add), [`sub`](#ud30x9_base-sub), [`mul`](#ud30x9_base-mul), [`mul_trunc`](#ud30x9_base-mul_trunc), [`mul_away`](#ud30x9_base-mul_away), [`div`](#ud30x9_base-div), [`div_trunc`](#ud30x9_base-div_trunc), [`div_away`](#ud30x9_base-div_away), [`mod`](#ud30x9_base-mod), [`pow`](#ud30x9_base-pow), [`sqrt`](#ud30x9_base-sqrt), [`ln`](#ud30x9_base-ln), [`log2`](#ud30x9_base-log2), [`log10`](#ud30x9_base-log10), [`abs`](#ud30x9_base-abs), [`ceil`](#ud30x9_base-ceil), [`floor`](#ud30x9_base-floor), [`unchecked_add`](#ud30x9_base-unchecked_add), [`unchecked_sub`](#ud30x9_base-unchecked_sub)
 - Comparison: [`eq`](#ud30x9_base-eq), [`neq`](#ud30x9_base-neq), [`gt`](#ud30x9_base-gt), [`gte`](#ud30x9_base-gte), [`lt`](#ud30x9_base-lt), [`lte`](#ud30x9_base-lte), [`is_zero`](#ud30x9_base-is_zero)
 - Bitwise: [`and`](#ud30x9_base-and), [`and2`](#ud30x9_base-and2), [`or`](#ud30x9_base-or), [`xor`](#ud30x9_base-xor), [`not`](#ud30x9_base-not), [`lshift`](#ud30x9_base-lshift), [`unchecked_lshift`](#ud30x9_base-unchecked_lshift), [`rshift`](#ud30x9_base-rshift), [`unchecked_rshift`](#ud30x9_base-unchecked_rshift)
 - Cross-type casts: [`into_SD29x9`](#ud30x9_base-into_SD29x9), [`try_into_SD29x9`](#ud30x9_base-try_into_SD29x9)
@@ -119,6 +119,8 @@ Errors
 - [`EDivideByZero`](#ud30x9_base-EDivideByZero)
 - [`ECannotBeConvertedToSD29x9`](#ud30x9_base-ECannotBeConvertedToSD29x9)
 - [`EInvalidShiftSize`](#ud30x9_base-EInvalidShiftSize)
+- [`ELogUndefined`](#ud30x9_base-ELogUndefined)
+- [`ELogResultUnrepresentable`](#ud30x9_base-ELogResultUnrepresentable)
 
 #### Functions [!toc] [#ud30x9_base-Functions]
 
@@ -225,6 +227,47 @@ Returns an approximation of `x^exp` computed using binary exponentiation with fi
 Aborts with `EOverflow` if any intermediate or the final result exceeds the representable `UD30x9` range.
 
 NOTE: Because truncation is applied at intermediate steps, `pow` is approximate for most fractional values. Rounding error compounds as `exp` grows; results are biased toward zero; for `0 < x < 1` intermediate values can reach zero before the final mathematically scaled result would. Fixed-point multiplication is not associative under truncation, so the grouping used by binary exponentiation can affect the value.
+</APIItem>
+
+<APIItem
+  functionSignature="sqrt(x: UD30x9) -> UD30x9"
+  id="ud30x9_base-sqrt"
+  kind="public"
+>
+Returns the largest `UD30x9` value `r` such that `r * r <= x`. The result is rounded down to the nearest representable `UD30x9` value.
+</APIItem>
+
+<APIItem
+  functionSignature="ln(x: UD30x9) -> UD30x9"
+  id="ud30x9_base-ln"
+  kind="public"
+>
+Returns the natural logarithm of `x`, derived from `log2` via `ln(x) = log2(x) * ln(2)`. The result is rounded down and may sit up to 2 ulps below the true value.
+
+Aborts with `ELogUndefined` if `x` is zero.
+Aborts with `ELogResultUnrepresentable` if `x` is in `(0, 1)` (the result would be negative and cannot be represented in `UD30x9` — use [`SD29x9::ln`](#sd29x9_base-ln) instead).
+</APIItem>
+
+<APIItem
+  functionSignature="log2(x: UD30x9) -> UD30x9"
+  id="ud30x9_base-log2"
+  kind="public"
+>
+Returns the base-2 logarithm of `x`. The result is rounded down and sits at most 2 ulps below the true `log2(x)`. For inputs in `[1, 2)` the result is exact.
+
+Aborts with `ELogUndefined` if `x` is zero.
+Aborts with `ELogResultUnrepresentable` if `x` is in `(0, 1)` (the result would be negative and cannot be represented in `UD30x9` — use [`SD29x9::log2`](#sd29x9_base-log2) instead).
+</APIItem>
+
+<APIItem
+  functionSignature="log10(x: UD30x9) -> UD30x9"
+  id="ud30x9_base-log10"
+  kind="public"
+>
+Returns the base-10 logarithm of `x`. Exact when `x` is an integer power of ten (`10^k`, `k >= 0`). Otherwise derived from `log2` via `log10(x) = log2(x) * log10(2)` and rounded down; the result may sit up to 2 ulps below the true value.
+
+Aborts with `ELogUndefined` if `x` is zero.
+Aborts with `ELogResultUnrepresentable` if `x` is in `(0, 1)` (the result would be negative and cannot be represented in `UD30x9` — use [`SD29x9::log10`](#sd29x9_base-log10) instead).
 </APIItem>
 
 <APIItem
@@ -464,11 +507,27 @@ Raised when [`into_SD29x9`](#ud30x9_base-into_SD29x9) is called on a value above
 Raised when [`lshift`](#ud30x9_base-lshift) or [`rshift`](#ud30x9_base-rshift) is called with `bits >= 128`.
 </APIItem>
 
+<APIItem
+  functionSignature="ELogUndefined"
+  id="ud30x9_base-ELogUndefined"
+  kind="error"
+>
+Raised when [`ln`](#ud30x9_base-ln), [`log2`](#ud30x9_base-log2), or [`log10`](#ud30x9_base-log10) is called with a zero input.
+</APIItem>
+
+<APIItem
+  functionSignature="ELogResultUnrepresentable"
+  id="ud30x9_base-ELogResultUnrepresentable"
+  kind="error"
+>
+Raised when [`ln`](#ud30x9_base-ln), [`log2`](#ud30x9_base-log2), or [`log10`](#ud30x9_base-log10) is called with an input in `(0, 1)`. The result would be negative, which is unrepresentable in `UD30x9`; the signed `SD29x9` variants accept these inputs.
+</APIItem>
+
 ### `ud30x9_convert` [toc] [#ud30x9_convert]
 
 <APIGithubLinkHeader
   moduleName="ud30x9_convert"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.1.0/math/fixed_point/sources/ud30x9/conversions.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.2.0/math/fixed_point/sources/ud30x9/conversions.move"
 />
 
 ```move
@@ -569,7 +628,7 @@ Raised when a truncated whole part does not fit in `u64`.
 
 <APIGithubLinkHeader
   moduleName="sd29x9"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.1.0/math/fixed_point/sources/sd29x9/sd29x9.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.2.0/math/fixed_point/sources/sd29x9/sd29x9.move"
 />
 
 ```move
@@ -677,7 +736,7 @@ Raised when [`wrap`](#sd29x9-wrap) is called with a magnitude that exceeds `2^12
 
 <APIGithubLinkHeader
   moduleName="sd29x9_base"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.1.0/math/fixed_point/sources/sd29x9/sd29x9_base.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.2.0/math/fixed_point/sources/sd29x9/sd29x9_base.move"
 />
 
 ```move
@@ -692,7 +751,7 @@ Types
 
 Functions
 
-- Arithmetic: [`add`](#sd29x9_base-add), [`sub`](#sd29x9_base-sub), [`mul`](#sd29x9_base-mul), [`mul_trunc`](#sd29x9_base-mul_trunc), [`mul_away`](#sd29x9_base-mul_away), [`div`](#sd29x9_base-div), [`div_trunc`](#sd29x9_base-div_trunc), [`div_away`](#sd29x9_base-div_away), [`mod`](#sd29x9_base-mod), [`rem`](#sd29x9_base-rem), [`pow`](#sd29x9_base-pow), [`negate`](#sd29x9_base-negate), [`abs`](#sd29x9_base-abs), [`ceil`](#sd29x9_base-ceil), [`floor`](#sd29x9_base-floor), [`unchecked_add`](#sd29x9_base-unchecked_add), [`unchecked_sub`](#sd29x9_base-unchecked_sub)
+- Arithmetic: [`add`](#sd29x9_base-add), [`sub`](#sd29x9_base-sub), [`mul`](#sd29x9_base-mul), [`mul_trunc`](#sd29x9_base-mul_trunc), [`mul_away`](#sd29x9_base-mul_away), [`div`](#sd29x9_base-div), [`div_trunc`](#sd29x9_base-div_trunc), [`div_away`](#sd29x9_base-div_away), [`mod`](#sd29x9_base-mod), [`rem`](#sd29x9_base-rem), [`pow`](#sd29x9_base-pow), [`sqrt`](#sd29x9_base-sqrt), [`ln`](#sd29x9_base-ln), [`log2`](#sd29x9_base-log2), [`log10`](#sd29x9_base-log10), [`negate`](#sd29x9_base-negate), [`abs`](#sd29x9_base-abs), [`ceil`](#sd29x9_base-ceil), [`floor`](#sd29x9_base-floor), [`unchecked_add`](#sd29x9_base-unchecked_add), [`unchecked_sub`](#sd29x9_base-unchecked_sub)
 - Comparison: [`eq`](#sd29x9_base-eq), [`neq`](#sd29x9_base-neq), [`gt`](#sd29x9_base-gt), [`gte`](#sd29x9_base-gte), [`lt`](#sd29x9_base-lt), [`lte`](#sd29x9_base-lte), [`is_zero`](#sd29x9_base-is_zero)
 - Cross-type casts: [`into_UD30x9`](#sd29x9_base-into_UD30x9), [`try_into_UD30x9`](#sd29x9_base-try_into_UD30x9)
 
@@ -701,6 +760,8 @@ Errors
 - [`EOverflow`](#sd29x9_base-EOverflow)
 - [`EDivideByZero`](#sd29x9_base-EDivideByZero)
 - [`ECannotBeConvertedToUD30x9`](#sd29x9_base-ECannotBeConvertedToUD30x9)
+- [`ENegativeSqrt`](#sd29x9_base-ENegativeSqrt)
+- [`ELogUndefined`](#sd29x9_base-ELogUndefined)
 
 #### Types [!toc] [#sd29x9_base-Types]
 
@@ -829,6 +890,46 @@ Returns an approximation of `x^exp` computed using binary exponentiation with fi
 Aborts with `EOverflow` if any intermediate or the final result exceeds the representable `SD29x9` range.
 
 NOTE: As with `UD30x9::pow`, results are biased toward zero, error compounds with `exp`, and binary-exponentiation grouping affects the value because fixed-point multiplication is not associative under truncation.
+</APIItem>
+
+<APIItem
+  functionSignature="sqrt(x: SD29x9) -> SD29x9"
+  id="sd29x9_base-sqrt"
+  kind="public"
+>
+Returns the largest non-negative `SD29x9` value `r` such that `r * r <= x`. The result is rounded down to the nearest representable `SD29x9` value.
+
+Aborts with `ENegativeSqrt` if `x` is negative.
+</APIItem>
+
+<APIItem
+  functionSignature="ln(x: SD29x9) -> SD29x9"
+  id="sd29x9_base-ln"
+  kind="public"
+>
+Returns the natural logarithm of `x`, derived from `log2` via `ln(x) = log2(x) * ln(2)`. Rounded toward zero; see [`log2`](#sd29x9_base-log2) for full rounding semantics on signed results.
+
+Aborts with `ELogUndefined` if `x` is zero or negative.
+</APIItem>
+
+<APIItem
+  functionSignature="log2(x: SD29x9) -> SD29x9"
+  id="sd29x9_base-log2"
+  kind="public"
+>
+Returns the base-2 logarithm of `x`, rounded toward zero (matching the convention used by `mul_trunc`, `div_trunc`, and `pow` in this module). For positive results (inputs `>= 1`) this coincides with rounding down and sits at most 2 ulps below the true value. For negative results (inputs in `(0, 1)`) the signed result usually sits closer to zero than the true value, but in narrow edge cases where the kernel's small upward magnitude bias crosses an integer boundary it may instead be 1 ulp further from zero.
+
+Aborts with `ELogUndefined` if `x` is zero or negative.
+</APIItem>
+
+<APIItem
+  functionSignature="log10(x: SD29x9) -> SD29x9"
+  id="sd29x9_base-log10"
+  kind="public"
+>
+Returns the base-10 logarithm of `x`. Exact when `x` is an integer power of ten, including sub-unit powers `10^-k` (`k` in `1..=9`). Otherwise derived from `log2` via `log10(x) = log2(x) * log10(2)` and rounded toward zero; see [`log2`](#sd29x9_base-log2) for full rounding semantics on signed results.
+
+Aborts with `ELogUndefined` if `x` is zero or negative.
 </APIItem>
 
 <APIItem
@@ -987,11 +1088,27 @@ Raised when a division, modulo, or remainder operation receives a zero divisor.
 Raised when [`into_UD30x9`](#sd29x9_base-into_UD30x9) is called on a negative value.
 </APIItem>
 
+<APIItem
+  functionSignature="ENegativeSqrt"
+  id="sd29x9_base-ENegativeSqrt"
+  kind="error"
+>
+Raised when [`sqrt`](#sd29x9_base-sqrt) is called on a negative value.
+</APIItem>
+
+<APIItem
+  functionSignature="ELogUndefined"
+  id="sd29x9_base-ELogUndefined"
+  kind="error"
+>
+Raised when [`ln`](#sd29x9_base-ln), [`log2`](#sd29x9_base-log2), or [`log10`](#sd29x9_base-log10) is called on a zero or negative value.
+</APIItem>
+
 ### `sd29x9_convert` [toc] [#sd29x9_convert]
 
 <APIGithubLinkHeader
   moduleName="sd29x9_convert"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.1.0/math/fixed_point/sources/sd29x9/conversions.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.2.0/math/fixed_point/sources/sd29x9/conversions.move"
 />
 
 ```move

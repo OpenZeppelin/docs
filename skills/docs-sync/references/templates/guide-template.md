@@ -144,4 +144,5 @@ module my_app::full_example;
 - Do not include source-code links in guides. Link to the related API
   reference instead; API reference pages own source links.
 - Match `docs.tone` from config. Default for the contracts-sui slice:
-  *clear, precise, security-conscious*.
+  *direct, concise, precise, security-conscious*. Remove filler,
+  repetition, and obvious narration in touched sections.

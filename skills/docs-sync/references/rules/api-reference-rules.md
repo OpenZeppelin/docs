@@ -208,8 +208,10 @@ To keep API reference comparable run-to-run:
 1. **Sort sections in source order** when the source order is
    meaningful (Sui modules use source order); sort alphabetically only
    when the language has no inherent order.
-2. **Preserve prose carried over** verbatim if it is still accurate.
-   Do not rewrite for style.
+2. **Preserve prose carried over** if it is accurate and
+   tone-compliant. Do not churn untouched sections. When an entry is
+   already being edited, trim verbose or indirect prose so it matches
+   `docs.tone`.
 3. **Use exact identifier strings** from the source. Do not
    pretty-print signatures.
 4. **Pin source links to a release tag** when one exists; otherwise
