@@ -25,13 +25,13 @@ the library uses the Compact type `Uint<128>`.
 **Features and specifications NOT supported**
 
 * **Events** - Midnight does not currently support events, but this is planned on being supported in the future.
-* **Uint256 type** - There’s ongoing research on ways to support uint256 in the future.
+* **Uint256 type** - There's ongoing research on ways to support uint256 in the future.
 * **Interface** - Compact currently does not have a way to define a contract interface.
 This library offers modules of contracts with free floating circuits;
-nevertheless, there’s no means of enforcing that all circuits are provided.
+nevertheless, there's no means of enforcing that all circuits are provided.
 * **Batch mint, burn, transfer** - Without support for dynamic arrays,
 batching transfers is difficult to do without a hacky solution.
-For instance, we could change the `to` and `from` parameters to be vectors.
+For instance, we could change the `to` and `fromAddress` parameters to be vectors.
 This would change the signature and would be both difficult to use and easy to misuse.
 * **Querying batched balances** - This can be somewhat supported.
 The issue, without dynamic arrays, is that the module circuit must use `Vector<n>` for accounts and ids;
@@ -39,7 +39,7 @@ therefore, the implementing contract must explicitly define the number of balanc
 
 ```ts
 balanceOfBatch_10(
-   accounts: Vector<10, Either<ZswapCoinPublicKey, ContractAddress>>,
+   accounts: Vector<10, Either<Bytes<32>, ContractAddress>>,
    ids: Vector<10, Uint<128>>
 ): Vector<10, Uint<128>>
 ```
@@ -65,13 +65,13 @@ The `unsafe` circuits will eventually be deprecated after Compact supports contr
 ## Usage
 
 Import the MultiToken module into the implementing contract.
-It’s recommended to prefix the module with `MultiToken_` to avoid circuit signature clashes.
+It's recommended to prefix the module with `MultiToken_` to avoid circuit signature clashes.
 
 ```typescript
 pragma language_version >= {{compact_language_version}};
 
 import CompactStandardLibrary;
-import "./compact-contracts/node_modules/@openzeppelin-compact/contracts/src/token/MultiToken"
+import "./node_modules/@openzeppelin/compact-contracts/token/MultiToken"
   prefix MultiToken_;
 
 constructor(
@@ -90,11 +90,11 @@ Exposing [_mint] without some sort of access control, for example, would allow A
 
 ```typescript
 export circuit uri(id: Uint<128>): Opaque<"string"> {
-  return MultiToken_uri();
+  return MultiToken_uri(id);
 }
 
-export circuit balanceOf(account: Either<ZswapCoinPublicKey, ContractAddress>): Uint<128> {
-  return MultiToken_balanceOf(account);
+export circuit balanceOf(account: Either<Bytes<32>, ContractAddress>, id: Uint<128>): Uint<128> {
+  return MultiToken_balanceOf(account, id);
 }
 
 (...)
@@ -108,12 +108,12 @@ The following example is a simple multi-token contract that creates both a fixed
 pragma language_version >= {{compact_language_version}};
 
 import CompactStandardLibrary;
-import "./compact-contracts/node_modules/@openzeppelin-compact/contracts/src/token/MultiToken"
+import "./node_modules/@openzeppelin/compact-contracts/token/MultiToken"
   prefix MultiToken_;
 
 constructor(
   _uri: Opaque<"string">,
-  recipient: Either<ZswapCoinPublicKey, ContractAddress>,
+  recipient: Either<Bytes<32>, ContractAddress>,
   fungibleFixedSupply: Uint<128>,
 ) {
   // `initialize` sets the URI (base) for all tokens minted from this contract
@@ -132,31 +132,31 @@ export circuit uri(id: Uint<128>): Opaque<"string"> {
   return MultiToken_uri(id);
 }
 
-export circuit balanceOf(account: Either<ZswapCoinPublicKey, ContractAddress>, id: Uint<128>): Uint<128> {
+export circuit balanceOf(account: Either<Bytes<32>, ContractAddress>, id: Uint<128>): Uint<128> {
   return MultiToken_balanceOf(account, id);
 }
 
 export circuit setApprovalForAll(
-  operator: Either<ZswapCoinPublicKey, ContractAddress>,
+  operator: Either<Bytes<32>, ContractAddress>,
   approved: Boolean
 ): [] {
   return MultiToken_setApprovalForAll(operator, approved);
 }
 
 export circuit isApprovedForAll(
-  account: Either<ZswapCoinPublicKey, ContractAddress>,
-  operator: Either<ZswapCoinPublicKey, ContractAddress>
+  account: Either<Bytes<32>, ContractAddress>,
+  operator: Either<Bytes<32>, ContractAddress>
 ): Boolean {
   return MultiToken_isApprovedForAll(account, operator);
 }
 
 export circuit transferFrom(
-  from: Either<ZswapCoinPublicKey, ContractAddress>,
-  to: Either<ZswapCoinPublicKey, ContractAddress>,
+  fromAddress: Either<Bytes<32>, ContractAddress>,
+  to: Either<Bytes<32>, ContractAddress>,
   id: Uint<128>,
   value: Uint<128>,
 ): [] {
-  return MultiToken_transferFrom(from, to, id, value);
+  return MultiToken_transferFrom(fromAddress, to, id, value);
 }
 
 ```
