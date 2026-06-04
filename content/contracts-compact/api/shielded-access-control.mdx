@@ -241,7 +241,7 @@ import "./node_modules/@openzeppelin/compact-contracts/access/ShieldedAccessCont
 #### [!toc] [#ShieldedAccessControl-DEFAULT_ADMIN_ROLE]
 <APIItemCompact
   circuitSig="DEFAULT_ADMIN_ROLE() → RoleIdentifier"
-  kind="circuit"
+  kind="pure"
   modulePrefix="ShieldedAccessControl"
 >
   The default admin role for all roles. Returns zero bytes (`default<Bytes<32>>`).
@@ -284,6 +284,26 @@ import "./node_modules/@openzeppelin/compact-contracts/access/ShieldedAccessCont
 
   * Contract is initialized.
   * Caller must not provide a valid Merkle tree path for a different `(role, accountId)` pairing.
+</APIItemCompact>
+
+#### _uncheckedCanProveRole [toc] [#ShieldedAccessControl-_uncheckedCanProveRole]
+#### [!toc] [#ShieldedAccessControl-_uncheckedCanProveRole]
+<APIItemCompact
+  circuitSig="_uncheckedCanProveRole(role: RoleIdentifier) → Boolean"
+  kind="internal"
+  modulePrefix="ShieldedAccessControl"
+>
+  Returns `true` if the caller proves ownership of `role` and is not revoked.
+  MAY return false for a legitimately credentialed caller if the proving environment supplies an invalid Merkle path.
+  This circuit will never return true for an unauthorized caller.
+
+  Disclosures: a Merkle tree path to a role commitment, a role commitment corresponding to a `(role, accountId)` pairing, and a nullifier for the respective role commitment.
+
+  <Callout type='warn'>
+    This circuit does not perform an initialization check.
+    It is only meant to be used as an internal helper.
+    Using this circuit outside of the module may cause undefined behavior and break security guarantees.
+  </Callout>
 </APIItemCompact>
 
 #### grantRole [toc] [#ShieldedAccessControl-grantRole]
@@ -364,6 +384,28 @@ import "./node_modules/@openzeppelin/compact-contracts/access/ShieldedAccessCont
   * Contract is initialized.
   * The caller must provide a valid `accountId` for the role.
   * The `(role, accountId)` pairing must not be already revoked.
+</APIItemCompact>
+
+#### _updateRole [toc] [#ShieldedAccessControl-_updateRole]
+#### [!toc] [#ShieldedAccessControl-_updateRole]
+<APIItemCompact
+  circuitSig="_updateRole(role: RoleIdentifier, accountId: AccountIdentifier, updateType: UpdateType) → []"
+  kind="internal"
+  stackParams="true"
+  modulePrefix="ShieldedAccessControl"
+>
+  Core business logic for the grant/revoke role circuits.
+  Asserts that the `(role, accountId)` pairing has not already been revoked.
+  On success, dispatches on `updateType`: a `Grant` inserts the role commitment into `_operatorRoles`, and
+  a `Revoke` inserts the nullifier into `_roleCommitmentNullifiers`.
+
+  Disclosures: a nullifier for the respective role commitment, and a role commitment (on Grant only).
+
+  <Callout type='info'>
+    The nullifier is disclosed via `_roleCommitmentNullifiers.member` on every call,
+    regardless of the update type.
+    This enables observers to correlate grant and revocation transactions for the same `(role, accountId)` pairing.
+  </Callout>
 </APIItemCompact>
 
 #### getRoleAdmin [toc] [#ShieldedAccessControl-getRoleAdmin]
@@ -465,6 +507,33 @@ import "./node_modules/@openzeppelin/compact-contracts/access/ShieldedAccessCont
   * Contract is initialized.
 </APIItemCompact>
 
+#### _validateRole [toc] [#ShieldedAccessControl-_validateRole]
+#### [!toc] [#ShieldedAccessControl-_validateRole]
+<APIItemCompact
+  circuitSig="_validateRole(role: RoleIdentifier, accountId: AccountIdentifier) → Boolean"
+  kind="internal"
+  stackParams="true"
+  modulePrefix="ShieldedAccessControl"
+>
+  Verifies whether `accountId` holds `role`.
+  MAY return false for a legitimately credentialed account
+  if the proving environment supplies an invalid Merkle path.
+
+  Disclosures: a Merkle tree path to a role commitment, and a nullifier for the respective role commitment.
+
+  <Callout type='warn'>
+    This circuit does not perform an initialization check.
+    It is only meant to be used as an internal helper.
+    Using this circuit outside of the module may cause undefined behavior and break security guarantees.
+  </Callout>
+  <Callout type='info'>
+    The nullifier is disclosed via `_roleCommitmentNullifiers.member` on every call.
+    Since this circuit is invoked by `assertOnlyRole` and `canProveRole`,
+    every protected operation discloses the same nullifier,
+    allowing observers to link all actions performed under the same role instance across time.
+  </Callout>
+</APIItemCompact>
+
 #### computeRoleCommitment [toc] [#ShieldedAccessControl-computeRoleCommitment]
 #### [!toc] [#ShieldedAccessControl-computeRoleCommitment]
 <APIItemCompact
@@ -496,11 +565,31 @@ import "./node_modules/@openzeppelin/compact-contracts/access/ShieldedAccessCont
   Role Nullifier Derivation: `roleNullifier = SHA256(roleCommitment, nullifierDomain)`
 </APIItemCompact>
 
+#### _computeAccountId [toc] [#ShieldedAccessControl-_computeAccountId]
+#### [!toc] [#ShieldedAccessControl-_computeAccountId]
+<APIItemCompact
+  circuitSig="_computeAccountId() → AccountIdentifier"
+  kind="internal"
+  modulePrefix="ShieldedAccessControl"
+>
+  Computes the caller's account identifier from the `wit_secretKey` witness and the `_instanceSalt`.
+
+  ID Derivation: `accountId = SHA256(secretKey, instanceSalt, accountIdDomain)`
+
+  The result is a 32-byte commitment that uniquely identifies the account.
+
+  <Callout type='warn'>
+    This circuit does not perform an initialization check.
+    It is only meant to be used as an internal helper.
+    Using this circuit outside of the module may cause undefined behavior and break security guarantees.
+  </Callout>
+</APIItemCompact>
+
 #### computeAccountId [toc] [#ShieldedAccessControl-computeAccountId]
 #### [!toc] [#ShieldedAccessControl-computeAccountId]
 <APIItemCompact
   circuitSig="computeAccountId(secretKey: Bytes<32>, instanceSalt: Bytes<32>) → AccountIdentifier"
-  kind="circuit"
+  kind="pure"
   stackParams="true"
   modulePrefix="ShieldedAccessControl"
 >
