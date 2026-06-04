@@ -1,0 +1,323 @@
+---
+title: Utilities API Reference
+---
+
+This page documents the public API of `openzeppelin_utils` for OpenZeppelin Contracts for Sui `v1.x`.
+
+### `rate_limiter` [toc] [#rate_limiter]
+
+<APIGithubLinkHeader
+  moduleName="rate_limiter"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.3.0/contracts/utils/sources/rate_limiter.move"
+/>
+
+```move
+use openzeppelin_utils::rate_limiter;
+```
+
+Embeddable, multi-strategy rate-limiting primitive. `RateLimiter` is a `store + drop` value, not a Sui object: it lives as a field inside an object the integrator owns, and its scope is that parent. There is no registry, no shared state, and no library-owned object.
+
+The same consume and inspect API serves all three strategies. The variant is chosen at construction and can only be swapped by building a fresh `RateLimiter` and overwriting the field. All functions that observe or advance time take `&Clock` (the shared Sui `Clock` singleton at `0x6`).
+
+Types
+
+- [`RateLimiter`](#rate_limiter-RateLimiter)
+
+Functions
+
+- [`new_bucket(capacity, refill_amount, refill_interval_ms, initial_available, last_refill_ms, clock)`](#rate_limiter-new_bucket)
+- [`new_fixed_window(capacity, window_ms, window_start_ms, initial_available, clock)`](#rate_limiter-new_fixed_window)
+- [`new_cooldown(capacity, cooldown_ms, initial_available, cooldown_end_ms, clock)`](#rate_limiter-new_cooldown)
+- [`try_consume(self, amount, clock)`](#rate_limiter-try_consume)
+- [`consume_or_abort(self, amount, clock)`](#rate_limiter-consume_or_abort)
+- [`available(self, clock)`](#rate_limiter-available)
+- [`capacity(self)`](#rate_limiter-capacity)
+- [`is_bucket(self)`](#rate_limiter-is_bucket)
+- [`is_fixed_window(self)`](#rate_limiter-is_fixed_window)
+- [`is_cooldown(self)`](#rate_limiter-is_cooldown)
+- [`refill_amount(self)`](#rate_limiter-refill_amount)
+- [`refill_interval_ms(self)`](#rate_limiter-refill_interval_ms)
+- [`last_refill_ms(self, clock)`](#rate_limiter-last_refill_ms)
+- [`window_ms(self)`](#rate_limiter-window_ms)
+- [`window_start_ms(self, clock)`](#rate_limiter-window_start_ms)
+- [`cooldown_ms(self)`](#rate_limiter-cooldown_ms)
+- [`cooldown_end_ms(self)`](#rate_limiter-cooldown_end_ms)
+
+Errors
+
+- [`ERateLimited`](#rate_limiter-ERateLimited)
+- [`EZeroCapacity`](#rate_limiter-EZeroCapacity)
+- [`EWrongVariant`](#rate_limiter-EWrongVariant)
+- [`EInvalidAmount`](#rate_limiter-EInvalidAmount)
+- [`EZeroRefillAmount`](#rate_limiter-EZeroRefillAmount)
+- [`EZeroRefillInterval`](#rate_limiter-EZeroRefillInterval)
+- [`EZeroWindow`](#rate_limiter-EZeroWindow)
+- [`EZeroCooldown`](#rate_limiter-EZeroCooldown)
+- [`EInitialAboveCapacity`](#rate_limiter-EInitialAboveCapacity)
+- [`EWindowAnchorInFuture`](#rate_limiter-EWindowAnchorInFuture)
+- [`ECooldownArmedWithTokens`](#rate_limiter-ECooldownArmedWithTokens)
+- [`EBucketAnchorInFuture`](#rate_limiter-EBucketAnchorInFuture)
+
+#### Types [!toc] [#rate_limiter-Types]
+
+<APIItem
+  functionSignature="enum RateLimiter has store, drop"
+  id="rate_limiter-RateLimiter"
+  kind="struct"
+>
+One embeddable limiter with three strategies: `Bucket`, `FixedWindow`, and `Cooldown`. Every variant stores an `available` counter that starts at `initial_available`, is decremented by successful consumes, and is reset back toward `capacity` by refill (`Bucket`), window rollover (`FixedWindow`), or cooldown release (`Cooldown`).
+
+`store` lets it live as a field inside an integrator's `key` object, and `drop` lets the parent object be destroyed and lets a fresh limiter overwrite an old one during reconfigure-by-reconstruction. There is no `key`/`UID` (it is never a top-level object) and no `copy` (a duplicable limiter would multiply configured capacity by N).
+
+The variant fields are not directly accessible from outside the module; read them through the getters below.
+</APIItem>
+
+#### Functions [!toc] [#rate_limiter-Functions]
+
+<APIItem
+  functionSignature="new_bucket(capacity: u64, refill_amount: u64, refill_interval_ms: u64, initial_available: u64, last_refill_ms: u64, clock: &Clock) -> RateLimiter"
+  id="rate_limiter-new_bucket"
+  kind="public"
+>
+Creates a token bucket with an explicit initial balance and refill anchor. `available` accrues `refill_amount` every `refill_interval_ms`, capped at `capacity`.
+
+`initial_available` is the starting balance and must be `<= capacity`; `0` forces a wait for the first refill. `last_refill_ms` anchors the refill schedule; for a greenfield limiter pass `clock.timestamp_ms()`.
+
+Aborts with `EZeroCapacity` if `capacity` is `0`.
+
+Aborts with `EZeroRefillAmount` if `refill_amount` is `0`.
+
+Aborts with `EZeroRefillInterval` if `refill_interval_ms` is `0`.
+
+Aborts with `EInitialAboveCapacity` if `initial_available > capacity`.
+
+Aborts with `EBucketAnchorInFuture` if `last_refill_ms > clock.timestamp_ms()`.
+</APIItem>
+
+<APIItem
+  functionSignature="new_fixed_window(capacity: u64, window_ms: u64, window_start_ms: u64, initial_available: u64, clock: &Clock) -> RateLimiter"
+  id="rate_limiter-new_fixed_window"
+  kind="public"
+>
+Creates a fixed window limiter anchored at `window_start_ms`. Windows are `[window_start_ms + k·window_ms, window_start_ms + (k+1)·window_ms)` for `k >= 0`, and `available` resets to `capacity` when time crosses into a later window. The first window always has length exactly `window_ms` (anchor-based, not wall-clock-aligned).
+
+`initial_available` is the starting available units for the current window and must be `<= capacity`. For a greenfield limiter pass `clock.timestamp_ms()` as `window_start_ms`.
+
+Aborts with `EZeroCapacity` if `capacity` is `0`.
+
+Aborts with `EZeroWindow` if `window_ms` is `0`.
+
+Aborts with `EInitialAboveCapacity` if `initial_available > capacity`.
+
+Aborts with `EWindowAnchorInFuture` if `window_start_ms > clock.timestamp_ms()`.
+
+<Callout type="warn">
+A caller can spend the full quota at the end of one window and again at the start of the next, yielding a `2 * capacity` burst across the boundary. Pick `FixedWindow` when the per-window quota is the contract and that boundary burst is acceptable; otherwise use a `Bucket`.
+</Callout>
+</APIItem>
+
+<APIItem
+  functionSignature="new_cooldown(capacity: u64, cooldown_ms: u64, initial_available: u64, cooldown_end_ms: u64, clock: &Clock) -> RateLimiter"
+  id="rate_limiter-new_cooldown"
+  kind="public"
+>
+Creates a cooldown limiter. Up to `capacity` units may be consumed (in any combination of per-call amounts) before the limiter gates. Once `available` reaches `0`, `cooldown_end_ms` is set to `now + cooldown_ms`; no further consume succeeds until `now >= cooldown_end_ms`, at which point `available` resets to `capacity`.
+
+`cooldown_end_ms <= now` means no gate is armed. The valid seed combinations are: `initial_available > 0` with `cooldown_end_ms <= now` (granted — up to `initial_available` units before the first arm); `initial_available == 0` with `cooldown_end_ms > now` (gated — reconstructing a limiter mid-throttle, or arming a delay in front of an action); and `initial_available == 0` with `cooldown_end_ms <= now` (released — projects to fully available on the next read or consume).
+
+Aborts with `EZeroCapacity` if `capacity` is `0`.
+
+Aborts with `EZeroCooldown` if `cooldown_ms` is `0`.
+
+Aborts with `EInitialAboveCapacity` if `initial_available > capacity`.
+
+Aborts with `ECooldownArmedWithTokens` if `initial_available > 0` and `cooldown_end_ms > now` (self-contradictory).
+</APIItem>
+
+<APIItem
+  functionSignature="try_consume(self: &mut RateLimiter, amount: u64, clock: &Clock) -> bool"
+  id="rate_limiter-try_consume"
+  kind="public"
+>
+Projects state forward (accrual / window rollover / gate release), then consumes `amount` if the projected headroom allows. All-or-nothing: on success the projected state is committed and `amount` deducted; on failure the persisted state is left untouched. Returns `true` if the consume succeeded, `false` if the limiter refused.
+
+Aborts with `EInvalidAmount` if `amount` is `0`.
+</APIItem>
+
+<APIItem
+  functionSignature="consume_or_abort(self: &mut RateLimiter, amount: u64, clock: &Clock)"
+  id="rate_limiter-consume_or_abort"
+  kind="public"
+>
+Applies accrual, then consumes `amount` or aborts. The ergonomic wrapper for the common "rate-limit then act" path.
+
+Aborts with `EInvalidAmount` if `amount` is `0`.
+
+Aborts with `ERateLimited` if the limiter cannot satisfy the request.
+</APIItem>
+
+<APIItem
+  functionSignature="available(self: &RateLimiter, clock: &Clock) -> u64"
+  id="rate_limiter-available"
+  kind="public"
+>
+Read-only view of the units consumable right now, after projecting accrual / window reset / gate release on read (not committed). Variant-agnostic; never aborts.
+
+For `Bucket`, this is the tokens consumable now. For `FixedWindow`, the remaining headroom after any rollover. For `Cooldown`, `capacity` if the gate has elapsed, otherwise the stored `available`.
+
+<Callout type="warn">
+`try_consume(self.available(clock), clock)` aborts `EInvalidAmount` when `available()` returns `0`. Guard with `if (n > 0) { self.try_consume(n, clock); }`.
+</Callout>
+</APIItem>
+
+<APIItem
+  functionSignature="capacity(self: &RateLimiter) -> u64"
+  id="rate_limiter-capacity"
+  kind="public"
+>
+Returns the capacity of the limiter, regardless of variant. Variant-agnostic; never aborts.
+</APIItem>
+
+<APIItem
+  functionSignature="is_bucket(self: &RateLimiter) -> bool"
+  id="rate_limiter-is_bucket"
+  kind="public"
+>
+Returns `true` only if the limiter is a `Bucket`. Variant-agnostic; never aborts. Use a predicate to branch before calling a variant-typed getter, which would otherwise abort `EWrongVariant` on a mismatch.
+</APIItem>
+
+<APIItem
+  functionSignature="is_fixed_window(self: &RateLimiter) -> bool"
+  id="rate_limiter-is_fixed_window"
+  kind="public"
+>
+Returns `true` only if the limiter is a `FixedWindow`. Variant-agnostic; never aborts.
+</APIItem>
+
+<APIItem
+  functionSignature="is_cooldown(self: &RateLimiter) -> bool"
+  id="rate_limiter-is_cooldown"
+  kind="public"
+>
+Returns `true` only if the limiter is a `Cooldown`. Variant-agnostic; never aborts.
+</APIItem>
+
+<APIItem
+  functionSignature="refill_amount(self: &RateLimiter) -> u64"
+  id="rate_limiter-refill_amount"
+  kind="public"
+>
+Returns the tokens credited per refill interval.
+
+Aborts with `EWrongVariant` if the limiter is not a `Bucket`.
+</APIItem>
+
+<APIItem
+  functionSignature="refill_interval_ms(self: &RateLimiter) -> u64"
+  id="rate_limiter-refill_interval_ms"
+  kind="public"
+>
+Returns the length of one refill interval, in milliseconds.
+
+Aborts with `EWrongVariant` if the limiter is not a `Bucket`.
+</APIItem>
+
+<APIItem
+  functionSignature="last_refill_ms(self: &RateLimiter, clock: &Clock) -> u64"
+  id="rate_limiter-last_refill_ms"
+  kind="public"
+>
+Returns the **projected** refill anchor at `now`, so it pairs coherently with `available(clock)`: read both, reconstruct, and the new limiter preserves refill phase.
+
+Aborts with `EWrongVariant` if the limiter is not a `Bucket`.
+</APIItem>
+
+<APIItem
+  functionSignature="window_ms(self: &RateLimiter) -> u64"
+  id="rate_limiter-window_ms"
+  kind="public"
+>
+Returns the length of one window, in milliseconds.
+
+Aborts with `EWrongVariant` if the limiter is not a `FixedWindow`.
+</APIItem>
+
+<APIItem
+  functionSignature="window_start_ms(self: &RateLimiter, clock: &Clock) -> u64"
+  id="rate_limiter-window_start_ms"
+  kind="public"
+>
+Returns the **projected** window anchor at `now`, so it pairs coherently with `available(clock)` for snapshotting.
+
+Aborts with `EWrongVariant` if the limiter is not a `FixedWindow`.
+</APIItem>
+
+<APIItem
+  functionSignature="cooldown_ms(self: &RateLimiter) -> u64"
+  id="rate_limiter-cooldown_ms"
+  kind="public"
+>
+Returns the wait between exhausting a batch and the next reset, in milliseconds.
+
+Aborts with `EWrongVariant` if the limiter is not a `Cooldown`.
+</APIItem>
+
+<APIItem
+  functionSignature="cooldown_end_ms(self: &RateLimiter) -> u64"
+  id="rate_limiter-cooldown_end_ms"
+  kind="public"
+>
+Returns the **stored** gate deadline as-is (a deadline does not evolve with time). Only meaningful when `available(clock) == 0`.
+
+Aborts with `EWrongVariant` if the limiter is not a `Cooldown`.
+</APIItem>
+
+#### Errors [!toc] [#rate_limiter-Errors]
+
+<APIItem functionSignature="ERateLimited" id="rate_limiter-ERateLimited" kind="error">
+Raised by `consume_or_abort` when the limiter cannot satisfy the request. This is the only consume-time error; `try_consume` returns `false` instead of aborting.
+</APIItem>
+
+<APIItem functionSignature="EZeroCapacity" id="rate_limiter-EZeroCapacity" kind="error">
+Raised by any constructor called with `capacity == 0`.
+</APIItem>
+
+<APIItem functionSignature="EWrongVariant" id="rate_limiter-EWrongVariant" kind="error">
+Raised when a variant-typed getter is called on a limiter of a different variant. Guard with `is_bucket` / `is_fixed_window` / `is_cooldown` when the variant is not known statically.
+</APIItem>
+
+<APIItem functionSignature="EInvalidAmount" id="rate_limiter-EInvalidAmount" kind="error">
+Raised by `try_consume` or `consume_or_abort` when `amount == 0`.
+</APIItem>
+
+<APIItem functionSignature="EZeroRefillAmount" id="rate_limiter-EZeroRefillAmount" kind="error">
+Raised by `new_bucket` when `refill_amount == 0`.
+</APIItem>
+
+<APIItem functionSignature="EZeroRefillInterval" id="rate_limiter-EZeroRefillInterval" kind="error">
+Raised by `new_bucket` when `refill_interval_ms == 0`.
+</APIItem>
+
+<APIItem functionSignature="EZeroWindow" id="rate_limiter-EZeroWindow" kind="error">
+Raised by `new_fixed_window` when `window_ms == 0`.
+</APIItem>
+
+<APIItem functionSignature="EZeroCooldown" id="rate_limiter-EZeroCooldown" kind="error">
+Raised by `new_cooldown` when `cooldown_ms == 0`.
+</APIItem>
+
+<APIItem functionSignature="EInitialAboveCapacity" id="rate_limiter-EInitialAboveCapacity" kind="error">
+Raised by any constructor when `initial_available > capacity`.
+</APIItem>
+
+<APIItem functionSignature="EWindowAnchorInFuture" id="rate_limiter-EWindowAnchorInFuture" kind="error">
+Raised by `new_fixed_window` when `window_start_ms` is later than the current time.
+</APIItem>
+
+<APIItem functionSignature="ECooldownArmedWithTokens" id="rate_limiter-ECooldownArmedWithTokens" kind="error">
+Raised by `new_cooldown` when `initial_available > 0` and `cooldown_end_ms > now`, which is a self-contradictory seed (units available while a gate is armed).
+</APIItem>
+
+<APIItem functionSignature="EBucketAnchorInFuture" id="rate_limiter-EBucketAnchorInFuture" kind="error">
+Raised by `new_bucket` when `last_refill_ms` is later than the current time.
+</APIItem>

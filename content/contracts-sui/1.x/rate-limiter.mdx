@@ -1,0 +1,120 @@
+---
+title: Rate Limiter
+---
+
+<Callout type="warn">
+The example code snippets used in this guide are experimental and have not been audited. They simply help exemplify usage of the OpenZeppelin Sui Package.
+</Callout>
+
+The `rate_limiter` module provides an embeddable, multi-strategy rate-limiting primitive for Sui Move. `RateLimiter` is a plain `store + drop` value — **not** a Sui object. You embed it as a field inside an object you already own (a vault, a capability, a per-player record) and call one function on the hot path. There is no registry, no shared policy object, no admin cap, and no separate ID to track: the limiter's scope is whatever object it lives inside.
+
+Rate limiting is otherwise reimplemented ad hoc by every protocol that needs it — withdrawal throttles, daily caps, action cooldowns. `rate_limiter` generalizes the proven token-bucket math into a reusable primitive and adds two strategies (fixed window and cooldown) that share one consume and inspect API.
+
+## Use cases
+
+Use `rate_limiter` when your protocol needs:
+
+- A throughput ceiling on a shared resource, such as withdrawals from a vault or flow through a bridge pathway.
+- Independent per-user or per-object budgets that refill over time.
+- A hard per-window quota, such as "100 mints per hour".
+- A cooldown that gates the reuse of an action after a burst.
+- A delay that must elapse before an action — like a claim or an unstake — can execute.
+- A regenerating resource in non-financial logic, such as health, mana, stamina, or energy.
+
+## Import
+
+```move
+use openzeppelin_utils::rate_limiter::{Self, RateLimiter};
+```
+
+## Strategies
+
+One `RateLimiter` enum, three strategies. The variant is chosen at construction; the consume and inspect calls are identical across all three, so only the constructor differs.
+
+| Variant | Behavior | When to pick it |
+|---|---|---|
+| `Bucket` | Holds up to `capacity` tokens, refilling `refill_amount` every `refill_interval_ms`, capped at `capacity`. | Smooth, sustained throughput with bursts up to `capacity` (vaults, throughput controls, mana/stamina regen). |
+| `FixedWindow` | Up to `capacity` units per fixed window of `window_ms`, anchored at creation; resets to `capacity` at each boundary. | Hard per-window quotas, e.g. "100 mints per hour". |
+| `Cooldown` | Up to `capacity` units per batch, then gated for `cooldown_ms` before the next full batch. | Burst-then-pause patterns, and one-shot delays in front of an action. |
+
+The library owns only the variant layout and the accrual / window / cooldown math. You own the enclosing object, the authorization model, and all reconfiguration semantics.
+
+## Quickstart
+
+Embed one `RateLimiter` field and check it on the hot path. Here a shared vault throttles all withdrawals collectively through a single token bucket:
+
+```move
+module my_protocol::vault;
+
+use openzeppelin_utils::rate_limiter::{Self, RateLimiter};
+use sui::balance::{Self, Balance};
+use sui::clock::Clock;
+use sui::coin::{Self, Coin};
+use sui::sui::SUI;
+
+public struct Vault has key {
+    id: UID,
+    limiter: RateLimiter, // the only library type the integrator sees
+    funds: Balance<SUI>,
+}
+
+public fun create(clock: &Clock, ctx: &mut TxContext) {
+    // Bucket: at most 1_000 SUI outstanding, refilling 100 every 6 s, starting full.
+    let limiter = rate_limiter::new_bucket(1_000, 100, 6_000, 1_000, clock.timestamp_ms(), clock);
+    transfer::share_object(Vault { id: object::new(ctx), limiter, funds: balance::zero() });
+}
+
+public fun withdraw(self: &mut Vault, amount: u64, clock: &Clock, ctx: &mut TxContext): Coin<SUI> {
+    self.limiter.consume_or_abort(amount, clock); // rate-limit check, aborts ERateLimited
+    coin::from_balance(self.funds.split(amount), ctx) // protocol action
+}
+```
+
+The limiter check runs *before* the side effect, so a denied withdrawal never touches `funds`.
+
+## Key concepts
+
+- **Embedded value, not an object.** `RateLimiter` has `store + drop` and no `key`/`UID`. It can only exist as a field of a parent value you own, and its scope is that parent — no global state, no contention, no registry to index. Withholding `copy` is what prevents over-issuance: a duplicable limiter would multiply your configured capacity by N.
+
+- **Project-on-read.** `available(clock)` returns the units consumable *right now*, projecting any pending refill, window rollover, or cooldown release without mutating. `try_consume` commits that projection only on success.
+
+- **All-or-nothing consume.** `try_consume` either consumes `amount` and commits the time projection, or returns `false` and writes nothing. There is no "denied but charged", so you can safely probe with `try_consume` without skewing state. `consume_or_abort` is the ergonomic wrapper that turns a refusal into an `ERateLimited` abort.
+
+- **Reconfigure by reconstruction.** There are no in-place `reconfigure_*` functions. To change config or state, read the current values through the getters, build a fresh `RateLimiter`, and overwrite the field. Every policy (preserve anchor, re-anchor, full reset, proportional carry, freeze an in-flight gate) is expressible in your own code; the library validates only structural validity on construction.
+
+- **Authorization is yours.** Whoever holds `&mut` to the field may consume and reconfigure. Gate your entry functions with whatever model fits — a capability, [`openzeppelin_access`](/contracts-sui/1.x/access), governance, or a multisig. The module makes no access-control claim.
+
+## Common mistakes
+
+| Mistake | What happens | How to fix |
+|---|---|---|
+| `try_consume(rl.available(clock), clock)` when empty | Aborts `EInvalidAmount` (`available()` is `0`, and a zero-unit consume is rejected) | Guard: `let n = rl.available(clock); if (n > 0) { rl.try_consume(n, clock); }` |
+| Calling `try_consume` / `consume_or_abort` with `amount == 0` | Aborts `EInvalidAmount` | Treat zero-unit work as a no-op in your own code; never pass `0`. |
+| Reading `cooldown_end_ms()` while `available > 0` | Returns a stale value (the gate is only consulted when `available == 0`) | Only interpret `cooldown_end_ms()` when `available(clock) == 0`. |
+| Seeding `new_cooldown` with `initial_available > 0` and `cooldown_end_ms > now` | Aborts `ECooldownArmedWithTokens` | Use one of the valid seed combinations (see the [API reference](/contracts-sui/1.x/api/utils)). |
+| Passing a future `last_refill_ms` / `window_start_ms` | Aborts `EBucketAnchorInFuture` / `EWindowAnchorInFuture` | Pass `clock.timestamp_ms()` (or an earlier value). |
+| Expecting `FixedWindow` to prevent boundary bursts | A caller can spend `capacity` at the end of one window and `capacity` at the start of the next (a `2 * capacity` burst) | Use `Bucket` if a smooth ceiling matters; `FixedWindow` only guarantees the per-window cap. |
+| Assuming the limiter authorizes callers | It does not — anyone with `&mut` to the field can consume and reconfigure | Gate your entry functions with a capability, `openzeppelin_access`, governance, or a multisig. |
+
+## FAQ
+
+**Do I need to register or track the limiter anywhere?**
+No. It is a field of your object, not a separate object. There is no registry, no ID, nothing for a front end or indexer to track per environment.
+
+**How do I disable a limiter (pause)?**
+The module has no `enabled` toggle by design. Implement pause in your own object (for example, a `bool` checked before the consume), or reconstruct with a configuration that denies.
+
+**Does the library emit events?**
+No. Observability is left to you, since you hold the context an event needs (which user, which object). Emit your own event after a successful consume if you want indexing.
+
+**Can I probe the limiter without affecting it?**
+Yes. A failed `try_consume` (returns `false`) is observably a no-op across all three variants — no anchor advance, no balance change, no gate re-arm. `available(clock)` is also non-mutating.
+
+**How do I inspect a limiter whose variant I don't know (for example, a `Table` mixing variants)?**
+Branch on `is_bucket()` / `is_fixed_window()` / `is_cooldown()` before calling a variant-typed getter (`refill_amount`, `window_ms`, `cooldown_ms`, ...). Those getters abort `EWrongVariant` on a mismatch, and Move cannot recover from an abort. `capacity()` and `available(clock)` are variant-agnostic and need no guard.
+
+## Learn more
+
+For end-to-end examples — a globally throttled vault, mixed global and per-user limits, many limiters inside one type, and a cooldown that delays an action — with publishing and PTB walkthroughs, see the [Rate Limiting guide](/contracts-sui/1.x/guides/rate-limiter).
+
+For function-level signatures, parameters, and errors, see the [Utilities API reference](/contracts-sui/1.x/api/utils).
