@@ -26,18 +26,18 @@ the library uses the Compact type `Uint<128>`.
 * ***No _baseURI() support*** - Native strings and string operations are not supported within the Compact language,
 so concatenating a base URI + token ID is not possible like in other NFT implementations.
 Therefore, we propose the URI storage approach; whereby, NFTs may or may not have unique "base" URIs.
-It’s up to the implementation to decide on how to handle this.
+It's up to the implementation to decide on how to handle this.
 
 ***Features and specifications NOT supported***
 
 * ***Events*** - Midnight does not currently support events, but this is planned on being supported in the future.
-* ***Uint256 type*** - There’s ongoing research on ways to support uint256 in the future.
+* ***Uint256 type*** - There's ongoing research on ways to support uint256 in the future.
 * ***Interface*** - Compact currently does not have a way to define a contract interface.
 This library offers modules of contracts with free floating circuits;
 nevertheless, there are no means of enforcing that all circuits are provided.
 * ***ERC-165 Standard*** - Since Compact doesn't provide a way to define a contract interface,
-it’s not possible to implement an [ERC-165] like interface standard at this time.
-* ***Safe Transfers*** - It’s not possible to implement safe transfers without an [ERC-165]-like
+it's not possible to implement an [ERC-165] like interface standard at this time.
+* ***Safe Transfers*** - It's not possible to implement safe transfers without an [ERC-165]-like
 interface standard at this time.
 
 ## Contract-to-contract calls
@@ -55,13 +55,13 @@ The `unsafe` circuits will eventually be deprecated after Compact supports contr
 ## Usage
 
 Import the NonFungibleToken module into the implementing contract.
-It’s recommended to prefix the module with `NonFungibleToken_` to avoid circuit signature clashes.
+It's recommended to prefix the module with `NonFungibleToken_` to avoid circuit signature clashes.
 
 ```typescript
 pragma language_version >= {{compact_language_version}};
 
 import CompactStandardLibrary;
-import "./compact-contracts/node_modules/@openzeppelin-compact/contracts/src/token/NonFungibleToken"
+import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken"
   prefix NonFungibleToken_;
 
 constructor(name: Opaque<"string">, symbol: Opaque<"string">) {
@@ -96,13 +96,13 @@ The following example is a simple non-fungible token contract that mints an NFT 
 pragma language_version >= {{compact_language_version}};
 
 import CompactStandardLibrary;
-import "./compact-contracts/node_modules/@openzeppelin-compact/contracts/src/token/NonFungibleToken"
+import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken"
   prefix NonFungibleToken_;
 
 constructor(
   name: Opaque<"string">,
   symbol: Opaque<"string">,
-  recipient: Either<ZswapCoinPublicKey, ContractAddress>,
+  recipient: Either<Bytes<32>, ContractAddress>,
   tokenURI: Opaque<"string">,
 ) {
   const tokenId = 1 as Uint<128>;
@@ -111,11 +111,11 @@ constructor(
   NonFungibleToken__setTokenURI(tokenId, tokenURI);
 }
 
-export circuit balanceOf(owner: Either<ZswapCoinPublicKey, ContractAddress>): Uint<128> {
+export circuit balanceOf(owner: Either<Bytes<32>, ContractAddress>): Uint<128> {
   return NonFungibleToken_balanceOf(owner);
 }
 
-export circuit ownerOf(tokenId: Uint<128>): Either<ZswapCoinPublicKey, ContractAddress> {
+export circuit ownerOf(tokenId: Uint<128>): Either<Bytes<32>, ContractAddress> {
   return NonFungibleToken_ownerOf(tokenId);
 }
 
@@ -131,34 +131,34 @@ export circuit tokenURI(tokenId: Uint<128>): Opaque<"string"> {
   return NonFungibleToken_tokenURI(tokenId);
 }
 
-export circuit approve(to: Either<ZswapCoinPublicKey, ContractAddress>, tokenId: Uint<128>): [] {
+export circuit approve(to: Either<Bytes<32>, ContractAddress>, tokenId: Uint<128>): [] {
   NonFungibleToken_approve(to, tokenId);
 }
 
-export circuit getApproved(tokenId: Uint<128>): Either<ZswapCoinPublicKey, ContractAddress> {
+export circuit getApproved(tokenId: Uint<128>): Either<Bytes<32>, ContractAddress> {
   return NonFungibleToken_getApproved(tokenId);
 }
 
 export circuit setApprovalForAll(
-  operator: Either<ZswapCoinPublicKey, ContractAddress>,
+  operator: Either<Bytes<32>, ContractAddress>,
   approved: Boolean
 ): [] {
   NonFungibleToken_setApprovalForAll(operator, approved);
 }
 
 export circuit isApprovedForAll(
-  owner: Either<ZswapCoinPublicKey, ContractAddress>,
-  operator: Either<ZswapCoinPublicKey, ContractAddress>
+  owner: Either<Bytes<32>, ContractAddress>,
+  operator: Either<Bytes<32>, ContractAddress>
 ): Boolean {
   return NonFungibleToken_isApprovedForAll(owner, operator);
 }
 
 export circuit transferFrom(
-  from: Either<ZswapCoinPublicKey, ContractAddress>,
-  to: Either<ZswapCoinPublicKey, ContractAddress>,
+  fromAddress: Either<Bytes<32>, ContractAddress>,
+  to: Either<Bytes<32>, ContractAddress>,
   tokenId: Uint<128>
 ): [] {
-  NonFungibleToken_transferFrom(from, to, tokenId);
+  NonFungibleToken_transferFrom(fromAddress, to, tokenId);
 }
 
 ```
