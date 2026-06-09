@@ -1,0 +1,93 @@
+---
+title: Chainlink CCV
+---
+
+Symbiotic-secured Cross-Chain Verifier for Chainlink CCIP-compatible message verification.
+
+## Overview
+
+The CCV provider watches `CCIPMessageSent` events, builds the verifier payload, collects BLS attestations through Symbiotic relay sidecars, and submits execution calldata to the destination OffRamp path. Success is confirmed when the destination emits `MessageExecuted(messageId)`.
+
+<Callout>
+
+This template supports the Symbiotic CCV path only. The Chainlink auxiliary devenv stack is not required.
+
+</Callout>
+
+## Message Flow
+
+```mermaid
+sequenceDiagram
+    participant App as Source App
+    participant OnRamp as OnRamp (Source)
+    participant Monitor as OZ Monitor
+    participant Operators as Operators (x3)
+    participant Relay as Symbiotic Relay (BLS)
+    participant Relayer as OZ Relayer
+    participant OffRamp as OffRamp (Dest)
+    participant CCV as SymbioticCCV (Dest)
+
+    App->>OnRamp: sendMessage()
+    OnRamp-->>Monitor: CCIPMessageSent event
+    Monitor->>Operators: HMAC webhook
+    Operators->>Operators: build CCV payload + Merkle tree
+    Operators->>Relay: sign Merkle root
+    Relay-->>Operators: aggregated signature
+    Operators->>Relayer: OffRamp.execute calldata
+    Relayer->>OffRamp: execute(message, ccvs, verifierResults)
+    OffRamp->>CCV: verifyMessage(message, messageId, verifierResults)
+    CCV-->>OffRamp: verified
+    OffRamp-->>OffRamp: emit MessageExecuted(messageId)
+```
+
+## Contracts and Code
+
+### Contracts
+
+- `contracts/src/ccv/SymbioticCCV.sol`
+- `contracts/src/ccv/interfaces/`
+- `contracts/src/ccv/libraries/`
+- `contracts/src/symbiotic/Settlement.sol`
+- `contracts/src/symbiotic/KeyRegistry.sol`
+- `contracts/src/symbiotic/Driver.sol`
+
+### Operator
+
+- `operator/src/provider/chainlink_ccv.rs`
+- `operator/src/provider/mod.rs`
+
+### Monitor Templates
+
+- `config/templates/oz-monitor/monitors/ccip_message_sent.json`
+
+## Configuration
+
+Select CCV in `config/environments/<env>.json`:
+
+```json
+{
+  "activeProvider": "chainlink_ccv"
+}
+```
+
+CCIP chain selectors come from `chains.source.ccipChainSelector` and `chains.destination.ccipChainSelector`, which are required for non-local environments. They can be overridden at runtime via the `CCV_SOURCE_CHAIN_SELECTOR` / `CCV_DEST_CHAIN_SELECTOR` environment variables. For local Anvil only (chainId `31337`), the selector falls back to `chainId` when `ccipChainSelector` is unset.
+
+Address resolution order:
+
+1. `CCV_*` environment variables
+2. `deployments/<env>.json`
+
+Available overrides:
+
+| Variable | Description |
+|----------|-------------|
+| `CCV_SOURCE_ADDRESS` | SymbioticCCV on source chain |
+| `CCV_DEST_ADDRESS` | SymbioticCCV on destination chain |
+| `CCV_SOURCE_ONRAMP_ADDRESS` | Source OnRamp-compatible contract |
+| `CCV_DEST_OFFRAMP_ADDRESS` | Destination OffRamp submit target |
+| `CCV_SOURCE_CHAIN_SELECTOR` | Override the source CCIP chain selector |
+| `CCV_DEST_CHAIN_SELECTOR` | Override the destination CCIP chain selector |
+
+Local and testnet are supported (testnet uses the `testnet-ccv` environment: `config/environments/testnet-ccv.json` and `deployments/testnet-ccv.json`, run via `ENV=testnet-ccv`); mainnet is not yet supported for CCV. `make watch` only succeeds once destination `MessageExecuted(messageId)` is observed.
+
+See [Setup](/symbiotic/setup) and [CLI & API Reference](/symbiotic/cli) for operation.

@@ -1,0 +1,143 @@
+---
+title: Acceptance Hooks
+---
+
+Acceptance hooks run before a message is batched for signing. They let operators enforce local policy or call an external approval service without changing provider event decoding.
+
+## Decisions
+
+| Decision | Meaning |
+| --- | --- |
+| `accept` | Message proceeds to batching. |
+| `reject` | Message is marked `Rejected` and is not evaluated again. |
+| `defer` | Message is held until the returned RFC 3339 `until` timestamp. |
+
+When multiple hooks are configured, hooks run in order. The first `reject` stops evaluation. Otherwise all hooks run, and the final decision is the latest `defer` timestamp if any hook deferred, or `accept`.
+
+## Operator Config
+
+Hooks are configured in `config/environments/<env>.json` under `operator.acceptanceHooks`:
+
+```json
+{
+  "operator": {
+    "acceptanceHooks": [
+      { "type": "native", "name": "provider" },
+      {
+        "type": "webhook",
+        "name": "approval",
+        "url": "http://approval-service:8088/",
+        "secret": "shared-secret",
+        "headers": {
+          "Authorization": { "type": "env", "value": "APPROVAL_HOOK_AUTHORIZATION" },
+          "X-Operator": "operator-a"
+        },
+        "timeout": "5s",
+        "errorBackoff": "30s",
+        "maxAttempts": 3
+      }
+    ]
+  }
+}
+```
+
+If `acceptanceHooks` is empty or omitted, the operator runs the built-in native `provider` hook for compatibility. Today the only named native hook is `provider`.
+
+Webhook hooks may include a `headers` object for additional outbound HTTP headers. Header values can be plain strings or `{ "type": "env", "value": "ENV_VAR_NAME" }` references; env references are resolved at operator startup and fail startup if missing or empty. `Content-Type` and `X-Hook-Signature` are reserved by the framework.
+
+## Native Hooks
+
+Native hooks are Rust code compiled into the operator. Use them for low-latency checks that need direct access to provider types or operator-local state.
+
+The supported native hook today is:
+
+| Name | Where to implement | Reference |
+| --- | --- | --- |
+| `provider` | Override `Provider::acceptance_hook` in the active provider implementation | `operator/src/provider/layerzero.rs` has the minimal pass-through implementation |
+
+The trait contract lives in `operator/src/provider/mod.rs`:
+
+```rust
+async fn acceptance_hook(
+    &self,
+    msg: &MessageData,
+    context: &AcceptanceContext,
+) -> Result<AcceptanceDecision, ProviderError>;
+```
+
+Guidelines for native hook changes:
+
+- Return `AcceptanceDecision::accept()` when the message should proceed.
+- Return `AcceptanceDecision::Reject { reason }` only for terminal policy failures. The message will not be evaluated again.
+- Return `AcceptanceDecision::Defer { until, reason }` for temporary holds. The operator persists the defer state and re-evaluates on or after `until`.
+- Use `context.defer_count` to give up after repeated defers and return `reject` when appropriate. This is a total framework defer count, including policy defers and operator-driven defers caused by hook errors.
+- Use `context.previous_defer_reason` only for diagnostics or policy continuity; do not parse it as a stable machine contract.
+- Avoid long blocking work in native hooks. If policy depends on a slow external system, prefer a webhook hook.
+- Do not implement retry loops in the hook. Return the current decision and let the operator re-evaluate later.
+- Avoid side effects. If unavoidable, key them by `message_id` and make them idempotent.
+- Return `Err` only for true implementation failures. Native hook errors are converted into terminal `reject` decisions by the framework, so transient conditions should return `defer` instead.
+
+Minimal native accept:
+
+```rust
+async fn acceptance_hook(
+    &self,
+    _msg: &MessageData,
+    _context: &AcceptanceContext,
+) -> Result<AcceptanceDecision, ProviderError> {
+    Ok(AcceptanceDecision::accept())
+}
+```
+
+Native reject/defer examples are covered by the signer tests in `operator/src/signer/mod.rs` (`RejectAllProvider` and `DeferAllProvider`).
+
+If a new named native hook is needed outside the provider hook, add a new `AcceptanceHookConfig::Native` name and wire it in `SignerJob::evaluate_acceptance_hooks`.
+
+## Webhook Contract
+
+The operator sends:
+
+```http
+POST <configured-url>
+Content-Type: application/json
+X-Hook-Signature: sha256=<hex(HMAC-SHA256(secret, body))>
+```
+
+```json
+{
+  "message": {
+    "metadata": {
+      "source_chain": 1,
+      "destination_chain": 31338,
+      "block_number": 12345,
+      "message_id": "0x...",
+      "event_tx_hash": "0x..."
+    },
+    "data": "<base64 provider payload>"
+  },
+  "context": {
+    "defer_count": 0,
+    "previous_defer_reason": null
+  }
+}
+```
+
+The webhook returns `200 OK` with one of:
+
+```json
+{ "decision": "accept" }
+{ "decision": "reject", "reason": "amount above cap" }
+{ "decision": "defer", "until": "2027-05-15T12:34:56Z", "reason": "awaiting approval" }
+```
+
+`reason` is optional. `until` is required for `defer`.
+
+`context.defer_count` is the total number of times the framework has deferred this message. It includes successful policy defers and operator-driven defers caused by webhook errors. Webhook unreachability is handled by `maxAttempts`, so do not treat `defer_count` as policy-only history.
+
+Webhook errors are not rejections. A non-2xx response, connection error, timeout, malformed JSON, or missing/invalid `until` auto-defers the message by `errorBackoff`. After `maxAttempts` consecutive errors for the same hook and message, the operator rejects the message with reason `approval service unreachable after N attempts`.
+
+Webhook URLs must use `http` or `https`. For production, prefer `https` or trusted in-cluster networking because message metadata is sent in the JSON body.
+
+Configured headers are sent with every request after startup-time validation. Use them for service-specific auth mechanisms such as `Authorization: Bearer ...` or tenant routing headers. Do not configure `Content-Type` or `X-Hook-Signature`; the operator owns those headers.
+
+The reference FastAPI implementation lives in `examples/webhook-hook/`. It is intentionally not Rust: webhook hooks are language-agnostic, and the example demonstrates the wire contract an external service must implement.

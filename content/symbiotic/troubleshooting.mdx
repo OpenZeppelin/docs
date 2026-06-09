@@ -1,0 +1,72 @@
+---
+title: Troubleshooting
+---
+
+Common operator-side failures and the shortest useful checks for each.
+
+## First Checks
+
+```bash
+make status
+make logs-operators
+make logs-monitor
+make logs-relayer
+curl -s http://localhost:3001/debug/v1/messages
+curl -s http://localhost:3001/debug/v1/pending
+```
+
+## Shared Failures
+
+### Webhook or authentication failures
+
+- Confirm operators are reachable from OZ Monitor.
+- Verify `WEBHOOK_SECRET` and `OZ_RELAYER_WEBHOOK_SECRET` match the sender config exactly.
+- Ensure trigger templates still use `payload_mode: "raw"`.
+
+### BLS signatures do not aggregate
+
+- Check sidecar health with `docker compose ps symbiotic-relay-1`.
+- Check sidecar logs with `docker compose logs symbiotic-relay-1`.
+- Verify operator keys are registered in Settlement and all operators saw the same ingress event.
+
+### Quorum is never reached
+
+- Make sure all required operators are running.
+- Confirm all operators received the same message.
+- Check Settlement voting power and registered keys.
+
+### Relayer submission keeps failing
+
+- Verify the relayer health endpoint responds with your API key.
+- Check `make logs-relayer` for rate limits, estimate-gas failures, or permanent 4xx errors.
+- For 429s, back off or use stronger RPC capacity.
+
+### Fresh local state is stuck or inconsistent
+
+- If contracts, genesis, or generated config look out of sync, reset with `make clean && make deploy && make start`.
+- If Anvil stopped responding, restart the relevant containers before doing a full reset.
+
+## LayerZero
+
+### `submitProof` reverts
+
+- Check that the relayer submitter address is whitelisted on the DVN.
+- Check Settlement state: registered keys, quorum threshold, and current epoch assumptions.
+- Search `make logs-relayer` for the revert reason before changing config.
+
+## Chainlink CCV
+
+### `EpochTooStale` / `0xf5ab0d81`
+
+- Settlement epoch data is stale.
+- Refresh genesis or adjust the epoch timing parameters before retrying.
+
+### `make watch` never succeeds
+
+- CCV success is destination `MessageExecuted(messageId)`, not just relayer submission.
+- If the relayer submitted but watch still fails, inspect destination execution and relayer estimate-gas logs.
+
+### Estimate-gas failures
+
+- Common causes are stale epoch data, wrong CCV addresses, or uninitialized settlement state.
+- Start with `make logs-relayer | grep -E "estimate_gas|custom error"`.
