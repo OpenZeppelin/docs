@@ -60,7 +60,7 @@ public struct Vault has key {
 
 public fun create(clock: &Clock, ctx: &mut TxContext) {
     // Bucket: at most 1_000 SUI outstanding, refilling 100 every 6 s, starting full.
-    let limiter = rate_limiter::new_bucket(1_000, 100, 6_000, 1_000, clock.timestamp_ms(), clock);
+    let limiter = rate_limiter::new_bucket(1_000, 100, 6_000, clock.timestamp_ms(), 1_000, clock);
     transfer::share_object(Vault { id: object::new(ctx), limiter, funds: balance::zero() });
 }
 
@@ -88,8 +88,8 @@ The limiter check runs *before* the side effect, so a denied withdrawal never to
 
 | Mistake | What happens | How to fix |
 |---|---|---|
-| `try_consume(rl.available(clock), clock)` when empty | Aborts `EInvalidAmount` (`available()` is `0`, and a zero-unit consume is rejected) | Guard: `let n = rl.available(clock); if (n > 0) { rl.try_consume(n, clock); }` |
-| Calling `try_consume` / `consume_or_abort` with `amount == 0` | Aborts `EInvalidAmount` | Treat zero-unit work as a no-op in your own code; never pass `0`. |
+| `try_consume(rl.available(clock), clock)` when empty | Returns `false` (`available()` is `0`, and a zero-unit consume is rejected) — easy to misread as a successful consume | Guard: `let n = rl.available(clock); if (n > 0) { rl.try_consume(n, clock); }` |
+| Calling `consume_or_abort` with `amount == 0` | Aborts `EInvalidAmount` (`try_consume` returns `false` instead) | Treat zero-unit work as a no-op in your own code; never pass `0`. |
 | Reading `cooldown_end_ms()` while `available > 0` | Returns a stale value (the gate is only consulted when `available == 0`) | Only interpret `cooldown_end_ms()` when `available(clock) == 0`. |
 | Seeding `new_cooldown` with `initial_available > 0` and `cooldown_end_ms > now` | Aborts `ECooldownArmedWithTokens` | Use one of the valid seed combinations (see the [API reference](/contracts-sui/1.x/api/utils)). |
 | Passing a future `last_refill_ms` / `window_start_ms` | Aborts `EBucketAnchorInFuture` / `EWindowAnchorInFuture` | Pass `clock.timestamp_ms()` (or an earlier value). |

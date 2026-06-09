@@ -16,16 +16,38 @@ flowchart LR
 
 Because the limiter lives inside your object, `&mut` to that object is what authorizes both consuming and reconfiguring it. Authorization is whatever guards that `&mut` — the module makes no access-control claim of its own.
 
-This guide builds four examples that showcase the range of the primitive:
+## What we will build
 
-1. A globally throttled vault — one limiter shared by all withdrawers.
-2. A vault that mixes the global limiter with a per-user limit carried in each capability.
-3. A mage duel — many limiters of different variants inside one type, outside of DeFi.
-4. A staking vault — a cooldown that adds a delay *before* an action can execute.
+This guide builds **one** end-to-end example — a token faucet — and runs it on testnet from start to finish.
+
+The faucet hands out a fixed-supply token (`RARE_COIN`), throttled two ways at once:
+
+- A **global** `FixedWindow` limiter on the shared `Faucet`: at most `100` coins may be claimed per rolling hour, *collectively across every claimer*.
+- A **personal** `Bucket` limiter carried inside each holder's `ClaimCap`: it caps how much that specific holder can claim, refilling over time.
+
+A claim must satisfy **both** limiters. That makes the faucet a compact tour of the primitive's range in a single module:
+
+- embedding a limiter in a shared object (the global window),
+- embedding a limiter in a per-user capability (the personal bucket),
+- composing two limiters of *different variants* across two objects,
+- running the rate-limit check *before* the side effect, and
+- observing each limiter become the binding constraint in turn.
+
+```mermaid
+flowchart LR
+    Caller["Claimer"] -->|"claim(amount)"| Cap["ClaimCap<br/>personal_limiter: Bucket"]
+    Cap -->|"consume_or_abort (per-user)"| Faucet["Faucet (shared)<br/>global_limiter: FixedWindow"]
+    Faucet -->|"consume_or_abort (global)"| Funds["split balance"]
+```
 
 ## Prerequisites
 
-It helps to be familiar with Sui Move shared objects, capabilities, the shared `Clock` at `0x6`, and programmable transaction blocks (PTBs). The examples reference those concepts throughout.
+To follow the on-chain walkthrough you need:
+
+- The [Sui CLI](https://docs.sui.io/references/cli) installed, with an address configured for **testnet** and funded from the [faucet](https://docs.sui.io/guides/developer/getting-started/get-coins).
+- [`jq`](https://jqlang.org/) for pulling object IDs out of JSON output.
+
+It also helps to be familiar with Sui Move shared objects, capabilities, the shared `Clock` at `0x6`, and programmable transaction blocks (PTBs).
 
 ## Add the dependency
 
@@ -42,195 +64,96 @@ Then import the module from your Move code:
 use openzeppelin_utils::rate_limiter::{Self, RateLimiter};
 ```
 
-## Example 1: A globally throttled vault
+## The token to dispense
 
-The simplest integration: one `RateLimiter` field on a shared `Vault` throttles *all* withdrawals collectively. Here it is a `FixedWindow` — a hard quota of 1,000 units per rolling hour. Withdrawing requires presenting a `WithdrawCap`, so the limiter governs throughput while the capability governs who may withdraw.
+A faucet needs something to hand out. We use a minimal fixed-supply coin, `RARE_COIN`, that mints its entire supply to the publisher on creation. This part is plain Sui — it does not touch `rate_limiter` — so the rate-limiting logic stays the focus.
 
-```move
-module my_protocol::simple_vault;
+```move title="sources/rare_coin.move"
+module rate_limiter_example::rare_coin;
 
-use openzeppelin_utils::rate_limiter::{Self, RateLimiter};
-use sui::balance::{Self, Balance};
-use sui::clock::Clock;
-use sui::coin::{Self, Coin};
-use sui::sui::SUI;
+public struct RARE_COIN has drop {}
 
-/// Shared vault holding pooled funds behind one global withdrawal limiter.
-public struct Vault has key {
-    id: UID,
-    limiter: RateLimiter,
-    funds: Balance<SUI>,
-}
-
-/// Held by the publisher; authorizes issuing `WithdrawCap`s.
-public struct AdminCap has key, store { id: UID }
-
-/// Presented on every withdrawal. Holding one marks a legitimate withdrawer.
-public struct WithdrawCap has key, store { id: UID }
-
-/// On publish, hand the publisher an `AdminCap` for issuing withdraw capabilities.
-fun init(ctx: &mut TxContext) {
-    transfer::transfer(AdminCap { id: object::new(ctx) }, ctx.sender());
-}
-
-/// Share a vault whose withdrawals are capped at 1_000 SUI per hour, globally across all holders.
-public fun create(clock: &Clock, ctx: &mut TxContext) {
-    // FixedWindow: a hard quota of 1_000 per rolling hour, anchored at now, starting full.
-    let limiter = rate_limiter::new_fixed_window(
-        1_000, // capacity (units per window)
-        3_600_000, // window_ms (1 hour)
-        clock.timestamp_ms(), // window_start_ms (anchor at now)
-        1_000, // initial_available (start full)
-        clock,
+fun init(witness: RARE_COIN, ctx: &mut TxContext) {
+    let (mut currency, mut treasury_cap) = sui::coin_registry::new_currency_with_otw(
+        witness,
+        0,
+        "RARE_COIN",
+        "Rare Coin",
+        "",
+        "",
+        ctx,
     );
-    transfer::share_object(Vault { id: object::new(ctx), limiter, funds: balance::zero() });
-}
 
-/// Deposit funds into the vault (no rate limit on the way in).
-public fun deposit(self: &mut Vault, payment: Coin<SUI>) {
-    self.funds.join(payment.into_balance());
-}
-
-/// Issue a withdraw capability to `recipient`. Admin-gated so the global budget is only
-/// shared among legitimate holders.
-public fun issue_withdraw_cap(_: &AdminCap, recipient: address, ctx: &mut TxContext) {
-    transfer::transfer(WithdrawCap { id: object::new(ctx) }, recipient);
-}
-
-/// Withdraw `amount`, charging the global limiter first. The rate-limit check runs before the
-/// balance split, so a denied withdrawal never touches `funds`.
-public fun withdraw(
-    self: &mut Vault,
-    _: &WithdrawCap,
-    amount: u64,
-    clock: &Clock,
-    ctx: &mut TxContext,
-): Coin<SUI> {
-    self.limiter.consume_or_abort(amount, clock);
-    coin::from_balance(self.funds.split(amount), ctx)
-}
-
-/// How much the vault will allow to be withdrawn right now (projects window rollover on read).
-public fun withdrawable_now(self: &Vault, clock: &Clock): u64 {
-    self.limiter.available(clock)
+    let coins = treasury_cap.mint(10_000, ctx);
+    currency.make_supply_fixed(treasury_cap);
+    let metadata_cap = currency.finalize(ctx);
+    transfer::public_freeze_object(metadata_cap);
+    transfer::public_transfer(coins, ctx.sender());
 }
 ```
 
-Because the `Vault` is shared, every caller draws from the same per-window budget. `consume_or_abort` is the ergonomic path: it aborts `ERateLimited` and the whole transaction reverts if the budget is exhausted.
+## The faucet module
 
-### Publish and call it
+The faucet itself is one module. The shared `Faucet` holds the funds and the global window; each `ClaimCap` holds its owner's personal bucket. `claim` charges the personal bucket, then the global window, and only then splits the coins — so a refusal on either limiter never touches the balance.
 
-Publish the package and record the IDs from the output:
-
-```bash
-sui client publish
-```
-
-```bash
-export PKG=0x...           # published package
-export ADMIN_CAP=0x...     # AdminCap transferred to the publisher
-export ME=0x...            # your address
-```
-
-Create and fund the vault, then issue yourself a withdraw capability. The shared `Clock` is the object at `0x6`:
-
-```bash
-sui client ptb \
-  --move-call $PKG::simple_vault::create @0x6
-```
-
-```bash
-export VAULT=0x...         # shared Vault from the create output
-
-sui client ptb \
-  --split-coins gas "[5000]" \
-  --assign funding \
-  --move-call $PKG::simple_vault::deposit @$VAULT funding.0 \
-  --move-call $PKG::simple_vault::issue_withdraw_cap @$ADMIN_CAP @$ME
-```
-
-Withdraw within the window and forward the coin in the same PTB:
-
-```bash
-export WITHDRAW_CAP=0x...  # WithdrawCap from the previous output
-
-sui client ptb \
-  --move-call $PKG::simple_vault::withdraw @$VAULT @$WITHDRAW_CAP 250 @0x6 \
-  --assign coin \
-  --transfer-objects "[coin]" @$ME
-```
-
-A withdrawal that overruns the remaining per-window budget aborts `ERateLimited` (error code `0`) and the whole PTB reverts:
-
-```bash
-sui client ptb \
-  --move-call $PKG::simple_vault::withdraw @$VAULT @$WITHDRAW_CAP 1000 @0x6 \
-  --assign coin \
-  --transfer-objects "[coin]" @$ME
-# Aborts: consume_or_abort -> ERateLimited. The window only had 750 left.
-```
-
-## Example 2: Mixing a global limiter with per-user limits
-
-The same global window as before, but now each `WithdrawCap` carries its *own* `RateLimiter` — a token bucket capping that specific holder. A withdrawal must satisfy **both**: the holder's personal bucket and the vault's global window. This shows two limiters of different variants composed across two objects.
-
-```mermaid
-flowchart LR
-    Caller["Withdrawer"] -->|"withdraw(amount)"| Cap["WithdrawCap<br/>personal_limiter: Bucket"]
-    Cap -->|"consume_or_abort (per-user)"| Vault["Vault<br/>global_limiter: FixedWindow"]
-    Vault -->|"consume_or_abort (global)"| Funds["split funds"]
-```
-
-```move
-module my_protocol::tiered_vault;
+```move title="sources/faucet.move"
+module rate_limiter_example::faucet;
 
 use openzeppelin_utils::rate_limiter::{Self, RateLimiter};
-use sui::balance::{Self, Balance};
+use sui::balance::Balance;
 use sui::clock::Clock;
 use sui::coin::{Self, Coin};
-use sui::sui::SUI;
+use rate_limiter_example::rare_coin::RARE_COIN;
 
-/// Shared vault with one global withdrawal limiter shared by every holder.
-public struct Vault has key {
+// === Constants ===
+
+const HOUR: u64 = 60 * 60 * 1000;
+
+const HOURLY_LIMIT: u64 = 100;
+
+// === Structs ===
+
+/// Shared faucet with one global claim limiter shared by every holder.
+public struct Faucet has key {
     id: UID,
+    balance: Balance<RARE_COIN>,
     global_limiter: RateLimiter,
-    funds: Balance<SUI>,
 }
 
-/// Held by the publisher; authorizes issuing `WithdrawCap`s with per-holder limits.
+/// Handed to whoever funds the faucet; authorizes issuing `ClaimCap`s with per-holder limits.
 public struct AdminCap has key, store { id: UID }
 
-/// Presented on every withdrawal. Carries a personal bucket limiter that caps this holder.
-public struct WithdrawCap has key, store {
+/// Presented on every claim. Carries a personal bucket limiter that caps this holder.
+public struct ClaimCap has key, store {
     id: UID,
     personal_limiter: RateLimiter,
 }
 
-/// On publish, hand the publisher an `AdminCap` for issuing withdraw capabilities.
-fun init(ctx: &mut TxContext) {
-    transfer::transfer(AdminCap { id: object::new(ctx) }, ctx.sender());
-}
+// === Public Functions ===
 
-/// Share a vault whose global budget is 1_000 SUI per hour.
-public fun create(clock: &Clock, ctx: &mut TxContext) {
+/// Share a faucet whose global budget is 100 coins per hour, and return an `AdminCap`
+/// for issuing claim capabilities.
+public fun new(funds: Coin<RARE_COIN>, clock: &Clock, ctx: &mut TxContext): AdminCap {
+    // FixedWindow: a hard quota of 100 per rolling hour, anchored at now, starting full.
     let global_limiter = rate_limiter::new_fixed_window(
-        1_000, // capacity per window
-        3_600_000, // 1 hour window
-        clock.timestamp_ms(),
-        1_000, // start full
+        HOURLY_LIMIT, // capacity (units per window)
+        HOUR, // window_ms (1 hour)
+        clock.timestamp_ms(), // window_start_ms (anchor at now)
+        HOURLY_LIMIT, // initial_available (start full)
         clock,
     );
-    transfer::share_object(Vault { id: object::new(ctx), global_limiter, funds: balance::zero() });
+
+    transfer::share_object(Faucet {
+        id: object::new(ctx),
+        balance: funds.into_balance(),
+        global_limiter,
+    });
+    AdminCap { id: object::new(ctx) }
 }
 
-/// Deposit funds into the vault (no rate limit on the way in).
-public fun deposit(self: &mut Vault, payment: Coin<SUI>) {
-    self.funds.join(payment.into_balance());
-}
-
-/// Issue a withdraw capability with a personal token-bucket limit: at most `per_user_cap`
+/// Issue a claim capability with a personal token-bucket limit: at most `per_user_cap`
 /// outstanding, refilling `refill_amount` every `refill_interval_ms`, starting full.
-public fun issue_withdraw_cap(
+public fun issue_claim_cap(
     _: &AdminCap,
     recipient: address,
     per_user_cap: u64,
@@ -240,438 +163,294 @@ public fun issue_withdraw_cap(
     ctx: &mut TxContext,
 ) {
     let personal_limiter = rate_limiter::new_bucket(
-        per_user_cap,
+        per_user_cap, // capacity
         refill_amount,
         refill_interval_ms,
-        per_user_cap, // start full
-        clock.timestamp_ms(),
+        clock.timestamp_ms(), // last_refill_ms (anchor at now)
+        per_user_cap, // initial_available (start full)
         clock,
     );
-    transfer::transfer(WithdrawCap { id: object::new(ctx), personal_limiter }, recipient);
+    transfer::transfer(ClaimCap { id: object::new(ctx), personal_limiter }, recipient);
 }
 
-/// Withdraw `amount`, charging the holder's personal bucket first, then the global window.
-/// Both checks run before the balance split, so a denial on either never touches `funds`.
-public fun withdraw(
-    self: &mut Vault,
-    cap: &mut WithdrawCap,
+/// Claim `amount`, charging the holder's personal bucket first, then the global window.
+/// Both checks run before the balance split, so a denial on either never touches `balance`.
+public fun claim(
+    self: &mut Faucet,
+    cap: &mut ClaimCap,
     amount: u64,
     clock: &Clock,
     ctx: &mut TxContext,
-): Coin<SUI> {
+): Coin<RARE_COIN> {
     cap.personal_limiter.consume_or_abort(amount, clock); // per-user cap
     self.global_limiter.consume_or_abort(amount, clock); // global cap
-    coin::from_balance(self.funds.split(amount), ctx)
+    coin::from_balance(self.balance.split(amount), ctx)
 }
 
+// === View helpers ===
+
 /// This holder's currently-available personal allowance (projects refill on read).
-public fun personal_allowance(cap: &WithdrawCap, clock: &Clock): u64 {
+public fun personal_allowance(cap: &ClaimCap, clock: &Clock): u64 {
     cap.personal_limiter.available(clock)
 }
 
-/// The vault's currently-available global allowance (projects window rollover on read).
-public fun global_allowance(self: &Vault, clock: &Clock): u64 {
+/// The faucet's currently-available global allowance (projects window rollover on read).
+public fun global_allowance(self: &Faucet, clock: &Clock): u64 {
     self.global_limiter.available(clock)
 }
 ```
 
-The two limiters are fully independent: the personal bucket refills smoothly over time, while the global window resets on its own hourly boundary. A holder is bounded by whichever is tighter at the moment of the call.
+A few things worth highlighting:
 
-### Publish and call it
+- **Two variants, one API.** The global limiter is a `FixedWindow` and the personal limiter is a `Bucket`, yet both are consumed with the same `consume_or_abort(amount, clock)` call. Only the constructor differs.
+- **Both limiters are independent.** The personal bucket refills smoothly over time; the global window resets on its own hourly boundary. A holder is bounded by whichever is tighter at the moment of the call.
+- **Check before effect.** Both `consume_or_abort` calls run before `balance.split`, so a denied claim aborts `ERateLimited` and the whole transaction reverts without moving any funds.
+- **The cap governs *who*, the limiter governs *how much*.** Holding a `ClaimCap` is what lets you call `claim` at all; the limiters bound the throughput once you can.
+
+## Deploy and try it on testnet
+
+The walkthrough below takes the faucet from a fresh publish to exercising *both* rate limits. Make sure your CLI is pointed at testnet first:
 
 ```bash
-sui client publish
+sui client switch --env testnet
+```
+
+### 1. Publish the package
+
+Publishing creates `RARE_COIN`, mints its full supply (`10_000`) to you, and installs the faucet module. We capture the output as JSON and pull out the IDs we need.
+
+```bash
+ADDR=$(sui client active-address)
+
+sui client publish --build-env testnet --gas-budget 200000000 --json > /tmp/pub.json
 ```
 
 ```bash
-export PKG=0x...
-export ADMIN_CAP=0x...
-export ME=0x...
+PKG=$(jq -r '.objectChanges[] | select(.type=="published") | .packageId' /tmp/pub.json)
+
+COIN=$(jq -r '.objectChanges[]
+  | select(.type=="created" and (.objectType|test("coin::Coin<.*::rare_coin::RARE_COIN>")))
+  | .objectId' /tmp/pub.json)
+
+CURRENCY=$(jq -r '.objectChanges[]
+  | select(.type=="created" and (.objectType|test("coin_registry::Currency")))
+  | .objectId' /tmp/pub.json)
 ```
 
-Create and fund the vault, then issue a capability with a personal cap of 100, refilling 10 per second:
+### 2. Register the coin currency
+
+Finalize the `RARE_COIN` registration in the on-chain coin registry (`0xc`):
+
+```bash
+sui client ptb --move-call 0x2::coin_registry::finalize_registration "<$PKG::rare_coin::RARE_COIN>" @0xc @$CURRENCY
+```
+
+Confirm the full supply landed with you:
+
+```bash
+sui client balance --coin-type $PKG::rare_coin::RARE_COIN
+```
+
+```
+╭──────────────────────────────────────────────────╮
+│ Balance of coins owned by this address           │
+├──────────────────────────────────────────────────┤
+│ ╭──────────────────────────────────────────────╮ │
+│ │ coin       balance (raw)  balance            │ │
+│ ├──────────────────────────────────────────────┤ │
+│ │ Rare Coin  10000          10.00K RARE_COIN   │ │
+│ ╰──────────────────────────────────────────────╯ │
+╰──────────────────────────────────────────────────╯
+```
+
+### 3. Create and fund the faucet
+
+`new` takes the coin to dispense, shares the `Faucet` (carrying the global limiter), and *returns* an `AdminCap`. We capture the returned cap and transfer it to ourselves in the same PTB. The shared `Clock` is the object at `0x6`.
 
 ```bash
 sui client ptb \
-  --move-call $PKG::tiered_vault::create @0x6
+  --move-call $PKG::faucet::new @$COIN @0x6 \
+  --assign admin_cap \
+  --transfer-objects "[admin_cap]" @$ADDR \
+  --gas-budget 100000000 --json > /tmp/new.json
+```
+
+Grab the shared `Faucet` and the owned `AdminCap` that transaction created:
+
+```bash
+FAUCET=$(jq -r '.objectChanges[] | select(.type=="created" and (.objectType|test("::faucet::Faucet"))) | .objectId' /tmp/new.json)
+
+ADMIN=$(jq -r '.objectChanges[] | select(.type=="created" and (.objectType|test("::faucet::AdminCap"))) | .objectId' /tmp/new.json)
+```
+
+The faucet now holds the full balance, and its global window starts at the full `100`/hour allowance:
+
+```bash
+sui client object $FAUCET --json | jq -r '.content.balance'
+```
+
+```
+10000
 ```
 
 ```bash
-export VAULT=0x...
-
-sui client ptb \
-  --split-coins gas "[5000]" \
-  --assign funding \
-  --move-call $PKG::tiered_vault::deposit @$VAULT funding.0 \
-  --move-call $PKG::tiered_vault::issue_withdraw_cap @$ADMIN_CAP @$ME 100 10 1000 @0x6
+sui client object $FAUCET --json | jq -r '.content.global_limiter.available'
 ```
 
-A withdrawal of 80 fits under the personal cap of 100 (and the global 1,000):
+```
+100
+```
+
+### 4. Issue yourself a claim capability
+
+Issue a `ClaimCap` with a personal token-bucket cap of `10` coins, refilling `10` every hour, starting full:
 
 ```bash
-export WITHDRAW_CAP=0x...
+CAP=$(sui client ptb \
+  --move-call $PKG::faucet::issue_claim_cap @$ADMIN @$ADDR 10 10 3600000 @0x6 \
+  --gas-budget 100000000 \
+  --json | jq -r '.objectChanges[] | select(.type=="created" and (.objectType|test("::faucet::ClaimCap"))) | .objectId')
+```
 
+The personal bucket starts full at `10`:
+
+```bash
+sui client object $CAP --json | jq -r '.content.personal_limiter.available'
+```
+
+```
+10
+```
+
+### 5. Claim — and watch both limiters get charged
+
+Claim `5` `RARE_COIN`, presenting the `Faucet` and your `ClaimCap`, and forward the coin to yourself in the same PTB:
+
+```bash
 sui client ptb \
-  --move-call $PKG::tiered_vault::withdraw @$VAULT @$WITHDRAW_CAP 80 @0x6 \
+  --move-call $PKG::faucet::claim @$FAUCET @$CAP 5 @0x6 \
   --assign coin \
-  --transfer-objects "[coin]" @$ME
+  --transfer-objects "[coin]" @$ADDR \
+  --gas-budget 100000000
 ```
 
-A further withdrawal of 50 aborts `ERateLimited`: the personal bucket has only about 20 left, even though the global window still allows it.
+```
+...
+│ Status: Success                                  │
+...
+╭────────────────────────────────────────────────────────────────────╮
+│ Balance Changes                                                      │
+├────────────────────────────────────────────────────────────────────┤
+│  CoinType: ...::rare_coin::RARE_COIN   Amount: 5                     │
+╰────────────────────────────────────────────────────────────────────╯
+```
+
+The faucet balance dropped by `5`, and *both* limiters were charged — the personal bucket `10 → 5` and the global window `100 → 95`:
+
+```bash
+sui client object $FAUCET --json | jq -r '.content.balance'
+```
+
+```
+9995
+```
+
+```bash
+sui client object $CAP --json | jq -r '.content.personal_limiter.available'
+```
+
+```
+5
+```
+
+```bash
+sui client object $FAUCET --json | jq -r '.content.global_limiter.available'
+```
+
+```
+95
+```
+
+### 6. The personal bucket binds
+
+Try to claim `6` with the same cap. The global window still has `95` left, but the **personal** bucket only has `5`, so the claim aborts `ERateLimited` and the whole PTB reverts:
 
 ```bash
 sui client ptb \
-  --move-call $PKG::tiered_vault::withdraw @$VAULT @$WITHDRAW_CAP 50 @0x6 \
+  --move-call $PKG::faucet::claim @$FAUCET @$CAP 6 @0x6 \
   --assign coin \
-  --transfer-objects "[coin]" @$ME
-# Aborts: the personal bucket is the binding limit here.
+  --transfer-objects "[coin]" @$ADDR \
+  --gas-budget 100000000
 ```
 
-## Example 3: Many limiters in one type (a mage duel)
-
-Rate limiting is not only for DeFi. This example models a two-player duel where each `Mage` packs **four** limiters of mixed variants, one per game resource:
-
-- `health` (`Bucket`) — consuming is taking damage; refill is passive regeneration.
-- `mana` (`Bucket`) — consuming is paying a spell's cost; refill is mana regeneration.
-- `spell_a_cd` (`Cooldown`, capacity 1) — gated after a single cast.
-- `spell_b_cd` (`Cooldown`, capacity 3) — gated after three casts.
-
-A mage casts one of two spells at its opponent. Each spell costs mana, deals damage, and burns one charge of that spell's cooldown. When a mage's health reaches zero it is defeated, and because `Mage` is a `store + drop` value, removing it from the duel destroys it.
-
-```move
-module my_protocol::mage_duel;
-
-use openzeppelin_utils::rate_limiter::{Self, RateLimiter};
-use sui::clock::Clock;
-use std::string::String;
-
-#[error(code = 0)]
-const EDuelOver: vector<u8> = b"The duel already has a winner";
-
-const MAX_HEALTH: u64 = 100;
-const MAX_MANA: u64 = 60;
-const CD_MS: u64 = 10_000; // 10s cooldown after a spell is exhausted
-
-// Spell A: cheap, light hit, single charge before cooldown.
-const SPELL_A_COST: u64 = 10;
-const SPELL_A_DAMAGE: u64 = 15;
-// Spell B: pricier, heavier hit, three charges before cooldown.
-const SPELL_B_COST: u64 = 20;
-const SPELL_B_DAMAGE: u64 = 30;
-
-/// A single combatant. A plain `store + drop` value — destroyed by being dropped on defeat.
-public struct Mage has store, drop {
-    name: String,
-    health: RateLimiter,
-    mana: RateLimiter,
-    spell_a_cd: RateLimiter,
-    spell_b_cd: RateLimiter,
-}
-
-/// Shared arena holding both mages by value. Index 0 and 1 identify the combatants.
-public struct Duel has key {
-    id: UID,
-    mages: vector<Mage>,
-}
-
-/// Start a duel between two freshly-spawned, full-health mages.
-public fun start(name_0: String, name_1: String, clock: &Clock, ctx: &mut TxContext) {
-    let mages = vector[new_mage(name_0, clock), new_mage(name_1, clock)];
-    transfer::share_object(Duel { id: object::new(ctx), mages });
-}
-
-/// Mage at `attacker_idx` casts spell A at its opponent.
-public fun cast_spell_a(self: &mut Duel, attacker_idx: u64, clock: &Clock) {
-    cast(self, attacker_idx, true, clock);
-}
-
-/// Mage at `attacker_idx` casts spell B at its opponent.
-public fun cast_spell_b(self: &mut Duel, attacker_idx: u64, clock: &Clock) {
-    cast(self, attacker_idx, false, clock);
-}
-
-/// Resolve a cast: burn a cooldown charge, pay mana, then damage the opponent. Aborts (reverting
-/// the whole transaction) if the spell is on cooldown or the caster cannot afford the mana.
-fun cast(self: &mut Duel, attacker_idx: u64, is_spell_a: bool, clock: &Clock) {
-    assert!(self.mages.length() == 2, EDuelOver);
-    let target_idx = 1 - attacker_idx;
-
-    // Attacker pays: a cooldown charge and the spell's mana cost.
-    let attacker = &mut self.mages[attacker_idx];
-    if (is_spell_a) {
-        attacker.spell_a_cd.consume_or_abort(1, clock);
-        attacker.mana.consume_or_abort(SPELL_A_COST, clock);
-    } else {
-        attacker.spell_b_cd.consume_or_abort(1, clock);
-        attacker.mana.consume_or_abort(SPELL_B_COST, clock);
-    };
-
-    // Opponent takes damage. Clamp to remaining health so an overkill blow doesn't get rejected
-    // by the limiter's all-or-nothing consume; guard the zero case (a zero-unit consume aborts).
-    let damage = if (is_spell_a) SPELL_A_DAMAGE else SPELL_B_DAMAGE;
-    let target = &mut self.mages[target_idx];
-    let dealt = damage.min(target.health.available(clock));
-    if (dealt > 0) target.health.consume_or_abort(dealt, clock);
-
-    // Defeated when no health remains: pull the mage out of the duel and let it drop.
-    if (target.health.available(clock) == 0) {
-        self.mages.remove(target_idx);
-    }
-}
-
-/// A mage's current health (projects regeneration on read). `idx` must be a live combatant.
-public fun health_of(self: &Duel, idx: u64, clock: &Clock): u64 {
-    self.mages[idx].health.available(clock)
-}
-
-/// A mage's current mana (projects regeneration on read). `idx` must be a live combatant.
-public fun mana_of(self: &Duel, idx: u64, clock: &Clock): u64 {
-    self.mages[idx].mana.available(clock)
-}
-
-/// Whether the duel has ended (one mage has been defeated).
-public fun is_over(self: &Duel): bool {
-    self.mages.length() < 2
-}
-
-/// Spawn a full-health, full-mana mage with both spells ready.
-fun new_mage(name: String, clock: &Clock): Mage {
-    let now = clock.timestamp_ms();
-    Mage {
-        name,
-        // Health as a bucket: starts full, regenerates 1 every 2s up to MAX_HEALTH.
-        health: rate_limiter::new_bucket(MAX_HEALTH, 1, 2_000, MAX_HEALTH, now, clock),
-        // Mana as a bucket: starts full, regenerates 5 every second up to MAX_MANA.
-        mana: rate_limiter::new_bucket(MAX_MANA, 5, 1_000, MAX_MANA, now, clock),
-        // Spell A: 1 charge, then a CD_MS cooldown. Starts ready (granted seed).
-        spell_a_cd: rate_limiter::new_cooldown(1, CD_MS, 1, 0, clock),
-        // Spell B: 3 charges, then a CD_MS cooldown. Starts ready (granted seed).
-        spell_b_cd: rate_limiter::new_cooldown(3, CD_MS, 3, 0, clock),
-    }
-}
+```
+Error executing transaction '...': 1st command aborted within function
+'...::rate_limiter::consume_or_abort' ... Aborted with error code 0
+--'ERateLimited' -- 'Rate limited'
 ```
 
-Two things are worth highlighting:
+### 7. The global window binds
 
-- **Different cooldown capacities, same variant.** Spell A's `Cooldown` has capacity 1, so it gates after a single cast; spell B's has capacity 3, so it allows three casts before gating. The two cooldowns are independent — using one never touches the other.
-- **The clamp before damage.** `try_consume` and `consume_or_abort` are all-or-nothing, so consuming more than `available` is rejected outright. For health, an overkill blow should still be lethal, so the code clamps damage to `available(clock)` and guards the zero case — the documented footgun of passing `0` to a consume.
-
-### Publish and call it
+Now show the *other* limiter becoming the binding constraint. Issue a second cap with a generous personal cap of `1000`, so the personal bucket can never bind for this holder:
 
 ```bash
-sui client publish
+CAP2=$(sui client ptb \
+  --move-call $PKG::faucet::issue_claim_cap @$ADMIN @$ADDR 1000 1000 3600000 @0x6 \
+  --gas-budget 100000000 \
+  --json | jq -r '.objectChanges[] | select(.type=="created" and (.objectType|test("::faucet::ClaimCap"))) | .objectId')
+```
+
+The personal bucket has `1000` available, but the global window only has `95` left:
+
+```bash
+sui client object $CAP2 --json | jq -r '.content.personal_limiter.available'
+```
+
+```
+1000
 ```
 
 ```bash
-export PKG=0x...
+sui client object $FAUCET --json | jq -r '.content.global_limiter.available'
 ```
 
-Start a duel, then have mage 0 cast spell A at mage 1:
+```
+95
+```
+
+Try to claim `96` with the generous cap. The personal bucket has room, but the **global** window only allows `95`, so it aborts — the global cap binds across all holders:
 
 ```bash
 sui client ptb \
-  --move-call $PKG::mage_duel::start "'Alice'" "'Bob'" @0x6
-```
-
-```bash
-export DUEL=0x...          # shared Duel from the start output
-
-sui client ptb \
-  --move-call $PKG::mage_duel::cast_spell_a @$DUEL 0 @0x6
-```
-
-Spell A has a single charge, so casting it again before its cooldown elapses aborts `ERateLimited`:
-
-```bash
-sui client ptb \
-  --move-call $PKG::mage_duel::cast_spell_a @$DUEL 0 @0x6
-# Aborts: spell A is on cooldown after one use.
-```
-
-Spell B has its own, independent cooldown with three charges, so it is still castable:
-
-```bash
-sui client ptb \
-  --move-call $PKG::mage_duel::cast_spell_b @$DUEL 0 @0x6
-```
-
-## Example 4: A cooldown that delays an action (staking)
-
-A `Cooldown` does not have to throttle a repeated action — seeded as an *armed* gate, it can sit in front of a single action and delay it. This staking vault has no yield; its only job is to enforce an unbonding delay. Initiating an unstake hands the user an `UnstakeTicket` whose cooldown gate is armed to release `unbond_delay_ms` in the future. The user can only `claim` once that gate elapses.
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant Vault as StakingVault
-    participant Ticket as UnstakeTicket
-    User->>Vault: initiate_unstake(receipt, clock)
-    Vault-->>User: UnstakeTicket (gate armed: now + delay)
-    User->>Ticket: claim(clock) before delay
-    Ticket-->>User: aborts ERateLimited
-    User->>Ticket: claim(clock) after delay
-    Ticket-->>User: Coin<SUI>
-```
-
-```move
-module my_protocol::staking_vault;
-
-use openzeppelin_utils::rate_limiter::{Self, RateLimiter};
-use sui::balance::{Self, Balance};
-use sui::clock::Clock;
-use sui::coin::{Self, Coin};
-use sui::sui::SUI;
-
-/// Shared staking pool. `unbond_delay_ms` is the cooldown applied before staked funds can be claimed.
-public struct StakingVault has key {
-    id: UID,
-    funds: Balance<SUI>,
-    unbond_delay_ms: u64,
-}
-
-/// Proof of a staked position, held by the staker.
-public struct StakeReceipt has key, store {
-    id: UID,
-    amount: u64,
-}
-
-/// Issued when unstaking begins. Releases the reserved coins only after its cooldown gate elapses.
-public struct UnstakeTicket has key, store {
-    id: UID,
-    coins: Balance<SUI>,
-    gate: RateLimiter,
-}
-
-/// Share a staking vault with the given unbonding delay.
-public fun create(unbond_delay_ms: u64, ctx: &mut TxContext) {
-    transfer::share_object(StakingVault {
-        id: object::new(ctx),
-        funds: balance::zero(),
-        unbond_delay_ms,
-    });
-}
-
-/// Stake `payment`, returning a receipt for the staked amount.
-public fun stake(self: &mut StakingVault, payment: Coin<SUI>, ctx: &mut TxContext): StakeReceipt {
-    let amount = payment.value();
-    self.funds.join(payment.into_balance());
-    StakeReceipt { id: object::new(ctx), amount }
-}
-
-/// Begin unstaking: burn the receipt, reserve the coins into a ticket, and arm a cooldown that
-/// releases `unbond_delay_ms` from now.
-public fun initiate_unstake(
-    self: &mut StakingVault,
-    receipt: StakeReceipt,
-    clock: &Clock,
-    ctx: &mut TxContext,
-): UnstakeTicket {
-    let StakeReceipt { id, amount } = receipt;
-    id.delete();
-
-    let coins = self.funds.split(amount);
-    // Armed cooldown (gated seed): no charge available now, gate releases at now + delay.
-    let gate = rate_limiter::new_cooldown(
-        1, // capacity: a single claim
-        self.unbond_delay_ms, // cooldown_ms
-        0, // initial_available: nothing claimable yet
-        clock.timestamp_ms() + self.unbond_delay_ms, // cooldown_end_ms: release time
-        clock,
-    );
-    UnstakeTicket { id: object::new(ctx), coins, gate }
-}
-
-/// Claim unstaked coins. Consuming the gate aborts `ERateLimited` until the unbonding cooldown
-/// has elapsed; once it has, the gate releases and the coins are returned.
-public fun claim(ticket: UnstakeTicket, clock: &Clock, ctx: &mut TxContext): Coin<SUI> {
-    let UnstakeTicket { id, coins, mut gate } = ticket;
-    gate.consume_or_abort(1, clock);
-    id.delete();
-    coin::from_balance(coins, ctx)
-}
-
-/// Whether the ticket's cooldown has elapsed and the coins can be claimed now.
-public fun is_claimable(ticket: &UnstakeTicket, clock: &Clock): bool {
-    ticket.gate.available(clock) > 0
-}
-```
-
-The armed-gate seed (`initial_available == 0`, `cooldown_end_ms > now`) is the key. Until the release time, `available(clock)` projects to `0` and `consume_or_abort` aborts; once `now >= cooldown_end_ms`, the gate releases, `available(clock)` projects to `capacity` (here `1`), and the claim succeeds. The limiter holds no funds itself — it only decides *when* the surrounding `UnstakeTicket` may release them.
-
-### Publish and call it
-
-```bash
-sui client publish
-```
-
-```bash
-export PKG=0x...
-export ME=0x...
-```
-
-Create a vault with a short unbonding delay (3 seconds, to observe the gate release), stake some SUI, and keep the receipt:
-
-```bash
-sui client ptb \
-  --move-call $PKG::staking_vault::create 3000
-```
-
-```bash
-export STAKING_VAULT=0x...
-
-sui client ptb \
-  --split-coins gas "[1000]" \
-  --assign stake_coin \
-  --move-call $PKG::staking_vault::stake @$STAKING_VAULT stake_coin.0 \
-  --assign receipt \
-  --transfer-objects "[receipt]" @$ME
-```
-
-Initiate the unstake to receive a ticket with an armed cooldown:
-
-```bash
-export RECEIPT=0x...
-
-sui client ptb \
-  --move-call $PKG::staking_vault::initiate_unstake @$STAKING_VAULT @$RECEIPT @0x6 \
-  --assign ticket \
-  --transfer-objects "[ticket]" @$ME
-```
-
-Claiming immediately aborts `ERateLimited` — the unbonding cooldown has not elapsed:
-
-```bash
-export UNSTAKE_TICKET=0x...
-
-sui client ptb \
-  --move-call $PKG::staking_vault::claim @$UNSTAKE_TICKET @0x6 \
+  --move-call $PKG::faucet::claim @$FAUCET @$CAP2 96 @0x6 \
   --assign coin \
-  --transfer-objects "[coin]" @$ME
-# Aborts: the gate is still armed.
+  --transfer-objects "[coin]" @$ADDR \
+  --gas-budget 100000000
 ```
 
-After the delay elapses, the same call succeeds and returns the coins:
+```
+Error executing transaction '...': 1st command aborted within function
+'...::rate_limiter::consume_or_abort' ... Aborted with error code 0
+--'ERateLimited' -- 'Rate limited'
+```
+
+And because both checks run before the balance split, the failed claims never moved any funds — the faucet balance is still `9995`:
 
 ```bash
-sui client ptb \
-  --move-call $PKG::staking_vault::claim @$UNSTAKE_TICKET @0x6 \
-  --assign coin \
-  --transfer-objects "[coin]" @$ME
+sui client object $FAUCET --json | jq -r '.content.balance'
 ```
 
-## Reconfiguration
+```
+9995
+```
 
-There are no in-place `reconfigure_*` functions. To change a limiter's configuration or runtime state, snapshot the current values through the getters, build a fresh `RateLimiter`, and overwrite the field. The anchor getters (`last_refill_ms`, `window_start_ms`) return the *projected* anchor at `now` and pair with `available(clock)`, so reading both and reconstructing preserves the limiter's phase. Gate any reconfigure entry function with whatever authorization you require — here, the same `AdminCap` used to issue capabilities.
+## What this showed
 
-Rate guarantees hold *between* reconstructions, not *across* one: a backdated anchor pre-credits elapsed time on the first projection. Anchor at `clock.timestamp_ms()` unless you are deliberately preserving phase.
+In one module, the faucet exercised the core integration pattern end to end:
 
-## Operational checklist
+- A `RateLimiter` is embedded as a field of an object you own — the shared `Faucet` for the global window, and each `ClaimCap` for a per-holder bucket — never as a standalone object.
+- Different variants (`FixedWindow` and `Bucket`) share one `consume_or_abort` / `available` API, and compose cleanly across objects within a single PTB.
+- Running the check before the side effect makes every denial all-or-nothing: a refused claim reverts the transaction without touching funds.
+- Authorization (`ClaimCap`) and throughput (the limiters) are separate concerns — the module decides *how much*, the capability decides *who*.
 
-- Embed `RateLimiter` as a field of an object you own; never expect it to be a standalone object.
-- Choose the variant deliberately: `Bucket` for a smooth ceiling with bursts, `FixedWindow` for hard per-window quotas, `Cooldown` for burst-then-pause or a one-shot delay.
-- Run the limiter check *before* the side effect so a denied call has no partial effects.
-- Use `consume_or_abort` to revert on refusal, or `try_consume` to branch on it.
-- Guard against passing `0` to a consume; clamp with `available(clock)` and an `if (n > 0)` check where overkill is possible.
-- Gate the `&mut` to your object with a capability, [`openzeppelin_access`](/contracts-sui/1.x/access), governance, or a multisig — the module authorizes no one.
-- Reconfigure by reconstruction, anchoring at `clock.timestamp_ms()` unless you intend to preserve phase.
-
-For key concepts and the common-mistakes reference, see the [Rate Limiter module guide](/contracts-sui/1.x/rate-limiter). For function signatures, parameters, and errors, see the [Utilities API reference](/contracts-sui/1.x/api/utils).
+To change a limiter's configuration after deployment, there are no in-place setters: snapshot the current values through the getters, build a fresh `RateLimiter`, and overwrite the field, gating that entry function with the same `AdminCap`. See the [Rate Limiter module guide](/contracts-sui/1.x/rate-limiter) for key concepts and the common-mistakes reference, and the [Utilities API reference](/contracts-sui/1.x/api/utils) for function signatures, parameters, and errors.

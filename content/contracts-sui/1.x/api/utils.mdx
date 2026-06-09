@@ -25,9 +25,9 @@ Types
 
 Functions
 
-- [`new_bucket(capacity, refill_amount, refill_interval_ms, initial_available, last_refill_ms, clock)`](#rate_limiter-new_bucket)
+- [`new_bucket(capacity, refill_amount, refill_interval_ms, last_refill_ms, initial_available, clock)`](#rate_limiter-new_bucket)
 - [`new_fixed_window(capacity, window_ms, window_start_ms, initial_available, clock)`](#rate_limiter-new_fixed_window)
-- [`new_cooldown(capacity, cooldown_ms, initial_available, cooldown_end_ms, clock)`](#rate_limiter-new_cooldown)
+- [`new_cooldown(capacity, cooldown_ms, cooldown_end_ms, initial_available, clock)`](#rate_limiter-new_cooldown)
 - [`try_consume(self, amount, clock)`](#rate_limiter-try_consume)
 - [`consume_or_abort(self, amount, clock)`](#rate_limiter-consume_or_abort)
 - [`available(self, clock)`](#rate_limiter-available)
@@ -57,6 +57,7 @@ Errors
 - [`EWindowAnchorInFuture`](#rate_limiter-EWindowAnchorInFuture)
 - [`ECooldownArmedWithTokens`](#rate_limiter-ECooldownArmedWithTokens)
 - [`EBucketAnchorInFuture`](#rate_limiter-EBucketAnchorInFuture)
+- [`ECooldownDeadlineOverflow`](#rate_limiter-ECooldownDeadlineOverflow)
 
 #### Types [!toc] [#rate_limiter-Types]
 
@@ -75,13 +76,13 @@ The variant fields are not directly accessible from outside the module; read the
 #### Functions [!toc] [#rate_limiter-Functions]
 
 <APIItem
-  functionSignature="new_bucket(capacity: u64, refill_amount: u64, refill_interval_ms: u64, initial_available: u64, last_refill_ms: u64, clock: &Clock) -> RateLimiter"
+  functionSignature="new_bucket(capacity: u64, refill_amount: u64, refill_interval_ms: u64, last_refill_ms: u64, initial_available: u64, clock: &Clock) -> RateLimiter"
   id="rate_limiter-new_bucket"
   kind="public"
 >
 Creates a token bucket with an explicit initial balance and refill anchor. `available` accrues `refill_amount` every `refill_interval_ms`, capped at `capacity`.
 
-`initial_available` is the starting balance and must be `<= capacity`; `0` forces a wait for the first refill. `last_refill_ms` anchors the refill schedule; for a greenfield limiter pass `clock.timestamp_ms()`.
+`last_refill_ms` anchors the refill schedule; for a greenfield limiter pass `clock.timestamp_ms()`. Pass an earlier value to preserve the refill phase across a reconstruction, but only when the rate (`refill_amount` / `refill_interval_ms`) is unchanged — carrying an old anchor into a new rate pre-credits elapsed time at the new rate and can briefly exceed it. `initial_available` is the starting balance and must be `<= capacity`; `0` forces a wait for the first refill.
 
 Aborts with `EZeroCapacity` if `capacity` is `0`.
 
@@ -117,7 +118,7 @@ A caller can spend the full quota at the end of one window and again at the star
 </APIItem>
 
 <APIItem
-  functionSignature="new_cooldown(capacity: u64, cooldown_ms: u64, initial_available: u64, cooldown_end_ms: u64, clock: &Clock) -> RateLimiter"
+  functionSignature="new_cooldown(capacity: u64, cooldown_ms: u64, cooldown_end_ms: u64, initial_available: u64, clock: &Clock) -> RateLimiter"
   id="rate_limiter-new_cooldown"
   kind="public"
 >
@@ -139,9 +140,9 @@ Aborts with `ECooldownArmedWithTokens` if `initial_available > 0` and `cooldown_
   id="rate_limiter-try_consume"
   kind="public"
 >
-Projects state forward (accrual / window rollover / gate release), then consumes `amount` if the projected headroom allows. All-or-nothing: on success the projected state is committed and `amount` deducted; on failure the persisted state is left untouched. Returns `true` if the consume succeeded, `false` if the limiter refused.
+Projects state forward (accrual / window rollover / gate release), then consumes `amount` if the projected headroom allows. All-or-nothing: on success the projected state is committed and `amount` deducted; on failure the persisted state is left untouched. Returns `true` if the consume succeeded, `false` if the limiter refused or if `amount` is `0`.
 
-Aborts with `EInvalidAmount` if `amount` is `0`.
+Aborts with `ECooldownDeadlineOverflow` if consuming arms a `Cooldown` gate and `now + cooldown_ms` would overflow `u64`.
 </APIItem>
 
 <APIItem
@@ -154,6 +155,8 @@ Applies accrual, then consumes `amount` or aborts. The ergonomic wrapper for the
 Aborts with `EInvalidAmount` if `amount` is `0`.
 
 Aborts with `ERateLimited` if the limiter cannot satisfy the request.
+
+Aborts with `ECooldownDeadlineOverflow` if consuming arms a `Cooldown` gate and `now + cooldown_ms` would overflow `u64`.
 </APIItem>
 
 <APIItem
@@ -166,7 +169,7 @@ Read-only view of the units consumable right now, after projecting accrual / win
 For `Bucket`, this is the tokens consumable now. For `FixedWindow`, the remaining headroom after any rollover. For `Cooldown`, `capacity` if the gate has elapsed, otherwise the stored `available`.
 
 <Callout type="warn">
-`try_consume(self.available(clock), clock)` aborts `EInvalidAmount` when `available()` returns `0`. Guard with `if (n > 0) { self.try_consume(n, clock); }`.
+`try_consume(self.available(clock), clock)` returns `false` when `available()` returns `0` (a zero-unit consume is rejected). Guard with `if (n > 0) { self.try_consume(n, clock); }`.
 </Callout>
 </APIItem>
 
@@ -287,7 +290,7 @@ Raised when a variant-typed getter is called on a limiter of a different variant
 </APIItem>
 
 <APIItem functionSignature="EInvalidAmount" id="rate_limiter-EInvalidAmount" kind="error">
-Raised by `try_consume` or `consume_or_abort` when `amount == 0`.
+Raised by `consume_or_abort` when `amount == 0`. `try_consume` returns `false` instead of aborting.
 </APIItem>
 
 <APIItem functionSignature="EZeroRefillAmount" id="rate_limiter-EZeroRefillAmount" kind="error">
@@ -320,4 +323,8 @@ Raised by `new_cooldown` when `initial_available > 0` and `cooldown_end_ms > now
 
 <APIItem functionSignature="EBucketAnchorInFuture" id="rate_limiter-EBucketAnchorInFuture" kind="error">
 Raised by `new_bucket` when `last_refill_ms` is later than the current time.
+</APIItem>
+
+<APIItem functionSignature="ECooldownDeadlineOverflow" id="rate_limiter-ECooldownDeadlineOverflow" kind="error">
+Raised by `try_consume` / `consume_or_abort` when a consume drains a `Cooldown` batch and arming its gate would overflow `u64` (`now + cooldown_ms`). Any realistic `cooldown_ms` (seconds to years) stays well clear of this bound.
 </APIItem>
