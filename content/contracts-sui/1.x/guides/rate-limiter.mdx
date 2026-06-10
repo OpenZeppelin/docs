@@ -66,7 +66,7 @@ use openzeppelin_utils::rate_limiter::{Self, RateLimiter};
 
 ## The token to dispense
 
-A faucet needs something to hand out. We use a minimal fixed-supply coin, `RARE_COIN`, that mints its entire supply to the publisher on creation. This part is plain Sui — it does not touch `rate_limiter` — so the rate-limiting logic stays the focus.
+A faucet needs something to hand out. We use a minimal fixed-supply coin, `RARE_COIN`, that mints its entire supply to the publisher on creation.
 
 ```move title="sources/rare_coin.move"
 module rate_limiter_example::rare_coin;
@@ -86,8 +86,7 @@ fun init(witness: RARE_COIN, ctx: &mut TxContext) {
 
     let coins = treasury_cap.mint(10_000, ctx);
     currency.make_supply_fixed(treasury_cap);
-    let metadata_cap = currency.finalize(ctx);
-    transfer::public_freeze_object(metadata_cap);
+    currency.finalize_and_delete_metadata_cap(ctx);
     transfer::public_transfer(coins, ctx.sender());
 }
 ```
