@@ -8,7 +8,7 @@ The example code snippets used in this guide are experimental and have not been 
 
 The `rate_limiter` module provides an embeddable, multi-strategy rate-limiting primitive for Sui Move. `RateLimiter` is a plain `store + drop` value — **not** a Sui object. You embed it as a field inside an object you already own (a vault, a capability, a per-player record) and call one function on the hot path. There is no registry, no shared policy object, no admin cap, and no separate ID to track: the limiter's scope is whatever object it lives inside.
 
-Rate limiting is otherwise reimplemented ad hoc by every protocol that needs it — withdrawal throttles, daily caps, action cooldowns. `rate_limiter` generalizes the proven token-bucket math into a reusable primitive and adds two strategies (fixed window and cooldown) that share one consume and inspect API.
+Rate limiting is otherwise reimplemented ad hoc by every protocol that needs it — withdrawal throttles, daily caps, action cooldowns. `rate_limiter` generalizes the proven rate limiting math into a reusable primitive and exposes three strategies (bucket, fixed window and cooldown) that share a single API.
 
 ## Use cases
 
@@ -88,7 +88,7 @@ The limiter check runs *before* the side effect, so a denied withdrawal never to
 
 | Mistake | What happens | How to fix |
 |---|---|---|
-| `try_consume(rl.available(clock), clock)` when empty | Returns `false` (`available()` is `0`, and a zero-unit consume is rejected) — easy to misread as a successful consume | Guard: `let n = rl.available(clock); if (n > 0) { rl.try_consume(n, clock); }` |
+| `try_consume(rl.available(clock), clock)` when empty | Returns `false` (`available()` is `0`, and a zero-unit consume is rejected) — surprising if you expect "consume all available" to succeed as a no-op | Guard: `let n = rl.available(clock); if (n > 0) { rl.try_consume(n, clock); }` |
 | Calling `consume_or_abort` with `amount == 0` | Aborts `EInvalidAmount` (`try_consume` returns `false` instead) | Treat zero-unit work as a no-op in your own code; never pass `0`. |
 | Reading `cooldown_end_ms()` while `available > 0` | Returns a stale value (the gate is only consulted when `available == 0`) | Only interpret `cooldown_end_ms()` when `available(clock) == 0`. |
 | Seeding `new_cooldown` with `initial_available > 0` and `cooldown_end_ms > now` | Aborts `ECooldownArmedWithTokens` | Use one of the valid seed combinations (see the [API reference](/contracts-sui/1.x/api/utils)). |
@@ -108,13 +108,13 @@ The module has no `enabled` toggle by design. Implement pause in your own object
 No. Observability is left to you, since you hold the context an event needs (which user, which object). Emit your own event after a successful consume if you want indexing.
 
 **Can I probe the limiter without affecting it?**
-Yes. A failed `try_consume` (returns `false`) is observably a no-op across all three variants — no anchor advance, no balance change, no gate re-arm. `available(clock)` is also non-mutating.
+Yes. You can use the `available(clock)` getter (projects pending refills). Also, a failed `try_consume` (returns `false`) is observably a no-op across all three variants — no anchor advance, no balance change, no gate re-arm.
 
 **How do I inspect a limiter whose variant I don't know (for example, a `Table` mixing variants)?**
 Branch on `is_bucket()` / `is_fixed_window()` / `is_cooldown()` before calling a variant-typed getter (`refill_amount`, `window_ms`, `cooldown_ms`, ...). Those getters abort `EWrongVariant` on a mismatch, and Move cannot recover from an abort. `capacity()` and `available(clock)` are variant-agnostic and need no guard.
 
 ## Learn more
 
-For end-to-end examples — a globally throttled vault, mixed global and per-user limits, many limiters inside one type, and a cooldown that delays an action — with publishing and PTB walkthroughs, see the [Rate Limiting guide](/contracts-sui/1.x/guides/rate-limiter).
+For end-to-end examples — a globally throttled faucet, mixed global and per-user limits, many limiters inside one type, and a cooldown that delays an action — with publishing and PTB walkthroughs, see the [Rate Limiting guide](/contracts-sui/1.x/guides/rate-limiter).
 
 For function-level signatures, parameters, and errors, see the [Utilities API reference](/contracts-sui/1.x/api/utils).
