@@ -72,6 +72,67 @@ public fun withdraw(self: &mut Vault, amount: u64, clock: &Clock, ctx: &mut TxCo
 
 The limiter check runs *before* the side effect, so a denied withdrawal never touches `funds`.
 
+## Gating reuse with a cooldown
+
+`Cooldown` allows up to `capacity` uses, then locks for `cooldown_ms` before the batch refreshes. The consume call is identical to the bucket — only the constructor changes — and `available` surfaces the remaining uses without mutating:
+
+```move
+module my_game::ability;
+
+use openzeppelin_utils::rate_limiter::{Self, RateLimiter};
+use sui::clock::Clock;
+
+public struct Hero has key {
+    id: UID,
+    dash: RateLimiter, // 3 dashes, then a 30 s lockout
+}
+
+public fun mint(clock: &Clock, ctx: &mut TxContext) {
+    // Cooldown: 3 uses granted now, no gate armed yet (cooldown_end_ms = 0).
+    let dash = rate_limiter::new_cooldown(3, 30_000, 0, 3, clock);
+    transfer::transfer(Hero { id: object::new(ctx), dash }, ctx.sender());
+}
+
+public fun dash(self: &mut Hero, clock: &Clock) {
+    self.dash.consume_or_abort(1, clock); // aborts ERateLimited while gated
+    // ... apply the dash ...
+}
+
+/// Dashes still available right now — 0 while the cooldown is active.
+public fun dashes_left(self: &Hero, clock: &Clock): u64 {
+    self.dash.available(clock)
+}
+```
+
+The same shape arms a one-shot delay in front of an action: construct with `initial_available = 0` and `cooldown_end_ms = clock.timestamp_ms() + delay`, and every consume is gated until the delay elapses.
+
+## Reconfiguring a limiter
+
+There are no in-place setters. To change a limiter's configuration, snapshot its live state through the getters, build a fresh `RateLimiter`, and overwrite the field — `drop` lets the old value go. Gate the entry function with the same authority that guards your other privileged operations:
+
+```move
+/// Raise the vault's withdrawal ceiling, preserving the current balance and refill phase.
+public fun set_capacity(self: &mut Vault, new_capacity: u64, clock: &Clock) {
+    // Snapshot the live state...
+    let refill_amount = self.limiter.refill_amount();
+    let refill_interval_ms = self.limiter.refill_interval_ms();
+    let last_refill_ms = self.limiter.last_refill_ms(clock); // projected: preserves refill phase
+    let available = self.limiter.available(clock).min(new_capacity); // clamp if lowering capacity
+
+    // ...then overwrite the field with a fresh limiter built from it.
+    self.limiter = rate_limiter::new_bucket(
+        new_capacity,
+        refill_amount,
+        refill_interval_ms,
+        last_refill_ms,
+        available,
+        clock,
+    );
+}
+```
+
+Reading `last_refill_ms(clock)` and `available(clock)` together keeps the refill phase intact across the swap. Other policies — re-anchoring, a full reset, or switching variant entirely — are just different constructor calls over the same snapshot.
+
 ## Key concepts
 
 - **Embedded value, not an object.** `RateLimiter` has `store + drop` and no `key`/`UID`. It can only exist as a field of a parent value you own, and its scope is that parent — no global state, no contention, no registry to index. Withholding `copy` is what prevents over-issuance: a duplicable limiter would multiply your configured capacity by N.
@@ -80,7 +141,7 @@ The limiter check runs *before* the side effect, so a denied withdrawal never to
 
 - **All-or-nothing consume.** `try_consume` either consumes `amount` and commits the time projection, or returns `false` and writes nothing. There is no "denied but charged", so you can safely probe with `try_consume` without skewing state. `consume_or_abort` is the ergonomic wrapper that turns a refusal into an `ERateLimited` abort.
 
-- **Reconfigure by reconstruction.** There are no in-place `reconfigure_*` functions. To change config or state, read the current values through the getters, build a fresh `RateLimiter`, and overwrite the field. Every policy (preserve anchor, re-anchor, full reset, proportional carry, freeze an in-flight gate) is expressible in your own code; the library validates only structural validity on construction.
+- **Reconfigure by reconstruction.** There are no in-place setters; you change a limiter by overwriting the field with a fresh one (see [Reconfiguring a limiter](#reconfiguring-a-limiter)). Every policy — preserve anchor, re-anchor, full reset, proportional carry, freeze an in-flight gate — is expressible in your own code; the library validates only structural validity on construction.
 
 - **Authorization is yours.** Whoever holds `&mut` to the field may consume and reconfigure. Gate your entry functions with whatever model fits — a capability, [`openzeppelin_access`](/contracts-sui/1.x/access), governance, or a multisig. The module makes no access-control claim.
 
