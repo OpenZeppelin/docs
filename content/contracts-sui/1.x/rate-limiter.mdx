@@ -144,7 +144,7 @@ Preserving the anchor while *also* changing the refill rate re-prices the elapse
 
 - **Project-on-read.** `available(clock)` returns the units consumable *right now*, projecting any pending refill, window rollover, or cooldown release without mutating. `try_consume` commits that projection only on success.
 
-- **All-or-nothing consume.** `try_consume` either consumes `amount` and commits the time projection, or returns `false` and writes nothing. There is no "denied but charged", so you can safely probe with `try_consume` without skewing state. `consume_or_abort` is the ergonomic wrapper that turns a refusal into an `ERateLimited` abort.
+- **All-or-nothing consume.** `try_consume` either consumes `amount` and commits the time projection, or returns `false` and writes nothing (the lone exception is a pathological `Cooldown` config whose next deadline would overflow `u64`, which aborts `ECooldownDeadlineOverflow`). There is no "denied but charged", so you can safely probe with `try_consume` without skewing state. `consume_or_abort` is the ergonomic wrapper that turns a refusal into an `ERateLimited` abort.
 
 - **Reconfigure by reconstruction.** There are no in-place setters; you change a limiter by overwriting the field with a fresh one (see [Reconfiguring a limiter](#reconfiguring-a-limiter)). Every policy — preserve anchor, re-anchor, full reset, proportional carry, freeze an in-flight gate — is expressible in your own code; the library validates only structural validity on construction.
 
