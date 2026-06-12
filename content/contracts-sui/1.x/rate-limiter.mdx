@@ -134,6 +134,10 @@ public fun set_capacity(self: &mut Vault, new_capacity: u64, clock: &Clock) {
 
 Reading `last_refill_ms(clock)` and `available(clock)` together keeps the refill phase intact across the swap. Other policies — re-anchoring, a full reset, or switching variant entirely — are just different constructor calls over the same snapshot.
 
+<Callout type="warn">
+Preserving the anchor while *also* changing the refill rate re-prices the elapsed time under the new rate. A long gap since `last_refill_ms` can mint up to `capacity` tokens the instant the new limiter is constructed. If you change `refill_amount` or `refill_interval_ms`, re-anchor to `clock.timestamp_ms()` (and pick `initial_available` explicitly) instead of carrying the old anchor forward. Preserving the anchor is safe only when the rate is unchanged — as in the `set_capacity` example above.
+</Callout>
+
 ## Key concepts
 
 - **Embedded value, not an object.** `RateLimiter` has `store + drop` and no `key`/`UID`. It can only exist as a field of a parent value you own, and its scope is that parent — no global state, no contention, no registry to index. Withholding `copy` is what prevents over-issuance: a duplicable limiter would multiply your configured capacity by N.
@@ -156,6 +160,7 @@ Reading `last_refill_ms(clock)` and `available(clock)` together keeps the refill
 | Seeding `new_cooldown` with `initial_available > 0` and `cooldown_end_ms > now` | Aborts `ECooldownArmedWithTokens` | Use one of the valid seed combinations (see the [API reference](/contracts-sui/1.x/api/utils)). |
 | Passing a future `last_refill_ms` / `window_start_ms` | Aborts `EBucketAnchorInFuture` / `EWindowAnchorInFuture` | Pass `clock.timestamp_ms()` (or an earlier value). |
 | Expecting `FixedWindow` to prevent boundary bursts | A caller can spend `capacity` at the end of one window and `capacity` at the start of the next (a `2 * capacity` burst) | Use `Bucket` if a smooth ceiling matters; `FixedWindow` only guarantees the per-window cap. |
+| Preserving the bucket anchor while changing the refill rate | Elapsed time is re-priced under the new rate, minting up to `capacity` phantom tokens the instant the limiter is rebuilt | When changing `refill_amount` / `refill_interval_ms`, re-anchor to `clock.timestamp_ms()` and set `initial_available` explicitly; only preserve the anchor when the rate is unchanged. |
 | Assuming the limiter authorizes callers | It does not — anyone with `&mut` to the field can consume and reconfigure | Gate your entry functions with a capability, `openzeppelin_access`, governance, or a multisig. |
 
 ## FAQ
