@@ -143,13 +143,8 @@ const PROPERTY_EXPORTS = [
 	"returns2", "inheritedFunctions",
 ];
 
-function tsShim(varName, sourcePath, exports) {
-	return [
-		`import ${varName} from '${sourcePath}';`,
-		"",
-		...exports.map(e => `export const ${e} = ${varName}.${e};`),
-		"",
-	].join("\n");
+function tsShim(sourcePath, exports) {
+	return `export { ${exports.join(", ")} } from "${sourcePath}";\n`;
 }
 
 async function injectTemplates(tempDir, options) {
@@ -161,11 +156,7 @@ async function injectTemplates(tempDir, options) {
 
 	// Detect new layout (hardhat3-style): docs/config.mjs + docs/templates/.
 	// Legacy layout uses docs/config.js + docs/templates-md/.
-	let newLayout = false;
-	try {
-		await fs.access(path.join(tempDir, "docs", "config.mjs"));
-		newLayout = true;
-	} catch {}
+	const newLayout = await fs.access(path.join(tempDir, "docs", "config.mjs")).then(() => true, () => false);
 
 	const templatesTarget = path.join(
 		tempDir,
@@ -224,12 +215,12 @@ async function injectTemplates(tempDir, options) {
 		await fs.writeFile(propertiesCjsPath, propertiesSource, "utf8");
 		await fs.writeFile(
 			path.join(templatesTarget, "helpers.ts"),
-			tsShim("h", "./helpers.cjs", HELPER_EXPORTS),
+			tsShim("./helpers.cjs", HELPER_EXPORTS),
 			"utf8",
 		);
 		await fs.writeFile(
 			path.join(templatesTarget, "properties.ts"),
-			tsShim("p", "./properties.cjs", PROPERTY_EXPORTS),
+			tsShim("./properties.cjs", PROPERTY_EXPORTS),
 			"utf8",
 		);
 	}
