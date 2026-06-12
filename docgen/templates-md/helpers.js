@@ -321,12 +321,23 @@ function cleanupContent(content) {
     // xref:api:filename.adoc#anchor[text] -> [text](apiDocsBase/filename#anchor)
     .replace(/xref:api:([^[]+)\.adoc(?:#([^[]*))?\[([^\]]*)\]/g, (_, file, anchor, text) =>
       `[${text}](${apiDocsBase}/${file}${anchor ? '#' + anchor : ''})`)
-    // xref:module::filename.adoc[text] -> [text](docsBase/module/filename)
-    // Modules like "learn" are relative to the product docs base, not site root
-    .replace(/xref:([a-z-]+)::([^[]+)\.adoc(?:#([^[]*))?\[([^\]]*)\]/g, (_, mod, file, anchor, text) => {
-      // upgrades-plugins is a separate product at site root
-      const base = mod === 'upgrades-plugins' ? '' : docsBase;
-      return `[${text}](${base}/${mod}/${file}${anchor ? '#' + anchor : ''})`;
+    // xref:module::filename.adoc[text] -> [text](base/filename)
+    // `learn` is version-independent (only lives under /contracts/5.x/learn);
+    // separate products live at the site root; everything else hangs off the
+    // per-version product docs base. Keep in sync with scripts/convert-adoc.js.
+    .replace(/xref:([a-z-]+)::([^[]+)\.adoc(?:#([^[]*))?\[([^\]]*)\]/g, (match, mod, file, anchor, text) => {
+      const moduleBases = {
+        contracts: docsBase,
+        'community-contracts': '/community-contracts',
+        'confidential-contracts': '/confidential-contracts',
+        'upgrades-plugins': '/upgrades-plugins',
+        defender: '/defender',
+        learn: '/contracts/5.x/learn',
+      };
+      const base = moduleBases[mod];
+      if (base === undefined) return match;
+      const prefix = mod === 'learn' ? '' : `/${mod}`; // `learn`'s base already includes the module segment
+      return `[${text}](${base}${prefix}/${file}${anchor ? '#' + anchor : ''})`;
     })
     // xref:filename.adoc#anchor[text] -> [text](apiDocsBase/filename#anchor) (bare, within API context)
     .replace(/xref:([^:[\s]+)\.adoc(?:#([^[]*))?\[([^\]]*)\]/g, (_, file, anchor, text) =>
