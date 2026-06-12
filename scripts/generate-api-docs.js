@@ -161,11 +161,7 @@ async function injectTemplates(tempDir, options) {
 
 	// Detect new layout (hardhat3-style): docs/config.mjs + docs/templates/.
 	// Legacy layout uses docs/config.js + docs/templates-md/.
-	let newLayout = false;
-	try {
-		await fs.access(path.join(tempDir, "docs", "config.mjs"));
-		newLayout = true;
-	} catch {}
+	let newLayout = await fs.access(path.join(tempDir, "docs", "config.mjs")).then(() => true, () => false);
 
 	const templatesTarget = path.join(
 		tempDir,
