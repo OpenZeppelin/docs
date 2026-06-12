@@ -170,7 +170,7 @@ Preserving the anchor while *also* changing the refill rate re-prices the elapse
 No. It is a field of your object, not a separate object. There is no registry, no ID, nothing for a front end or indexer to track per environment.
 
 **How do I disable a limiter (pause)?**
-The module has no `enabled` toggle by design. Implement pause in your own object (for example, a `bool` checked before the consume), or reconstruct with a configuration that denies.
+The module has no `enabled` toggle by design. The simplest pause is in your own object — a `bool` checked before the consume. There is no literal deny-all config (every constructor requires positive parameters; `capacity == 0` aborts `EZeroCapacity`, and a `Bucket`/`FixedWindow` seeded empty just refills over time), but a `Cooldown` seeded with `initial_available = 0` and a far-future `cooldown_end_ms` stays gated and denies every consume until you reconstruct it.
 
 **Does the library emit events?**
 No. Observability is left to you, since you hold the context an event needs (which user, which object). Emit your own event after a successful consume if you want indexing.
@@ -179,7 +179,7 @@ No. Observability is left to you, since you hold the context an event needs (whi
 Yes. You can use the `available(clock)` getter (projects pending refills). Also, a failed `try_consume` (returns `false`) is observably a no-op across all three variants — no anchor advance, no balance change, no gate re-arm.
 
 **How do I inspect a limiter whose variant I don't know (for example, a `Table` mixing variants)?**
-Branch on `is_bucket()` / `is_fixed_window()` / `is_cooldown()` before calling a variant-typed getter (`refill_amount`, `window_ms`, `cooldown_ms`, ...). Those getters abort `EWrongVariant` on a mismatch, and Move cannot recover from an abort. `capacity()` and `available(clock)` are variant-agnostic and need no guard.
+Branch on `is_bucket()` / `is_fixed_window()` / `is_cooldown()` before calling a variant-typed getter (`refill_amount`, `window_ms`, `cooldown_ms`, ...). Those getters abort `EWrongVariant` on a mismatch, and Move cannot recover from an abort. Some variant-typed getters also take a `&Clock` and return a projected anchor — `last_refill_ms(clock)` (`Bucket`) and `window_start_ms(clock)` (`FixedWindow`) — so don't assume every variant getter is clock-free. `capacity()` and `available(clock)` are variant-agnostic and need no guard.
 
 ## Learn more
 
