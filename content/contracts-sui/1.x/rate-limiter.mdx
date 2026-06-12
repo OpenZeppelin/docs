@@ -34,7 +34,7 @@ One `RateLimiter` enum, three strategies. The variant is chosen at construction;
 | Variant | Behavior | When to pick it |
 |---|---|---|
 | `Bucket` | Holds up to `capacity` tokens, refilling `refill_amount` every `refill_interval_ms`, capped at `capacity`. | Smooth, sustained throughput with bursts up to `capacity` (vaults, throughput controls, mana/stamina regen). |
-| `FixedWindow` | Up to `capacity` units per fixed window of `window_ms`, anchored at creation; resets to `capacity` at each boundary. | Hard per-window quotas, e.g. "100 mints per hour". |
+| `FixedWindow` | Up to `capacity` units per fixed window of `window_ms`, anchored at a caller-chosen start (typically creation time); resets to `capacity` at each boundary. | Hard per-window quotas, e.g. "100 mints per hour". |
 | `Cooldown` | Up to `capacity` units per batch, then gated for `cooldown_ms` before the next full batch. | Burst-then-pause patterns, and one-shot delays in front of an action. |
 
 The library owns only the variant layout and the accrual / window / cooldown math. You own the enclosing object, the authorization model, and all reconfiguration semantics.
@@ -59,7 +59,8 @@ public struct Vault has key {
 }
 
 public fun create(clock: &Clock, ctx: &mut TxContext) {
-    // Bucket: at most 1_000 SUI outstanding, refilling 100 every 6 s, starting full.
+    // Bucket: cap 1_000 units, refilling 100 units every 6 s, starting full.
+    // (units are whatever you meter — here MIST)
     let limiter = rate_limiter::new_bucket(1_000, 100, 6_000, clock.timestamp_ms(), 1_000, clock);
     transfer::share_object(Vault { id: object::new(ctx), limiter, funds: balance::zero() });
 }
