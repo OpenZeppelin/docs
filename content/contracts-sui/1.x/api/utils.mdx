@@ -82,7 +82,7 @@ The variant fields are not directly accessible from outside the module; read the
 >
 Creates a token bucket with an explicit initial balance and refill anchor. `available` accrues `refill_amount` every `refill_interval_ms`, capped at `capacity`.
 
-`last_refill_ms` anchors the refill schedule; for a greenfield limiter pass `clock.timestamp_ms()`. Pass an earlier value to preserve the refill phase across a reconstruction, but only when the rate (`refill_amount` / `refill_interval_ms`) is unchanged — carrying an old anchor into a new rate pre-credits elapsed time at the new rate and can briefly exceed it. `initial_available` is the starting balance and must be `<= capacity`; `0` forces a wait for the first refill.
+`last_refill_ms` anchors the refill schedule; for a greenfield limiter pass `clock.timestamp_ms()`. Pass an earlier value to preserve the refill phase across a reconstruction, but only when the rate (`refill_amount` / `refill_interval_ms`) is unchanged - carrying an old anchor into a new rate pre-credits elapsed time at the new rate and can briefly exceed it. `initial_available` is the starting balance and must be `<= capacity`; `0` forces a wait for the first refill.
 
 Aborts with `EZeroCapacity` if `capacity` is `0`.
 
@@ -124,7 +124,7 @@ A caller can spend the full quota at the end of one window and again at the star
 >
 Creates a cooldown limiter. Up to `capacity` units may be consumed (in any combination of per-call amounts) before the limiter gates. Once `available` reaches `0`, `cooldown_end_ms` is set to `now + cooldown_ms`; no further consume succeeds until `now >= cooldown_end_ms`, at which point `available` resets to `capacity`.
 
-`cooldown_end_ms <= now` means no gate is armed. The valid seed combinations are: `initial_available > 0` with `cooldown_end_ms <= now` (granted — up to `initial_available` units before the first arm); `initial_available == 0` with `cooldown_end_ms > now` (gated — reconstructing a limiter mid-throttle, or arming a delay in front of an action); and `initial_available == 0` with `cooldown_end_ms <= now` (released — projects to fully available on the next read or consume).
+`cooldown_end_ms <= now` means no gate is armed. The valid seed combinations are: `initial_available > 0` with `cooldown_end_ms <= now` (granted - up to `initial_available` units before the first arm); `initial_available == 0` with `cooldown_end_ms > now` (gated - reconstructing a limiter mid-throttle, or arming a delay in front of an action); and `initial_available == 0` with `cooldown_end_ms <= now` (released - projects to fully available on the next read or consume).
 
 Aborts with `EZeroCapacity` if `capacity` is `0`.
 
