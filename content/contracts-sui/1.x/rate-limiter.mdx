@@ -6,9 +6,9 @@ title: Rate Limiter
 The example code snippets used in this guide are experimental and have not been audited. They simply help exemplify usage of the OpenZeppelin Sui Package.
 </Callout>
 
-The `rate_limiter` module provides an embeddable, multi-strategy rate-limiting primitive for Sui Move. `RateLimiter` is a plain `store + drop` value — **not** a Sui object. You embed it as a field inside an object you already own (a vault, a capability, a per-player record) and call one function on the hot path. There is no registry, no shared policy object, no admin cap, and no separate ID to track: the limiter's scope is whatever object it lives inside.
+The `rate_limiter` module provides an embeddable, multi-strategy rate-limiting primitive for Sui Move. `RateLimiter` is a plain `store + drop` value, **not** a Sui object. You embed it as a field inside an object you already own (a vault, a capability, a per-player record) and call one function on the hot path. There is no registry, no shared policy object, no admin cap, and no separate ID to track: the limiter's scope is whatever object it lives inside.
 
-Rate limiting is otherwise reimplemented ad hoc by every protocol that needs it — withdrawal throttles, daily caps, action cooldowns. `rate_limiter` generalizes the proven rate limiting math into a reusable primitive and exposes three strategies (bucket, fixed window and cooldown) that share a single API.
+Rate limiting is otherwise reimplemented ad hoc by every protocol that needs it, whether for withdrawal throttles, daily caps, or action cooldowns. `rate_limiter` generalizes the proven rate limiting math into a reusable primitive and exposes three strategies (bucket, fixed window and cooldown) that share a single API.
 
 ## Use cases
 
@@ -18,7 +18,7 @@ Use `rate_limiter` when your protocol needs:
 - Independent per-user or per-object budgets that refill over time.
 - A hard per-window quota, such as "100 mints per hour".
 - A cooldown that gates the reuse of an action after a burst.
-- A delay that must elapse before an action — like a claim or an unstake — can execute.
+- A delay that must elapse before an action such as a claim or an unstake can execute.
 - A regenerating resource in non-financial logic, such as health, mana, stamina, or energy.
 
 ## Import
@@ -60,7 +60,7 @@ public struct Vault has key {
 
 public fun create(clock: &Clock, ctx: &mut TxContext) {
     // Bucket: cap 1_000 units, refilling 100 units every 6 s, starting full.
-    // (units are whatever you meter — here MIST)
+    // (units are whatever you meter; here, MIST)
     let limiter = rate_limiter::new_bucket(1_000, 100, 6_000, clock.timestamp_ms(), 1_000, clock);
     transfer::share_object(Vault { id: object::new(ctx), limiter, funds: balance::zero() });
 }
@@ -75,7 +75,7 @@ The limiter check runs *before* the side effect, so a denied withdrawal never to
 
 ## Gating reuse with a cooldown
 
-`Cooldown` allows up to `capacity` uses, then locks for `cooldown_ms` before the batch refreshes. The consume call is identical to the bucket — only the constructor changes — and `available` surfaces the remaining uses without mutating:
+`Cooldown` allows up to `capacity` uses, then locks for `cooldown_ms` before the batch refreshes. The consume call is identical to the bucket (only the constructor changes), and `available` surfaces the remaining uses without mutating:
 
 ```move
 module my_game::ability;
@@ -99,7 +99,7 @@ public fun dash(self: &mut Hero, clock: &Clock) {
     // ... apply the dash ...
 }
 
-/// Dashes still available right now — 0 while the cooldown is active.
+/// Dashes still available right now; 0 while the cooldown is active.
 public fun dashes_left(self: &Hero, clock: &Clock): u64 {
     self.dash.available(clock)
 }
@@ -109,7 +109,7 @@ The same shape arms a one-shot delay in front of an action: construct with `init
 
 ## Reconfiguring a limiter
 
-There are no in-place setters. To change a limiter's configuration, snapshot its live state through the getters, build a fresh `RateLimiter`, and overwrite the field — `drop` lets the old value go. Gate the entry function with the same authority that guards your other privileged operations:
+There are no in-place setters. To change a limiter's configuration, snapshot its live state through the getters, build a fresh `RateLimiter`, and overwrite the field, since `drop` lets the old value go. Gate the entry function with the same authority that guards your other privileged operations:
 
 ```move
 /// Raise the vault's withdrawal ceiling, preserving the current balance and refill phase.
@@ -132,37 +132,37 @@ public fun set_capacity(self: &mut Vault, new_capacity: u64, clock: &Clock) {
 }
 ```
 
-Reading `last_refill_ms(clock)` and `available(clock)` together keeps the refill phase intact across the swap. Other policies — re-anchoring, a full reset, or switching variant entirely — are just different constructor calls over the same snapshot.
+Reading `last_refill_ms(clock)` and `available(clock)` together keeps the refill phase intact across the swap. Other policies, such as re-anchoring, a full reset, or switching variant entirely, are just different constructor calls over the same snapshot.
 
 <Callout type="warn">
-Preserving the anchor while *also* changing the refill rate re-prices the elapsed time under the new rate. A long gap since `last_refill_ms` can mint up to `capacity` tokens the instant the new limiter is constructed. If you change `refill_amount` or `refill_interval_ms`, re-anchor to `clock.timestamp_ms()` (and pick `initial_available` explicitly) instead of carrying the old anchor forward. Preserving the anchor is safe only when the rate is unchanged — as in the `set_capacity` example above.
+Preserving the anchor while *also* changing the refill rate re-prices the elapsed time under the new rate. A long gap since `last_refill_ms` can mint up to `capacity` tokens the instant the new limiter is constructed. If you change `refill_amount` or `refill_interval_ms`, re-anchor to `clock.timestamp_ms()` (and pick `initial_available` explicitly) instead of carrying the old anchor forward. Preserving the anchor is safe only when the rate is unchanged, as in the `set_capacity` example above.
 </Callout>
 
 ## Key concepts
 
-- **Embedded value, not an object.** `RateLimiter` has `store + drop` and no `key`/`UID`. It can only exist as a field of a parent value you own, and its scope is that parent — no global state, no contention, no registry to index. Withholding `copy` is what prevents over-issuance: a duplicable limiter would multiply your configured capacity by N.
+- **Embedded value, not an object.** `RateLimiter` has `store + drop` and no `key`/`UID`. It can only exist as a field of a parent value you own, and its scope is that parent, with no global state, no contention, and no registry to index. Withholding `copy` is what prevents over-issuance: a duplicable limiter would multiply your configured capacity by N.
 
 - **Project-on-read.** `available(clock)` returns the units consumable *right now*, projecting any pending refill, window rollover, or cooldown release without mutating. `try_consume` commits that projection only on success.
 
 - **All-or-nothing consume.** `try_consume` either consumes `amount` and commits the time projection, or returns `false` and writes nothing (the lone exception is a pathological `Cooldown` config whose next deadline would overflow `u64`, which aborts `ECooldownDeadlineOverflow`). There is no "denied but charged", so you can safely probe with `try_consume` without skewing state. `consume_or_abort` is the ergonomic wrapper that turns a refusal into an `ERateLimited` abort.
 
-- **Reconfigure by reconstruction.** There are no in-place setters; you change a limiter by overwriting the field with a fresh one (see [Reconfiguring a limiter](#reconfiguring-a-limiter)). Every policy — preserve anchor, re-anchor, full reset, proportional carry, freeze an in-flight gate — is expressible in your own code; the library validates only structural validity on construction.
+- **Reconfigure by reconstruction.** There are no in-place setters; you change a limiter by overwriting the field with a fresh one (see [Reconfiguring a limiter](#reconfiguring-a-limiter)). Every policy (preserve anchor, re-anchor, full reset, proportional carry, freeze an in-flight gate) is expressible in your own code; the library validates only structural validity on construction.
 
-- **Authorization is yours.** Whoever holds `&mut` to the field may consume and reconfigure. Gate your entry functions with whatever model fits — a capability, [`openzeppelin_access`](/contracts-sui/1.x/access), governance, or a multisig. The module makes no access-control claim.
+- **Authorization is yours.** Whoever holds `&mut` to the field may consume and reconfigure. Gate your entry functions with whatever model fits, such as a capability, [`openzeppelin_access`](/contracts-sui/1.x/access), governance, or a multisig. The module makes no access-control claim.
 
 ## Common mistakes
 
 | Mistake | What happens | How to fix |
 |---|---|---|
-| `try_consume(rl.available(clock), clock)` when empty | Returns `false` (`available()` is `0`, and a zero-unit consume is rejected) — surprising if you expect "consume all available" to succeed as a no-op | Guard: `let n = rl.available(clock); if (n > 0) { rl.try_consume(n, clock); }` |
+| `try_consume(rl.available(clock), clock)` when empty | Returns `false` (`available()` is `0`, and a zero-unit consume is rejected), which is surprising if you expect "consume all available" to succeed as a no-op | Guard: `let n = rl.available(clock); if (n > 0) { rl.try_consume(n, clock); }` |
 | Calling `consume_or_abort` with `amount == 0` | Aborts `EInvalidAmount` (`try_consume` returns `false` instead) | Treat zero-unit work as a no-op in your own code; never pass `0`. |
 | Reading `cooldown_end_ms()` while `available > 0` | Returns a stale value (the gate is only consulted when `available == 0`) | Only interpret `cooldown_end_ms()` when `available(clock) == 0`. |
-| Expecting a partially drained `Cooldown` to refill on each cooldown | It does not — the gate arms and the batch refreshes to `capacity` only once the balance hits exactly `0`. Capacity 10 with 7 spent reports `3` forever until those `3` are consumed and the gate then elapses | Drain the batch fully before the cooldown applies; the refresh is per-emptied-batch, not per-elapsed-interval. |
+| Expecting a partially drained `Cooldown` to refill on each cooldown | It does not. The gate arms and the batch refreshes to `capacity` only once the balance hits exactly `0`. Capacity 10 with 7 spent reports `3` forever until those `3` are consumed and the gate then elapses | Drain the batch fully before the cooldown applies; the refresh is per-emptied-batch, not per-elapsed-interval. |
 | Seeding `new_cooldown` with `initial_available > 0` and `cooldown_end_ms > now` | Aborts `ECooldownArmedWithTokens` | Use one of the valid seed combinations (see the [API reference](/contracts-sui/1.x/api/utils)). |
 | Passing a future `last_refill_ms` / `window_start_ms` | Aborts `EBucketAnchorInFuture` / `EWindowAnchorInFuture` | Pass `clock.timestamp_ms()` (or an earlier value). |
 | Expecting `FixedWindow` to prevent boundary bursts | A caller can spend `capacity` at the end of one window and `capacity` at the start of the next (a `2 * capacity` burst) | Use `Bucket` if a smooth ceiling matters; `FixedWindow` only guarantees the per-window cap. |
 | Preserving the bucket anchor while changing the refill rate | Elapsed time is re-priced under the new rate, minting up to `capacity` phantom tokens the instant the limiter is rebuilt | When changing `refill_amount` / `refill_interval_ms`, re-anchor to `clock.timestamp_ms()` and set `initial_available` explicitly; only preserve the anchor when the rate is unchanged. |
-| Assuming the limiter authorizes callers | It does not — anyone with `&mut` to the field can consume and reconfigure | Gate your entry functions with a capability, `openzeppelin_access`, governance, or a multisig. |
+| Assuming the limiter authorizes callers | It does not; anyone with `&mut` to the field can consume and reconfigure | Gate your entry functions with a capability, `openzeppelin_access`, governance, or a multisig. |
 
 ## FAQ
 
@@ -170,16 +170,16 @@ Preserving the anchor while *also* changing the refill rate re-prices the elapse
 No. It is a field of your object, not a separate object. There is no registry, no ID, nothing for a front end or indexer to track per environment.
 
 **How do I disable a limiter (pause)?**
-The module has no `enabled` toggle by design. The simplest pause is in your own object — a `bool` checked before the consume. There is no literal deny-all config (every constructor requires positive parameters; `capacity == 0` aborts `EZeroCapacity`, and a `Bucket`/`FixedWindow` seeded empty just refills over time), but a `Cooldown` seeded with `initial_available = 0` and a far-future `cooldown_end_ms` stays gated and denies every consume until you reconstruct it.
+The module has no `enabled` toggle by design. The simplest pause is in your own object: a `bool` checked before the consume. There is no literal deny-all config (every constructor requires positive parameters; `capacity == 0` aborts `EZeroCapacity`, and a `Bucket`/`FixedWindow` seeded empty just refills over time), but a `Cooldown` seeded with `initial_available = 0` and a far-future `cooldown_end_ms` stays gated and denies every consume until you reconstruct it.
 
 **Does the library emit events?**
 No. Observability is left to you, since you hold the context an event needs (which user, which object). Emit your own event after a successful consume if you want indexing.
 
 **Can I probe the limiter without affecting it?**
-Yes. You can use the `available(clock)` getter (projects pending refills). Also, a failed `try_consume` (returns `false`) is observably a no-op across all three variants — no anchor advance, no balance change, no gate re-arm.
+Yes. You can use the `available(clock)` getter (projects pending refills). Also, a failed `try_consume` (returns `false`) is observably a no-op across all three variants, with no anchor advance, no balance change, and no gate re-arm.
 
 **How do I inspect a limiter whose variant I don't know (for example, a `Table` mixing variants)?**
-Branch on `is_bucket()` / `is_fixed_window()` / `is_cooldown()` before calling a variant-typed getter (`refill_amount`, `window_ms`, `cooldown_ms`, ...). Those getters abort `EWrongVariant` on a mismatch, and Move cannot recover from an abort. Some variant-typed getters also take a `&Clock` and return a projected anchor — `last_refill_ms(clock)` (`Bucket`) and `window_start_ms(clock)` (`FixedWindow`) — so don't assume every variant getter is clock-free. `capacity()` and `available(clock)` are variant-agnostic and need no guard.
+Branch on `is_bucket()` / `is_fixed_window()` / `is_cooldown()` before calling a variant-typed getter (`refill_amount`, `window_ms`, `cooldown_ms`, ...). Those getters abort `EWrongVariant` on a mismatch, and Move cannot recover from an abort. Some variant-typed getters also take a `&Clock` and return a projected anchor (`last_refill_ms(clock)` for `Bucket` and `window_start_ms(clock)` for `FixedWindow`), so don't assume every variant getter is clock-free. `capacity()` and `available(clock)` are variant-agnostic and need no guard.
 
 ## Learn more
 
