@@ -6,7 +6,12 @@ title: OpenZeppelin Hardhat Upgrades API
 This is the documentation for Hardhat 3. For Hardhat 2, see the [Hardhat Upgrades API docs (Hardhat 2)](/upgrades-plugins/hardhat-2/api-hardhat-upgrades).
 </Callout>
 
-Both `deployProxy` and `upgradeProxy` functions will return instances of [ethers.js contracts](https://docs.ethers.org/v6/api/contract/#Contract), and require [ethers.js contract factories](https://docs.ethers.org/v6/api/contract/#ContractFactory) as arguments. For [beacons](/contracts/5.x/api/proxy#beacon), `deployBeacon` and `upgradeBeacon` will both return an upgradable beacon instance that can be used with a beacon proxy. All deploy and upgrade functions validate that the implementation contract is upgrade-safe, and will fail otherwise.
+This package offers two APIs: an ethers-based API (the default) and a viem-based API (imported from `@openzeppelin/hardhat-upgrades/viem`). The options and validations documented below apply to both; they differ in how contracts are referenced and returned:
+
+* **ethers-based API:** `deployProxy` and `upgradeProxy` return instances of [ethers.js contracts](https://docs.ethers.org/v6/api/contract/#Contract) and require [ethers.js contract factories](https://docs.ethers.org/v6/api/contract/#ContractFactory) as arguments.
+* **viem-based API:** the same functions identify contracts by name (a string) and return [viem contract instances](https://viem.sh/docs/contract/getContract); addresses are typed as `` `0x${string}` ``.
+
+For [beacons](/contracts/5.x/api/proxy#beacon), `deployBeacon` and `upgradeBeacon` both return an upgradable beacon instance that can be used with a beacon proxy. All deploy and upgrade functions validate that the implementation contract is upgrade-safe, and will fail otherwise.
 
 ## Setup
 
@@ -25,6 +30,18 @@ const defenderApi = await defender(hre, connection);
 ```
 
 `upgradesApi` exposes every top-level function documented below (e.g. `upgradesApi.deployProxy(...)`). `defenderApi` exposes the same functions plus the `defender.*` functions (e.g. `defenderApi.deployContract(...)`, `defenderApi.proposeUpgradeWithApproval(...)`). The `admin`, `erc1967`, and `beacon` namespaces are accessed as `upgradesApi.admin.*`, `upgradesApi.erc1967.*`, and `upgradesApi.beacon.*`.
+
+For the viem-based API, import `upgrades` from `@openzeppelin/hardhat-upgrades/viem` instead:
+
+```typescript
+import hre from 'hardhat';
+import { upgrades } from '@openzeppelin/hardhat-upgrades/viem';
+
+const connection = await hre.network.create();
+const upgradesApi = await upgrades(hre, connection);
+```
+
+It exposes the same functions and namespaces, with contracts referenced by name and returned as viem contract instances. The OpenZeppelin Defender functions (`defender.*`) are available only through the ethers-based API. Transactions are signed by the connection's first wallet client by default; pass a specific one with the `client` option.
 
 ## Common Options
 
@@ -57,7 +74,8 @@ The following options are common to some functions.
   * If set to `"always"`, the implementation contract is always redeployed even if it was previously deployed with the same bytecode. This can be used with the `salt` option when deploying a proxy through OpenZeppelin Defender to ensure that the implementation contract is deployed with the same salt as the proxy.
   * If set to `"never"`, the implementation contract is never redeployed. If the implementation contract was not previously deployed or is not found in the network file, an error will be thrown.
   * If set to `"onchange"`, the implementation contract is redeployed only if the bytecode has changed from previous deployments.
-* `txOverrides`: (`ethers.Overrides`) An ethers.js [Overrides](https://docs.ethers.org/v6/api/contract/#Overrides) object to override transaction parameters, such as `gasLimit` and `gasPrice`. Applies to all transactions sent by a function with this option, even if the function sends multiple transactions. For OpenZeppelin Defender deployments, only the `gasLimit`, `gasPrice`, `maxFeePerGas`, and `maxPriorityFeePerGas` parameters are supported.
+* `txOverrides`: (`ethers.Overrides`) An ethers.js [Overrides](https://docs.ethers.org/v6/api/contract/#Overrides) object to override transaction parameters, such as `gasLimit` and `gasPrice`. Applies to all transactions sent by a function with this option, even if the function sends multiple transactions. For OpenZeppelin Defender deployments, only the `gasLimit`, `gasPrice`, `maxFeePerGas`, and `maxPriorityFeePerGas` parameters are supported. This option is specific to the ethers-based API.
+* viem-based API transaction options: the viem-based API does not use `txOverrides`. Instead, pass the transaction parameters `gas`, `gasPrice`, `maxFeePerGas`, `maxPriorityFeePerGas`, and `value` directly as options, and use the `client` option to select the wallet/public client. The deprecated `useDeployedImplementation` option is also not available in the viem-based API; use `redeployImplementation` instead.
 * `useDefenderDeploy`: (`boolean`) Deploy contracts using OpenZeppelin Defender instead of ethers.js. See [Using with OpenZeppelin Defender](/upgrades-plugins/defender-deploy).
 * `verifySourceCode`: (`boolean`) When using OpenZeppelin Defender deployments, whether to verify source code on block explorers. Defaults to `true`.
 * `relayerId`: (`string`) When using OpenZeppelin Defender deployments, the ID of the relayer to use for the deployment. Defaults to the relayer configured for your deployment environment on Defender.

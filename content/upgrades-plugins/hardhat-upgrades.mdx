@@ -6,7 +6,7 @@ title: Using with Hardhat
 This is the documentation for Hardhat 3. For Hardhat 2, see [Using with Hardhat (Hardhat 2)](/upgrades-plugins/hardhat-2/hardhat-upgrades).
 </Callout>
 
-This package adds functions to your Hardhat scripts so you can deploy and upgrade proxies for your contracts. Requires `@nomicfoundation/hardhat-ethers`.
+This package adds functions to your Hardhat scripts so you can deploy and upgrade proxies for your contracts. It offers two APIs that you can choose between: an ethers-based API (the default, imported from `@openzeppelin/hardhat-upgrades`) and a viem-based API (imported from `@openzeppelin/hardhat-upgrades/viem`).
 
 <Callout>
 Migrating from Hardhat 2? See the [Migration Guide](/upgrades-plugins/migrate-from-hardhat-2).
@@ -16,11 +16,22 @@ Migrating from Hardhat 2? See the [Migration Guide](/upgrades-plugins/migrate-fr
 
 ```console
 $ npm install --save-dev @openzeppelin/hardhat-upgrades
-$ npm install --save-dev @nomicfoundation/hardhat-ethers ethers # peer dependencies
+```
+
+Then install the peer dependencies for the API you use. For the ethers-based API:
+
+```console
+$ npm install --save-dev @nomicfoundation/hardhat-ethers ethers
+```
+
+For the viem-based API:
+
+```console
+$ npm install --save-dev @nomicfoundation/hardhat-viem viem
 ```
 
 <Callout>
-Hardhat 3 supports both ethers and viem. This plugin uses `@nomicfoundation/hardhat-ethers` internally and loads it automatically. If your project uses viem, install `@nomicfoundation/hardhat-viem` and add it to your config alongside this plugin: your own scripts and tests can use viem, while the plugin's functions take ethers contract factories from `connection.ethers` and return ethers contracts.
+`@nomicfoundation/hardhat-ethers` and `ethers` are optional peer dependencies, required only by the ethers-based API; projects that use only the viem-based API do not need them. (Before this version they were required peer dependencies, so package managers installed them automatically.)
 </Callout>
 
 Register the `@openzeppelin/hardhat-upgrades` plugin in your [`hardhat.config.ts`](https://hardhat.org/config/):
@@ -34,6 +45,10 @@ export default defineConfig({
   // ... rest of config
 });
 ```
+
+<Callout>
+This default import registers the plugin and works with either API. If your project uses only the viem-based API and does not install `@nomicfoundation/hardhat-ethers`, import the plugin from `@openzeppelin/hardhat-upgrades/viem` instead — it is the same plugin, re-exported so it can be registered without referencing the ethers types. An `@openzeppelin/hardhat-upgrades/ethers` alias is also available as an alternative to the default import.
+</Callout>
 
 If you use the `verify` task, also add `@nomicfoundation/hardhat-verify` to the `plugins` array and configure Hardhat's `verify.etherscan.apiKey` setting.
 
@@ -154,6 +169,43 @@ main().catch(err => {
 });
 ```
 
+### Using the viem-based API
+
+The viem-based API mirrors the ethers-based one, with two differences in how you call it: import from `@openzeppelin/hardhat-upgrades/viem`, and identify contracts by name (instead of passing an ethers contract factory). The deploy and upgrade functions return [viem contract instances](https://viem.sh/docs/contract/getContract).
+
+```typescript
+// scripts/create-box.ts
+import hre from 'hardhat';
+import { upgrades } from '@openzeppelin/hardhat-upgrades/viem';
+
+async function main() {
+  const connection = await hre.network.create();
+  const upgradesApi = await upgrades(hre, connection);
+
+  const box = await upgradesApi.deployProxy('Box', [42]);
+  console.log('Box deployed to:', box.address);
+  console.log('Value:', await box.read.value());
+
+  // Later, upgrade the proxy to a new version:
+  const upgraded = await upgradesApi.upgradeProxy(box.address, 'BoxV2');
+  console.log('Box upgraded:', upgraded.address);
+}
+
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
+```
+
+Beacons work the same way, using contract names: `deployBeacon('Box')`, `deployBeaconProxy(beacon, 'Box', [42])`, and `upgradeBeacon(beacon, 'BoxV2')`. Addresses are typed as `` `0x${string}` ``, and transactions are signed by the connection's wallet client (or one you pass with the `client` option), so viem local accounts such as `privateKeyToAccount` are supported.
+
+#### Differences from the ethers-based API
+
+Both APIs accept the same options and run the same upgrade-safety validations. A couple of behaviors differ:
+
+- **Overloaded function names.** When you pass a bare function name (no parameter types) for the `initializer` option or an upgrade `call`, and the contract has multiple overloads of that name, the viem-based API resolves the overload from the argument types, while the ethers-based API requires the full function signature in that case.
+- **Function reference formats.** For the `initializer` option and upgrade `call`, the viem-based API accepts a function name or a canonical signature such as `initialize(uint256)`. It does not accept a 4-byte selector or non-canonical signature spellings that the ethers-based API tolerates.
+
 ## Usage in tests
 
 You can also use the plugin's functions from your Hardhat tests, in case you want to add tests for upgrading your contracts (which you should!). The API is the same as in scripts.
@@ -219,6 +271,30 @@ describe('Box', function () {
 
     const value = await upgraded.value();
     expect(value.toString()).to.equal('42');
+  });
+});
+```
+
+### Using the viem-based API
+
+```typescript
+import { expect } from 'chai';
+import hre from 'hardhat';
+import { upgrades } from '@openzeppelin/hardhat-upgrades/viem';
+
+describe('Box (viem)', function () {
+  let upgradesApi;
+
+  before(async () => {
+    const connection = await hre.network.create();
+    upgradesApi = await upgrades(hre, connection);
+  });
+
+  it('works', async () => {
+    const instance = await upgradesApi.deployProxy('Box', [42]);
+    const upgraded = await upgradesApi.upgradeProxy(instance.address, 'BoxV2');
+
+    expect(await upgraded.read.value()).to.equal(42n);
   });
 });
 ```
