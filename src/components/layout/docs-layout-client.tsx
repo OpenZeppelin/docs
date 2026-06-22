@@ -17,6 +17,7 @@ import {
 } from "@/components/icons";
 import { DocsLayout } from "@/components/layout/docs";
 import { useNavigationTree } from "@/hooks/use-navigation-tree";
+import { getEcosystemFromPath } from "@/lib/ecosystem-detection";
 
 interface DocsLayoutClientProps {
 	children: ReactNode;
@@ -42,6 +43,11 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 			return [];
 		}
 
+		// Prefer the ecosystem that uniquely owns this specific page (deterministic
+		// from the URL, available on a direct/first visit) over the sessionStorage
+		// value, which is empty until the user has navigated within an ecosystem.
+		const effectiveEcosystem = getEcosystemFromPath(pathname) ?? lastEcosystem;
+
 		const isSharedPath =
 			pathname.startsWith("/monitor") ||
 			pathname.startsWith("/relayer") ||
@@ -51,7 +57,7 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 
 		// Include shared paths in Stellar tab only if coming from Stellar context
 		const stellarUrls =
-			isSharedPath && lastEcosystem === "stellar"
+			isSharedPath && effectiveEcosystem === "stellar"
 				? new Set([
 						"/stellar-contracts",
 						"/monitor",
@@ -64,7 +70,7 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 
 		// Include shared paths in Polkadot tab only if coming from Polkadot context
 		const polkadotUrls =
-			isSharedPath && lastEcosystem === "polkadot"
+			isSharedPath && effectiveEcosystem === "polkadot"
 				? new Set([
 						"/substrate-runtimes",
 						"/monitor",
@@ -75,7 +81,7 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 				: new Set(["/substrate-runtimes"]);
 
 		const arbitrumStylusUrls =
-			isSharedPath && lastEcosystem === "contracts-stylus"
+			isSharedPath && effectiveEcosystem === "contracts-stylus"
 				? new Set([
 						"/contracts-stylus",
 						"/monitor",
@@ -100,9 +106,9 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 		]);
 		if (
 			!isSharedPath ||
-			!lastEcosystem ||
+			!effectiveEcosystem ||
 			!["stellar", "polkadot", "contracts-stylus", "midnight", "zama"].includes(
-				lastEcosystem,
+				effectiveEcosystem,
 			)
 		) {
 			ethereumUrls.add("/ecosystem-adapters");
@@ -110,12 +116,12 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 		}
 
 		const midnightUrls =
-			isSharedPath && lastEcosystem === "midnight"
+			isSharedPath && effectiveEcosystem === "midnight"
 				? new Set(["/contracts-compact", "/ecosystem-adapters", "/tools"])
 				: new Set(["/contracts-compact"]);
 
 		const zamaUrls =
-			isSharedPath && lastEcosystem === "zama"
+			isSharedPath && effectiveEcosystem === "zama"
 				? new Set([
 						"/confidential-contracts",
 						"/relayer",

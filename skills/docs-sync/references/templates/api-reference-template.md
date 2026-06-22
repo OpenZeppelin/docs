@@ -168,8 +168,9 @@ matching explanation page when one exists.>
 
 - **Source order, not alphabetical**, for sections within a module.
   Source order is meaningful in Move and matches the contracts repo.
-- **Carry over working prose verbatim.** Do not rewrite for style.
-  Replace prose only when it has become wrong.
+- **Carry over working prose** if it is accurate and tone-compliant. Do
+  not churn untouched entries. When an entry is already being edited,
+  trim verbose or indirect prose so it matches `docs.tone`.
 - **Match canonical entry order** (description → Aborts → Emits →
   NOTE/INFO/WARNING) per `<LOCAL_DOCS_CONVENTIONS_PATH>`. For Sui this
   order is mandatory.

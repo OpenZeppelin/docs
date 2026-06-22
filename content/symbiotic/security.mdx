@@ -1,0 +1,67 @@
+---
+title: Security
+---
+
+Security architecture and trust assumptions for the Symbiotic template.
+
+## Shared Trust Model
+
+| Entity | Trust Level | Notes |
+|--------|-------------|-------|
+| Settlement | Trusted | Verifies BLS quorum signatures |
+| Authorized submitters | Semi-trusted | Can submit proofs, but cannot forge valid signatures |
+| Owner | Trusted | Handles pause, unpause, and submitter management |
+| External users | Untrusted | No privileged access |
+
+Webhook ingress between OZ Monitor, OZ Relayer, and operators uses HMAC-SHA256 shared secrets. See [CLI & API Reference](/symbiotic/cli#http-api) for the header format.
+
+## Runtime API Security
+
+Operator runtime behavior that is easy to miss:
+
+- `/healthz` bypasses authentication so orchestration health checks keep working.
+- `/webhook/events` verifies HMAC over the raw body plus `X-Timestamp`, and rejects requests outside a 300s timestamp window.
+- `/api/v1/webhooks/oz-relayer` verifies a separate base64 HMAC signature over the raw JSON body.
+- Authentication failures on ingress webhooks intentionally return generic `401` responses instead of detailed errors.
+- CORS is off by default.
+- Debug routes are security-gated and may be hidden by middleware before the handler runs.
+
+Secrets are loaded from `WEBHOOK_SECRET` and `OZ_RELAYER_WEBHOOK_SECRET` at startup, not from the environment JSON.
+
+## LayerZero DVN Security
+
+The LayerZero provider trusts `SendUln302` as the only valid source-chain caller for `assignJob`.
+
+### Access Control
+
+| Function | Caller | Purpose |
+|----------|--------|---------|
+| `assignJob` | `SendUln302` only | Register verification jobs and emit `JobAssigned` |
+| `getFee` | Anyone | Quote verification fee |
+| `submitProof` | Authorized submitters | Submit signed Merkle proofs |
+| `addSubmitter` / `removeSubmitter` | Owner | Manage submitter whitelist |
+| `setBaseFee` / `pause` / `unpause` / `withdraw` / `transferOwnership` | Owner | Administrative controls |
+
+### Invariants
+
+1. `verifiedLeaves[leaf]` only moves from `false` to `true`.
+2. `verifiedRoots[root]` only moves from `false` to `true`.
+3. Uncached roots require a valid BLS quorum from Settlement.
+4. Verified packet headers must have the expected length and destination EID.
+5. `assignJob` rejects `msg.value > 0`; the DVN does not custody fees.
+
+## Chainlink CCV Security
+
+### Access Control
+
+| Function | Caller | Purpose |
+|----------|--------|---------|
+| `forwardToVerifier` | OnRamp | Register a message for CCV verification |
+| `verifyMessage` | OffRamp | Verify the message on the destination path |
+| `getFee` | Anyone | Quote verification fee |
+
+### Invariants
+
+1. Verification requires a valid BLS quorum signature from Settlement.
+2. The derived message ID must match the message payload being verified.
+3. Settlement epoch data must be fresh, or verification reverts with `EpochTooStale`.

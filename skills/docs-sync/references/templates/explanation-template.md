@@ -114,9 +114,9 @@ PTBs, with off-chain indexers, with upgrade paths?>
   you mention a function, link to it instead of redocumenting it.
 - **State opinions clearly.** Explanations are the one place where the
   docs may say "we recommend X over Y, because Z".
-- **Match `docs.tone` from config.** Default: *clear, precise,
-  security-conscious*. In explanations this means: willing to discuss
-  what could go wrong and willing to compare to alternatives.
+- **Match `docs.tone` from config.** Default: *direct, concise,
+  precise, security-conscious*. In explanations this means clear
+  tradeoffs, specific risks, and no extra setup prose.
 
 ## Where to put the file
 

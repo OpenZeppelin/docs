@@ -1,0 +1,91 @@
+---
+title: Deployment
+---
+
+Deploying and operating the stack beyond local development.
+
+<Callout type="warn">
+
+Testnet supports both providers: `layerzero` (`config/environments/testnet.json`, `ENV=testnet`) and `chainlink_ccv` (`config/environments/testnet-ccv.json`, `ENV=testnet-ccv`). The workflow below uses `ENV=testnet` (LayerZero); for the CCV path substitute `ENV=testnet-ccv`. Mainnet CCV is not yet supported.
+
+</Callout>
+
+## Testnet Workflow
+
+### 1. Generate keystores
+
+```bash
+cargo xtask --env testnet generate-signer \
+  --name deployer --name operator-1 --name operator-2 --name operator-3
+
+cargo xtask --env testnet generate-signer \
+  --name signer-1 --name signer-2 --name signer-3
+```
+
+Each command prompts for a passphrase interactively (hidden input, confirmed). Use separate passphrases for operator and relayer keystores. The `--env testnet` flag writes keys under `config/keys/testnet/`, where `config/environments/testnet.json` expects them — without it, keys default to `config/keys/local/` and `make deploy ENV=testnet` will not find them.
+
+Relayer keystores (`signer-1/2/3`) are generated automatically by `make deploy` for any environment if they don't already exist (using `KEYSTORE_PASSPHRASE`). Generating them manually above is optional — it only lets you set the passphrase interactively instead of reading it from `.env.testnet`.
+
+### 2. Configure environment
+
+Copy `.env.example` to `.env.testnet` and fill in the RPC URLs (Base Sepolia source, Sepolia destination) and keystore passphrases. Signer definitions in `config/environments/testnet.json` reference these passphrases.
+
+### 3. Deploy and run
+
+```bash
+make validate ENV=testnet
+make deploy ENV=testnet
+make refresh-genesis ENV=testnet   # only when validation says genesis is stale
+make start ENV=testnet
+make e2e ENV=testnet MSG="hello"
+```
+
+- `validate` runs read-only checks against config, RPC reachability, deployment state, operator state, and relayer signer safety.
+- `deploy` deploys managed contracts and regenerates `deployments/testnet.json` and `generated/testnet/`.
+- `refresh-genesis` repairs stale settlement genesis without redeploying contracts.
+- `start` detects the environment type and starts the appropriate services.
+
+By default, the LayerZero testnet config also deploys the starter `ExampleOApp`, so `make e2e ENV=testnet` remains part of the main workflow.
+
+If you want provider infrastructure only, set `layerzero.oapp.enabled` to `false` in `config/environments/testnet.json` before deploying. `validate` will still pass, but `make send` and `make e2e` will be unavailable.
+
+## Required Inputs
+
+Testnet settings live in `config/environments/<env>.json`. `.env.<env>` must provide:
+
+```bash
+DEPLOYER_PASSPHRASE=<deployer keystore passphrase>
+OPERATOR_1_PASSPHRASE=<operator-1 keystore passphrase>
+OPERATOR_2_PASSPHRASE=<operator-2 keystore passphrase>
+OPERATOR_3_PASSPHRASE=<operator-3 keystore passphrase>
+KEYSTORE_PASSPHRASE=<relayer keystore passphrase>   # used by OZ Relayer at runtime
+```
+
+Operator and deployer passphrases are resolved by `xtask` via the `signers` config. `KEYSTORE_PASSPHRASE` is read directly by the OZ Relayer container to decrypt relayer keystores at runtime.
+
+## Operational Notes
+
+- Local uses `make chains && make deploy && make start`; testnet uses `make deploy ENV=testnet` plus `make start ENV=testnet`.
+- Testnet uses `docker-compose.yml` only, not the local overlay.
+- Canonical deployment addresses always live in `deployments/<env>.json`.
+
+## Sidecar Image Compatibility
+
+The Symbiotic relay sidecar (`symbioticfi/relay`) is still in release-candidate phase. The pinned version in `docker-compose.yml` and the `RELAY_IMAGE` default in `xtask/src/genesis.rs` must stay in sync. Known states observed during integration:
+
+| Tag | Status | Notes |
+| --- | --- | --- |
+| `1.0.1-rc4` | works | Current pin. First image where aggregation produces proofs against real mainnet. |
+| `1.0.1-rc3.0.20260507060511-...` | broken | Starts cleanly but the aggregator never produces proofs even with full quorum signing. |
+| `1.0.1-20260326074346-da0bce8ba949` | broken on non-local | Panics at config init with an `errors.As` target-type bug when multiple chains are configured. Local works because the codepath differs. |
+
+If you bump the tag, run a full testnet e2e first and verify proofs are aggregated end-to-end. The `1.0.1` GA tag has not yet shipped from Symbiotic — track upstream releases before promoting any tag past `rc4`.
+
+## Common Deployment Failures
+
+- `validation failed: genesis stale`: run `make refresh-genesis ENV=<env>`.
+- `insufficient funds for gas`: fund the deployer account from the deployer keystore address.
+- Sidecars hit RPC rate limits: use stronger RPCs or reduce sidecar load temporarily.
+- Keys look drained immediately: do not reuse known local/dev keys on public networks.
+
+For runtime failures after deployment, see [Troubleshooting](/symbiotic/troubleshooting).
