@@ -26,7 +26,7 @@ $ npm install --save-dev @nomicfoundation/hardhat-viem viem
 ```
 
 <Callout>
-You need the `@openzeppelin/hardhat-upgrades` plugin **plus** the peer dependencies for the library you use — `@nomicfoundation/hardhat-ethers` and `ethers`, or `@nomicfoundation/hardhat-viem` and `viem`. (These are peer dependencies, so they aren't installed automatically.) **If you are using viem, import from `@openzeppelin/hardhat-upgrades/viem`** (not `@openzeppelin/hardhat-upgrades`) in both your config and your scripts/tests. The examples below use ethers; see [If you are using viem](#if-you-are-using-viem) for the viem equivalents.
+You need the `@openzeppelin/hardhat-upgrades` plugin **plus** the peer dependencies for the library you use — `@nomicfoundation/hardhat-ethers` and `ethers`, or `@nomicfoundation/hardhat-viem` and `viem`. (These are peer dependencies, so they aren't installed automatically.) **If you are using viem, import from `@openzeppelin/hardhat-upgrades/viem`** (not `@openzeppelin/hardhat-upgrades`) in both your config and your scripts/tests. The examples below use ethers; see [Using with viem](#using-with-viem) for the viem equivalents.
 </Callout>
 
 Register the `@openzeppelin/hardhat-upgrades` plugin in your [`hardhat.config.ts`](https://hardhat.org/config/):
@@ -164,43 +164,6 @@ main().catch(err => {
 });
 ```
 
-### If you are using viem
-
-If you are using viem, the API mirrors the ethers one, with two differences in how you call it: import from `@openzeppelin/hardhat-upgrades/viem`, and identify contracts by name (instead of passing an ethers contract factory). The deploy and upgrade functions return [viem contract instances](https://viem.sh/docs/contract/getContract).
-
-```typescript
-// scripts/create-box.ts
-import hre from 'hardhat';
-import { upgrades } from '@openzeppelin/hardhat-upgrades/viem';
-
-async function main() {
-  const connection = await hre.network.create();
-  const upgradesApi = await upgrades(hre, connection);
-
-  const box = await upgradesApi.deployProxy('Box', [42]);
-  console.log('Box deployed to:', box.address);
-  console.log('Value:', await box.read.value());
-
-  // Later, upgrade the proxy to a new version:
-  const upgraded = await upgradesApi.upgradeProxy(box.address, 'BoxV2');
-  console.log('Box upgraded:', upgraded.address);
-}
-
-main().catch(err => {
-  console.error(err);
-  process.exit(1);
-});
-```
-
-Beacons work the same way, using contract names: `deployBeacon('Box')`, `deployBeaconProxy(beacon, 'Box', [42])`, and `upgradeBeacon(beacon, 'BoxV2')`. Addresses are typed as `` `0x${string}` ``, and transactions are signed by the connection's wallet client (or one you pass with the `client` option), so viem local accounts such as `privateKeyToAccount` are supported.
-
-#### Differences from the ethers-based API
-
-Both accept the same options and run the same upgrade-safety validations. A couple of behaviors differ:
-
-- **Overloaded function names.** When you pass a bare function name (no parameter types) for the `initializer` option or an upgrade `call`, and the contract has multiple overloads of that name, viem resolves the overload from the argument types, while ethers requires the full function signature in that case.
-- **Function reference formats.** For the `initializer` option and upgrade `call`, viem accepts a function name or a canonical signature such as `initialize(uint256)`. It does not accept a 4-byte selector or non-canonical signature spellings that ethers tolerates.
-
 ## Usage in tests
 
 You can also use the plugin's functions from your Hardhat tests, in case you want to add tests for upgrading your contracts (which you should!). The API is the same as in scripts.
@@ -270,7 +233,39 @@ describe('Box', function () {
 });
 ```
 
-### If you are using viem
+## Using with viem
+
+If you are using viem, the API mirrors the ethers one, with two differences in how you call it: import from `@openzeppelin/hardhat-upgrades/viem`, and identify contracts by name (instead of passing an ethers contract factory). The deploy and upgrade functions return [viem contract instances](https://viem.sh/docs/contract/getContract).
+
+In a script:
+
+```typescript
+// scripts/create-box.ts
+import hre from 'hardhat';
+import { upgrades } from '@openzeppelin/hardhat-upgrades/viem';
+
+async function main() {
+  const connection = await hre.network.create();
+  const upgradesApi = await upgrades(hre, connection);
+
+  const box = await upgradesApi.deployProxy('Box', [42]);
+  console.log('Box deployed to:', box.address);
+  console.log('Value:', await box.read.value());
+
+  // Later, upgrade the proxy to a new version:
+  const upgraded = await upgradesApi.upgradeProxy(box.address, 'BoxV2');
+  console.log('Box upgraded:', upgraded.address);
+}
+
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
+```
+
+Beacons work the same way, using contract names: `deployBeacon('Box')`, `deployBeaconProxy(beacon, 'Box', [42])`, and `upgradeBeacon(beacon, 'BoxV2')`. Addresses are typed as `` `0x${string}` ``, and transactions are signed by the connection's wallet client (or one you pass with the `client` option), so viem local accounts such as `privateKeyToAccount` are supported.
+
+The same functions work in your tests:
 
 ```typescript
 import { expect } from 'chai';
@@ -293,6 +288,13 @@ describe('Box (viem)', function () {
   });
 });
 ```
+
+### Differences from the ethers-based API
+
+Both accept the same options and run the same upgrade-safety validations. A couple of behaviors differ:
+
+- **Overloaded function names.** When you pass a bare function name (no parameter types) for the `initializer` option or an upgrade `call`, and the contract has multiple overloads of that name, viem resolves the overload from the argument types, while ethers requires the full function signature in that case.
+- **Function reference formats.** For the `initializer` option and upgrade `call`, viem accepts a function name or a canonical signature such as `initialize(uint256)`. It does not accept a 4-byte selector or non-canonical signature spellings that ethers tolerates.
 
 ## Solidity tests
 
