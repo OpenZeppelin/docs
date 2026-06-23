@@ -17,7 +17,10 @@ All deploy and upgrade functions validate that the implementation contract is up
 
 ## Setup
 
-In Hardhat 3, all of the functions below are accessed via an `upgradesApi` object created from the `upgrades` factory. Defender-specific functions (`defender.*`) are accessed via `defenderApi` from the `defender` factory. Both factories take a network connection as an argument; share one connection across your operations. (Or use `hre.network.getOrCreate()`, which reuses a connection per network instead of creating a new one each time.)
+In Hardhat 3, all of the functions below are accessed via an `upgradesApi` object created from the `upgrades` factory, which takes a network connection as an argument; share one connection across your operations. (Or use `hre.network.getOrCreate()`, which reuses a connection per network instead of creating a new one each time.)
+
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
 
 ```typescript
 import hre from 'hardhat';
@@ -31,9 +34,8 @@ const upgradesApi = await upgrades(hre, connection);
 const defenderApi = await defender(hre, connection);
 ```
 
-`upgradesApi` exposes every top-level function documented below (e.g. `upgradesApi.deployProxy(...)`). `defenderApi` exposes the same functions plus the `defender.*` functions (e.g. `defenderApi.deployContract(...)`, `defenderApi.proposeUpgradeWithApproval(...)`). The `admin`, `erc1967`, and `beacon` namespaces are accessed as `upgradesApi.admin.*`, `upgradesApi.erc1967.*`, and `upgradesApi.beacon.*`.
-
-If you are using viem, import `upgrades` from `@openzeppelin/hardhat-upgrades/viem` instead:
+</Tab>
+<Tab value="viem">
 
 ```typescript
 import hre from 'hardhat';
@@ -43,7 +45,12 @@ const connection = await hre.network.create();
 const upgradesApi = await upgrades(hre, connection);
 ```
 
-It exposes the same functions and namespaces, with contracts referenced by name and returned as viem contract instances. The OpenZeppelin Defender functions (`defender.*`) are available only through the ethers-based API. Transactions are signed by the connection's first wallet client by default; pass a specific one with the `client` option.
+Contracts are referenced by name and returned as viem contract instances. OpenZeppelin Defender (`defender.*`) is available only with ethers. Transactions are signed by the connection's first wallet client by default; pass a specific one with the `client` option.
+
+</Tab>
+</Tabs>
+
+`upgradesApi` exposes every top-level function documented below (e.g. `upgradesApi.deployProxy(...)`). With ethers, `defenderApi` exposes the same functions plus the `defender.*` functions (e.g. `defenderApi.deployContract(...)`, `defenderApi.proposeUpgradeWithApproval(...)`). The `admin`, `erc1967`, and `beacon` namespaces are accessed as `upgradesApi.admin.*`, `upgradesApi.erc1967.*`, and `upgradesApi.beacon.*`.
 
 ## Common Options
 
@@ -98,6 +105,9 @@ The following options have been deprecated.
 
 ## deployProxy
 
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
+
 ```ts
 async function deployProxy(
   Contract: ethers.ContractFactory,
@@ -120,21 +130,46 @@ async function deployProxy(
 ): Promise<ethers.Contract>
 ```
 
-Creates a UUPS or Transparent proxy given an ethers contract factory to use as implementation, and returns a contract instance with the proxy address and the implementation interface. If `args` is set, will call an initializer function `initialize` with the supplied args during proxy deployment.
+</Tab>
+<Tab value="viem">
+
+```ts
+async function deployProxy(
+  contractName: string,
+  args: unknown[] = [],
+  opts?:
+    initializer?: string | false,
+    unsafeAllow?: ValidationError[],
+    constructorArgs?: unknown[],
+    initialOwner?: `0x${string}`,
+    unsafeSkipProxyAdminCheck?: boolean,
+    timeout?: number,
+    pollingInterval?: number,
+    redeployImplementation?: 'always' | 'never' | 'onchange',
+    kind?: 'uups' | 'transparent',
+    client?: KeyedClient,
+  ,
+): Promise<GetContractReturnType>
+```
+
+</Tab>
+</Tabs>
+
+Creates a UUPS or Transparent proxy from the given implementation, and returns a contract instance bound to the proxy address with the implementation interface. If `args` is set, will call an initializer function `initialize` with the supplied args during proxy deployment.
 
 If you call `deployProxy` several times for the same implementation contract, several proxies will be deployed, but only one implementation contract will be used.
 
 **Parameters:**
 
-* `Contract` - an ethers contract factory to use as the implementation.
+* the implementation — an ethers contract factory (`Contract`), or the contract name as a string when using viem (`contractName`).
 * `args` - arguments for the initializer function.
 * `opts` - an object with options:
-  * `initializer`: set a different initializer function to call (see [Specifying Fragments](https://docs.ethers.io/v5/api/utils/abi/interface/#Interface--specifying-fragments)), or specify `false` to disable initialization.
+  * `initializer`: set a different initializer function to call, or specify `false` to disable initialization.
   * additional options as described in [Common Options](#common-options).
 
 **Returns:**
 
-* a contract instance with the proxy address and the implementation interface.
+* a contract instance bound to the proxy address with the implementation interface — an ethers contract, or a viem contract instance when using viem.
 
 ## upgradeProxy
 

@@ -55,6 +55,9 @@ If you use the `verify` task, also add `@nomicfoundation/hardhat-verify` to the 
 
 You can use this plugin in a [Hardhat script](https://hardhat.org/docs/guides/writing-scripts) to deploy an upgradeable instance of one of your contracts via the `deployProxy` function:
 
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
+
 ```typescript
 // scripts/create-box.ts
 import hre from 'hardhat';
@@ -77,9 +80,37 @@ main().catch(err => {
 });
 ```
 
+</Tab>
+<Tab value="viem">
+
+```typescript
+// scripts/create-box.ts
+import hre from 'hardhat';
+import { upgrades } from '@openzeppelin/hardhat-upgrades/viem';
+
+async function main() {
+  const connection = await hre.network.create();
+  const upgradesApi = await upgrades(hre, connection);
+
+  const box = await upgradesApi.deployProxy('Box', [42]);
+  console.log('Box deployed to:', box.address);
+}
+
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
+```
+
+</Tab>
+</Tabs>
+
 This will automatically check that the `Box` contract is upgrade-safe, deploy an implementation contract for the `Box` contract (unless there is one already from a previous deployment), create a proxy (along with a proxy admin if needed), and initialize it by calling `initialize(42)`.
 
 Then, in another script, you can use the `upgradeProxy` function to upgrade the deployed instance to a new version. The new version can be a different contract (such as `BoxV2`), or you can just modify the existing `Box` contract and recompile it — the plugin will note it changed.
+
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
 
 ```typescript
 // scripts/upgrade-box.ts
@@ -103,6 +134,33 @@ main().catch(err => {
   process.exit(1);
 });
 ```
+
+</Tab>
+<Tab value="viem">
+
+```typescript
+// scripts/upgrade-box.ts
+import hre from 'hardhat';
+import { upgrades } from '@openzeppelin/hardhat-upgrades/viem';
+
+const PROXY_ADDRESS = '0x...'; // Replace with your proxy address
+
+async function main() {
+  const connection = await hre.network.create();
+  const upgradesApi = await upgrades(hre, connection);
+
+  await upgradesApi.upgradeProxy(PROXY_ADDRESS, 'BoxV2');
+  console.log('Box upgraded');
+}
+
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
+```
+
+</Tab>
+</Tabs>
 
 > Note: While this plugin keeps track of all the implementation contracts you have deployed per network, in order to reuse them and validate storage compatibilities, it does _not_ keep track of the proxies you have deployed. This means that you will need to manually keep track of each deployment address, to supply those to the upgrade function when needed.
 
