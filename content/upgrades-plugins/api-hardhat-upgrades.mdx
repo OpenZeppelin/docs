@@ -85,6 +85,7 @@ The following options are common to some functions.
   * If set to `"onchange"`, the implementation contract is redeployed only if the bytecode has changed from previous deployments.
 * `txOverrides`: (`ethers.Overrides`) An ethers.js [Overrides](https://docs.ethers.org/v6/api/contract/#Overrides) object to override transaction parameters, such as `gasLimit` and `gasPrice`. Applies to all transactions sent by a function with this option, even if the function sends multiple transactions. For OpenZeppelin Defender deployments, only the `gasLimit`, `gasPrice`, `maxFeePerGas`, and `maxPriorityFeePerGas` parameters are supported. This option applies to the default ethers-based API.
   * If you are using viem, `txOverrides` does not apply. Instead, pass the transaction parameters `gas`, `gasPrice`, `maxFeePerGas`, `maxPriorityFeePerGas`, and `value` directly as options, and use the `client` option to select the wallet/public client.
+* `client`: (`KeyedClient`) viem-based API only. The viem public and/or wallet clients to use, following `@nomicfoundation/hardhat-viem` conventions. `KeyedClient` is an object `{ public?: PublicClient; wallet?: WalletClient }` (with at least one of the two provided). The **wallet client** selects the account that signs the plugin's transactions — the viem counterpart of the ethers signer — and must be an account managed by the network connection. Defaults to the first wallet client from `connection.viem.getWalletClients()`.
 * `useDefenderDeploy`: (`boolean`) Deploy contracts using OpenZeppelin Defender instead of ethers.js. See [Using with OpenZeppelin Defender](/upgrades-plugins/defender-deploy).
 * `verifySourceCode`: (`boolean`) When using OpenZeppelin Defender deployments, whether to verify source code on block explorers. Defaults to `true`.
 * `relayerId`: (`string`) When using OpenZeppelin Defender deployments, the ID of the relayer to use for the deployment. Defaults to the relayer configured for your deployment environment on Defender.
@@ -149,7 +150,7 @@ async function deployProxy(
     kind?: 'uups' | 'transparent',
     client?: KeyedClient,
   ,
-): Promise<GetContractReturnType>
+): Promise<ContractReturnType>
 ```
 
 </Tab>
@@ -173,6 +174,9 @@ If you call `deployProxy` several times for the same implementation contract, se
 
 ## upgradeProxy
 
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
+
 ```ts
 async function upgradeProxy(
   proxy: string | ethers.Contract,
@@ -192,14 +196,39 @@ async function upgradeProxy(
 ): Promise<ethers.Contract>
 ```
 
+</Tab>
+<Tab value="viem">
+
+```ts
+async function upgradeProxy(
+  proxy: `0x${string}` | ContractReturnType,
+  contractName: string,
+  opts?:
+    call?: string | { fn: string; args?: unknown[] },
+    unsafeAllow?: ValidationError[],
+    unsafeAllowRenames?: boolean,
+    unsafeSkipStorageCheck?: boolean,
+    constructorArgs?: unknown[],
+    timeout?: number,
+    pollingInterval?: number,
+    redeployImplementation?: 'always' | 'never' | 'onchange',
+    kind?: 'uups' | 'transparent',
+    client?: KeyedClient,
+  ,
+): Promise<ContractReturnType>
+```
+
+</Tab>
+</Tabs>
+
 Upgrades a UUPS or Transparent proxy at a specified address to a new implementation contract, and returns a contract instance with the proxy address and the new implementation interface.
 
 **Parameters:**
 
 * `proxy` - the proxy address or proxy contract instance.
-* `Contract` - an ethers contract factory to use as the new implementation.
+* the new implementation — an ethers contract factory (`Contract`), or the contract name as a string when using viem (`contractName`).
 * `opts` - an object with options:
-  * `call`: enables the execution of an arbitrary function call during the upgrade process. This call is described using a function name, signature, or selector (see [Specifying Fragments](https://docs.ethers.io/v5/api/utils/abi/interface/#Interface--specifying-fragments)), and optional arguments. It is batched into the upgrade transaction, making it safe to call migration initializing functions.
+  * `call`: enables the execution of an arbitrary function call during the upgrade process. This call is described using a function name or signature, and optional arguments. It is batched into the upgrade transaction, making it safe to call migration initializing functions. The accepted formats differ slightly between ethers and viem — see [Differences](/upgrades-plugins/hardhat-upgrades#differences-from-the-ethers-based-api).
   * additional options as described in [Common Options](#common-options).
 
 **Returns:**
@@ -207,6 +236,9 @@ Upgrades a UUPS or Transparent proxy at a specified address to a new implementat
 * a contract instance with the proxy address and the new implementation interface.
 
 ## deployBeacon
+
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
 
 ```ts
 async function deployBeacon(
@@ -223,11 +255,32 @@ async function deployBeacon(
 ): Promise<ethers.Contract>
 ```
 
-Creates an [upgradable beacon](/contracts/5.x/api/proxy#UpgradeableBeacon) given an ethers contract factory to use as implementation, and returns the beacon contract instance.
+</Tab>
+<Tab value="viem">
+
+```ts
+async function deployBeacon(
+  contractName: string,
+  opts?:
+    unsafeAllow?: ValidationError[],
+    constructorArgs?: unknown[],
+    initialOwner?: `0x${string}`,
+    timeout?: number,
+    pollingInterval?: number,
+    redeployImplementation?: 'always' | 'never' | 'onchange',
+    client?: KeyedClient,
+  ,
+): Promise<UpgradeableBeaconContract>
+```
+
+</Tab>
+</Tabs>
+
+Creates an [upgradable beacon](/contracts/5.x/api/proxy#UpgradeableBeacon) for the given implementation, and returns the beacon contract instance.
 
 **Parameters:**
 
-* `Contract` - an ethers contract factory to use as the implementation.
+* the implementation — an ethers contract factory (`Contract`), or the contract name as a string when using viem (`contractName`).
 * `opts` - an object with options:
   * additional options as described in [Common Options](#common-options).
 
@@ -240,6 +293,9 @@ Creates an [upgradable beacon](/contracts/5.x/api/proxy#UpgradeableBeacon) given
 * `@openzeppelin/hardhat-upgrades@1.13.0`
 
 ## upgradeBeacon
+
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
 
 ```ts
 async function upgradeBeacon(
@@ -258,12 +314,35 @@ async function upgradeBeacon(
 ): Promise<ethers.Contract>
 ```
 
+</Tab>
+<Tab value="viem">
+
+```ts
+async function upgradeBeacon(
+  beacon: `0x${string}` | UpgradeableBeaconContract,
+  contractName: string,
+  opts?:
+    unsafeAllow?: ValidationError[],
+    unsafeAllowRenames?: boolean,
+    unsafeSkipStorageCheck?: boolean,
+    constructorArgs?: unknown[],
+    timeout?: number,
+    pollingInterval?: number,
+    redeployImplementation?: 'always' | 'never' | 'onchange',
+    client?: KeyedClient,
+  ,
+): Promise<UpgradeableBeaconContract>
+```
+
+</Tab>
+</Tabs>
+
 Upgrades an [upgradable beacon](/contracts/5.x/api/proxy#UpgradeableBeacon) at a specified address to a new implementation contract, and returns the beacon contract instance.
 
 **Parameters:**
 
 * `beacon` - the beacon address or beacon contract instance.
-* `Contract` - an ethers contract factory to use as the new implementation.
+* the new implementation — an ethers contract factory (`Contract`), or the contract name as a string when using viem (`contractName`).
 * `opts` - an object with options:
   * additional options as described in [Common Options](#common-options).
 
@@ -276,6 +355,9 @@ Upgrades an [upgradable beacon](/contracts/5.x/api/proxy#UpgradeableBeacon) at a
 * `@openzeppelin/hardhat-upgrades@1.13.0`
 
 ## deployBeaconProxy
+
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
 
 ```ts
 async function deployBeaconProxy(
@@ -292,15 +374,36 @@ async function deployBeaconProxy(
 ): Promise<ethers.Contract>
 ```
 
-Creates a [Beacon proxy](/contracts/5.x/api/proxy#BeaconProxy) given an existing beacon contract address and an ethers contract factory corresponding to the beacon’s current implementation contract, and returns a contract instance with the beacon proxy address and the implementation interface. If `args` is set, will call an initializer function `initialize` with the supplied args during proxy deployment.
+</Tab>
+<Tab value="viem">
+
+```ts
+async function deployBeaconProxy(
+  beacon: `0x${string}` | UpgradeableBeaconContract,
+  contractName: string,
+  args: unknown[] = [],
+  opts?:
+    initializer?: string | false,
+    kind?: 'uups' | 'transparent' | 'beacon',
+    timeout?: number,
+    pollingInterval?: number,
+    client?: KeyedClient,
+  ,
+): Promise<ContractReturnType>
+```
+
+</Tab>
+</Tabs>
+
+Creates a [Beacon proxy](/contracts/5.x/api/proxy#BeaconProxy) given an existing beacon and the beacon's current implementation contract, and returns a contract instance with the beacon proxy address and the implementation interface. If `args` is set, will call an initializer function `initialize` with the supplied args during proxy deployment.
 
 **Parameters:**
 
 * `beacon` - the beacon address or beacon contract instance.
-* `attachTo` - an ethers contract factory corresponding to the beacon’s current implementation contract.
+* the beacon's current implementation — an ethers contract factory (`attachTo`), or the contract name as a string when using viem (`contractName`).
 * `args` - arguments for the initializer function.
 * `opts` - an object with options:
-  * `initializer`: set a different initializer function to call (see [Specifying Fragments](https://docs.ethers.io/v5/api/utils/abi/interface/#Interface--specifying-fragments)), or specify `false` to disable initialization.
+  * `initializer`: set a different initializer function to call (a function name, or a signature such as `initialize(uint256)`), or specify `false` to disable initialization. See [Differences](/upgrades-plugins/hardhat-upgrades#differences-from-the-ethers-based-api).
   * additional options as described in [Common Options](#common-options).
 
 **Returns:**
@@ -313,6 +416,9 @@ Creates a [Beacon proxy](/contracts/5.x/api/proxy#BeaconProxy) given an existing
 
 ## forceImport
 
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
+
 ```ts
 async function forceImport(
   address: string,
@@ -323,10 +429,27 @@ async function forceImport(
 ): Promise<ethers.Contract>
 ```
 
-Forces the import of an existing proxy, beacon, or implementation contract deployment to be used with this plugin. Provide the address of an existing proxy, beacon or implementation, along with the ethers contract factory of the implementation contract that was deployed.
+</Tab>
+<Tab value="viem">
+
+```ts
+async function forceImport(
+  address: `0x${string}`,
+  contractName: string,
+  opts?:
+    kind?: 'uups' | 'transparent' | 'beacon',
+    client?: KeyedClient,
+  ,
+): Promise<ContractReturnType>
+```
+
+</Tab>
+</Tabs>
+
+Forces the import of an existing proxy, beacon, or implementation contract deployment to be used with this plugin. Provide the address of an existing proxy, beacon or implementation, along with its current implementation contract (an ethers contract factory, or the contract name as a string when using viem).
 
 <Callout type='warn'>
-When importing a proxy or beacon, the `deployedImpl` argument must be the contract factory of the **current** implementation contract version that is being used, not the version that you are planning to upgrade to.
+When importing a proxy or beacon, the implementation argument must be the **current** implementation contract version that is being used, not the version that you are planning to upgrade to.
 </Callout>
 
 Use this function to recreate a lost [network file](/upgrades-plugins/network-files) by importing previous deployments, or to register proxies or beacons for upgrading even if they were not originally deployed by this plugin. Supported for UUPS, Transparent, and Beacon proxies, as well as beacons and implementation contracts.
@@ -334,7 +457,7 @@ Use this function to recreate a lost [network file](/upgrades-plugins/network-fi
 **Parameters:**
 
 * `address` - the address of an existing proxy, beacon or implementation.
-* `deployedImpl` - the ethers contract factory of the implementation contract that was deployed.
+* the current implementation — an ethers contract factory (`deployedImpl`), or the contract name as a string when using viem (`contractName`).
 * `opts` - an object with options:
   * `kind`: (`"uups" | "transparent" | "beacon"`) forces a proxy to be treated as a UUPS, Transparent, or Beacon proxy. If not provided, the proxy kind will be automatically detected.
 
@@ -348,6 +471,9 @@ Use this function to recreate a lost [network file](/upgrades-plugins/network-fi
 
 ## validateImplementation
 
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
+
 ```ts
 async function validateImplementation(
   Contract: ethers.ContractFactory,
@@ -358,11 +484,27 @@ async function validateImplementation(
 ): Promise<void>
 ```
 
+</Tab>
+<Tab value="viem">
+
+```ts
+async function validateImplementation(
+  contractName: string,
+  opts?:
+    unsafeAllow?: ValidationError[],
+    kind?: 'uups' | 'transparent' | 'beacon',
+  ,
+): Promise<void>
+```
+
+</Tab>
+</Tabs>
+
 Validates an implementation contract without deploying it.
 
 **Parameters:**
 
-* `Contract` - the ethers contract factory of the implementation contract.
+* the implementation — an ethers contract factory (`Contract`), or the contract name as a string when using viem.
 * `opts` - an object with options:
   * additional options as described in [Common Options](#common-options).
 
@@ -371,6 +513,9 @@ Validates an implementation contract without deploying it.
 * `@openzeppelin/hardhat-upgrades@1.20.0`
 
 ## deployImplementation
+
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
 
 ```ts
 async function deployImplementation(
@@ -389,24 +534,48 @@ async function deployImplementation(
 ): Promise<string | ethers.providers.TransactionResponse>
 ```
 
+</Tab>
+<Tab value="viem">
+
+```ts
+async function deployImplementation(
+  contractName: string,
+  opts?:
+    unsafeAllow?: ValidationError[],
+    constructorArgs?: unknown[],
+    timeout?: number,
+    pollingInterval?: number,
+    redeployImplementation?: 'always' | 'never' | 'onchange',
+    kind?: 'uups' | 'transparent' | 'beacon',
+    client?: KeyedClient,
+  ,
+): Promise<`0x${string}`>
+```
+
+</Tab>
+</Tabs>
+
 Validates and deploys an implementation contract, and returns its address.
 
 **Parameters:**
 
-* `Contract` - an ethers contract factory to use as the implementation.
+* the implementation — an ethers contract factory (`Contract`), or the contract name as a string when using viem.
 * `opts` - an object with options:
-  * `getTxResponse`: if set to `true`, causes this function to return an ethers transaction response corresponding to the deployment of the new implementation contract instead of its address. Note that if the new implementation contract was originally imported as a result of `forceImport`, only the address will be returned.
+  * `getTxResponse`: (ethers-based API only) if set to `true`, causes this function to return an ethers transaction response corresponding to the deployment of the new implementation contract instead of its address. Note that if the new implementation contract was originally imported as a result of `forceImport`, only the address will be returned.
   * additional options as described in [Common Options](#common-options).
 
 **Returns:**
 
-* the address or an ethers transaction response corresponding to the deployment of the implementation contract.
+* the implementation contract address (or, with the ethers-based API, an ethers transaction response when `getTxResponse` is set).
 
 **Since:**
 
 * `@openzeppelin/hardhat-upgrades@1.20.0`
 
 ## validateUpgrade
+
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
 
 ```ts
 async function validateUpgrade(
@@ -421,12 +590,31 @@ async function validateUpgrade(
 ): Promise<void>
 ```
 
-Validates a new implementation contract without deploying it and without actually upgrading to it. Compares the current implementation contract to the new implementation contract to check for storage layout compatibility errors. If `referenceAddressOrContract` is the current implementation address, the `kind` option is required.
+</Tab>
+<Tab value="viem">
+
+```ts
+async function validateUpgrade(
+  referenceAddressOrContractName: `0x${string}` | string,
+  newContractName: string,
+  opts?:
+    unsafeAllow?: ValidationError[],
+    unsafeAllowRenames?: boolean,
+    unsafeSkipStorageCheck?: boolean,
+    kind?: 'uups' | 'transparent' | 'beacon',
+  ,
+): Promise<void>
+```
+
+</Tab>
+</Tabs>
+
+Validates a new implementation contract without deploying it and without actually upgrading to it. Compares the current implementation contract to the new implementation contract to check for storage layout compatibility errors. If the reference is the current implementation address, the `kind` option is required.
 
 **Parameters:**
 
-* `referenceAddressOrContract` - a proxy or beacon address that uses the current implementation, or an address or ethers contract factory corresponding to the current implementation.
-* `newContract` - the new implementation contract.
+* the current implementation — a proxy or beacon address that uses it, or the current implementation itself (an address or ethers contract factory, or the contract name as a string when using viem).
+* the new implementation contract — an ethers contract factory, or the contract name as a string when using viem.
 * `opts` - an object with options:
   * additional options as described in [Common Options](#common-options).
 
@@ -465,6 +653,9 @@ await upgradesApi.validateUpgrade(Box, BoxV2);
 
 ## prepareUpgrade
 
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
+
 ```ts
 async function prepareUpgrade(
   referenceAddressOrContract: string | ethers.Contract,
@@ -485,21 +676,49 @@ async function prepareUpgrade(
 ): Promise<string | ethers.providers.TransactionResponse>
 ```
 
-Validates and deploys a new implementation contract, and returns its address. If `referenceAddressOrContract` is the current implementation address, the `kind` option is required. Use this method to prepare an upgrade to be run from an admin address you do not control directly or cannot use from Hardhat.
+</Tab>
+<Tab value="viem">
+
+```ts
+async function prepareUpgrade(
+  referenceAddressOrContract: `0x${string}`,
+  contractName: string,
+  opts?:
+    unsafeAllow?: ValidationError[],
+    unsafeAllowRenames?: boolean,
+    unsafeSkipStorageCheck?: boolean,
+    constructorArgs?: unknown[],
+    timeout?: number,
+    pollingInterval?: number,
+    redeployImplementation?: 'always' | 'never' | 'onchange',
+    kind?: 'uups' | 'transparent' | 'beacon',
+    client?: KeyedClient,
+  ,
+): Promise<`0x${string}`>
+```
+
+</Tab>
+</Tabs>
+
+Validates and deploys a new implementation contract, and returns its address. If the reference is the current implementation address, the `kind` option is required. Use this method to prepare an upgrade to be run from an admin address you do not control directly or cannot use from Hardhat.
 
 **Parameters:**
 
-* `referenceAddressOrContract` - the proxy or beacon or implementation address or contract instance.
-* `Contract` - the new implementation contract.
+* the proxy, beacon, or implementation — an address or contract instance.
+* the new implementation contract — an ethers contract factory (`Contract`), or the contract name as a string when using viem (`contractName`).
 * `opts` - an object with options:
-  * `getTxResponse`: if set to `true`, causes this function to return an ethers transaction response corresponding to the deployment of the new implementation contract instead of its address. Note that if the new implementation contract was originally imported as a result of `forceImport`, only the address will be returned.
+  * `getTxResponse`: (ethers-based API only) if set to `true`, causes this function to return an ethers transaction response corresponding to the deployment of the new implementation contract instead of its address. Note that if the new implementation contract was originally imported as a result of `forceImport`, only the address will be returned.
   * additional options as described in [Common Options](#common-options).
 
 **Returns:**
 
-* the address or an ethers transaction response corresponding to the deployment of the new implementation contract.
+* the new implementation contract address (or, with the ethers-based API, an ethers transaction response when `getTxResponse` is set).
 
 ## defender.deployContract
+
+<Callout>
+The `defender.*` functions are available only with the ethers-based API (accessed via `defender(hre, connection)`); they are not part of the viem-based API.
+</Callout>
 
 ```ts
 async function deployContract(
@@ -622,6 +841,9 @@ Similar to `prepareUpgrade`. This method validates and deploys the new implement
 
 ## admin.changeProxyAdmin
 
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
+
 ```ts
 async function changeProxyAdmin(
   proxyAddress: string,
@@ -633,6 +855,26 @@ async function changeProxyAdmin(
 ): Promise<void>
 ```
 
+</Tab>
+<Tab value="viem">
+
+```ts
+async function changeProxyAdmin(
+  proxyAddress: `0x${string}`,
+  newAdmin: `0x${string}`,
+  opts?:
+    gas?: bigint,
+    gasPrice?: bigint,
+    maxFeePerGas?: bigint,
+    maxPriorityFeePerGas?: bigint,
+    value?: bigint,
+  ,
+): Promise<void>
+```
+
+</Tab>
+</Tabs>
+
 Changes the admin for a specific proxy.
 
 <Callout>
@@ -643,11 +885,14 @@ This function is not supported with admins or proxies from OpenZeppelin Contract
 
 * `proxyAddress` - the address of the proxy to change.
 * `newAdmin` - the new admin address.
-* `signer` - the signer to use for the transaction.
+* `signer` - (ethers-based API only) the signer to use for the transaction. The viem-based API signs admin transactions with the connection's wallet client and does not accept a `client` option here.
 * `opts` - an object with options:
   * additional options as described in [Common Options](#common-options).
 
 ## admin.transferProxyAdminOwnership
+
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
 
 ```ts
 async function transferProxyAdminOwnership(
@@ -661,6 +906,27 @@ async function transferProxyAdminOwnership(
 ): Promise<void>
 ```
 
+</Tab>
+<Tab value="viem">
+
+```ts
+async function transferProxyAdminOwnership(
+  proxyAddress: `0x${string}`,
+  newOwner: `0x${string}`,
+  opts?:
+    silent?: boolean,
+    gas?: bigint,
+    gasPrice?: bigint,
+    maxFeePerGas?: bigint,
+    maxPriorityFeePerGas?: bigint,
+    value?: bigint,
+  ,
+): Promise<void>
+```
+
+</Tab>
+</Tabs>
+
 Changes the owner of the proxy admin contract for a specific proxy.
 
 <Callout>
@@ -671,7 +937,7 @@ The `proxyAddress` parameter is required since `@openzeppelin/hardhat-upgrades@3
 
 * `proxyAddress` - the address of the proxy whose admin ownership is to be transferred.
 * `newOwner` - the new owner address for the proxy admin contract.
-* `signer` - the signer to use for the transaction.
+* `signer` - (ethers-based API only) the signer to use for the transaction. The viem-based API signs with the connection's wallet client.
 * `opts` - an object with options:
   * `silent`: if set to `true`, silences console logging about each proxy affected by the admin ownership transfer.
   * additional options as described in [Common Options](#common-options).
@@ -682,11 +948,26 @@ The `proxyAddress` parameter is required since `@openzeppelin/hardhat-upgrades@3
 
 ## erc1967
 
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
+
 ```ts
 async function erc1967.getImplementationAddress(proxyAddress: string): Promise<string>;
 async function erc1967.getBeaconAddress(proxyAddress: string): Promise<string>;
 async function erc1967.getAdminAddress(proxyAddress: string): Promise<string>;
 ```
+
+</Tab>
+<Tab value="viem">
+
+```ts
+async function erc1967.getImplementationAddress(proxyAddress: `0x${string}`): Promise<`0x${string}`>;
+async function erc1967.getBeaconAddress(proxyAddress: `0x${string}`): Promise<`0x${string}`>;
+async function erc1967.getAdminAddress(proxyAddress: `0x${string}`): Promise<`0x${string}`>;
+```
+
+</Tab>
+</Tabs>
 
 Functions in this module provide access to the [ERC1967](https://eips.ethereum.org/EIPS/eip-1967) variables of a proxy contract.
 
@@ -700,9 +981,22 @@ Functions in this module provide access to the [ERC1967](https://eips.ethereum.o
 
 ## beacon
 
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
+
 ```ts
 async function beacon.getImplementationAddress(beaconAddress: string): Promise<string>;
 ```
+
+</Tab>
+<Tab value="viem">
+
+```ts
+async function beacon.getImplementationAddress(beaconAddress: `0x${string}`): Promise<`0x${string}`>;
+```
+
+</Tab>
+</Tabs>
 
 This module provides a convenience function to get the implementation address from a beacon contract.
 
