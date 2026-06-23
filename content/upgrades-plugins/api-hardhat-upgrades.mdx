@@ -9,7 +9,7 @@ This is the documentation for Hardhat 3. For Hardhat 2, see the [Hardhat Upgrade
 This package works with both ethers and viem. By default it uses the ethers-based API; if you are using viem, import from `@openzeppelin/hardhat-upgrades/viem`. The options and validations documented below apply either way; what differs is how contracts are referenced and returned:
 
 * **Ethers (the default):** `deployProxy` and `upgradeProxy` return instances of [ethers.js contracts](https://docs.ethers.org/v6/api/contract/#Contract) and require [ethers.js contract factories](https://docs.ethers.org/v6/api/contract/#ContractFactory) as arguments.
-* **If you are using viem:** the same functions identify contracts by name (a string) and return [viem contract instances](https://viem.sh/docs/contract/getContract); addresses are typed as `` `0x${string}` ``.
+* **If you are using viem:** the same functions identify contracts by name (a string) and return [viem contract instances](https://viem.sh/docs/contract/getContract); addresses use viem's `Address` type (a `` `0x${string}` `` template-literal type — any string beginning with `0x`).
 
 For beacons, `deployBeacon` and `upgradeBeacon` both return an upgradable beacon instance that can be used with a beacon proxy.
 
@@ -142,7 +142,7 @@ async function deployProxy(
     initializer?: string | false,
     unsafeAllow?: ValidationError[],
     constructorArgs?: unknown[],
-    initialOwner?: `0x${string}`,
+    initialOwner?: Address,
     unsafeSkipProxyAdminCheck?: boolean,
     timeout?: number,
     pollingInterval?: number,
@@ -201,7 +201,7 @@ async function upgradeProxy(
 
 ```ts
 async function upgradeProxy(
-  proxy: `0x${string}` | ContractReturnType,
+  proxy: Address | ContractReturnType,
   contractName: string,
   opts?:
     call?: string | { fn: string; args?: unknown[] },
@@ -264,7 +264,7 @@ async function deployBeacon(
   opts?:
     unsafeAllow?: ValidationError[],
     constructorArgs?: unknown[],
-    initialOwner?: `0x${string}`,
+    initialOwner?: Address,
     timeout?: number,
     pollingInterval?: number,
     redeployImplementation?: 'always' | 'never' | 'onchange',
@@ -319,7 +319,7 @@ async function upgradeBeacon(
 
 ```ts
 async function upgradeBeacon(
-  beacon: `0x${string}` | UpgradeableBeaconContract,
+  beacon: Address | UpgradeableBeaconContract,
   contractName: string,
   opts?:
     unsafeAllow?: ValidationError[],
@@ -379,7 +379,7 @@ async function deployBeaconProxy(
 
 ```ts
 async function deployBeaconProxy(
-  beacon: `0x${string}` | UpgradeableBeaconContract,
+  beacon: Address | UpgradeableBeaconContract,
   contractName: string,
   args: unknown[] = [],
   opts?:
@@ -434,7 +434,7 @@ async function forceImport(
 
 ```ts
 async function forceImport(
-  address: `0x${string}`,
+  address: Address,
   contractName: string,
   opts?:
     kind?: 'uups' | 'transparent' | 'beacon',
@@ -549,7 +549,7 @@ async function deployImplementation(
     kind?: 'uups' | 'transparent' | 'beacon',
     client?: KeyedClient,
   ,
-): Promise<`0x${string}`>
+): Promise<Address>
 ```
 
 </Tab>
@@ -595,7 +595,7 @@ async function validateUpgrade(
 
 ```ts
 async function validateUpgrade(
-  referenceAddressOrContractName: `0x${string}` | string,
+  referenceAddressOrContractName: Address | string,
   newContractName: string,
   opts?:
     unsafeAllow?: ValidationError[],
@@ -721,7 +721,7 @@ async function prepareUpgrade(
 
 ```ts
 async function prepareUpgrade(
-  referenceAddressOrContract: `0x${string}`,
+  referenceAddressOrContract: Address,
   contractName: string,
   opts?:
     unsafeAllow?: ValidationError[],
@@ -734,7 +734,7 @@ async function prepareUpgrade(
     kind?: 'uups' | 'transparent' | 'beacon',
     client?: KeyedClient,
   ,
-): Promise<`0x${string}`>
+): Promise<Address>
 ```
 
 </Tab>
@@ -900,8 +900,8 @@ async function changeProxyAdmin(
 
 ```ts
 async function changeProxyAdmin(
-  proxyAddress: `0x${string}`,
-  newAdmin: `0x${string}`,
+  proxyAddress: Address,
+  newAdmin: Address,
   opts?:
     gas?: bigint,
     gasPrice?: bigint,
@@ -951,8 +951,8 @@ async function transferProxyAdminOwnership(
 
 ```ts
 async function transferProxyAdminOwnership(
-  proxyAddress: `0x${string}`,
-  newOwner: `0x${string}`,
+  proxyAddress: Address,
+  newOwner: Address,
   opts?:
     silent?: boolean,
     gas?: bigint,
@@ -1001,9 +1001,9 @@ async function erc1967.getAdminAddress(proxyAddress: string): Promise<string>;
 <Tab value="viem">
 
 ```ts
-async function erc1967.getImplementationAddress(proxyAddress: `0x${string}`): Promise<`0x${string}`>;
-async function erc1967.getBeaconAddress(proxyAddress: `0x${string}`): Promise<`0x${string}`>;
-async function erc1967.getAdminAddress(proxyAddress: `0x${string}`): Promise<`0x${string}`>;
+async function erc1967.getImplementationAddress(proxyAddress: Address): Promise<Address>;
+async function erc1967.getBeaconAddress(proxyAddress: Address): Promise<Address>;
+async function erc1967.getAdminAddress(proxyAddress: Address): Promise<Address>;
 ```
 
 </Tab>
@@ -1032,7 +1032,7 @@ async function beacon.getImplementationAddress(beaconAddress: string): Promise<s
 <Tab value="viem">
 
 ```ts
-async function beacon.getImplementationAddress(beaconAddress: `0x${string}`): Promise<`0x${string}`>;
+async function beacon.getImplementationAddress(beaconAddress: Address): Promise<Address>;
 ```
 
 </Tab>

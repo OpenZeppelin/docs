@@ -14,22 +14,33 @@ Migrating from Hardhat 2? See the [Migration Guide](/upgrades-plugins/migrate-fr
 
 ## Installation
 
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
+
 ```console
-# install the plugin:
 $ npm install --save-dev @openzeppelin/hardhat-upgrades
-
-# and the peer dependencies for the library you use — either ethers:
 $ npm install --save-dev @nomicfoundation/hardhat-ethers ethers
+```
 
-# or viem:
+</Tab>
+<Tab value="viem">
+
+```console
+$ npm install --save-dev @openzeppelin/hardhat-upgrades
 $ npm install --save-dev @nomicfoundation/hardhat-viem viem
 ```
 
+</Tab>
+</Tabs>
+
 <Callout>
-You need the `@openzeppelin/hardhat-upgrades` plugin **plus** the peer dependencies for the library you use — `@nomicfoundation/hardhat-ethers` and `ethers`, or `@nomicfoundation/hardhat-viem` and `viem`. (These are peer dependencies, so they aren't installed automatically.) **If you are using viem, import from `@openzeppelin/hardhat-upgrades/viem`** (not `@openzeppelin/hardhat-upgrades`) in both your config and your scripts/tests. Every code example below has an **ethers / viem** toggle — see [Using with viem](#using-with-viem).
+Use the **ethers / viem** toggle to choose your library — it switches the install commands, the config below, and every code example on this page, and your choice is remembered. The peer dependencies are optional, so your package manager won't install them automatically. See [Using with viem](#using-with-viem) for the behavior differences between the two.
 </Callout>
 
-Register the `@openzeppelin/hardhat-upgrades` plugin in your [`hardhat.config.ts`](https://hardhat.org/config/):
+Register the plugin in your [`hardhat.config.ts`](https://hardhat.org/config/):
+
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
 
 ```typescript
 import { defineConfig } from 'hardhat/config';
@@ -41,9 +52,22 @@ export default defineConfig({
 });
 ```
 
-<Callout>
-This default import registers the plugin and works either way. If you are using only viem and do not install `@nomicfoundation/hardhat-ethers`, import the plugin from `@openzeppelin/hardhat-upgrades/viem` instead — it is the same plugin, re-exported so it can be registered without referencing the ethers types. An `@openzeppelin/hardhat-upgrades/ethers` alias is also available as an alternative to the default import.
-</Callout>
+</Tab>
+<Tab value="viem">
+
+```typescript
+import { defineConfig } from 'hardhat/config';
+import hardhatViem from '@nomicfoundation/hardhat-viem';
+import hardhatUpgrades from '@openzeppelin/hardhat-upgrades/viem';
+
+export default defineConfig({
+  plugins: [hardhatViem, hardhatUpgrades],
+  // ... rest of config
+});
+```
+
+</Tab>
+</Tabs>
 
 If you use the `verify` task, also add `@nomicfoundation/hardhat-verify` to the `plugins` array and configure Hardhat's `verify.etherscan.apiKey` setting.
 
@@ -418,7 +442,7 @@ describe('Box', function () {
 
 ## Using with viem
 
-Every code example on this page has an **ethers / viem** toggle — switch the tab to see the viem version. The viem API imports from `@openzeppelin/hardhat-upgrades/viem`, identifies contracts by name (instead of passing an ethers contract factory), and returns [viem contract instances](https://viem.sh/docs/contract/getContract) with `read` and `write`. Your selected tab is remembered across the page. Addresses are typed as `` `0x${string}` ``, and transactions are signed by the connection's wallet client (or one you pass with the `client` option), so viem local accounts such as `privateKeyToAccount` are supported.
+Every code example on this page has an **ethers / viem** toggle — switch the tab to see the viem version. The viem API imports from `@openzeppelin/hardhat-upgrades/viem`, identifies contracts by name (instead of passing an ethers contract factory), and returns [viem contract instances](https://viem.sh/docs/contract/getContract) with `read` and `write`. Your selected tab is remembered across the page. Addresses use viem's `Address` type, and transactions are signed by the connection's wallet client (or one you pass with the `client` option), so viem local accounts such as `privateKeyToAccount` are supported.
 
 ### Differences from the ethers-based API
 
