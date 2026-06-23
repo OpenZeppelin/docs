@@ -1,6 +1,6 @@
 import { APIPage } from "fumadocs-openapi/ui";
-import defaultMdxComponents from "fumadocs-ui/mdx";
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
+import defaultMdxComponents from "fumadocs-ui/mdx";
 import {
 	AnchorIcon,
 	CodeIcon,
