@@ -85,7 +85,7 @@ The following options are common to some functions.
   * If set to `"onchange"`, the implementation contract is redeployed only if the bytecode has changed from previous deployments.
 * `txOverrides`: (`ethers.Overrides`) An ethers.js [Overrides](https://docs.ethers.org/v6/api/contract/#Overrides) object to override transaction parameters, such as `gasLimit` and `gasPrice`. Applies to all transactions sent by a function with this option, even if the function sends multiple transactions. For OpenZeppelin Defender deployments, only the `gasLimit`, `gasPrice`, `maxFeePerGas`, and `maxPriorityFeePerGas` parameters are supported. This option applies to the default ethers-based API.
   * If you are using viem, `txOverrides` does not apply. Instead, pass the transaction parameters `gas`, `gasPrice`, `maxFeePerGas`, `maxPriorityFeePerGas`, and `value` directly as options, and use the `client` option to select the wallet/public client.
-* `client`: (`KeyedClient`) viem-based API only. The viem public and/or wallet clients to use, following `@nomicfoundation/hardhat-viem` conventions. `KeyedClient` is an object `{ public?: PublicClient; wallet?: WalletClient }` (with at least one of the two provided). The **wallet client** selects the account that signs the plugin's transactions — the viem counterpart of the ethers signer — and must be an account managed by the network connection. Defaults to the first wallet client from `connection.viem.getWalletClients()`.
+* `client`: (`KeyedClient`) viem-based API only. The viem public and/or wallet clients to use, following `@nomicfoundation/hardhat-viem` conventions. `KeyedClient` is an object `{ public?: PublicClient; wallet?: WalletClient }` (with at least one of the two provided). The **wallet client** selects the account that signs the plugin's transactions — the viem counterpart of the ethers signer — and must be an account managed by the network connection. Defaults to the first wallet client from `connection.viem.getWalletClients()`. The `admin.*` functions instead take a wallet client as a positional argument, not via this option.
 * `useDefenderDeploy`: (`boolean`) Deploy contracts using OpenZeppelin Defender instead of ethers.js. See [Using with OpenZeppelin Defender](/upgrades-plugins/defender-deploy).
 * `verifySourceCode`: (`boolean`) When using OpenZeppelin Defender deployments, whether to verify source code on block explorers. Defaults to `true`.
 * `relayerId`: (`string`) When using OpenZeppelin Defender deployments, the ID of the relayer to use for the deployment. Defaults to the relayer configured for your deployment environment on Defender.
@@ -113,7 +113,7 @@ The following options have been deprecated.
 async function deployProxy(
   Contract: ethers.ContractFactory,
   args: unknown[] = [],
-  opts?:
+  opts?: {
     initializer?: string | false,
     unsafeAllow?: ValidationError[],
     constructorArgs?: unknown[],
@@ -127,7 +127,7 @@ async function deployProxy(
     useDefenderDeploy?: boolean,
     proxyFactory?: ethers.ContractFactory,
     deployFunction?: () => Promise<EthersOrDefenderDeployment>,
-  ,
+  },
 ): Promise<ethers.Contract>
 ```
 
@@ -138,7 +138,7 @@ async function deployProxy(
 async function deployProxy(
   contractName: string,
   args: unknown[] = [],
-  opts?:
+  opts?: {
     initializer?: string | false,
     unsafeAllow?: ValidationError[],
     constructorArgs?: unknown[],
@@ -149,7 +149,7 @@ async function deployProxy(
     redeployImplementation?: 'always' | 'never' | 'onchange',
     kind?: 'uups' | 'transparent',
     client?: KeyedClient,
-  ,
+  },
 ): Promise<ContractReturnType>
 ```
 
@@ -181,8 +181,8 @@ If you call `deployProxy` several times for the same implementation contract, se
 async function upgradeProxy(
   proxy: string | ethers.Contract,
   Contract: ethers.ContractFactory,
-  opts?:
-    call?: string | { fn: string; args?: unknown[] ,
+  opts?: {
+    call?: string | { fn: string; args?: unknown[] },
     unsafeAllow?: ValidationError[],
     unsafeAllowRenames?: boolean,
     unsafeSkipStorageCheck?: boolean,
@@ -203,7 +203,7 @@ async function upgradeProxy(
 async function upgradeProxy(
   proxy: Address | ContractReturnType,
   contractName: string,
-  opts?:
+  opts?: {
     call?: string | { fn: string; args?: unknown[] },
     unsafeAllow?: ValidationError[],
     unsafeAllowRenames?: boolean,
@@ -214,7 +214,7 @@ async function upgradeProxy(
     redeployImplementation?: 'always' | 'never' | 'onchange',
     kind?: 'uups' | 'transparent',
     client?: KeyedClient,
-  ,
+  },
 ): Promise<ContractReturnType>
 ```
 
@@ -243,7 +243,7 @@ Upgrades a UUPS or Transparent proxy at a specified address to a new implementat
 ```ts
 async function deployBeacon(
   Contract: ethers.ContractFactory,
-  opts?:
+  opts?: {
     unsafeAllow?: ValidationError[],
     constructorArgs?: unknown[],
     initialOwner?: string,
@@ -251,7 +251,7 @@ async function deployBeacon(
     pollingInterval?: number,
     redeployImplementation?: 'always' | 'never' | 'onchange',
     txOverrides?: ethers.Overrides,
-  ,
+  },
 ): Promise<ethers.Contract>
 ```
 
@@ -261,7 +261,7 @@ async function deployBeacon(
 ```ts
 async function deployBeacon(
   contractName: string,
-  opts?:
+  opts?: {
     unsafeAllow?: ValidationError[],
     constructorArgs?: unknown[],
     initialOwner?: Address,
@@ -269,7 +269,7 @@ async function deployBeacon(
     pollingInterval?: number,
     redeployImplementation?: 'always' | 'never' | 'onchange',
     client?: KeyedClient,
-  ,
+  },
 ): Promise<UpgradeableBeaconContract>
 ```
 
@@ -301,7 +301,7 @@ Creates an [upgradable beacon](/contracts/5.x/api/proxy#UpgradeableBeacon) for t
 async function upgradeBeacon(
   beacon: string | ethers.Contract,
   Contract: ethers.ContractFactory,
-  opts?:
+  opts?: {
     unsafeAllow?: ValidationError[],
     unsafeAllowRenames?: boolean,
     unsafeSkipStorageCheck?: boolean,
@@ -310,7 +310,7 @@ async function upgradeBeacon(
     pollingInterval?: number,
     redeployImplementation?: 'always' | 'never' | 'onchange',
     txOverrides?: ethers.Overrides,
-  ,
+  },
 ): Promise<ethers.Contract>
 ```
 
@@ -321,7 +321,7 @@ async function upgradeBeacon(
 async function upgradeBeacon(
   beacon: Address | UpgradeableBeaconContract,
   contractName: string,
-  opts?:
+  opts?: {
     unsafeAllow?: ValidationError[],
     unsafeAllowRenames?: boolean,
     unsafeSkipStorageCheck?: boolean,
@@ -330,7 +330,7 @@ async function upgradeBeacon(
     pollingInterval?: number,
     redeployImplementation?: 'always' | 'never' | 'onchange',
     client?: KeyedClient,
-  ,
+  },
 ): Promise<UpgradeableBeaconContract>
 ```
 
@@ -364,13 +364,13 @@ async function deployBeaconProxy(
   beacon: string | ethers.Contract,
   attachTo: ethers.ContractFactory,
   args: unknown[] = [],
-  opts?:
+  opts?: {
     initializer?: string | false,
     txOverrides?: ethers.Overrides,
     useDefenderDeploy?: boolean,
     proxyFactory?: ethers.ContractFactory,
     deployFunction?: () => Promise<EthersOrDefenderDeployment>,
-  ,
+  },
 ): Promise<ethers.Contract>
 ```
 
@@ -382,13 +382,10 @@ async function deployBeaconProxy(
   beacon: Address | UpgradeableBeaconContract,
   contractName: string,
   args: unknown[] = [],
-  opts?:
+  opts?: {
     initializer?: string | false,
-    kind?: 'uups' | 'transparent' | 'beacon',
-    timeout?: number,
-    pollingInterval?: number,
     client?: KeyedClient,
-  ,
+  },
 ): Promise<ContractReturnType>
 ```
 
@@ -423,9 +420,9 @@ Creates a [Beacon proxy](/contracts/5.x/api/proxy#BeaconProxy) given an existing
 async function forceImport(
   address: string,
   deployedImpl: ethers.ContractFactory,
-  opts?:
+  opts?: {
     kind?: 'uups' | 'transparent' | 'beacon',
-  ,
+  },
 ): Promise<ethers.Contract>
 ```
 
@@ -434,12 +431,12 @@ async function forceImport(
 
 ```ts
 async function forceImport(
-  address: Address,
+  addressOrInstance: Address | ContractReturnType,
   contractName: string,
-  opts?:
+  opts?: {
     kind?: 'uups' | 'transparent' | 'beacon',
     client?: KeyedClient,
-  ,
+  },
 ): Promise<ContractReturnType>
 ```
 
@@ -456,7 +453,7 @@ Use this function to recreate a lost [network file](/upgrades-plugins/network-fi
 
 **Parameters:**
 
-* `address` - the address of an existing proxy, beacon or implementation.
+* the address of the proxy, beacon, or implementation to import (the viem API also accepts a contract instance).
 * the current implementation — an ethers contract factory (`deployedImpl`), or the contract name as a string when using viem (`contractName`).
 * `opts` - an object with options:
   * `kind`: (`"uups" | "transparent" | "beacon"`) forces a proxy to be treated as a UUPS, Transparent, or Beacon proxy. If not provided, the proxy kind will be automatically detected.
@@ -477,10 +474,10 @@ Use this function to recreate a lost [network file](/upgrades-plugins/network-fi
 ```ts
 async function validateImplementation(
   Contract: ethers.ContractFactory,
-  opts?:
+  opts?: {
     unsafeAllow?: ValidationError[],
     kind?: 'uups' | 'transparent' | 'beacon',
-  ,
+  },
 ): Promise<void>
 ```
 
@@ -490,10 +487,10 @@ async function validateImplementation(
 ```ts
 async function validateImplementation(
   contractName: string,
-  opts?:
+  opts?: {
     unsafeAllow?: ValidationError[],
     kind?: 'uups' | 'transparent' | 'beacon',
-  ,
+  },
 ): Promise<void>
 ```
 
@@ -520,7 +517,7 @@ Validates an implementation contract without deploying it.
 ```ts
 async function deployImplementation(
   Contract: ethers.ContractFactory,
-  opts?:
+  opts?: {
     unsafeAllow?: ValidationError[],
     constructorArgs?: unknown[],
     timeout?: number,
@@ -530,7 +527,7 @@ async function deployImplementation(
     getTxResponse?: boolean,
     kind?: 'uups' | 'transparent' | 'beacon',
     useDefenderDeploy?: boolean,
-  ,
+  },
 ): Promise<string | ethers.providers.TransactionResponse>
 ```
 
@@ -540,7 +537,7 @@ async function deployImplementation(
 ```ts
 async function deployImplementation(
   contractName: string,
-  opts?:
+  opts?: {
     unsafeAllow?: ValidationError[],
     constructorArgs?: unknown[],
     timeout?: number,
@@ -548,7 +545,7 @@ async function deployImplementation(
     redeployImplementation?: 'always' | 'never' | 'onchange',
     kind?: 'uups' | 'transparent' | 'beacon',
     client?: KeyedClient,
-  ,
+  },
 ): Promise<Address>
 ```
 
@@ -581,12 +578,12 @@ Validates and deploys an implementation contract, and returns its address.
 async function validateUpgrade(
   referenceAddressOrContract: string | ethers.ContractFactory,
   newContract: ethers.ContractFactory,
-  opts?:
+  opts?: {
     unsafeAllow?: ValidationError[],
     unsafeAllowRenames?: boolean,
     unsafeSkipStorageCheck?: boolean,
     kind?: 'uups' | 'transparent' | 'beacon',
-  ,
+  },
 ): Promise<void>
 ```
 
@@ -597,12 +594,12 @@ async function validateUpgrade(
 async function validateUpgrade(
   referenceAddressOrContractName: Address | string,
   newContractName: string,
-  opts?:
+  opts?: {
     unsafeAllow?: ValidationError[],
     unsafeAllowRenames?: boolean,
     unsafeSkipStorageCheck?: boolean,
     kind?: 'uups' | 'transparent' | 'beacon',
-  ,
+  },
 ): Promise<void>
 ```
 
@@ -700,7 +697,7 @@ await upgradesApi.validateUpgrade('Box', 'BoxV2');
 async function prepareUpgrade(
   referenceAddressOrContract: string | ethers.Contract,
   Contract: ethers.ContractFactory,
-  opts?:
+  opts?: {
     unsafeAllow?: ValidationError[],
     unsafeAllowRenames?: boolean,
     unsafeSkipStorageCheck?: boolean,
@@ -712,7 +709,7 @@ async function prepareUpgrade(
     getTxResponse?: boolean,
     kind?: 'uups' | 'transparent' | 'beacon',
     useDefenderDeploy?: boolean,
-  ,
+  },
 ): Promise<string | ethers.providers.TransactionResponse>
 ```
 
@@ -721,9 +718,9 @@ async function prepareUpgrade(
 
 ```ts
 async function prepareUpgrade(
-  referenceAddressOrContract: Address,
+  referenceAddressOrContract: Address | ContractReturnType,
   contractName: string,
-  opts?:
+  opts?: {
     unsafeAllow?: ValidationError[],
     unsafeAllowRenames?: boolean,
     unsafeSkipStorageCheck?: boolean,
@@ -733,7 +730,7 @@ async function prepareUpgrade(
     redeployImplementation?: 'always' | 'never' | 'onchange',
     kind?: 'uups' | 'transparent' | 'beacon',
     client?: KeyedClient,
-  ,
+  },
 ): Promise<Address>
 ```
 
@@ -764,10 +761,10 @@ The `defender.*` functions are available only with the ethers-based API (accesse
 async function deployContract(
   Contract: ethers.ContractFactory,
   args: unknown[] = [],
-  opts?:
+  opts?: {
     unsafeAllowDeployContract?: boolean,
     pollingInterval?: number,
-  ,
+  },
 ): Promise<ethers.Contract>
 ```
 
@@ -840,7 +837,7 @@ Gets the default upgrade approval process configured for your deployment environ
 async function proposeUpgradeWithApproval(
   proxyAddress: string,
   ImplFactory: ContractFactory,
-  opts?:
+  opts?: {
     unsafeAllow?: ValidationError[],
     unsafeAllowRenames?: boolean,
     unsafeSkipStorageCheck?: boolean,
@@ -851,7 +848,7 @@ async function proposeUpgradeWithApproval(
     kind?: 'uups' | 'transparent' | 'beacon',
     useDefenderDeploy?: boolean,
     approvalProcessId?: string,
-  ,
+  },
 ): Promise<
     proposalId: string,
     url: string,
@@ -889,9 +886,9 @@ async function changeProxyAdmin(
   proxyAddress: string,
   newAdmin: string,
   signer?: ethers.Signer,
-  opts?:
+  opts?: {
     txOverrides?: ethers.Overrides,
-
+  },
 ): Promise<void>
 ```
 
@@ -902,13 +899,14 @@ async function changeProxyAdmin(
 async function changeProxyAdmin(
   proxyAddress: Address,
   newAdmin: Address,
-  opts?:
+  walletClient?: WalletClient,
+  opts?: {
     gas?: bigint,
     gasPrice?: bigint,
     maxFeePerGas?: bigint,
     maxPriorityFeePerGas?: bigint,
     value?: bigint,
-  ,
+  },
 ): Promise<void>
 ```
 
@@ -925,7 +923,7 @@ This function is not supported with admins or proxies from OpenZeppelin Contract
 
 * `proxyAddress` - the address of the proxy to change.
 * `newAdmin` - the new admin address.
-* `signer` - (ethers-based API only) the signer to use for the transaction. The viem-based API signs admin transactions with the connection's wallet client and does not accept a `client` option here.
+* The account to send the transaction with — `signer` for ethers, `walletClient` for viem. Optional; defaults to the connection's default account.
 * `opts` - an object with options:
   * additional options as described in [Common Options](#common-options).
 
@@ -939,10 +937,10 @@ async function transferProxyAdminOwnership(
   proxyAddress: string,
   newOwner: string,
   signer?: ethers.Signer,
-  opts?:
+  opts?: {
     silent?: boolean,
     txOverrides?: ethers.Overrides,
-
+  },
 ): Promise<void>
 ```
 
@@ -953,14 +951,15 @@ async function transferProxyAdminOwnership(
 async function transferProxyAdminOwnership(
   proxyAddress: Address,
   newOwner: Address,
-  opts?:
+  walletClient?: WalletClient,
+  opts?: {
     silent?: boolean,
     gas?: bigint,
     gasPrice?: bigint,
     maxFeePerGas?: bigint,
     maxPriorityFeePerGas?: bigint,
     value?: bigint,
-  ,
+  },
 ): Promise<void>
 ```
 
@@ -977,7 +976,7 @@ The `proxyAddress` parameter is required since `@openzeppelin/hardhat-upgrades@3
 
 * `proxyAddress` - the address of the proxy whose admin ownership is to be transferred.
 * `newOwner` - the new owner address for the proxy admin contract.
-* `signer` - (ethers-based API only) the signer to use for the transaction. The viem-based API signs with the connection's wallet client.
+* The account to send the transaction with — `signer` for ethers, `walletClient` for viem. Optional; defaults to the connection's default account.
 * `opts` - an object with options:
   * `silent`: if set to `true`, silences console logging about each proxy affected by the admin ownership transfer.
   * additional options as described in [Common Options](#common-options).
@@ -1089,6 +1088,9 @@ npm install --save-dev @nomicfoundation/hardhat-verify
 ```
 
 Then add both `@nomicfoundation/hardhat-verify` and `@openzeppelin/hardhat-upgrades` to the `plugins` array in your `hardhat.config.ts`. The upgrades plugin detects hardhat-verify and automatically extends its `verify` task:
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
+
 ```typescript
 import { configVariable, defineConfig } from 'hardhat/config';
 import hardhatVerify from '@nomicfoundation/hardhat-verify';
@@ -1103,6 +1105,27 @@ export default defineConfig({
   },
 });
 ```
+
+</Tab>
+<Tab value="viem">
+
+```typescript
+import { configVariable, defineConfig } from 'hardhat/config';
+import hardhatVerify from '@nomicfoundation/hardhat-verify';
+import hardhatUpgrades from '@openzeppelin/hardhat-upgrades/viem';
+
+export default defineConfig({
+  plugins: [hardhatVerify, hardhatUpgrades],
+  verify: {
+    etherscan: {
+      apiKey: configVariable('ETHERSCAN_API_KEY'),
+    },
+  },
+});
+```
+
+</Tab>
+</Tabs>
 
 Then run the `verify` task from the command line with the proxy address:
 ```

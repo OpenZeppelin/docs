@@ -420,9 +420,10 @@ import { upgrades } from '@openzeppelin/hardhat-upgrades/viem';
 
 describe('Box', function () {
   let upgradesApi;
+  let connection;
 
   before(async () => {
-    const connection = await hre.network.create();
+    connection = await hre.network.create();
     upgradesApi = await upgrades(hre, connection);
   });
 
@@ -431,8 +432,10 @@ describe('Box', function () {
     const instance = await upgradesApi.deployBeaconProxy(beacon, 'Box', [42]);
 
     await upgradesApi.upgradeBeacon(beacon, 'BoxV2');
+    const upgraded = await connection.viem.getContractAt('BoxV2', instance.address);
 
-    expect(await instance.read.value()).to.equal(42n);
+    const value = await upgraded.read.value();
+    expect(value).to.equal(42n);
   });
 });
 ```
@@ -471,6 +474,9 @@ $ npm install --save-dev @openzeppelin/foundry-upgrades "github:foundry-rs/forge
 
 Configure your Hardhat config to enable Solidity tests and expose the artifacts directory to FFI:
 
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
+
 ```typescript
 import { defineConfig } from 'hardhat/config';
 import hardhatUpgrades, { proxyFilesToBuild } from '@openzeppelin/hardhat-upgrades';
@@ -495,6 +501,37 @@ export default defineConfig({
   },
 });
 ```
+
+</Tab>
+<Tab value="viem">
+
+```typescript
+import { defineConfig } from 'hardhat/config';
+import hardhatUpgrades, { proxyFilesToBuild } from '@openzeppelin/hardhat-upgrades/viem';
+
+if (!process.env.FOUNDRY_OUT) {
+  process.env.FOUNDRY_OUT = 'artifacts/contracts';
+}
+
+export default defineConfig({
+  plugins: [hardhatUpgrades],
+  solidity: {
+    version: '0.8.28',
+    npmFilesToBuild: [...proxyFilesToBuild()],
+  },
+  test: {
+    solidity: {
+      ffi: true,
+      fsPermissions: {
+        readDirectory: ['artifacts/contracts'],
+      },
+    },
+  },
+});
+```
+
+</Tab>
+</Tabs>
 
 Add a `remappings.txt` at your project root so the library's imports resolve to the npm package's source:
 
