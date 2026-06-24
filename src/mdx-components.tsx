@@ -1,4 +1,5 @@
 import { APIPage } from "fumadocs-openapi/ui";
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 import defaultMdxComponents from "fumadocs-ui/mdx";
 import {
 	AnchorIcon,
@@ -28,6 +29,8 @@ import { APIItemCompact } from "./components/ui/api-reference/api-item-compact";
 export function getMDXComponents(components?: MDXComponents): MDXComponents {
 	return {
 		...defaultMdxComponents,
+		Tabs,
+		Tab,
 		OZWizard,
 		APIItemCompact,
 		APIGithubLinkHeader,
