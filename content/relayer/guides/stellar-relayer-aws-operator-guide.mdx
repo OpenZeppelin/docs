@@ -225,7 +225,7 @@ The reference deployment OpenZeppelin runs handles a **growing ~3M transactions 
 
 The deployment is **trending up** WoW (+8.8% in the most recent window) and routinely absorbs daily peaks **~25–30% above the 7-day average**. Plan for headroom; autoscaling minimums should comfortably cover the **peak day**, not the average.
 
-**Traffic concentration.** In both windows, **~99%+ of all transactions terminate at a small set of high-volume Soroban contracts** registered in `LIMITED_CONTRACTS`. The top contract alone accounts for **73–97% of daily volume** depending on its onchain phase, with the second contributing most of the remainder. Non-limited contracts are below sampling resolution (0.2% or less). This is what the contract-capacity-ratio knob is sized against. The full env-var tuning is in section 6.
+**`LIMITED_CONTRACTS` and pool isolation.** In practice, a small number of Soroban contracts tend to dominate the channel-account pool's submission queue. `LIMITED_CONTRACTS` lists the contract IDs to cap, and `CONTRACT_CAPACITY_RATIO` (a value between 0 and 1) sets the maximum fraction of the pool those listed contracts may collectively occupy at any one moment. This keeps high-throughput contracts from starving other callers of channel capacity. The full env-var tuning is in section 6.
 
 **The Terraform module defaults are sized for `environment = "prod"` workloads but tuned conservatively.** For reference, here is the actual production configuration OpenZeppelin runs at this scale (sanitized):
 
