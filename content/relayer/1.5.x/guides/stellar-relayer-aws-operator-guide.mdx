@@ -2,7 +2,7 @@
 title: 'Hosted Stellar Relayer on AWS: Operator Deployment Guide'
 ---
 
-A step-by-step guide for infrastructure teams (such as Blockdaemon or SDF) deploying a hosted Stellar relayer service that mirrors OpenZeppelin's existing production setup.
+A step-by-step guide for infrastructure teams deploying a hosted Stellar Relayer service on AWS that mirrors OpenZeppelin's existing production setup.
 
 **Audience:** infrastructure operators who have run production AWS workloads but are new to OpenZeppelin's relayer stack.
 
@@ -14,9 +14,9 @@ For the GCP deployment, see the [GCP Operator Deployment Guide](/relayer/1.5.x/g
 
 ## 1. Overview
 
-OpenZeppelin currently runs a hosted Stellar relayer service at `channels.openzeppelin.com` (mainnet) and `channels.openzeppelin.com/testnet` (testnet). The service absorbs the operational complexity of parallel Stellar transaction submission (channel-account pool management, fee bumping, sequence-number arbitration, multi-RPC failover) and exposes a simple HTTP API to downstream callers.
+OpenZeppelin currently runs a hosted Stellar relayer service. The service absorbs the operational complexity of parallel Stellar transaction submission (channel-account pool management, fee bumping, sequence-number arbitration, multi-RPC failover) and exposes a simple HTTP API to downstream callers.
 
-This guide is for infrastructure teams deploying a hosted relayer service for SDF providing the same throughput as OpenZeppelin. Blockdaemon is the first such operator; this guide is written to be portable to others.
+This guide is for infrastructure teams deploying a hosted relayer service providing throughput of ~2M transactions per day on Stellar Network.
 
 ### What You Will End Up With
 
@@ -216,14 +216,7 @@ The 202 response is returned synchronously; the rest happens asynchronously via 
 
 ### Capacity Profile
 
-The reference deployment OpenZeppelin runs handles a **growing ~3M transactions per day** sustained, served by **~1,000 relayers** (fund and channel-account entities combined). Two recent windows:
-
-| Window | Total tx (7d) | Daily avg | Sustained tx/s | Peak day | Peak tx/s |
-| --- | --- | --- | --- | --- | --- |
-| Apr 28 – May 4 | 19.19M | 2.74M | ~31.7 | May 4 (3.90M) | ~45 |
-| **May 5 – May 11** | **20.88M (+8.8% WoW)** | **2.98M** | **~34.5** | **May 8 (3.67M)** | **~42.5** |
-
-The deployment is **trending up** WoW (+8.8% in the most recent window) and routinely absorbs daily peaks **~25–30% above the 7-day average**. Plan for headroom; autoscaling minimums should comfortably cover the **peak day**, not the average.
+The reference deployment OpenZeppelin runs handles a growing ~2-3M transactions per day sustained, served by ~2,500 relayers (fund and channel-account entities combined).
 
 **`LIMITED_CONTRACTS` and pool isolation.** In practice, a small number of Soroban contracts tend to dominate the channel-account pool's submission queue. `LIMITED_CONTRACTS` lists the contract IDs to cap, and `CONTRACT_CAPACITY_RATIO` (a value between 0 and 1) sets the maximum fraction of the pool those listed contracts may collectively occupy at any one moment. This keeps high-throughput contracts from starving other callers of channel capacity. The full env-var tuning is in section 6.
 
@@ -248,10 +241,6 @@ The deployment is **trending up** WoW (+8.8% in the most recent window) and rout
 The module defaults are operationally fine for a new deployment ramping up; expect to grow into something closer to the production shape as your workload approaches the OpenZeppelin scale. The full env-var tuning is in section 6.
 
 **Sidecar pattern:** OpenZeppelin runs a `cloudwatch-exporter` sidecar in every task that scrapes `:8081/debug/metrics/scrape` and pushes Prometheus metrics into CloudWatch under namespaces like `RelayerChannelsMainnetTransactions`. The module exposes this as an optional feature via `enable_cloudwatch_exporter` and `cloudwatch_exporter_image`.
-
-<Callout>
-Traffic figures above are drawn from internal traffic analysis covering Apr 28 – May 11 on the channels-fund mainnet deployment (CloudWatch + per-contract instrumentation). Refresh this section quarterly or whenever a new WoW snapshot is generated.
-</Callout>
 
 ### SQS Queue Topology
 
