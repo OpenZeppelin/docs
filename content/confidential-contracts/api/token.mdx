@@ -13,7 +13,11 @@ This set of interfaces, contracts, and utilities are all related to `ERC7984`, a
 * [`ERC7984Omnibus`](#ERC7984Omnibus): An extension of [`ERC7984`](#ERC7984) that emits additional events for omnibus transfers, which contain encrypted addresses for the sub-account sender and recipient.
 * [`ERC7984Rwa`](#ERC7984Rwa): Extension of [`ERC7984`](#ERC7984) that supports confidential Real World Assets (RWAs) by providing compliance checks, transfer controls and enforcement actions.
 * [`ERC7984Votes`](#ERC7984Votes): An extension of [`ERC7984`](#ERC7984) that supports confidential vote tracking and delegation via [`VotesConfidential`](/confidential-contracts/api/governance#VotesConfidential).
+* [`ERC7984Hooked`](#ERC7984Hooked): An extension of [`ERC7984`](#ERC7984) that calls pre and post transfer hooks on installed modules.
 * [`ERC7984Utils`](#ERC7984Utils): A library that provides the on-transfer callback check used by [`ERC7984`](#ERC7984).
+* [`ERC7984HookModule`](#ERC7984HookModule): A an abstract, base implementation for hook modules compatible with [`ERC7984Hooked`](#ERC7984Hooked).
+* [`ERC7984BalanceCapHookModule`](#ERC7984BalanceCapHookModule): An example hook module for [`ERC7984Hooked`](#ERC7984Hooked) that enforces a per-account encrypted balance cap.
+* [`ERC7984HolderCapHookModule`](#ERC7984HolderCapHookModule): An example hook module for [`ERC7984Hooked`](#ERC7984Hooked) that enforces a maximum number of holders. Must be installed before any tokens are minted.
 
 ## Core
 [`ERC7984`](#ERC7984)
@@ -26,9 +30,13 @@ This set of interfaces, contracts, and utilities are all related to `ERC7984`, a
 [`ERC7984Omnibus`](#ERC7984Omnibus)
 [`ERC7984Rwa`](#ERC7984Rwa)
 [`ERC7984Votes`](#ERC7984Votes)
+[`ERC7984Hooked`](#ERC7984Hooked)
 
 ## Utilities
 [`ERC7984Utils`](#ERC7984Utils)
+[`ERC7984HookModule`](#ERC7984HookModule)
+[`ERC7984BalanceCapHookModule`](#ERC7984BalanceCapHookModule)
+[`ERC7984HolderCapHookModule`](#ERC7984HolderCapHookModule)
 
 <a id="ERC7984"></a>
 
@@ -36,7 +44,7 @@ This set of interfaces, contracts, and utilities are all related to `ERC7984`, a
 
 ## `ERC7984` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.4.0/contracts/token/ERC7984/ERC7984.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.5.1/contracts/token/ERC7984/ERC7984.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -113,10 +121,8 @@ Key features:
 - [ERC7984InvalidReceiver(receiver)](#ERC7984-ERC7984InvalidReceiver-address-)
 - [ERC7984InvalidSender(sender)](#ERC7984-ERC7984InvalidSender-address-)
 - [ERC7984UnauthorizedSpender(holder, spender)](#ERC7984-ERC7984UnauthorizedSpender-address-address-)
-- [ERC7984ZeroBalance(holder)](#ERC7984-ERC7984ZeroBalance-address-)
 - [ERC7984UnauthorizedUseOfEncryptedAmount(amount, user)](#ERC7984-ERC7984UnauthorizedUseOfEncryptedAmount-euint64-address-)
 - [ERC7984UnauthorizedCaller(caller)](#ERC7984-ERC7984UnauthorizedCaller-address-)
-- [ERC7984InvalidGatewayRequest(requestId)](#ERC7984-ERC7984InvalidGatewayRequest-uint256-)
 </div>
 </div>
 
@@ -288,11 +294,8 @@ Returns true if `spender` is currently an operator for `holder`.
 </div>
 <div className="px-4">
 
-Sets `operator` as an operator for `holder` until the timestamp `until`.
-
-<Callout>
-An operator may transfer any amount of tokens on behalf of a holder while approved.
-</Callout>
+See [`IERC7984.setOperator`](/confidential-contracts/api/interfaces#IERC7984-setOperator-address-uint48-). Operators are given ACL allowance (ability to decrypt) for the transferred amount
+of transfers they initiate.
 
 </div>
 </div>
@@ -338,7 +341,7 @@ Similar to `confidentialTransfer-address-externalEuint64-bytes` but without an i
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">confidentialTransferFrom(address from, address to, externalEuint64 encryptedAmount, bytes inputProof) → euint64 transferred</p>
+<p className="font-bold text-sm font-mono">confidentialTransferFrom(address from, address to, externalEuint64 encryptedAmount, bytes inputProof) → euint64</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
 <a className="peer" data-card href="#ERC7984-confidentialTransferFrom-address-address-externalEuint64-bytes-">#</a>
@@ -358,7 +361,7 @@ Returns the encrypted amount that was actually transferred.
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">confidentialTransferFrom(address from, address to, euint64 amount) → euint64 transferred</p>
+<p className="font-bold text-sm font-mono">confidentialTransferFrom(address from, address to, euint64 amount) → euint64</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
 <a className="peer" data-card href="#ERC7984-confidentialTransferFrom-address-address-euint64-">#</a>
@@ -376,7 +379,7 @@ The caller *must* be already allowed by ACL for the given `amount`.
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">confidentialTransferAndCall(address to, externalEuint64 encryptedAmount, bytes inputProof, bytes data) → euint64 transferred</p>
+<p className="font-bold text-sm font-mono">confidentialTransferAndCall(address to, externalEuint64 encryptedAmount, bytes inputProof, bytes data) → euint64</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
 <a className="peer" data-card href="#ERC7984-confidentialTransferAndCall-address-externalEuint64-bytes-bytes-">#</a>
@@ -398,7 +401,7 @@ data `data`.
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">confidentialTransferAndCall(address to, euint64 amount, bytes data) → euint64 transferred</p>
+<p className="font-bold text-sm font-mono">confidentialTransferAndCall(address to, euint64 amount, bytes data) → euint64</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
 <a className="peer" data-card href="#ERC7984-confidentialTransferAndCall-address-euint64-bytes-">#</a>
@@ -415,7 +418,7 @@ Similar to `confidentialTransfer-address-euint64` but with a callback to `to` af
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">confidentialTransferFromAndCall(address from, address to, externalEuint64 encryptedAmount, bytes inputProof, bytes data) → euint64 transferred</p>
+<p className="font-bold text-sm font-mono">confidentialTransferFromAndCall(address from, address to, externalEuint64 encryptedAmount, bytes inputProof, bytes data) → euint64</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
 <a className="peer" data-card href="#ERC7984-confidentialTransferFromAndCall-address-address-externalEuint64-bytes-bytes-">#</a>
@@ -433,7 +436,7 @@ after the transfer.
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">confidentialTransferFromAndCall(address from, address to, euint64 amount, bytes data) → euint64 transferred</p>
+<p className="font-bold text-sm font-mono">confidentialTransferFromAndCall(address from, address to, euint64 amount, bytes data) → euint64</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
 <a className="peer" data-card href="#ERC7984-confidentialTransferFromAndCall-address-address-euint64-bytes-">#</a>
@@ -563,6 +566,28 @@ May not be tied to a prior request via [`ERC7984.requestDiscloseEncryptedAmount`
 </div>
 <div className="px-4">
 
+Transfers the given amount of tokens from `from` to `to` and calls the `onConfidentialTransferReceived`
+function on the recipient.
+
+The token contract initiates a second transfer refunding the tokens from the recipient to the sender--the
+amount is 0 if the callback succeeds, otherwise the amount is the amount that was transferred.
+
+The returned `transferred` amount is a fresh ciphertext computed as `sent - refund`
+and `msg.sender` only receives a transient FHE allowance for it. This value is generally
+intended to be processed only in the same transaction. Event observers see `sent` and `refund` individually.
+
+<Callout type="warn">
+The refund triggered when [`IERC7984Receiver.onConfidentialTransferReceived`](/confidential-contracts/api/interfaces#IERC7984Receiver-onConfidentialTransferReceived-address-address-euint64-bytes-) returns an encrypted
+false is best-effort only. A receiver that transfers, burns, or otherwise reduces its balance during
+the hook can still return false, in which case the refund transfers zero tokens. The sender's tokens
+end up with the recipient rather than being refunded.
+</Callout>
+
+<Callout type="warn">
+Refunds are subject to the same validation flow as a normal transfer--they may fail for a variety of
+reasons (such as failed hook validation in [`ERC7984Hooked`](#ERC7984Hooked)). In these cases, the tokens do not return to the sender.
+</Callout>
+
 </div>
 </div>
 
@@ -577,6 +602,9 @@ May not be tied to a prior request via [`ERC7984.requestDiscloseEncryptedAmount`
 </div>
 </div>
 <div className="px-4">
+
+Safely moves up to `amount` from `from` to `to`, or mints/burns if `from`/`to` is the zero address.
+Emits a [`IERC7984.ConfidentialTransfer`](/confidential-contracts/api/interfaces#IERC7984-ConfidentialTransfer-address-address-euint64-) event with the successfully transferred amount.
 
 </div>
 </div>
@@ -650,23 +678,6 @@ The given holder `holder` is not authorized to spend on behalf of `spender`.
 </div>
 </div>
 
-<a id="ERC7984-ERC7984ZeroBalance-address-"></a>
-
-<div className="border rounded-md mb-4">
-<div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">ERC7984ZeroBalance(address holder)</p>
-<div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">error</p>
-<a className="peer" data-card href="#ERC7984-ERC7984ZeroBalance-address-">#</a>
-</div>
-</div>
-<div className="px-4">
-
-The holder `holder` is trying to send tokens but has a balance of 0.
-
-</div>
-</div>
-
 <a id="ERC7984-ERC7984UnauthorizedUseOfEncryptedAmount-euint64-address-"></a>
 
 <div className="border rounded-md mb-4">
@@ -705,30 +716,13 @@ The given caller `caller` is not authorized for the current operation.
 </div>
 </div>
 
-<a id="ERC7984-ERC7984InvalidGatewayRequest-uint256-"></a>
-
-<div className="border rounded-md mb-4">
-<div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">ERC7984InvalidGatewayRequest(uint256 requestId)</p>
-<div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">error</p>
-<a className="peer" data-card href="#ERC7984-ERC7984InvalidGatewayRequest-uint256-">#</a>
-</div>
-</div>
-<div className="px-4">
-
-The given gateway request ID `requestId` is invalid.
-
-</div>
-</div>
-
 <a id="ERC7984ERC20Wrapper"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
 ## `ERC7984ERC20Wrapper` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.4.0/contracts/token/ERC7984/extensions/ERC7984ERC20Wrapper.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.5.1/contracts/token/ERC7984/extensions/ERC7984ERC20Wrapper.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -837,10 +831,8 @@ tokens such as fee-on-transfer or other deflationary-type tokens are not support
 - [ERC7984InvalidReceiver(receiver)](#ERC7984-ERC7984InvalidReceiver-address-)
 - [ERC7984InvalidSender(sender)](#ERC7984-ERC7984InvalidSender-address-)
 - [ERC7984UnauthorizedSpender(holder, spender)](#ERC7984-ERC7984UnauthorizedSpender-address-address-)
-- [ERC7984ZeroBalance(holder)](#ERC7984-ERC7984ZeroBalance-address-)
 - [ERC7984UnauthorizedUseOfEncryptedAmount(amount, user)](#ERC7984-ERC7984UnauthorizedUseOfEncryptedAmount-euint64-address-)
 - [ERC7984UnauthorizedCaller(caller)](#ERC7984-ERC7984UnauthorizedCaller-address-)
-- [ERC7984InvalidGatewayRequest(requestId)](#ERC7984-ERC7984InvalidGatewayRequest-uint256-)
 
 </details>
 </div>
@@ -1100,8 +1092,8 @@ Returns the maximum total supply of wrapped tokens supported by the encrypted da
 </div>
 <div className="px-4">
 
-Get the address that has a pending unwrap request for the given `unwrapAmount`. Returns `address(0)` if no pending
-unwrap request for the amount `unwrapAmount` exists.
+Gets the address that will receive the ERC-20 tokens associated with a pending unwrap request identified by
+`unwrapRequestId`. Returns `address(0)` if there is no pending unwrap request with id `unwrapRequestId`.
 
 </div>
 </div>
@@ -1140,6 +1132,9 @@ not overflow.
 </div>
 </div>
 <div className="px-4">
+
+Safely moves up to `amount` from `from` to `to`, or mints/burns if `from`/`to` is the zero address.
+Emits a [`IERC7984.ConfidentialTransfer`](/confidential-contracts/api/interfaces#IERC7984-ConfidentialTransfer-address-address-euint64-) event with the successfully transferred amount.
 
 </div>
 </div>
@@ -1233,7 +1228,7 @@ Returns the maximum number that will be used for [`ERC7984.decimals`](#ERC7984-d
 
 ## `ERC7984Freezable` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.4.0/contracts/token/ERC7984/extensions/ERC7984Freezable.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.5.1/contracts/token/ERC7984/extensions/ERC7984Freezable.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1323,10 +1318,8 @@ Inspired by https://github.com/OpenZeppelin/openzeppelin-community-contracts/blo
 - [ERC7984InvalidReceiver(receiver)](#ERC7984-ERC7984InvalidReceiver-address-)
 - [ERC7984InvalidSender(sender)](#ERC7984-ERC7984InvalidSender-address-)
 - [ERC7984UnauthorizedSpender(holder, spender)](#ERC7984-ERC7984UnauthorizedSpender-address-address-)
-- [ERC7984ZeroBalance(holder)](#ERC7984-ERC7984ZeroBalance-address-)
 - [ERC7984UnauthorizedUseOfEncryptedAmount(amount, user)](#ERC7984-ERC7984UnauthorizedUseOfEncryptedAmount-euint64-address-)
 - [ERC7984UnauthorizedCaller(caller)](#ERC7984-ERC7984UnauthorizedCaller-address-)
-- [ERC7984InvalidGatewayRequest(requestId)](#ERC7984-ERC7984InvalidGatewayRequest-uint256-)
 
 </details>
 </div>
@@ -1441,13 +1434,484 @@ Emitted when a confidential amount of token is frozen for an account
 </div>
 </div>
 
+<a id="ERC7984Hooked"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC7984Hooked` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.5.1/contracts/token/ERC7984/extensions/ERC7984Hooked.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/confidential-contracts/token/ERC7984/extensions/ERC7984Hooked.sol";
+```
+
+Extension of [`ERC7984`](#ERC7984) that supports hook modules. Inspired by ERC-7579 modules.
+
+Modules are called before and after transfers. Before the transfer, modules
+conduct checks to see if they approve the given transfer and return an encrypted boolean. If any module
+returns false, the transferred amount becomes 0. After the transfer, modules are notified of the final transfer
+amount and may do accounting as necessary. Modules may revert on either call, which will propagate
+and revert the entire transaction.
+
+<Callout type="warn">
+Hook modules are trusted contracts--they have access to any private state the token has access to. This arbitrary
+ACL access allows hook modules to grant themselves (or any other address) allowance to view any handle the token has access to.
+ACL allowances granted by the hook module persist even after the module is uninstalled.
+</Callout>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Modifiers</h3>
+<div className="font-mono">
+- [onlyAuthorizedModuleChange()](#ERC7984Hooked-onlyAuthorizedModuleChange--)
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [isModuleInstalled(module)](#ERC7984Hooked-isModuleInstalled-address-)
+- [installModule(module, initData)](#ERC7984Hooked-installModule-address-bytes-)
+- [uninstallModule(module)](#ERC7984Hooked-uninstallModule-address-)
+- [modules(start, end)](#ERC7984Hooked-modules-uint256-uint256-)
+- [maxModules()](#ERC7984Hooked-maxModules--)
+- [_authorizeModuleChange()](#ERC7984Hooked-_authorizeModuleChange--)
+- [_installModule(module, initData)](#ERC7984Hooked-_installModule-address-bytes-)
+- [_uninstallModule(module)](#ERC7984Hooked-_uninstallModule-address-)
+- [_update(from, to, encryptedAmount)](#ERC7984Hooked-_update-address-address-euint64-)
+- [_runPreTransferHooks(from, to, encryptedAmount)](#ERC7984Hooked-_runPreTransferHooks-address-address-euint64-)
+- [_runPostTransferHooks(from, to, encryptedAmount)](#ERC7984Hooked-_runPostTransferHooks-address-address-euint64-)
+- [_validateHandleAllowance(handle)](#ERC7984Hooked-_validateHandleAllowance-bytes32-)
+<details>
+<summary>HandleAccessManager</summary>
+
+- [getHandleAllowance(handle, account, persistent)](#HandleAccessManager-getHandleAllowance-bytes32-address-bool-)
+
+</details>
+<details>
+<summary>ERC7984</summary>
+
+- [supportsInterface(interfaceId)](#ERC7984-supportsInterface-bytes4-)
+- [name()](#ERC7984-name--)
+- [symbol()](#ERC7984-symbol--)
+- [decimals()](#ERC7984-decimals--)
+- [contractURI()](#ERC7984-contractURI--)
+- [confidentialTotalSupply()](#ERC7984-confidentialTotalSupply--)
+- [confidentialBalanceOf(account)](#ERC7984-confidentialBalanceOf-address-)
+- [isOperator(holder, spender)](#ERC7984-isOperator-address-address-)
+- [setOperator(operator, until)](#ERC7984-setOperator-address-uint48-)
+- [confidentialTransfer(to, encryptedAmount, inputProof)](#ERC7984-confidentialTransfer-address-externalEuint64-bytes-)
+- [confidentialTransfer(to, amount)](#ERC7984-confidentialTransfer-address-euint64-)
+- [confidentialTransferFrom(from, to, encryptedAmount, inputProof)](#ERC7984-confidentialTransferFrom-address-address-externalEuint64-bytes-)
+- [confidentialTransferFrom(from, to, amount)](#ERC7984-confidentialTransferFrom-address-address-euint64-)
+- [confidentialTransferAndCall(to, encryptedAmount, inputProof, data)](#ERC7984-confidentialTransferAndCall-address-externalEuint64-bytes-bytes-)
+- [confidentialTransferAndCall(to, amount, data)](#ERC7984-confidentialTransferAndCall-address-euint64-bytes-)
+- [confidentialTransferFromAndCall(from, to, encryptedAmount, inputProof, data)](#ERC7984-confidentialTransferFromAndCall-address-address-externalEuint64-bytes-bytes-)
+- [confidentialTransferFromAndCall(from, to, amount, data)](#ERC7984-confidentialTransferFromAndCall-address-address-euint64-bytes-)
+- [requestDiscloseEncryptedAmount(encryptedAmount)](#ERC7984-requestDiscloseEncryptedAmount-euint64-)
+- [discloseEncryptedAmount(encryptedAmount, cleartextAmount, decryptionProof)](#ERC7984-discloseEncryptedAmount-euint64-uint64-bytes-)
+- [_setOperator(holder, operator, until)](#ERC7984-_setOperator-address-address-uint48-)
+- [_mint(to, amount)](#ERC7984-_mint-address-euint64-)
+- [_burn(from, amount)](#ERC7984-_burn-address-euint64-)
+- [_transfer(from, to, amount)](#ERC7984-_transfer-address-address-euint64-)
+- [_transferAndCall(from, to, amount, data)](#ERC7984-_transferAndCall-address-address-euint64-bytes-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+- [ERC7984HookedModuleInstalled(module)](#ERC7984Hooked-ERC7984HookedModuleInstalled-address-)
+- [ERC7984HookedModuleUninstalled(module)](#ERC7984Hooked-ERC7984HookedModuleUninstalled-address-)
+<details>
+<summary>ERC7984</summary>
+
+- [AmountDiscloseRequested(encryptedAmount, requester)](#ERC7984-AmountDiscloseRequested-euint64-address-)
+
+</details>
+<details>
+<summary>IERC7984</summary>
+
+- [OperatorSet(holder, operator, until)](#IERC7984-OperatorSet-address-address-uint48-)
+- [ConfidentialTransfer(from, to, amount)](#IERC7984-ConfidentialTransfer-address-address-euint64-)
+- [AmountDisclosed(encryptedAmount, amount)](#IERC7984-AmountDisclosed-euint64-uint64-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [ERC7984HookedInvalidModule(module)](#ERC7984Hooked-ERC7984HookedInvalidModule-address-)
+- [ERC7984HookedDuplicateModule(module)](#ERC7984Hooked-ERC7984HookedDuplicateModule-address-)
+- [ERC7984HookedNonexistentModule(module)](#ERC7984Hooked-ERC7984HookedNonexistentModule-address-)
+- [ERC7984HookedExceededMaxModules()](#ERC7984Hooked-ERC7984HookedExceededMaxModules--)
+<details>
+<summary>HandleAccessManager</summary>
+
+- [HandleAccessManagerNotAllowed(handle, account)](#HandleAccessManager-HandleAccessManagerNotAllowed-bytes32-address-)
+
+</details>
+<details>
+<summary>ERC7984</summary>
+
+- [ERC7984InvalidReceiver(receiver)](#ERC7984-ERC7984InvalidReceiver-address-)
+- [ERC7984InvalidSender(sender)](#ERC7984-ERC7984InvalidSender-address-)
+- [ERC7984UnauthorizedSpender(holder, spender)](#ERC7984-ERC7984UnauthorizedSpender-address-address-)
+- [ERC7984UnauthorizedUseOfEncryptedAmount(amount, user)](#ERC7984-ERC7984UnauthorizedUseOfEncryptedAmount-euint64-address-)
+- [ERC7984UnauthorizedCaller(caller)](#ERC7984-ERC7984UnauthorizedCaller-address-)
+
+</details>
+</div>
+</div>
+
+<a id="ERC7984Hooked-onlyAuthorizedModuleChange--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">onlyAuthorizedModuleChange()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984Hooked-onlyAuthorizedModuleChange--">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="ERC7984Hooked-isModuleInstalled-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">isModuleInstalled(address module) → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7984Hooked-isModuleInstalled-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Checks if a module is installed.
+
+</div>
+</div>
+
+<a id="ERC7984Hooked-installModule-address-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">installModule(address module, bytes initData)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7984Hooked-installModule-address-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Installs a hook module.
+
+Consider gas footprint of the module before adding it since all modules will perform
+both steps (pre-hook, post-hook) on all transfers.
+
+</div>
+</div>
+
+<a id="ERC7984Hooked-uninstallModule-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">uninstallModule(address module)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7984Hooked-uninstallModule-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Uninstalls a hook module.
+
+</div>
+</div>
+
+<a id="ERC7984Hooked-modules-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">modules(uint256 start, uint256 end) → address[]</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7984Hooked-modules-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns a slice of the list of modules installed on the token with inclusive start and exclusive end.
+
+<Callout>
+Use an end value of type(uint256).max to get the entire list of modules.
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7984Hooked-maxModules--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">maxModules() → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7984Hooked-maxModules--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the maximum number of modules that can be installed.
+
+</div>
+</div>
+
+<a id="ERC7984Hooked-_authorizeModuleChange--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_authorizeModuleChange()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984Hooked-_authorizeModuleChange--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Authorization logic for installing and uninstalling modules. Must be implemented by the concrete contract.
+
+</div>
+</div>
+
+<a id="ERC7984Hooked-_installModule-address-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_installModule(address module, bytes initData)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984Hooked-_installModule-address-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal function which installs a hook module.
+
+</div>
+</div>
+
+<a id="ERC7984Hooked-_uninstallModule-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_uninstallModule(address module)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984Hooked-_uninstallModule-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal function which uninstalls a module.
+
+</div>
+</div>
+
+<a id="ERC7984Hooked-_update-address-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_update(address from, address to, euint64 encryptedAmount) → euint64 transferred</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984Hooked-_update-address-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See [`ERC7984._update`](#ERC7984-_update-address-address-euint64-).
+
+Modified to run pre and post transfer hooks. Zero tokens are transferred if a module does not approve
+the transfer.
+
+</div>
+</div>
+
+<a id="ERC7984Hooked-_runPreTransferHooks-address-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_runPreTransferHooks(address from, address to, euint64 encryptedAmount) → ebool compliant</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984Hooked-_runPreTransferHooks-address-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Runs the pre-transfer hooks for all modules.
+
+</div>
+</div>
+
+<a id="ERC7984Hooked-_runPostTransferHooks-address-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_runPostTransferHooks(address from, address to, euint64 encryptedAmount)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984Hooked-_runPostTransferHooks-address-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Runs the post-transfer hooks for all modules.
+
+</div>
+</div>
+
+<a id="ERC7984Hooked-_validateHandleAllowance-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_validateHandleAllowance(bytes32 handle) → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984Hooked-_validateHandleAllowance-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See [`HandleAccessManager._validateHandleAllowance`](/confidential-contracts/api/utils#HandleAccessManager-_validateHandleAllowance-bytes32-). Allow modules to access any handle the token has access to.
+
+</div>
+</div>
+
+<a id="ERC7984Hooked-ERC7984HookedModuleInstalled-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7984HookedModuleInstalled(address module)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="#ERC7984Hooked-ERC7984HookedModuleInstalled-address-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when a module is installed.
+
+</div>
+</div>
+<a id="ERC7984Hooked-ERC7984HookedModuleUninstalled-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7984HookedModuleUninstalled(address module)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="#ERC7984Hooked-ERC7984HookedModuleUninstalled-address-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when a module is uninstalled.
+
+</div>
+</div>
+
+<a id="ERC7984Hooked-ERC7984HookedInvalidModule-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7984HookedInvalidModule(address module)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7984Hooked-ERC7984HookedInvalidModule-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The address is not a valid module.
+
+</div>
+</div>
+
+<a id="ERC7984Hooked-ERC7984HookedDuplicateModule-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7984HookedDuplicateModule(address module)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7984Hooked-ERC7984HookedDuplicateModule-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The module is already installed.
+
+</div>
+</div>
+
+<a id="ERC7984Hooked-ERC7984HookedNonexistentModule-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7984HookedNonexistentModule(address module)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7984Hooked-ERC7984HookedNonexistentModule-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The module is not installed.
+
+</div>
+</div>
+
+<a id="ERC7984Hooked-ERC7984HookedExceededMaxModules--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7984HookedExceededMaxModules()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7984Hooked-ERC7984HookedExceededMaxModules--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The maximum number of modules has been exceeded.
+
+</div>
+</div>
+
 <a id="ERC7984ObserverAccess"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
 ## `ERC7984ObserverAccess` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.4.0/contracts/token/ERC7984/extensions/ERC7984ObserverAccess.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.5.1/contracts/token/ERC7984/extensions/ERC7984ObserverAccess.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1529,10 +1993,8 @@ permanent ACL access to its transfer and balance amounts. An observer can be add
 - [ERC7984InvalidReceiver(receiver)](#ERC7984-ERC7984InvalidReceiver-address-)
 - [ERC7984InvalidSender(sender)](#ERC7984-ERC7984InvalidSender-address-)
 - [ERC7984UnauthorizedSpender(holder, spender)](#ERC7984-ERC7984UnauthorizedSpender-address-address-)
-- [ERC7984ZeroBalance(holder)](#ERC7984-ERC7984ZeroBalance-address-)
 - [ERC7984UnauthorizedUseOfEncryptedAmount(amount, user)](#ERC7984-ERC7984UnauthorizedUseOfEncryptedAmount-euint64-address-)
 - [ERC7984UnauthorizedCaller(caller)](#ERC7984-ERC7984UnauthorizedCaller-address-)
-- [ERC7984InvalidGatewayRequest(requestId)](#ERC7984-ERC7984InvalidGatewayRequest-uint256-)
 
 </details>
 </div>
@@ -1585,6 +2047,9 @@ Returns the observer for the given account `account`.
 </div>
 <div className="px-4">
 
+Safely moves up to `amount` from `from` to `to`, or mints/burns if `from`/`to` is the zero address.
+Emits a [`IERC7984.ConfidentialTransfer`](/confidential-contracts/api/interfaces#IERC7984-ConfidentialTransfer-address-address-euint64-) event with the successfully transferred amount.
+
 </div>
 </div>
 
@@ -1629,7 +2094,7 @@ Thrown when an account tries to set a `newObserver` for a given `account` withou
 
 ## `ERC7984Omnibus` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.4.0/contracts/token/ERC7984/extensions/ERC7984Omnibus.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.5.1/contracts/token/ERC7984/extensions/ERC7984Omnibus.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1724,10 +2189,8 @@ balances externally.
 - [ERC7984InvalidReceiver(receiver)](#ERC7984-ERC7984InvalidReceiver-address-)
 - [ERC7984InvalidSender(sender)](#ERC7984-ERC7984InvalidSender-address-)
 - [ERC7984UnauthorizedSpender(holder, spender)](#ERC7984-ERC7984UnauthorizedSpender-address-address-)
-- [ERC7984ZeroBalance(holder)](#ERC7984-ERC7984ZeroBalance-address-)
 - [ERC7984UnauthorizedUseOfEncryptedAmount(amount, user)](#ERC7984-ERC7984UnauthorizedUseOfEncryptedAmount-euint64-address-)
 - [ERC7984UnauthorizedCaller(caller)](#ERC7984-ERC7984UnauthorizedCaller-address-)
-- [ERC7984InvalidGatewayRequest(requestId)](#ERC7984-ERC7984InvalidGatewayRequest-uint256-)
 
 </details>
 </div>
@@ -1954,7 +2417,7 @@ Try using the equivalent transfer function with an input proof.
 
 ## `ERC7984Restricted` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.4.0/contracts/token/ERC7984/extensions/ERC7984Restricted.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.5.1/contracts/token/ERC7984/extensions/ERC7984Restricted.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2048,10 +2511,8 @@ to implement an allowlist.
 - [ERC7984InvalidReceiver(receiver)](#ERC7984-ERC7984InvalidReceiver-address-)
 - [ERC7984InvalidSender(sender)](#ERC7984-ERC7984InvalidSender-address-)
 - [ERC7984UnauthorizedSpender(holder, spender)](#ERC7984-ERC7984UnauthorizedSpender-address-address-)
-- [ERC7984ZeroBalance(holder)](#ERC7984-ERC7984ZeroBalance-address-)
 - [ERC7984UnauthorizedUseOfEncryptedAmount(amount, user)](#ERC7984-ERC7984UnauthorizedUseOfEncryptedAmount-euint64-address-)
 - [ERC7984UnauthorizedCaller(caller)](#ERC7984-ERC7984UnauthorizedCaller-address-)
-- [ERC7984InvalidGatewayRequest(requestId)](#ERC7984-ERC7984InvalidGatewayRequest-uint256-)
 
 </details>
 </div>
@@ -2086,7 +2547,7 @@ Returns the restriction of a user account.
 </div>
 <div className="px-4">
 
-Returns whether a user account is allowed to interact with the token.
+Returns whether a user account is allowed to receive or send tokens.
 
 Default implementation only disallows explicitly BLOCKED accounts (i.e. a blocklist).
 
@@ -2105,7 +2566,7 @@ Default implementation only disallows explicitly BLOCKED accounts (i.e. a blockl
 </div>
 <div className="px-4">
 
-See [`ERC7984._update`](#ERC7984-_update-address-address-euint64-). Enforces transfer restrictions (excluding minting and burning).
+See [`ERC7984._update`](#ERC7984-_update-address-address-euint64-). Enforces transfer restrictions.
 
 Requirements:
 
@@ -2280,7 +2741,7 @@ The operation failed because the user account is restricted.
 
 ## `ERC7984Rwa` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.4.0/contracts/token/ERC7984/extensions/ERC7984Rwa.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.5.1/contracts/token/ERC7984/extensions/ERC7984Rwa.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2320,6 +2781,7 @@ This interface provides compliance checks, transfer controls and enforcement act
 - [confidentialMint(to, encryptedAmount)](#ERC7984Rwa-confidentialMint-address-euint64-)
 - [confidentialBurn(account, encryptedAmount, inputProof)](#ERC7984Rwa-confidentialBurn-address-externalEuint64-bytes-)
 - [confidentialBurn(account, encryptedAmount)](#ERC7984Rwa-confidentialBurn-address-euint64-)
+- [recoverAddress(lostAccount, newAccount)](#ERC7984Rwa-recoverAddress-address-address-)
 - [forceConfidentialTransferFrom(from, to, encryptedAmount, inputProof)](#ERC7984Rwa-forceConfidentialTransferFrom-address-address-externalEuint64-bytes-)
 - [forceConfidentialTransferFrom(from, to, encryptedAmount)](#ERC7984Rwa-forceConfidentialTransferFrom-address-address-euint64-)
 - [confidentialAvailable(account)](#ERC7984Rwa-confidentialAvailable-address-)
@@ -2327,8 +2789,12 @@ This interface provides compliance checks, transfer controls and enforcement act
 - [paused()](#ERC7984Rwa-paused--)
 - [canTransact(account)](#ERC7984Rwa-canTransact-address-)
 - [_update(from, to, encryptedAmount)](#ERC7984Rwa-_update-address-address-euint64-)
-- [_forceUpdate(from, to, encryptedAmount)](#ERC7984Rwa-_forceUpdate-address-address-euint64-)
 - [_checkSenderRestriction(account)](#ERC7984Rwa-_checkSenderRestriction-address-)
+- [_checkRecipientRestriction(account)](#ERC7984Rwa-_checkRecipientRestriction-address-)
+- [_requireNotPaused()](#ERC7984Rwa-_requireNotPaused--)
+- [_isForceTransfer(selector)](#ERC7984Rwa-_isForceTransfer-bytes4-)
+- [_msgSender()](#ERC7984Rwa-_msgSender--)
+- [_msgData()](#ERC7984Rwa-_msgData--)
 - [AGENT_ROLE()](#ERC7984Rwa-AGENT_ROLE-bytes32)
 <details>
 <summary>AccessControl</summary>
@@ -2355,7 +2821,6 @@ This interface provides compliance checks, transfer controls and enforcement act
 <details>
 <summary>Pausable</summary>
 
-- [_requireNotPaused()](#Pausable-_requireNotPaused--)
 - [_requirePaused()](#Pausable-_requirePaused--)
 - [_pause()](#Pausable-_pause--)
 - [_unpause()](#Pausable-_unpause--)
@@ -2370,7 +2835,6 @@ This interface provides compliance checks, transfer controls and enforcement act
 - [_allowUser(account)](#ERC7984Restricted-_allowUser-address-)
 - [_resetUser(account)](#ERC7984Restricted-_resetUser-address-)
 - [_checkRestriction(account)](#ERC7984Restricted-_checkRestriction-address-)
-- [_checkRecipientRestriction(account)](#ERC7984Restricted-_checkRecipientRestriction-address-)
 
 </details>
 <details>
@@ -2440,6 +2904,12 @@ This interface provides compliance checks, transfer controls and enforcement act
 
 </details>
 <details>
+<summary>IERC7984Rwa</summary>
+
+- [TokensRecovered(lostAccount, newAccount, amount)](#IERC7984Rwa-TokensRecovered-address-address-euint64-)
+
+</details>
+<details>
 <summary>IERC7984</summary>
 
 - [OperatorSet(holder, operator, until)](#IERC7984-OperatorSet-address-address-uint48-)
@@ -2461,6 +2931,7 @@ This interface provides compliance checks, transfer controls and enforcement act
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
+- [ERC7984RwaSelfRecoveryNotAllowed()](#ERC7984Rwa-ERC7984RwaSelfRecoveryNotAllowed--)
 <details>
 <summary>Pausable</summary>
 
@@ -2480,10 +2951,8 @@ This interface provides compliance checks, transfer controls and enforcement act
 - [ERC7984InvalidReceiver(receiver)](#ERC7984-ERC7984InvalidReceiver-address-)
 - [ERC7984InvalidSender(sender)](#ERC7984-ERC7984InvalidSender-address-)
 - [ERC7984UnauthorizedSpender(holder, spender)](#ERC7984-ERC7984UnauthorizedSpender-address-address-)
-- [ERC7984ZeroBalance(holder)](#ERC7984-ERC7984ZeroBalance-address-)
 - [ERC7984UnauthorizedUseOfEncryptedAmount(amount, user)](#ERC7984-ERC7984UnauthorizedUseOfEncryptedAmount-euint64-address-)
 - [ERC7984UnauthorizedCaller(caller)](#ERC7984-ERC7984UnauthorizedCaller-address-)
-- [ERC7984InvalidGatewayRequest(requestId)](#ERC7984-ERC7984InvalidGatewayRequest-uint256-)
 
 </details>
 <details>
@@ -2800,6 +3269,23 @@ Burns confidential amount of tokens from account.
 </div>
 </div>
 
+<a id="ERC7984Rwa-recoverAddress-address-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">recoverAddress(address lostAccount, address newAccount) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7984Rwa-recoverAddress-address-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Recovers the address of a lost account to a new account.
+
+</div>
+</div>
+
 <a id="ERC7984Rwa-forceConfidentialTransferFrom-address-address-externalEuint64-bytes-"></a>
 
 <div className="border rounded-md mb-4">
@@ -2821,7 +3307,7 @@ Variant of `forceConfidentialTransferFrom-address-address-euint64` with an input
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">forceConfidentialTransferFrom(address from, address to, euint64 encryptedAmount) → euint64 transferred</p>
+<p className="font-bold text-sm font-mono">forceConfidentialTransferFrom(address from, address to, euint64 encryptedAmount) → euint64</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">public</p>
 <a className="peer" data-card href="#ERC7984Rwa-forceConfidentialTransferFrom-address-address-euint64-">#</a>
@@ -2899,7 +3385,7 @@ Returns true if the contract is paused, and false otherwise.
 </div>
 <div className="px-4">
 
-Returns whether a user account is allowed to interact with the token.
+Returns whether a user account is allowed to receive or send tokens.
 
 Default implementation only disallows explicitly BLOCKED accounts (i.e. a blocklist).
 
@@ -2923,23 +3409,6 @@ Internal function which updates confidential balances while performing frozen an
 </div>
 </div>
 
-<a id="ERC7984Rwa-_forceUpdate-address-address-euint64-"></a>
-
-<div className="border rounded-md mb-4">
-<div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">_forceUpdate(address from, address to, euint64 encryptedAmount) → euint64</p>
-<div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">internal</p>
-<a className="peer" data-card href="#ERC7984Rwa-_forceUpdate-address-address-euint64-">#</a>
-</div>
-</div>
-<div className="px-4">
-
-Internal function which forces transfer of confidential amount of tokens from account to account by skipping compliance checks.
-
-</div>
-</div>
-
 <a id="ERC7984Rwa-_checkSenderRestriction-address-"></a>
 
 <div className="border rounded-md mb-4">
@@ -2952,7 +3421,92 @@ Internal function which forces transfer of confidential amount of tokens from ac
 </div>
 <div className="px-4">
 
-Bypasses the `from` restriction check when performing a [`ERC7984Rwa.forceConfidentialTransferFrom`](#ERC7984Rwa-forceConfidentialTransferFrom-address-address-euint64-).
+Bypasses [`ERC7984Restricted`](#ERC7984Restricted) `from` restriction check when performing a forced transfer or token recovery.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-_checkRecipientRestriction-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_checkRecipientRestriction(address account)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984Rwa-_checkRecipientRestriction-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Bypasses [`ERC7984Restricted`](#ERC7984Restricted) `to` restriction check when performing a forced transfer or token recovery.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-_requireNotPaused--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_requireNotPaused()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984Rwa-_requireNotPaused--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Bypasses `Pausable` check when performing a [`ERC7984Rwa.forceConfidentialTransferFrom`](#ERC7984Rwa-forceConfidentialTransferFrom-address-address-euint64-).
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-_isForceTransfer-bytes4-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_isForceTransfer(bytes4 selector) → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984Rwa-_isForceTransfer-bytes4-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal function which checks if the current function call should be treated as a force transfer.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-_msgSender--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_msgSender() → address</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984Rwa-_msgSender--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Restrict overrides of `Context._msgSender`. Please use other account abstraction methods instead.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-_msgData--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_msgData() → bytes</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984Rwa-_msgData--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Restrict overrides of `Context._msgData`. Please use other account abstraction methods instead.
 
 </div>
 </div>
@@ -2971,12 +3525,29 @@ Bypasses the `from` restriction check when performing a [`ERC7984Rwa.forceConfid
 
 Accounts granted the agent role have the following permissioned abilities:
 
-- Mint/Burn to/from a given address (does not require permission)
-- Force transfer from a given address (does not require permission)
-  - Bypasses pause and restriction checks (not frozen)
-- Pause/Unpause the contract
-- Block/Unblock a given account
-- Set frozen amount of tokens for a given account.
+* Mint/Burn to/from a given address (does not require permission)
+* Force transfer from a given address (does not require permission)
+** Bypasses pause and restriction checks (not frozen)
+* Pause/Unpause the contract
+* Block/Unblock a given account
+* Set frozen amount of tokens for a given account.
+
+</div>
+</div>
+
+<a id="ERC7984Rwa-ERC7984RwaSelfRecoveryNotAllowed--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7984RwaSelfRecoveryNotAllowed()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7984Rwa-ERC7984RwaSelfRecoveryNotAllowed--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The operation failed because the lost account is the same as the new account.
 
 </div>
 </div>
@@ -2987,7 +3558,7 @@ Accounts granted the agent role have the following permissioned abilities:
 
 ## `ERC7984Votes` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.4.0/contracts/token/ERC7984/extensions/ERC7984Votes.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.5.1/contracts/token/ERC7984/extensions/ERC7984Votes.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3030,7 +3601,7 @@ account.
 <summary>HandleAccessManager</summary>
 
 - [getHandleAllowance(handle, account, persistent)](#HandleAccessManager-getHandleAllowance-bytes32-address-bool-)
-- [_validateHandleAllowance(handle)](#HandleAccessManager-_validateHandleAllowance-bytes32-)
+- [_validateHandleAllowance()](#HandleAccessManager-_validateHandleAllowance-bytes32-)
 
 </details>
 <details>
@@ -3144,10 +3715,8 @@ account.
 - [ERC7984InvalidReceiver(receiver)](#ERC7984-ERC7984InvalidReceiver-address-)
 - [ERC7984InvalidSender(sender)](#ERC7984-ERC7984InvalidSender-address-)
 - [ERC7984UnauthorizedSpender(holder, spender)](#ERC7984-ERC7984UnauthorizedSpender-address-address-)
-- [ERC7984ZeroBalance(holder)](#ERC7984-ERC7984ZeroBalance-address-)
 - [ERC7984UnauthorizedUseOfEncryptedAmount(amount, user)](#ERC7984-ERC7984UnauthorizedUseOfEncryptedAmount-euint64-address-)
 - [ERC7984UnauthorizedCaller(caller)](#ERC7984-ERC7984UnauthorizedCaller-address-)
-- [ERC7984InvalidGatewayRequest(requestId)](#ERC7984-ERC7984InvalidGatewayRequest-uint256-)
 
 </details>
 </div>
@@ -3182,6 +3751,9 @@ Returns the confidential total supply of the token.
 </div>
 <div className="px-4">
 
+Safely moves up to `amount` from `from` to `to`, or mints/burns if `from`/`to` is the zero address.
+Emits a [`IERC7984.ConfidentialTransfer`](/confidential-contracts/api/interfaces#IERC7984-ConfidentialTransfer-address-address-euint64-) event with the successfully transferred amount.
+
 </div>
 </div>
 
@@ -3200,13 +3772,764 @@ Returns the confidential total supply of the token.
 </div>
 </div>
 
+<a id="ERC7984BalanceCapHookModule"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC7984BalanceCapHookModule` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.5.1/contracts/token/ERC7984/utils/ERC7984BalanceCapHookModule.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/confidential-contracts/token/ERC7984/utils/ERC7984BalanceCapHookModule.sol";
+```
+
+An ERC-7984 hook module that limits the balance of each investor.
+
+The cap is stored as an encrypted `euint64` value. The pre-transfer hook compares the recipient's prospective balance to the
+encrypted cap and emits an encrypted compliance result via [`ERC7984HookModule._emitPreTransferResults`](#ERC7984HookModule-_emitPreTransferResults-address-address-address-euint64-ebool-bytes32-).
+
+This module is compatible with [`ERC7984Hooked`](#ERC7984Hooked).
+
+<Callout type="warn">
+This module notifies senders of the result of the pre-transfer hook. This can be used to leak
+information about the balance of the recipient. This is a potential security risk and should be used
+with caution. Production use-cases may want to remove this notification.
+</Callout>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [setMaxBalance(token, newMaxBalance, inputProof)](#ERC7984BalanceCapHookModule-setMaxBalance-address-externalEuint64-bytes-)
+- [maxBalance(token)](#ERC7984BalanceCapHookModule-maxBalance-address-)
+- [_setMaxBalance(token, newMaxBalance)](#ERC7984BalanceCapHookModule-_setMaxBalance-address-euint64-)
+- [_preTransfer(token, from, to, encryptedAmount)](#ERC7984BalanceCapHookModule-_preTransfer-address-address-address-euint64-)
+- [_onInstall(token, initData)](#ERC7984BalanceCapHookModule-_onInstall-address-bytes-)
+<details>
+<summary>ERC7984HookModule</summary>
+
+- [preTransfer(from, to, encryptedAmount)](#ERC7984HookModule-preTransfer-address-address-euint64-)
+- [postTransfer(from, to, encryptedAmount)](#ERC7984HookModule-postTransfer-address-address-euint64-)
+- [onInstall(initData)](#ERC7984HookModule-onInstall-bytes-)
+- [supportsInterface(interfaceId)](#ERC7984HookModule-supportsInterface-bytes4-)
+- [_postTransfer(, , , )](#ERC7984HookModule-_postTransfer-address-address-address-euint64-)
+- [_getTokenHandleAllowance(token, handle)](#ERC7984HookModule-_getTokenHandleAllowance-address-euint64-)
+- [_getTokenHandleAllowance(token, handle, persistent)](#ERC7984HookModule-_getTokenHandleAllowance-address-euint64-bool-)
+- [_emitPreTransferResults(token, from, to, encryptedAmount, compliant, context)](#ERC7984HookModule-_emitPreTransferResults-address-address-address-euint64-ebool-bytes32-)
+- [_accessHandle(token, handle)](#ERC7984HookModule-_accessHandle-address-euint64-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+- [ERC7984BalanceCapHookModuleMaxBalanceSet(token, newMaxBalance)](#ERC7984BalanceCapHookModule-ERC7984BalanceCapHookModuleMaxBalanceSet-address-euint64-)
+<details>
+<summary>IERC7984HookModule</summary>
+
+- [ERC7984HookModuleResult(token, from, to, encryptedAmount, result, context)](#IERC7984HookModule-ERC7984HookModuleResult-address-address-address-euint64-ebool-bytes32-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+<details>
+<summary>ERC7984HookModule</summary>
+
+- [ERC7984HookModuleUnauthorizedAccount(account)](#ERC7984HookModule-ERC7984HookModuleUnauthorizedAccount-address-)
+- [ERC7984HookModuleUnauthorizedUseOfEncryptedAmount(amount, user)](#ERC7984HookModule-ERC7984HookModuleUnauthorizedUseOfEncryptedAmount-euint64-address-)
+
+</details>
+</div>
+</div>
+
+<a id="ERC7984BalanceCapHookModule-setMaxBalance-address-externalEuint64-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">setMaxBalance(address token, externalEuint64 newMaxBalance, bytes inputProof)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7984BalanceCapHookModule-setMaxBalance-address-externalEuint64-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Sets the max balance for a given token `token` to the encrypted value `newMaxBalance`.
+
+`msg.sender` must have the agent role on `token`.
+
+</div>
+</div>
+
+<a id="ERC7984BalanceCapHookModule-maxBalance-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">maxBalance(address token) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7984BalanceCapHookModule-maxBalance-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Gets the encrypted max balance for a given token `token`. Returns the zero handle if unset.
+
+</div>
+</div>
+
+<a id="ERC7984BalanceCapHookModule-_setMaxBalance-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_setMaxBalance(address token, euint64 newMaxBalance)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984BalanceCapHookModule-_setMaxBalance-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Sets the encrypted max balance for a given token, grants the module persistent ACL, and emits an event.
+
+</div>
+</div>
+
+<a id="ERC7984BalanceCapHookModule-_preTransfer-address-address-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_preTransfer(address token, address from, address to, euint64 encryptedAmount) → ebool result</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984BalanceCapHookModule-_preTransfer-address-address-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal function which runs before a transfer. Transient access is already granted to the module
+for `encryptedAmount`. If additional handle access is needed from the token, call [`ERC7984HookModule._getTokenHandleAllowance`](#ERC7984HookModule-_getTokenHandleAllowance-address-euint64-bool-).
+
+<Callout>
+ACL allowance on `encryptedAmount` is already checked for `msg.sender` in [`ERC7984HookModule.preTransfer`](#ERC7984HookModule-preTransfer-address-address-euint64-).
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7984BalanceCapHookModule-_onInstall-address-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_onInstall(address token, bytes initData)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984BalanceCapHookModule-_onInstall-address-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See [`ERC7984HookModule._onInstall`](#ERC7984HookModule-_onInstall-address-bytes-). The `initData` must contain the initial max balance for the token
+along with the input proof for the max balance. These are encoded using standard ABI encoding.
+
+</div>
+</div>
+
+<a id="ERC7984BalanceCapHookModule-ERC7984BalanceCapHookModuleMaxBalanceSet-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7984BalanceCapHookModuleMaxBalanceSet(address indexed token, euint64 newMaxBalance)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="#ERC7984BalanceCapHookModule-ERC7984BalanceCapHookModuleMaxBalanceSet-address-euint64-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when the max balance for a given token is set.
+
+</div>
+</div>
+
+<a id="ERC7984HolderCapHookModule"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC7984HolderCapHookModule` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.5.1/contracts/token/ERC7984/utils/ERC7984HolderCapHookModule.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/confidential-contracts/token/ERC7984/utils/ERC7984HolderCapHookModule.sol";
+```
+
+An ERC-7984 hook module that limits the number of holders for a given token.
+
+<Callout>
+This module must be installed prior to minting any tokens. After the total supply is initialized,
+it is not possible to guarantee that the number of holders is 0, so the module can not be installed.
+</Callout>
+
+<Callout type="warn">
+This module may not function correctly with non-standard tokens such as fee on transfer.
+</Callout>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [setMaxHolderCount(token, maxHolderCount_)](#ERC7984HolderCapHookModule-setMaxHolderCount-address-uint64-)
+- [maxHolderCount(token)](#ERC7984HolderCapHookModule-maxHolderCount-address-)
+- [holderCount(token)](#ERC7984HolderCapHookModule-holderCount-address-)
+- [_setMaxHolderCount(token, maxHolderCount_)](#ERC7984HolderCapHookModule-_setMaxHolderCount-address-uint64-)
+- [_preTransfer(token, from, to, encryptedAmount)](#ERC7984HolderCapHookModule-_preTransfer-address-address-address-euint64-)
+- [_postTransfer(token, from, to, encryptedAmount)](#ERC7984HolderCapHookModule-_postTransfer-address-address-address-euint64-)
+- [_onInstall(token, initData)](#ERC7984HolderCapHookModule-_onInstall-address-bytes-)
+<details>
+<summary>ERC7984HookModule</summary>
+
+- [preTransfer(from, to, encryptedAmount)](#ERC7984HookModule-preTransfer-address-address-euint64-)
+- [postTransfer(from, to, encryptedAmount)](#ERC7984HookModule-postTransfer-address-address-euint64-)
+- [onInstall(initData)](#ERC7984HookModule-onInstall-bytes-)
+- [supportsInterface(interfaceId)](#ERC7984HookModule-supportsInterface-bytes4-)
+- [_getTokenHandleAllowance(token, handle)](#ERC7984HookModule-_getTokenHandleAllowance-address-euint64-)
+- [_getTokenHandleAllowance(token, handle, persistent)](#ERC7984HookModule-_getTokenHandleAllowance-address-euint64-bool-)
+- [_emitPreTransferResults(token, from, to, encryptedAmount, compliant, context)](#ERC7984HookModule-_emitPreTransferResults-address-address-address-euint64-ebool-bytes32-)
+- [_accessHandle(token, handle)](#ERC7984HookModule-_accessHandle-address-euint64-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+- [ERC7984HolderCapHookModuleMaxHolderCountSet(token, newMaxHolderCount)](#ERC7984HolderCapHookModule-ERC7984HolderCapHookModuleMaxHolderCountSet-address-uint64-)
+<details>
+<summary>IERC7984HookModule</summary>
+
+- [ERC7984HookModuleResult(token, from, to, encryptedAmount, result, context)](#IERC7984HookModule-ERC7984HookModuleResult-address-address-address-euint64-ebool-bytes32-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [ERC7984HolderCapHookModuleInvalidMaxHolderCount(maxHolderCount)](#ERC7984HolderCapHookModule-ERC7984HolderCapHookModuleInvalidMaxHolderCount-uint64-)
+- [ERC7984HolderCapHookModuleTotalSupplyInitialized()](#ERC7984HolderCapHookModule-ERC7984HolderCapHookModuleTotalSupplyInitialized--)
+<details>
+<summary>ERC7984HookModule</summary>
+
+- [ERC7984HookModuleUnauthorizedAccount(account)](#ERC7984HookModule-ERC7984HookModuleUnauthorizedAccount-address-)
+- [ERC7984HookModuleUnauthorizedUseOfEncryptedAmount(amount, user)](#ERC7984HookModule-ERC7984HookModuleUnauthorizedUseOfEncryptedAmount-euint64-address-)
+
+</details>
+</div>
+</div>
+
+<a id="ERC7984HolderCapHookModule-setMaxHolderCount-address-uint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">setMaxHolderCount(address token, uint64 maxHolderCount_)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7984HolderCapHookModule-setMaxHolderCount-address-uint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Sets the max number of holders for the given token `token` to `maxHolderCount_`.
+
+`msg.sender` must have the agent role on `token`
+
+</div>
+</div>
+
+<a id="ERC7984HolderCapHookModule-maxHolderCount-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">maxHolderCount(address token) → uint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7984HolderCapHookModule-maxHolderCount-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Gets max number of holders for the given token `token`.
+
+</div>
+</div>
+
+<a id="ERC7984HolderCapHookModule-holderCount-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">holderCount(address token) → euint64</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7984HolderCapHookModule-holderCount-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Gets current number of holders for the given token `token`.
+
+</div>
+</div>
+
+<a id="ERC7984HolderCapHookModule-_setMaxHolderCount-address-uint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_setMaxHolderCount(address token, uint64 maxHolderCount_)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984HolderCapHookModule-_setMaxHolderCount-address-uint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Sets the max holder count for a given token to `maxHolderCount_` and emits an event.
+
+</div>
+</div>
+
+<a id="ERC7984HolderCapHookModule-_preTransfer-address-address-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_preTransfer(address token, address from, address to, euint64 encryptedAmount) → ebool result</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984HolderCapHookModule-_preTransfer-address-address-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal function which runs before a transfer. Transient access is already granted to the module
+for `encryptedAmount`. If additional handle access is needed from the token, call [`ERC7984HookModule._getTokenHandleAllowance`](#ERC7984HookModule-_getTokenHandleAllowance-address-euint64-bool-).
+
+<Callout>
+ACL allowance on `encryptedAmount` is already checked for `msg.sender` in [`ERC7984HookModule.preTransfer`](#ERC7984HookModule-preTransfer-address-address-euint64-).
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7984HolderCapHookModule-_postTransfer-address-address-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_postTransfer(address token, address from, address to, euint64 encryptedAmount)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984HolderCapHookModule-_postTransfer-address-address-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal function which performs operations after transfers. Transient access is already granted to the module
+for `encryptedAmount`. If additional handle access is needed from the token, call [`ERC7984HookModule._getTokenHandleAllowance`](#ERC7984HookModule-_getTokenHandleAllowance-address-euint64-bool-).
+
+<Callout>
+ACL allowance on `encryptedAmount` is already checked for `msg.sender` in [`ERC7984HookModule.postTransfer`](#ERC7984HookModule-postTransfer-address-address-euint64-).
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7984HolderCapHookModule-_onInstall-address-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_onInstall(address token, bytes initData)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984HolderCapHookModule-_onInstall-address-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See [`ERC7984HookModule._onInstall`](#ERC7984HookModule-_onInstall-address-bytes-). The `initData` must contain the initial max holder count for the token
+as a standard ABI encoded uint64.
+
+</div>
+</div>
+
+<a id="ERC7984HolderCapHookModule-ERC7984HolderCapHookModuleMaxHolderCountSet-address-uint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7984HolderCapHookModuleMaxHolderCountSet(address indexed token, uint64 newMaxHolderCount)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="#ERC7984HolderCapHookModule-ERC7984HolderCapHookModuleMaxHolderCountSet-address-uint64-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when the max holder count for a given token is set.
+
+</div>
+</div>
+
+<a id="ERC7984HolderCapHookModule-ERC7984HolderCapHookModuleInvalidMaxHolderCount-uint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7984HolderCapHookModuleInvalidMaxHolderCount(uint64 maxHolderCount)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7984HolderCapHookModule-ERC7984HolderCapHookModuleInvalidMaxHolderCount-uint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The new max holder count `maxHolderCount` is invalid.
+
+</div>
+</div>
+
+<a id="ERC7984HolderCapHookModule-ERC7984HolderCapHookModuleTotalSupplyInitialized--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7984HolderCapHookModuleTotalSupplyInitialized()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7984HolderCapHookModule-ERC7984HolderCapHookModuleTotalSupplyInitialized--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="ERC7984HookModule"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC7984HookModule` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.5.1/contracts/token/ERC7984/utils/ERC7984HookModule.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/confidential-contracts/token/ERC7984/utils/ERC7984HookModule.sol";
+```
+
+An abstract base contract for building ERC-7984 hook modules. Compatible with [`ERC7984Hooked`](#ERC7984Hooked).
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [preTransfer(from, to, encryptedAmount)](#ERC7984HookModule-preTransfer-address-address-euint64-)
+- [postTransfer(from, to, encryptedAmount)](#ERC7984HookModule-postTransfer-address-address-euint64-)
+- [onInstall(initData)](#ERC7984HookModule-onInstall-bytes-)
+- [supportsInterface(interfaceId)](#ERC7984HookModule-supportsInterface-bytes4-)
+- [_onInstall(, )](#ERC7984HookModule-_onInstall-address-bytes-)
+- [_preTransfer(, , , )](#ERC7984HookModule-_preTransfer-address-address-address-euint64-)
+- [_postTransfer(, , , )](#ERC7984HookModule-_postTransfer-address-address-address-euint64-)
+- [_getTokenHandleAllowance(token, handle)](#ERC7984HookModule-_getTokenHandleAllowance-address-euint64-)
+- [_getTokenHandleAllowance(token, handle, persistent)](#ERC7984HookModule-_getTokenHandleAllowance-address-euint64-bool-)
+- [_emitPreTransferResults(token, from, to, encryptedAmount, compliant, context)](#ERC7984HookModule-_emitPreTransferResults-address-address-address-euint64-ebool-bytes32-)
+- [_accessHandle(token, handle)](#ERC7984HookModule-_accessHandle-address-euint64-)
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+<details>
+<summary>IERC7984HookModule</summary>
+
+- [ERC7984HookModuleResult(token, from, to, encryptedAmount, result, context)](#IERC7984HookModule-ERC7984HookModuleResult-address-address-address-euint64-ebool-bytes32-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [ERC7984HookModuleUnauthorizedAccount(account)](#ERC7984HookModule-ERC7984HookModuleUnauthorizedAccount-address-)
+- [ERC7984HookModuleUnauthorizedUseOfEncryptedAmount(amount, user)](#ERC7984HookModule-ERC7984HookModuleUnauthorizedUseOfEncryptedAmount-euint64-address-)
+</div>
+</div>
+
+<a id="ERC7984HookModule-preTransfer-address-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">preTransfer(address from, address to, euint64 encryptedAmount) → ebool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7984HookModule-preTransfer-address-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Hook that runs before a transfer. Should not mutate token state. Module is already
+granted transient access to `encryptedAmount`.
+
+</div>
+</div>
+
+<a id="ERC7984HookModule-postTransfer-address-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">postTransfer(address from, address to, euint64 encryptedAmount)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7984HookModule-postTransfer-address-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Performs operation after transfer.
+
+</div>
+</div>
+
+<a id="ERC7984HookModule-onInstall-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">onInstall(bytes initData)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7984HookModule-onInstall-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Performs operations after installation.
+
+</div>
+</div>
+
+<a id="ERC7984HookModule-supportsInterface-bytes4-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">supportsInterface(bytes4 interfaceId) → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC7984HookModule-supportsInterface-bytes4-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns true if this contract implements the interface defined by
+`interfaceId`. See the corresponding
+[ERC section](https://eips.ethereum.org/EIPS/eip-165#how-interfaces-are-identified)
+to learn more about how these ids are created.
+
+This function call must use less than 30 000 gas.
+
+</div>
+</div>
+
+<a id="ERC7984HookModule-_onInstall-address-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_onInstall(address, bytes)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984HookModule-_onInstall-address-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal function which may be overridden by the derived contract to perform actions
+when the module is installed. Should clean up dirty state from possible previous installations.
+
+</div>
+</div>
+
+<a id="ERC7984HookModule-_preTransfer-address-address-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_preTransfer(address, address, address, euint64) → ebool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984HookModule-_preTransfer-address-address-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal function which runs before a transfer. Transient access is already granted to the module
+for `encryptedAmount`. If additional handle access is needed from the token, call [`ERC7984HookModule._getTokenHandleAllowance`](#ERC7984HookModule-_getTokenHandleAllowance-address-euint64-bool-).
+
+<Callout>
+ACL allowance on `encryptedAmount` is already checked for `msg.sender` in [`ERC7984HookModule.preTransfer`](#ERC7984HookModule-preTransfer-address-address-euint64-).
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7984HookModule-_postTransfer-address-address-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_postTransfer(address, address, address, euint64)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984HookModule-_postTransfer-address-address-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal function which performs operations after transfers. Transient access is already granted to the module
+for `encryptedAmount`. If additional handle access is needed from the token, call [`ERC7984HookModule._getTokenHandleAllowance`](#ERC7984HookModule-_getTokenHandleAllowance-address-euint64-bool-).
+
+<Callout>
+ACL allowance on `encryptedAmount` is already checked for `msg.sender` in [`ERC7984HookModule.postTransfer`](#ERC7984HookModule-postTransfer-address-address-euint64-).
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC7984HookModule-_getTokenHandleAllowance-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_getTokenHandleAllowance(address token, euint64 handle)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984HookModule-_getTokenHandleAllowance-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Allow modules to get access to token handles during transaction.
+
+</div>
+</div>
+
+<a id="ERC7984HookModule-_getTokenHandleAllowance-address-euint64-bool-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_getTokenHandleAllowance(address token, euint64 handle, bool persistent)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984HookModule-_getTokenHandleAllowance-address-euint64-bool-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Allow modules to get access to token handles.
+
+</div>
+</div>
+
+<a id="ERC7984HookModule-_emitPreTransferResults-address-address-address-euint64-ebool-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_emitPreTransferResults(address token, address from, address to, euint64 encryptedAmount, ebool compliant, bytes32 context)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984HookModule-_emitPreTransferResults-address-address-address-euint64-ebool-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Optionally emit the result of the pre-transfer hook.
+
+Grants persistent ACL on `compliant` to both this contract and `from`.
+
+</div>
+</div>
+
+<a id="ERC7984HookModule-_accessHandle-address-euint64-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_accessHandle(address token, euint64 handle)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC7984HookModule-_accessHandle-address-euint64-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Get transient ACL allowance for the given handle from a contract that inherits [`HandleAccessManager`](/confidential-contracts/api/utils#HandleAccessManager).
+
+Additionally verifies that the token is authorized to access the handle.
+
+</div>
+</div>
+
+<a id="ERC7984HookModule-ERC7984HookModuleUnauthorizedAccount-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7984HookModuleUnauthorizedAccount(address account)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7984HookModule-ERC7984HookModuleUnauthorizedAccount-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The caller `account` is not authorized to perform the operation.
+
+</div>
+</div>
+
+<a id="ERC7984HookModule-ERC7984HookModuleUnauthorizedUseOfEncryptedAmount-euint64-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC7984HookModuleUnauthorizedUseOfEncryptedAmount(euint64 amount, address user)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC7984HookModule-ERC7984HookModuleUnauthorizedUseOfEncryptedAmount-euint64-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The caller `user` does not have access to the encrypted amount `amount`.
+
+</div>
+</div>
+
 <a id="ERC7984Utils"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
 ## `ERC7984Utils` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.4.0/contracts/token/ERC7984/utils/ERC7984Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-confidential-contracts/blob/v0.5.1/contracts/token/ERC7984/utils/ERC7984Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
