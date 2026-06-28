@@ -1,6 +1,7 @@
 import arbitrumStylusData from "./arbitrum-stylus.json";
 import ethereumEvmData from "./ethereum-evm.json";
 import impactData from "./impact.json";
+import { mergeDeveloperLibraries } from "./merge-developer-libraries";
 import midnightData from "./midnight.json";
 import polkadotData from "./polkadot.json";
 import starknetData from "./starknet";
@@ -10,16 +11,21 @@ import type { NavigationNode, NavigationTree } from "./types";
 import uniswapData from "./uniswap.json";
 import zamaData from "./zama.json";
 
-// Type-safe imports with proper typing
-const ethereumEvm = ethereumEvmData as NavigationNode[];
-const arbitrumStylus = arbitrumStylusData as NavigationNode[];
-const stellar = stellarData as NavigationNode[];
-const midnight = midnightData as NavigationNode[];
+// Type-safe imports with proper typing; shared Ecosystem Adapters + UIKit live in
+// `shared/developer-libraries.json` and are merged in `mergeDeveloperLibraries`.
+const ethereumEvm = mergeDeveloperLibraries(
+	ethereumEvmData as NavigationNode[],
+);
+const arbitrumStylus = mergeDeveloperLibraries(
+	arbitrumStylusData as NavigationNode[],
+);
+const stellar = mergeDeveloperLibraries(stellarData as NavigationNode[]);
+const midnight = mergeDeveloperLibraries(midnightData as NavigationNode[]);
 const starknet = starknetData as NavigationNode[];
 const sui = suiData as NavigationNode[];
-const zama = zamaData as NavigationNode[];
+const polkadot = mergeDeveloperLibraries(polkadotData as NavigationNode[]);
+const zama = mergeDeveloperLibraries(zamaData as NavigationNode[]);
 const uniswap = uniswapData as NavigationNode[];
-const polkadot = polkadotData as NavigationNode[];
 const impact = impactData as NavigationNode[];
 
 // Create separate navigation trees for each blockchain

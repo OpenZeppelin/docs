@@ -1,6 +1,6 @@
 import type { SidebarTab } from "fumadocs-ui/utils/get-sidebar-tabs";
 
-function normalize(url: string) {
+export function normalize(url: string) {
 	if (url.length > 1 && url.endsWith("/")) return url.slice(0, -1);
 	return url;
 }
@@ -24,7 +24,7 @@ interface ParsedPath {
  * For "/relayer" (development root) returns { base: "/relayer", version: null, subpath: "" }
  * For non-product paths, returns null.
  */
-function parseProductPath(path: string): ParsedPath | null {
+export function parseProductPath(path: string): ParsedPath | null {
 	const normalizedPath = normalize(path);
 
 	for (const product of VERSIONED_PRODUCTS) {

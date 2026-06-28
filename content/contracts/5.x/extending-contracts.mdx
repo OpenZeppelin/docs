@@ -7,9 +7,12 @@ Most of the OpenZeppelin Contracts are expected to be used via [inheritance](htt
 This is the commonly found `is` syntax, like in `contract MyToken is ERC20`.
 
 <Callout>
+
+
 Unlike ``contract``s, Solidity ``library``s are not inherited from and instead rely on the [`using for`](https://solidity.readthedocs.io/en/latest/contracts.html#using-for) syntax.
 
 OpenZeppelin Contracts has some ``library``s: most are in the [Utils](/contracts/5.x/api/utils) directory.
+
 </Callout>
 
 ## Overriding
@@ -18,22 +21,7 @@ Inheritance is often used to add the parent contract’s functionality to your o
 
 For example, imagine you want to change [`AccessControl`](/contracts/5.x/api/access#AccessControl) so that [`revokeRole`](/contracts/5.x/api/access#AccessControl-revokeRole-bytes32-address-) can no longer be called. This can be achieved using overrides:
 
-```solidity
-// contracts/AccessControlModified.sol
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
-
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
-
-contract AccessControlModified is AccessControl {
-    error AccessControlNonRevocable();
-
-    // Override the revokeRole function
-    function revokeRole(bytes32, address) public pure override {
-        revert AccessControlNonRevocable();
-    }
-}
-```
+<include cwd lang='solidity'>./examples/access-control/AccessControlModified.sol</include>
 
 The old `revokeRole` is then replaced by our override, and any calls to it will immediately revert. We cannot _remove_ the function from the contract, but reverting on all calls is good enough.
 
@@ -48,6 +36,26 @@ For more information on how overrides work, head over to the [official Solidity 
 </Callout>
 
 Here is a modified version of [`AccessControl`](/contracts/5.x/api/access#AccessControl) where [`revokeRole`](/contracts/5.x/api/access#AccessControl-revokeRole-bytes32-address-) cannot be used to revoke the `DEFAULT_ADMIN_ROLE`:
+
+```solidity
+// contracts/AccessControlNonRevokableAdmin.sol
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {AccessControl} from "../../../access/AccessControl.sol";
+
+contract AccessControlNonRevokableAdmin is AccessControl {
+    error AccessControlNonRevokable();
+
+    function revokeRole(bytes32 role, address account) public override {
+        if (role == DEFAULT_ADMIN_ROLE) {
+            revert AccessControlNonRevokable();
+        }
+
+        super.revokeRole(role, account);
+    }
+}
+```
 
 The `super.revokeRole` statement at the end will invoke ``AccessControl`’s original version of `revokeRole`, the same code that would’ve run if there were no overrides in place.
 

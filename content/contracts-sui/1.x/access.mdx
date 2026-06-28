@@ -2,13 +2,13 @@
 title: Access
 ---
 
-The `openzeppelin_access` package provides ownership-transfer wrappers for privileged Sui objects (`T: key + store`), such as admin and treasury capabilities.
-
-Use this package when direct object transfer is too permissive for your protocol. It gives you explicit transfer workflows that are easier to review, monitor, and constrain with policy.
-
 <Callout type="warn">
-This package is designed for single-owned objects. In `two_step_transfer`, `ctx.sender()` is stored as the owner-of-record for pending requests. Avoid using this policy directly in shared-object executor flows unless your design explicitly maps signer identity to cancel authority.
+The example code snippets used in this guide are experimental and have not been audited. They simply help exemplify usage of the OpenZeppelin Sui Package.
 </Callout>
+
+The `openzeppelin_access` package provides role-based access control and ownership-transfer wrappers for privileged Sui objects, such as admin capabilities, treasury capabilities, shared protocol state, and governance-controlled operations.
+
+Use this package when direct object transfer or single-admin authorization is too permissive for your protocol. It gives you typed role checks and explicit transfer workflows that are easier to review, monitor, and constrain with policy.
 
 ## Usage
 
@@ -19,37 +19,44 @@ Add the dependency in `Move.toml`:
 openzeppelin_access = { r.mvr = "@openzeppelin-move/access" }
 ```
 
-Import the transfer policy module you want to use:
+Import the module you want to use:
 
 ```move
+use openzeppelin_access::access_control::{Self, AccessControl, Auth};
 use openzeppelin_access::two_step_transfer;
+use openzeppelin_access::delayed_transfer;
 ```
 
-## Examples
+## Modules
 
-```move
-module my_sui_app::admin;
+<Cards>
+  <Card href="/contracts-sui/1.x/access-control" title="RBAC">
+    Role-based authorization for privileged functions, shared protocol objects, operators, guardians, keepers, and governance executors, with delayed root administration.
+  </Card>
+  <Card href="/contracts-sui/1.x/two-step-transfer" title="Two-Step Transfer">
+    Ownership-transfer wrapper for single-owned privileged objects that should not move until the recipient explicitly accepts.
+  </Card>
+  <Card href="/contracts-sui/1.x/delayed-transfer" title="Delayed Transfer">
+    Ownership-transfer wrapper for single-owned privileged objects whose transfer or unwrap should be visible on-chain for a delay window before execution.
+  </Card>
+</Cards>
 
-use openzeppelin_access::two_step_transfer;
+## Choosing a module
 
-public struct AdminCap has key, store {
-    id: object::UID,
-}
+| Module | Use it when |
+| --- | --- |
+| `access_control` | Authority is spread across multiple actors or roles, especially for shared objects, protocol functions, and delayed root-admin operations. |
+| `two_step_transfer` | A single-owned privileged object can transfer immediately, but the recipient should explicitly accept first. |
+| `delayed_transfer` | A single-owned privileged object should not transfer or unwrap until a visible delay has elapsed. |
 
-public fun wrap_admin_cap(
-    cap: AdminCap,
-    ctx: &mut TxContext,
-): two_step_transfer::TwoStepTransferWrapper<AdminCap> {
-    // Wrap the capability object to force a two-step transfer policy.
-    two_step_transfer::wrap(cap, ctx)
-}
-```
+<Callout type="warn">
+The ownership-transfer modules are designed for single-owned objects. In `two_step_transfer`, `ctx.sender()` is stored as the owner-of-record for pending requests. Avoid using this policy directly in shared-object executor flows unless your design explicitly maps signer identity to cancel authority.
+</Callout>
 
-## Choosing a transfer policy
+## Next steps
 
-- Use `two_step_transfer` when the signer triggering transfer initiation is the same principal that should retain cancel authority.
-- Use `delayed_transfer` when protocol safety requires on-chain lead time before transfer or unwrap execution, and when initial wrapper custody should be assigned explicitly at wrap time.
-
-## API Reference
-
-Use the full function-level reference here: [Access API](/contracts-sui/1.x/api/access).
+- [RBAC](/contracts-sui/1.x/access-control) for role-based authorization.
+- [Two-Step Transfer](/contracts-sui/1.x/two-step-transfer) for explicit recipient acceptance.
+- [Delayed Transfer](/contracts-sui/1.x/delayed-transfer) for delayed capability transfers and unwraps.
+- [Role Based Access Control guide](/contracts-sui/1.x/guides/access-control) for a full walkthrough with publishing, upgrades, and PTBs.
+- [Access API reference](/contracts-sui/1.x/api/access) for function signatures, events, and errors.
