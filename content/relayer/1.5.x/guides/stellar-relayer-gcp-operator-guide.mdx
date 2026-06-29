@@ -217,7 +217,7 @@ Gather everything in this section before running `terraform apply`. Missing any 
 ### 2.1. Accounts and Access
 
 - **GCP project** with billing enabled and permission to create Cloud Run services, Memorystore instances, Pub/Sub topics and subscriptions, Secret Manager secrets, Cloud KMS keyrings and keys, Compute Engine load balancers, VPC connectors, Artifact Registry repositories, and IAM role bindings.
-- **Service account** for Terraform with the specific predefined roles it needs — do **not** grant the broad `editor` basic role (it subsumes far more than this stack requires and undermines least privilege). Grant: `roles/resourcemanager.projectIamAdmin`, `roles/compute.networkAdmin`, `roles/cloudkms.admin`, `roles/pubsub.admin`, `roles/secretmanager.admin`, `roles/run.admin`, `roles/artifactregistry.admin`, `roles/iam.serviceAccountAdmin`, and `roles/iam.serviceAccountUser`. If a first `terraform apply` fails on a missing permission, add the specific predefined role it names rather than falling back to `editor`.
+- **Service account** for Terraform with the specific predefined roles it needs. Do **not** grant the broad `editor` basic role (it subsumes far more than this stack requires and undermines least privilege). Grant: `roles/resourcemanager.projectIamAdmin`, `roles/compute.networkAdmin`, `roles/cloudkms.admin`, `roles/pubsub.admin`, `roles/secretmanager.admin`, `roles/run.admin`, `roles/artifactregistry.admin`, `roles/iam.serviceAccountAdmin`, and `roles/iam.serviceAccountUser`. If a first `terraform apply` fails on a missing permission, add the specific predefined role it names rather than falling back to `editor`.
 - **Domain** with DNS access (Route53, Cloud DNS, or other)
 - (Optional) **Cloudflare account** for the `/gen` API-key flow
 
@@ -265,7 +265,7 @@ Work through the steps below in order on a fresh deployment. Each step produces 
 
 ### 4.1. Authenticate
 
-Prefer short-lived Application Default Credentials — they avoid creating a long-lived key file altogether:
+Prefer short-lived Application Default Credentials, which avoid creating a long-lived key file altogether:
 
 ```bash
 gcloud auth application-default login
@@ -274,7 +274,7 @@ gcloud auth application-default login
 For CI/CD, prefer [Workload Identity Federation](https://cloud.google.com/iam/docs/workload-identity-federation) over a downloaded key.
 
 <Callout type="warn">
-Only if your org blocks ADC login: create a service account key (IAM & Admin > Service Accounts > Keys) and point `GOOGLE_APPLICATION_CREDENTIALS` at it. This is a long-lived credential for a highly privileged Terraform service account — treat it as the most sensitive secret in the deployment. **Delete the key as soon as the deployment is done** (`gcloud iam service-accounts keys delete`), store it only outside the repo, and rotate it on a schedule while it exists.
+Only if your org blocks ADC login: create a service account key (IAM & Admin > Service Accounts > Keys) and point `GOOGLE_APPLICATION_CREDENTIALS` at it. This is a long-lived credential for a highly privileged Terraform service account. Treat it as the most sensitive secret in the deployment. **Delete the key as soon as the deployment is done** (`gcloud iam service-accounts keys delete`), store it only outside the repo, and rotate it on a schedule while it exists.
 
 ```bash
 export GOOGLE_APPLICATION_CREDENTIALS="$HOME/path/to/service-account-key.json"
@@ -819,7 +819,7 @@ This section documents the security posture of the deployed infrastructure. Revi
 
 ### 10.1. Secrets
 
-All secrets are stored in Secret Manager, but are currently injected into Cloud Run as plain environment variables rather than `secret_key_ref` references (see Known Issues for the plan to switch). **Consequence:** anyone with `run.viewer` on the project (or who can run `gcloud run services describe`) can read the secret values directly from the revision config — including `relayer_api_key`, `channels_admin_secret`, and `storage_encryption_key`. Until `secret_key_ref` lands, restrict `roles/run.viewer` / `roles/run.admin` to the minimum set of principals and audit it.
+All secrets are stored in Secret Manager, but are currently injected into Cloud Run as plain environment variables rather than `secret_key_ref` references (see Known Issues for the plan to switch). **Consequence:** anyone with `run.viewer` on the project (or who can run `gcloud run services describe`) can read the secret values directly from the revision config, including `relayer_api_key`, `channels_admin_secret`, and `storage_encryption_key`. Until `secret_key_ref` lands, restrict `roles/run.viewer` / `roles/run.admin` to the minimum set of principals and audit it.
 
 ### 10.2. Network Isolation
 
