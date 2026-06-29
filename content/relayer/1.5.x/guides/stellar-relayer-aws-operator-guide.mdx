@@ -487,6 +487,10 @@ export TF_VAR_webhook_signing_key="$(openssl rand -hex 32)"        # if using we
 export TF_VAR_storage_encryption_key="$(openssl rand -hex 32)"     # for at-rest encryption in Redis
 ```
 
+<Callout type="warn">
+These commands embed freshly generated secrets in the command line, so they land in your shell history (and are briefly visible in `ps`/`/proc` on a shared host). Set `HISTCONTROL=ignorespace` and prefix each command with a leading space, or run them in a subshell with history disabled (`set +o history`). Never paste the generated values into `terraform.tfvars` or commit them.
+</Callout>
+
 ### Step 5.4: Decide on the Container Image Strategy
 
 Two options:
@@ -551,6 +555,10 @@ docker push "$ECR_URL:latest"
 ```
 
 ### Step 5.5: Plan and Apply
+
+<Callout type="error">
+**Do not apply with an open ALB.** If you set `enable_cloudflare = false`, you **must** also set `alb_allowed_ipv4_cidrs` to an explicit allow-list (your office/VPN egress, monitoring sources, etc.) before applying. The allow-list defaults to empty, and an empty allow-list is treated as `0.0.0.0/0` — applying as-is publishes the transaction-signing API to the entire internet, gated only by a single static API key. Review the `terraform plan` output for the ALB security group ingress rules and confirm they are not `0.0.0.0/0` before running `apply`.
+</Callout>
 
 ```bash
 terraform plan -out plan.tfplan
@@ -973,7 +981,7 @@ The deploy unit is the container image. The Terraform module is "infra-mostly-st
 
 **Routine deploy** (new container image):
 
-1. Push the new image to ECR with a versioned tag (for example, `mainnet-1.3.40`).
+1. Push the new image to ECR with a versioned tag (for example, `mainnet-1.4.3`).
 2. Update `container_image` in tfvars to point at the new tag.
 3. `terraform apply`: this triggers an ECS service update with `deployment_minimum_healthy_percent = 100` and `deployment_maximum_percent = 200`, so the service stays available throughout (new tasks come up, then old ones go down).
 
@@ -983,7 +991,7 @@ The deploy unit is the container image. The Terraform module is "infra-mostly-st
 
 To roll out a new image with canary:
 
-1. Push the new image to ECR with a versioned tag (for example, `mainnet-1.4.3`).
+1. Push the new image to ECR with a versioned tag (for example, `mainnet-1.4.3`, one minor/patch ahead of the stable `mainnet-1.4.2`).
 2. Update the canary service's `container_image` to the new tag and bump its `desired_count` (from the "parked" 0 to a small number (for example, 2 tasks) for a ~10% slice.
 3. Shift ALB weights from `{stable: 100, canary: 0}` to `{stable: 90, canary: 10}` (or whatever ramp you want).
 4. `terraform apply`.
@@ -1000,7 +1008,7 @@ Extending the public `relayer-channels-infra` module to add a canary service is 
 
 To roll back to a previous container image:
 
-1. Update `container_image` tfvars to the older tag (for example, `mainnet-1.3.39`).
+1. Update `container_image` tfvars to the older tag (for example, `mainnet-1.4.1`).
 2. `terraform apply`.
 
 The same blue/green-ish ECS deployment semantics apply: rollback proceeds with `min_healthy = 100`, so the service stays available.
@@ -1333,12 +1341,20 @@ The Terraform `lifecycle { ignore_changes = [value] }` on SSM parameters means: 
 **Rotation procedure for `API_KEY`:**
 
 ```bash
+# Generate into a variable so the secret value never appears literally on a
+# command line (and thus not in shell history, `ps`, or /proc on a shared host).
+NEW_API_KEY="$(openssl rand -hex 32)"
 aws ssm put-parameter \
   --name "/<app_name>-<env>/relayer-api-key" \
-  --value "$(openssl rand -hex 32)" \
+  --value "$NEW_API_KEY" \
   --type SecureString \
   --overwrite
+unset NEW_API_KEY
 ```
+
+<Callout type="warn">
+Avoid the inline form `--value "$(openssl rand -hex 32)"`: it places the secret directly on the command line, where it is captured in shell history and visible via `ps`/`/proc` to other users on the host. Pass it through a variable (as above) and `unset` it when done.
+</Callout>
 
 Then force a task restart so the new value is picked up:
 
@@ -1351,7 +1367,7 @@ aws ecs update-service \
 
 ### 9.2: Network Isolation
 
-- **ALB ingress:** when Cloudflare is enabled, the ALB security group is restricted to Cloudflare's published IP ranges (the module pulls these from Cloudflare's API). Public ingress to the ALB directly is blocked. When Cloudflare is disabled, you must explicitly populate `alb_allowed_ipv4_cidrs`; by default, an empty allow-list means `0.0.0.0/0` is allowed.
+- **ALB ingress:** when Cloudflare is enabled, the ALB security group is restricted to Cloudflare's published IP ranges (the module pulls these from Cloudflare's API). Public ingress to the ALB directly is blocked. **When Cloudflare is disabled, the ingress allow-list (`alb_allowed_ipv4_cidrs`) defaults to empty, and an empty allow-list is treated as `0.0.0.0/0` (fully open).** This is a fail-open default: you **must** explicitly populate `alb_allowed_ipv4_cidrs` with a restricted set of CIDRs (office/VPN egress, monitoring sources) before applying, or the signing API is exposed to the entire internet behind only the static API key. Always confirm the ALB security-group ingress rules in `terraform plan` before `apply`.
 - **ALB egress:** restricted to the VPC CIDR (only the ECS service can be reached).
 - **ECS task egress:** allowed to `0.0.0.0/0` (the task needs to reach Soroban RPC, Horizon, AWS APIs, and any webhook destinations).
 - **ECS task ingress:** restricted to the ALB security group on the container port; metrics port (8081) is `self` only (sidecar containers only).

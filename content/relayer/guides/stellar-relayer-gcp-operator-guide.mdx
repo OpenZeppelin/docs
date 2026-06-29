@@ -217,7 +217,7 @@ Gather everything in this section before running `terraform apply`. Missing any 
 ### 2.1. Accounts and Access
 
 - **GCP project** with billing enabled and permission to create Cloud Run services, Memorystore instances, Pub/Sub topics and subscriptions, Secret Manager secrets, Cloud KMS keyrings and keys, Compute Engine load balancers, VPC connectors, Artifact Registry repositories, and IAM role bindings.
-- **Service account** for Terraform with these roles: `editor`, `resourcemanager.projectIamAdmin`, `compute.networkAdmin`, `cloudkms.admin`, `pubsub.admin`, `secretmanager.admin`, `run.admin`, `artifactregistry.admin`
+- **Service account** for Terraform with the specific predefined roles it needs — do **not** grant the broad `editor` basic role (it subsumes far more than this stack requires and undermines least privilege). Grant: `roles/resourcemanager.projectIamAdmin`, `roles/compute.networkAdmin`, `roles/cloudkms.admin`, `roles/pubsub.admin`, `roles/secretmanager.admin`, `roles/run.admin`, `roles/artifactregistry.admin`, `roles/iam.serviceAccountAdmin`, and `roles/iam.serviceAccountUser`. If a first `terraform apply` fails on a missing permission, add the specific predefined role it names rather than falling back to `editor`.
 - **Domain** with DNS access (Route53, Cloud DNS, or other)
 - (Optional) **Cloudflare account** for the `/gen` API-key flow
 
@@ -265,11 +265,21 @@ Work through the steps below in order on a fresh deployment. Each step produces 
 
 ### 4.1. Authenticate
 
+Prefer short-lived Application Default Credentials — they avoid creating a long-lived key file altogether:
+
+```bash
+gcloud auth application-default login
+```
+
+For CI/CD, prefer [Workload Identity Federation](https://cloud.google.com/iam/docs/workload-identity-federation) over a downloaded key.
+
+<Callout type="warn">
+Only if your org blocks ADC login: create a service account key (IAM & Admin > Service Accounts > Keys) and point `GOOGLE_APPLICATION_CREDENTIALS` at it. This is a long-lived credential for a highly privileged Terraform service account — treat it as the most sensitive secret in the deployment. **Delete the key as soon as the deployment is done** (`gcloud iam service-accounts keys delete`), store it only outside the repo, and rotate it on a schedule while it exists.
+
 ```bash
 export GOOGLE_APPLICATION_CREDENTIALS="$HOME/path/to/service-account-key.json"
 ```
-
-If your org blocks `gcloud auth application-default login`, create a service account key in IAM & Admin > Service Accounts > Keys.
+</Callout>
 
 ### 4.2. Get the Module
 
@@ -320,7 +330,7 @@ subnetwork      = "default"
 domain_name     = "channels.your-company.com"
 stellar_network = "mainnet"
 queue_backend   = "pubsub"
-container_image = "us-east1-docker.pkg.dev/my-project/ecr-public/w5h5k2p1/openzeppelin-relayer-channels:mainnet-latest"
+container_image = "us-east1-docker.pkg.dev/my-project/ecr-public/w5h5k2p1/openzeppelin-relayer-channels:mainnet-1.4.2"  # pin a version in prod; do not use mainnet-latest
 
 # Secrets — never commit these
 relayer_api_key        = ""  # set via TF_VAR_relayer_api_key
@@ -337,6 +347,10 @@ export TF_VAR_webhook_signing_key="$(openssl rand -hex 32)"
 export TF_VAR_storage_encryption_key="$(openssl rand -base64 32)"   # must be base64, not hex
 ```
 
+<Callout type="warn">
+These commands embed freshly generated secrets in the command line, so they land in your shell history (and are briefly visible in `ps`/`/proc` on a shared host). Set `HISTCONTROL=ignorespace` and prefix each command with a leading space, or run them in a subshell with history disabled (`set +o history`). Never paste the generated values into `terraform.tfvars` or commit them.
+</Callout>
+
 ### 4.5. Set Up Artifact Registry
 
 Cloud Run can't pull from ECR Public directly. Set up a remote repo to proxy it:
@@ -350,7 +364,7 @@ Then reference it in `container_image` in your tfvars (as shown in [section 4.4]
 Tag scheme: `mainnet-<version>` (pinned, use in prod), `mainnet-latest` (moves), `testnet-<version>`, `testnet-latest`.
 
 <Callout>
-The public image ships with `mainnet.sorobanrpc.com` as the default RPC. Override it with private providers after deployment (see [section 4.7](#47-dns-and-ssl)).
+The public image ships with `mainnet.sorobanrpc.com` as the default RPC. Override it with private providers after deployment (see [section 4.8](#48-override-rpc-endpoints)).
 </Callout>
 
 ### 4.6. Deploy
@@ -587,13 +601,19 @@ container_environment = [
 When enabled, a Cloudflare Worker handles API-key issuance (`/gen`), per-key rate limiting, and proxies requests to the LB with static-key injection.
 
 ```hcl
-enable_cloudflare      = true
-cloudflare_api_token   = "your-token"
-cloudflare_zone_id     = "your-zone-id"
-cloudflare_account_id  = "your-account-id"
-relayer_static_api_key = "same-as-your-relayer_api_key"
-key_salt               = "<openssl rand -base64 32>"
-cf_analytics_api_token = "your-token"
+enable_cloudflare     = true
+cloudflare_zone_id    = "your-zone-id"
+cloudflare_account_id = "your-account-id"
+# Sensitive values below are set via TF_VAR_* env vars, not inline — see note.
+```
+
+The sensitive values (`cloudflare_api_token`, `relayer_static_api_key`, `key_salt`, `cf_analytics_api_token`) are marked `sensitive` and must **not** be committed in `terraform.tfvars`. Set them via environment variables, the same way as the core secrets:
+
+```bash
+export TF_VAR_cloudflare_api_token="$CLOUDFLARE_API_TOKEN"
+export TF_VAR_relayer_static_api_key="$TF_VAR_relayer_api_key"   # must match relayer_api_key
+export TF_VAR_key_salt="$(openssl rand -base64 32)"
+export TF_VAR_cf_analytics_api_token="$CF_ANALYTICS_API_TOKEN"
 ```
 
 `relayer_static_api_key` should match your `relayer_api_key`; the Worker swaps every user's Bearer token for this key upstream. `key_salt` is used to hash user keys before storing in KV.
@@ -799,7 +819,7 @@ This section documents the security posture of the deployed infrastructure. Revi
 
 ### 10.1. Secrets
 
-All secrets are stored in Secret Manager, passed as env vars to Cloud Run. See Known Issues for the plan to switch to `secret_key_ref` references.
+All secrets are stored in Secret Manager, but are currently injected into Cloud Run as plain environment variables rather than `secret_key_ref` references (see Known Issues for the plan to switch). **Consequence:** anyone with `run.viewer` on the project (or who can run `gcloud run services describe`) can read the secret values directly from the revision config — including `relayer_api_key`, `channels_admin_secret`, and `storage_encryption_key`. Until `secret_key_ref` lands, restrict `roles/run.viewer` / `roles/run.admin` to the minimum set of principals and audit it.
 
 ### 10.2. Network Isolation
 
