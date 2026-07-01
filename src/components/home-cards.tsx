@@ -163,8 +163,7 @@ function EcosystemCard({
 		uniswap:
 			"before:bg-gradient-to-r before:from-[#e6007a] before:to-[#FC75FE]",
 		zama: "before:bg-gradient-to-r before:from-[#FFD205] before:to-[#FFD205]",
-		canton:
-			"before:bg-gradient-to-r before:from-[#2f6df6] before:to-[#12c2c2]",
+		canton: "before:bg-gradient-to-r before:from-[#2f6df6] before:to-[#12c2c2]",
 	};
 
 	return (
