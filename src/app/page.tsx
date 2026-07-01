@@ -11,6 +11,7 @@ import {
 import {
 	AnnotationDotsIcon,
 	ArbitrumIcon,
+	CantonIcon,
 	ContractsLibraryIcon,
 	ContractsMcpIcon,
 	ContractsUpgradesIcon,
@@ -268,6 +269,14 @@ export default function HomePage() {
 							title="Zama FHEVM"
 							description="Implement fully homomorphic encryption for confidential smart contracts in Solidity"
 							glowColor="zama"
+						/>
+
+						<EcosystemCard
+							href="/canton"
+							icon={<CantonIcon className="w-6 h-6" />}
+							title="Canton"
+							description="Build privacy-enabled Daml applications on the Canton Network with secure, reusable primitives"
+							glowColor="canton"
 						/>
 					</div>
 				</div>
