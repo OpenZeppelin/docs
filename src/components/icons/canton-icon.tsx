@@ -1,6 +1,6 @@
-// Canton Network symbol, official brand asset (unmodified geometry and colors)
-// from https://www.canton.network/brand-kit-trademark-use. Canton is a registered
-// trademark of Digital Asset (Switzerland) GmbH.
+// Canton Network symbol, official brand asset (white/reversed variant, unmodified
+// geometry) from https://www.canton.network/brand-kit-trademark-use. Canton is a
+// registered trademark of Digital Asset (Switzerland) GmbH.
 export function CantonIcon({ className }: { className: string }) {
 	return (
 		<svg
@@ -16,7 +16,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M279.5,40.7l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M279.5,41.9l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM279.5,39.5l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -24,7 +24,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M274.7,36.2l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M274.7,37.4l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM274.7,35l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -32,7 +32,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M269.8,31.9l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M269.8,33.1l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.7ZM269.8,30.7l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -40,7 +40,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M264.7,27.9l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M264.6,29.1l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM264.6,26.7l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -48,7 +48,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M259.5,24.2l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M259.4,25.3l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM259.4,23l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -56,7 +56,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M254,20.7l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M254.1,21.9l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM254.1,19.6l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -64,7 +64,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M248.5,17.5l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M248.6,18.7l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM248.6,16.4l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -72,7 +72,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M242.9,14.7l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M243,15.9l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM243,13.5l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -80,7 +80,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M237.2,12l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M237.3,13.3l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM237.3,10.9l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -88,7 +88,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M231.4,9.7l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M231.4,10.9l46.6,46.6-46.6,46.7-46.6-46.6,46.6-46.7ZM231.4,8.6l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -96,7 +96,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M225.6,7.7l-47.8,47.8,47.8,47.8,47.8-47.8L225.6,7.7Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M225.6,8.9l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM225.6,6.5l-49,49,49,49,49-49L225.6,6.5Z"
 			/>
 			<path
@@ -104,7 +104,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M219.6,5.9l-47.8,47.8,47.8,47.8,47.8-47.8L219.6,5.9Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M219.6,7.1l46.6,46.6-46.6,46.6-46.6-46.6L219.6,7.1ZM219.6,4.8l-49,49,49,49,49-49L219.6,4.8Z"
 			/>
 			<path
@@ -112,7 +112,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M213.6,4.5l-47.8,47.8,47.8,47.8,47.8-47.8L213.6,4.5Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M213.6,5.6l46.6,46.6-46.6,46.7-46.6-46.6L213.6,5.6ZM213.6,3.3l-49,49,49,49,49-49L213.6,3.3Z"
 			/>
 			<path
@@ -120,7 +120,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M207.5,3.2l-47.8,47.8,47.8,47.8,47.8-47.8L207.5,3.2Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M207.5,4.4l46.6,46.6-46.6,46.6-46.6-46.6L207.5,4.4ZM207.5,2.1l-49,49,49,49,49-49L207.5,2.1Z"
 			/>
 			<path
@@ -128,7 +128,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M201.4,2.3l-47.8,47.8,47.8,47.8,47.8-47.8L201.4,2.3Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M201.4,3.5l46.6,46.6-46.6,46.6-46.6-46.6L201.4,3.5ZM201.4,1.1l-49,49,49,49,49-49L201.4,1.1Z"
 			/>
 			<path
@@ -136,7 +136,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M195.3,1.7l-47.8,47.8,47.8,47.8,47.8-47.8L195.3,1.7Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M195.3,2.8l46.6,46.6-46.6,46.7-46.6-46.6L195.3,2.8ZM195.3.5l-49,49,49,49,49-49L195.3.5Z"
 			/>
 			<path
@@ -144,7 +144,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M189.2,1.3l-47.8,47.8,47.8,47.8,47.8-47.8L189.2,1.3Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M189.2,2.4l46.6,46.6-46.6,46.6-46.6-46.6L189.2,2.4ZM189.2.1l-49,49,49,49,49-49L189.2.1Z"
 			/>
 			<path
@@ -152,7 +152,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M183,1.2l-47.8,47.8,47.8,47.8,47.8-47.8L183,1.2Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M183,2.4l46.6,46.6-46.6,46.6-46.6-46.6L183,2.4ZM183,0l-49,49,49,49,49-49L183,0Z"
 			/>
 			<path
@@ -160,7 +160,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M176.8,1.4l-47.8,47.8,47.8,47.8,47.8-47.8L176.8,1.4Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M176.8,2.6l46.6,46.6-46.6,46.6-46.6-46.6L176.8,2.6ZM176.8.2l-49,49,49,49,49-49L176.8.2Z"
 			/>
 			<path
@@ -168,7 +168,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M170.7,1.8l-47.8,47.8,47.8,47.8,47.8-47.8L170.7,1.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M170.7,3l46.6,46.6-46.6,46.6-46.6-46.6L170.7,3ZM170.7.7l-49,49,49,49,49-49L170.7.7Z"
 			/>
 			<path
@@ -176,7 +176,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M164.5,2.6l-47.8,47.8,47.8,47.8,47.8-47.8L164.5,2.6Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M164.5,3.8l46.6,46.6-46.6,46.6-46.6-46.6L164.5,3.8ZM164.5,1.4l-49,49,49,49,49-49L164.5,1.4Z"
 			/>
 			<path
@@ -184,7 +184,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M158.5,3.6l-47.8,47.8,47.8,47.8,47.8-47.8L158.5,3.6Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M158.4,4.8l46.6,46.6-46.6,46.6-46.6-46.6L158.4,4.8ZM158.4,2.4l-49,49,49,49,49-49L158.4,2.4Z"
 			/>
 			<path
@@ -192,7 +192,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M152.4,4.9l-47.8,47.8,47.8,47.8,47.8-47.8L152.4,4.9Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M152.4,6.1l46.6,46.6-46.6,46.6-46.6-46.6L152.4,6.1ZM152.4,3.7l-49,49,49,49,49-49L152.4,3.7Z"
 			/>
 			<path
@@ -200,7 +200,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M146.4,6.5l-47.8,47.8,47.8,47.8,47.8-47.8L146.4,6.5Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M146.4,7.7l46.6,46.6-46.6,46.6-46.6-46.6L146.4,7.7ZM146.4,5.3l-49,49,49,49,49-49L146.4,5.3Z"
 			/>
 			<path
@@ -208,7 +208,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M140.5,8.4l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M140.5,9.5l46.6,46.6-46.6,46.7-46.6-46.6,46.6-46.7ZM140.5,7.2l-49,49,49,49,49-49L140.5,7.2Z"
 			/>
 			<path
@@ -216,7 +216,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M134.7,10.5l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M134.7,11.6l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM134.7,9.3l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -224,7 +224,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M128.9,12.9l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M128.9,14.1l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM128.9,11.8l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -232,7 +232,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M123.2,15.6l-47.8,47.8,47.8,47.8,47.8-47.8L123.2,15.6Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M123.2,16.8l46.7,46.6-46.6,46.6-46.7-46.6,46.6-46.6ZM123.2,14.4l-49,49,49,49,49-49L123.2,14.4Z"
 			/>
 			<path
@@ -240,7 +240,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M117.6,18.6l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M117.6,19.7l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM117.6,17.4l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -248,7 +248,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M112.2,21.8l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M112.2,23l46.6,46.6-46.6,46.7-46.6-46.6,46.6-46.7ZM112.2,20.7l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -256,7 +256,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M106.8,25.4l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M106.8,26.6l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM106.8,24.2l-49,49,49,49,49-49-49.1-49Z"
 			/>
 			<path
@@ -264,7 +264,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M101.6,29.2l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M101.7,30.4l46.6,46.6-46.6,46.7-46.6-46.6,46.6-46.7ZM101.7,28l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -272,7 +272,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M96.6,33.3l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M96.6,34.5l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM96.6,32.1l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -280,7 +280,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M91.7,37.7l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M91.7,38.8l46.6,46.6-46.6,46.7-46.6-46.6,46.6-46.7ZM91.7,36.5l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -288,7 +288,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M87,42.3l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M87,43.5l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM87,41.2l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -296,7 +296,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M82.5,47.1l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M82.5,48.3l46.6,46.6-46.6,46.7-46.6-46.6,46.6-46.7ZM82.5,46l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -304,7 +304,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M78.3,52.2l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M78.3,53.4l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM78.3,51l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -312,7 +312,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M74.4,57.3l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M74.4,58.5l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM74.4,56.1l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -320,7 +320,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M70.8,62.6l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M70.8,63.8l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM70.8,61.4l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -328,7 +328,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M67.4,68l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M67.4,69.2l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM67.4,66.8l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -336,7 +336,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M64.3,73.6l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M64.3,74.7l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM64.3,72.4L15.3,121.4l49,49,49-49-49-49Z"
 			/>
 			<path
@@ -344,7 +344,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M61.5,79.2L13.7,127l47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M61.6,80.4l46.6,46.6-46.6,46.6L14.9,127l46.6-46.6ZM61.6,78L12.5,127.1l49,49,49-49-49-49Z"
 			/>
 			<path
@@ -352,7 +352,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M59.1,84.9l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M59.1,86.1l46.6,46.6-46.6,46.6-46.7-46.6,46.7-46.6ZM59.1,83.7l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -360,7 +360,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M56.8,90.7l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M56.8,92l46.6,46.6-46.6,46.6-46.7-46.6,46.7-46.6ZM56.8,89.6L7.8,138.6l49,49,49-49-49-49Z"
 			/>
 			<path
@@ -368,7 +368,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M54.9,96.7L7,144.5l47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M54.8,97.8l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM54.8,95.5L5.8,144.5l49,49,49-49-49-49Z"
 			/>
 			<path
@@ -376,7 +376,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M53.2,102.6L5.3,150.5l47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M53.2,103.8l46.6,46.6-46.6,46.6L6.5,150.5l46.6-46.6ZM53.2,101.4L4.2,150.5l49,49,49-49-49-49Z"
 			/>
 			<path
@@ -384,7 +384,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M51.8,108.7L4,156.5l47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M51.8,109.9l46.6,46.6-46.6,46.7L5.2,156.5l46.6-46.6ZM51.8,107.5L2.8,156.5l49,49,49-49-49-49Z"
 			/>
 			<path
@@ -392,7 +392,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M50.7,114.8L2.9,162.6l47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M50.7,115.9l46.6,46.6-46.6,46.6L4,162.6l46.6-46.6ZM50.7,113.6L1.7,162.6l49,49,49-49-49-49Z"
 			/>
 			<path
@@ -400,7 +400,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M49.9,120.8L2,168.7l47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M49.9,122l46.6,46.6-46.6,46.6L3.2,168.7l46.6-46.6ZM49.9,119.7L.8,168.7l49,49,49-49-49-49Z"
 			/>
 			<path
@@ -408,7 +408,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M49.3,127L1.5,174.8l47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M49.3,128.2l46.6,46.6-46.6,46.7L2.7,174.9l46.6-46.7ZM49.3,125.8L.3,174.9l49,49,49-49-49-49Z"
 			/>
 			<path
@@ -416,7 +416,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M49,133.1L1.2,181l47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M49,134.3l46.6,46.6-46.6,46.6L2.4,181l46.6-46.6ZM49,132L0,181l49,49,49-49-49-49Z"
 			/>
 			<path
@@ -424,7 +424,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M49,139.3L1.2,187.2l47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M49,140.5l46.6,46.6-46.6,46.6L2.4,187.1l46.6-46.6ZM49,138.1L0,187.2l49,49,49-49-49-49Z"
 			/>
 			<path
@@ -432,7 +432,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M49.3,145.4L1.4,193.3l47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M49.3,146.6l46.6,46.6-46.6,46.6L2.7,193.3l46.6-46.6ZM49.3,144.3L.3,193.3l49,49,49-49-49-49Z"
 			/>
 			<path
@@ -440,7 +440,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M49.8,151.6L2,199.4l47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M49.9,152.8l46.6,46.6-46.6,46.6L3.2,199.4l46.6-46.6ZM49.9,150.4L.8,199.4l49,49,49-49-49-49Z"
 			/>
 			<path
@@ -448,7 +448,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M50.7,157.7L2.8,205.5l47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M50.7,158.9l46.6,46.6-46.6,46.6L4,205.5l46.6-46.6ZM50.7,156.5L1.7,205.5l49,49,49-49-49-49Z"
 			/>
 			<path
@@ -456,7 +456,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M51.8,163.8L4,211.6l47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M51.8,164.9l46.6,46.6-46.6,46.6L5.2,211.6l46.6-46.7ZM51.8,162.6L2.8,211.6l49,49,49-49-49-49Z"
 			/>
 			<path
@@ -464,7 +464,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M53.2,169.8L5.4,217.7l47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M53.2,171l46.6,46.6-46.6,46.6L6.5,217.6l46.6-46.6ZM53.2,168.7L4.2,217.7l49,49,49-49-49-49Z"
 			/>
 			<path
@@ -472,7 +472,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M54.8,175.8L7,223.6l47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M54.8,177l46.6,46.6-46.6,46.7-46.6-46.6,46.6-46.7ZM54.8,174.6L5.8,223.7l49,49,49-49-49-49Z"
 			/>
 			<path
@@ -480,7 +480,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M56.8,181.7l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M56.8,182.8l46.6,46.6-46.6,46.6-46.7-46.6,46.7-46.7ZM56.8,180.5L7.8,229.5l49,49,49-49-49-49Z"
 			/>
 			<path
@@ -488,7 +488,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M59.1,187.5l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M59.1,188.7l46.6,46.6-46.6,46.6-46.7-46.6,46.7-46.6ZM59.1,186.3l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -496,7 +496,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M61.6,193.3l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M61.6,194.4l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM61.6,192.1l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -504,7 +504,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M64.3,198.9l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M64.3,200.1l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM64.3,197.7l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -512,7 +512,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M67.4,204.4l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M67.4,205.6l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM67.4,203.3l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -520,7 +520,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M70.8,209.9l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M70.8,211l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM70.8,208.7l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -528,7 +528,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M74.4,215.1l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M74.4,216.3l46.6,46.6-46.6,46.7-46.6-46.6,46.6-46.7ZM74.4,214l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -536,7 +536,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M78.3,220.3l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M78.3,221.5l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM78.3,219.1l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -544,7 +544,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M82.5,225.3l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M82.5,226.5l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM82.5,224.1l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -552,7 +552,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M86.9,230.1l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M87,231.3l46.6,46.6-46.6,46.7-46.6-46.6,46.6-46.7ZM87,229l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -560,7 +560,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M91.7,234.8l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M91.7,236l46.6,46.6-46.6,46.7-46.6-46.6,46.6-46.7ZM91.7,233.6l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -568,7 +568,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M96.6,239.1l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M96.6,240.4l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM96.6,238l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -576,7 +576,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M101.7,243.2l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M101.7,244.4l46.6,46.6-46.6,46.7-46.6-46.6,46.6-46.7ZM101.7,242.1l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -584,7 +584,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M106.8,247.1l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M106.8,248.2l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM106.8,245.9l-49,49,49,49,49-49-49.1-49Z"
 			/>
 			<path
@@ -592,7 +592,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M112.2,250.6l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M112.2,251.8l46.6,46.6-46.6,46.7-46.6-46.6,46.6-46.7ZM112.2,249.5l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -600,7 +600,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M117.6,253.9l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M117.6,255.1l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM117.6,252.7l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -608,7 +608,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M123.2,256.9l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M123.2,258l46.7,46.7-46.6,46.6-46.7-46.6,46.6-46.7ZM123.2,255.7l-49,49,49,49,49-49-49.1-49Z"
 			/>
 			<path
@@ -616,7 +616,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M128.9,259.5l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M128.9,260.7l46.6,46.6-46.6,46.7-46.6-46.6,46.6-46.7ZM128.9,258.4l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -624,7 +624,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M134.6,261.9l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M134.7,263.2l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM134.7,260.8l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -632,7 +632,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M140.5,264.1l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M140.5,265.3l46.6,46.6-46.6,46.7-46.6-46.6,46.6-46.7ZM140.5,262.9l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -640,7 +640,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M146.4,266l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M146.4,267.1l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM146.4,264.8l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -648,7 +648,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M152.4,267.6l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M152.4,268.7l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM152.4,266.4l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -656,7 +656,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M158.4,268.9l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M158.4,270l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM158.4,267.6l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -664,7 +664,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M164.6,269.9l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M164.5,271l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM164.5,268.7l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -672,7 +672,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M170.7,270.6l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M170.7,271.8l46.6,46.6-46.6,46.7-46.6-46.6,46.6-46.7ZM170.7,269.4l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -680,7 +680,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M176.8,271.1l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M176.8,272.2l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM176.8,269.9l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -688,7 +688,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M183,271.3l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M183,272.4l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.7ZM183,270.1l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -696,7 +696,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M189.1,271.1l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M189.2,272.4l46.6,46.6-46.6,46.7-46.6-46.6,46.6-46.7ZM189.2,270l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -704,7 +704,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M195.3,270.8l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M195.3,272l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM195.3,269.6l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -712,7 +712,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M201.4,270.2l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M201.4,271.3l46.6,46.7-46.6,46.6-46.6-46.6,46.6-46.7ZM201.4,269l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -720,7 +720,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M207.5,269.2l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M207.5,270.4l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM207.5,268l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -728,7 +728,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M213.6,268l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M213.6,269.2l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM213.6,266.8l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -736,7 +736,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M219.6,266.5l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M219.6,267.7l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM219.6,265.3l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -744,7 +744,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M225.5,264.7l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M225.6,265.9l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM225.6,263.6l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -752,7 +752,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M231.4,262.7l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M231.4,263.9l46.6,46.6-46.6,46.7-46.6-46.6,46.6-46.7ZM231.4,261.5l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -760,7 +760,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M237.3,260.4l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M237.3,261.5l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM237.3,259.2l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -768,7 +768,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M243,257.8l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M243,258.9l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM243,256.6l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -776,7 +776,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M248.6,254.9l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M248.6,256.1l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM248.6,253.7l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -784,7 +784,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M254.1,251.7l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M254.1,252.9l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM254.1,250.6l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -792,7 +792,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M259.4,248.3l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M259.4,249.5l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM259.4,247.1l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -800,7 +800,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M264.6,244.6l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M264.6,245.7l46.6,46.6-46.6,46.7-46.6-46.6,46.6-46.7ZM264.6,243.4l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -808,7 +808,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M269.7,240.6l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M269.8,241.7l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM269.8,239.4l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -816,7 +816,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M274.7,236.3l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M274.7,237.5l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM274.7,235.1l-49,49,49,49,49-49-49-49Z"
 			/>
 			<path
@@ -824,7 +824,7 @@ export function CantonIcon({ className }: { className: string }) {
 				d="M279.5,231.7l-47.8,47.8,47.8,47.8,47.8-47.8-47.8-47.8Z"
 			/>
 			<path
-				fill="#f3ff97"
+				fill="#FFFFFC"
 				d="M279.5,232.9l46.6,46.6-46.6,46.6-46.6-46.6,46.6-46.6ZM279.5,230.5l-49,49,49,49,49-49-49-49Z"
 			/>
 		</svg>
