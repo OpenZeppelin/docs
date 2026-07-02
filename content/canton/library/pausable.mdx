@@ -1,0 +1,69 @@
+---
+title: Pausable
+---
+
+Pausable is a standalone, token-agnostic emergency-stop switch for Daml. It is the analogue of OpenZeppelin's `Pausable.sol`: a single boolean the authority can flip, plus a guard (`whenNotPaused`) that gated operations call to refuse work while paused.
+
+The package is independent: it carries no role type and depends on no other OpenZeppelin package, so a project that wants only a pause switch imports only this one package.
+
+<Callout type="warn">
+  Version 0.x, unstable, not yet public API. Interfaces may change before a 1.0
+  release. Source: [`OpenZeppelin/canton-contracts`](https://github.com/OpenZeppelin/canton-contracts).
+</Callout>
+
+```daml
+import OpenZeppelin.Pausable
+```
+
+## What "paused" means on a UTXO ledger
+
+Solidity stores `_paused` in contract storage and reads it through a modifier. Daml-LF 2.1 has no contract keys, so there is no global "is the resource paused?" lookup. Instead the live `PauseState` is a contract that gated operations read by `ContractId` (disclosed to them by the pauser) and check via `whenNotPaused`.
+
+Pause is therefore origination control: new operations that consult the flag refuse to start while paused, while already-committed work is unaffected. That is the only pause semantic that is robustly enforceable on a UTXO ledger. Flipping the flag archives the old `PauseState` and creates the next one, which is how state transitions work throughout Daml.
+
+## Templates
+
+### `PauseState`
+
+The current pause state of a resource, administered by `pauser`.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `pauser` | `Party` | The authority that may pause and unpause. |
+| `paused` | `Bool` | Whether the resource is currently paused. |
+
+Signatory `pauser` (the contract is pauser-signed and so unforgeable). Observers are granted read access by explicit disclosure, keeping the privacy surface minimal.
+
+*   **`PauseState_Set`** (returns `ContractId PauseState`): flip the flag, archiving the current state and creating its successor. Rejects a redundant change (setting the flag to its current value) so on-ledger history records only real transitions.
+*   **`PauseState_Get`** (nonconsuming, returns `Bool`): read the current flag without archiving the contract.
+
+## Helper functions
+
+*   **`whenNotPaused : PauseState -> Update ()`**: the `whenNotPaused` modifier analogue. A gated operation fetches the disclosed `PauseState` and calls this before doing origination work; it fails the transaction when paused.
+*   **`isPaused : PauseState -> Bool`**: the pure predicate form, for callers that already hold the flag.
+
+## Guarding an operation
+
+```daml
+nonconsuming choice Transfer : ContractId Token
+  with
+    pauseStateCid : ContractId PauseState
+    to : Party
+    amount : Int
+  controller owner
+  do
+    ps <- fetch pauseStateCid
+    whenNotPaused ps
+    create Token with owner = to; amount
+```
+
+## Errors
+
+| Message | When |
+| --- | --- |
+| `Pausable: paused` | A guarded operation ran while the resource was paused. |
+| `Pausable: redundant pause change` | `PauseState_Set` was called with the flag's current value. |
+
+## Related
+
+*   [Access Control](/canton/library/access-control) or [Ownable](/canton/library/ownable), to decide who is allowed to pause and resume.
