@@ -1,0 +1,77 @@
+---
+title: "TRC-6909"
+---
+
+TRC-6909 is a draft EIP that draws on TRC-1155 learnings since it was published in 2018. The main goals of TRC-6909 are to decrease gas costs and complexity--this is mainly accomplished by removing batching and callbacks.
+
+<Callout>
+To understand the inspiration for a multi token standard, see the [multi token standard](/tron-contracts/trc1155#multi-token-standard) section within the TRC-1155 docs.
+</Callout>
+
+## Changes from TRC-1155
+
+There are three main changes from TRC-1155 which are as follows:
+
+1. The removal of batch operations.
+2. The removal of transfer callbacks.
+3. Granularization in approvals--approvals can be set globally (as operators) or as amounts per token (inspired by TRC20).
+
+## Constructing a TRC-6909 Token Contract
+
+We'll use TRC-6909 to track multiple items in a game, each having their own unique attributes. All item types will be minted to the deployer of the contract, which we can later transfer to players. We'll also use the `TRC6909Metadata` extension to add decimals to our fungible items (the vanilla TRC-6909 implementation does not have decimals).
+
+For simplicity, we will mint all items in the constructor--however, minting functionality could be added to the contract to mint on demand to players.
+
+<Callout>
+For an overview of minting mechanisms, check out [Creating TRC-20 Supply](/tron-contracts/trc20-supply).
+</Callout>
+
+Here's what a contract for tokenized items might look like:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {TRC6909Metadata} from "@openzeppelin/tron-contracts/token/TRC6909/extensions/TRC6909Metadata.sol";
+
+contract TRC6909GameItems is TRC6909Metadata {
+    uint256 public constant GOLD = 0;
+    uint256 public constant SILVER = 1;
+    uint256 public constant THORS_HAMMER = 2;
+    uint256 public constant SWORD = 3;
+    uint256 public constant SHIELD = 4;
+
+    constructor() {
+        _setDecimals(GOLD, 18);
+        _setDecimals(SILVER, 18);
+        // Default decimals is 0
+        _setDecimals(SWORD, 9);
+        _setDecimals(SHIELD, 9);
+
+        _mint(msg.sender, GOLD, 10 ** 18);
+        _mint(msg.sender, SILVER, 10_000 ** 18);
+        _mint(msg.sender, THORS_HAMMER, 1);
+        _mint(msg.sender, SWORD, 10 ** 9);
+        _mint(msg.sender, SHIELD, 10 ** 9);
+    }
+}
+```
+
+Note that there is no content URI functionality in the base implementation, but the `TRC6909ContentURI` extension adds it. Additionally, the base implementation does not track total supplies, but the `TRC6909TokenSupply` extension tracks the total supply of each token id.
+
+Once the contract is deployed, we will be able to query the deployer's balance:
+
+```javascript
+> gameItems.balanceOf(deployerAddress, 3)
+1000000000
+```
+
+We can transfer items to player accounts:
+
+```javascript
+> gameItems.transfer(playerAddress, 2, 1)
+> gameItems.balanceOf(playerAddress, 2)
+1
+> gameItems.balanceOf(deployerAddress, 2)
+0
+```

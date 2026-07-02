@@ -15,5 +15,6 @@ export { StarknetIcon } from "./starknet-icon";
 export { StellarIcon } from "./stellar-icon";
 export { SuiIcon } from "./sui-icon";
 export { TransactionProposalIcon } from "./transaction-proposal-icon";
+export { TronIcon } from "./tron-icon";
 export { UniswapIcon } from "./uniswap-icon";
 export { ZamaIcon } from "./zama-icon";
