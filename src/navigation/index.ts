@@ -7,6 +7,7 @@ import polkadotData from "./polkadot.json";
 import starknetData from "./starknet";
 import stellarData from "./stellar.json";
 import suiData from "./sui";
+import tronData from "./tron.json";
 import type { NavigationNode, NavigationTree } from "./types";
 import uniswapData from "./uniswap.json";
 import zamaData from "./zama.json";
@@ -23,6 +24,7 @@ const stellar = mergeDeveloperLibraries(stellarData as NavigationNode[]);
 const midnight = mergeDeveloperLibraries(midnightData as NavigationNode[]);
 const starknet = starknetData as NavigationNode[];
 const sui = suiData as NavigationNode[];
+const tron = tronData as NavigationNode[];
 const polkadot = mergeDeveloperLibraries(polkadotData as NavigationNode[]);
 const zama = mergeDeveloperLibraries(zamaData as NavigationNode[]);
 const uniswap = uniswapData as NavigationNode[];
@@ -57,6 +59,11 @@ export const starknetTree: NavigationTree = {
 export const suiTree: NavigationTree = {
 	name: "Sui",
 	children: sui,
+};
+
+export const tronTree: NavigationTree = {
+	name: "Tron",
+	children: tron,
 };
 
 export const zamaTree: NavigationTree = {

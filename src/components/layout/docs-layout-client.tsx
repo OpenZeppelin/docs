@@ -12,6 +12,7 @@ import {
 	StarknetIcon,
 	StellarIcon,
 	SuiIcon,
+	TronIcon,
 	UniswapIcon,
 	ZamaIcon,
 } from "@/components/icons";
@@ -152,6 +153,11 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 				title: "Sui",
 				url: "/contracts-sui",
 				icon: <SuiIcon className="w-5 h-5" />,
+			},
+			{
+				title: "Tron",
+				url: "/tron-contracts",
+				icon: <TronIcon className="w-5 h-5" />,
 			},
 			{
 				title: "Stellar",
