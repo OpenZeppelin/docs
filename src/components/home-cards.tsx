@@ -160,6 +160,7 @@ function EcosystemCard({
 		polkadot:
 			"before:bg-gradient-to-r before:from-[#e6007a] before:to-[#ff4081]",
 		sui: "before:bg-gradient-to-r before:from-[#7dd3fc] before:to-[#0284c7]",
+		tron: "before:bg-gradient-to-r before:from-[#EF0027] before:to-[#FF060A]",
 		uniswap:
 			"before:bg-gradient-to-r before:from-[#e6007a] before:to-[#FC75FE]",
 		zama: "before:bg-gradient-to-r before:from-[#FFD205] before:to-[#FFD205]",

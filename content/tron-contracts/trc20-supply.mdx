@@ -1,0 +1,87 @@
+---
+title: "Creating TRC-20 Supply"
+---
+
+In this guide, you will learn how to create a TRC-20 token with a custom supply mechanism. We will showcase two idiomatic ways to use OpenZeppelin Contracts for this purpose that you will be able to apply to your smart contract development practice.
+
+The standard interface implemented by tokens built on Ethereum is called TRC-20, and Contracts includes a widely used implementation of it: the aptly named `TRC20` contract. This contract, like the standard itself, is quite simple and bare-bones. In fact, if you try to deploy an instance of `TRC20` as-is it will be quite literally useless... it will have no supply! What use is a token with no supply?
+
+The way that supply is created is not defined in the TRC-20 document. Every token is free to experiment with its own mechanisms, ranging from the most decentralized to the most centralized, from the most naive to the most researched, and more.
+
+## Fixed Supply
+
+Let's say we want a token with a fixed supply of 1000, initially allocated to the account that deploys the contract. If you've used Contracts v1, you may have written code like the following:
+
+```solidity
+contract TRC20FixedSupply is TRC20 {
+    constructor() {
+        totalSupply += 1000;
+        balances[msg.sender] += 1000;
+    }
+}
+```
+
+Starting with Contracts v2, this pattern is not only discouraged, but disallowed. The variables `totalSupply` and `balances` are now private implementation details of `TRC20`, and you can't directly write to them. Instead, there is an internal `_mint` function that will do exactly this:
+
+```solidity
+contract TRC20FixedSupply is TRC20 {
+    constructor() TRC20("Fixed", "FIX") {
+        _mint(msg.sender, 1000);
+    }
+}
+```
+
+Encapsulating state like this makes it safer to extend contracts. For instance, in the first example we had to manually keep the `totalSupply` in sync with the modified balances, which is easy to forget. In fact, we omitted something else that is also easily forgotten: the `Transfer` event that is required by the standard, and which is relied on by some clients. The second example does not have this bug, because the internal `_mint` function takes care of it.
+
+## Rewarding Block Proposers
+
+The internal `_mint` function is the key building block that allows us to write TRC-20 extensions that implement a supply mechanism.
+
+The mechanism we will implement is a token reward for the block proposer (the address that receives transaction fees). In Solidity, we can access this address using the global variable `block.coinbase`. Note that in Proof of Stake networks, `block.coinbase` refers to the fee recipient address, not a miner. We will mint a token reward to this address whenever someone calls the function `mintMinerReward()` on our token. The mechanism may sound silly, but you never know what kind of dynamic this might result in, and it's worth analyzing and experimenting with!
+
+```solidity
+contract TRC20WithMinerReward is TRC20 {
+    constructor() TRC20("Reward", "RWD") {}
+
+    function mintMinerReward() public {
+        _mint(block.coinbase, 1000);
+    }
+}
+```
+
+As we can see, `_mint` makes it super easy to do this correctly.
+
+## Automating the Reward
+
+So far our supply mechanism was triggered manually, but `TRC20` also allows us to extend the core functionality of the token through the `_update` function.
+
+Adding to the supply mechanism from the previous section, we can use this function to mint a block proposer reward for every token transfer that is included in the blockchain.
+
+```solidity
+// SPDX-License-Identifier: MIT
+
+pragma solidity ^0.8.20;
+
+import {TRC20} from "@openzeppelin/tron-contracts/token/TRC20/TRC20.sol";
+
+contract TRC20WithAutoMinerReward is TRC20 {
+    constructor() TRC20("Reward", "RWD") {
+        _mintMinerReward();
+    }
+
+    function _mintMinerReward() internal {
+        _mint(block.coinbase, 1000);
+    }
+
+    function _update(address from, address to, uint256 value) internal virtual override {
+        if (!(from == address(0) && to == block.coinbase)) {
+            _mintMinerReward();
+        }
+        super._update(from, to, value);
+    }
+}
+```
+
+## Wrapping Up
+
+We've seen how to implement a TRC-20 supply mechanism: internally through `_mint`. Hopefully this has helped you understand how to use OpenZeppelin Contracts and some of the design principles behind it, and you can apply them to your own smart contracts.

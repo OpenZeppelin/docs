@@ -14,6 +14,7 @@ import {
 	starknetTree,
 	stellarTree,
 	suiTree,
+	tronTree,
 	uniswapTree,
 	zamaTree,
 } from "@/navigation";
@@ -39,6 +40,8 @@ export function useNavigationTree() {
 			sessionStorage.setItem("lastEcosystem", "polkadot");
 		} else if (pathname.startsWith("/contracts-sui")) {
 			sessionStorage.setItem("lastEcosystem", "sui");
+		} else if (pathname.startsWith("/tron-contracts")) {
+			sessionStorage.setItem("lastEcosystem", "tron");
 		} else if (pathname.startsWith("/contracts-stylus")) {
 			sessionStorage.setItem("lastEcosystem", "contracts-stylus");
 		} else if (pathname.startsWith("/contracts-compact")) {
@@ -79,6 +82,8 @@ export function useNavigationTree() {
 			return starknetTree;
 		} else if (pathname.startsWith("/contracts-sui")) {
 			return suiTree;
+		} else if (pathname.startsWith("/tron-contracts")) {
+			return tronTree;
 		} else if (pathname.startsWith("/stellar-contracts")) {
 			return stellarTree;
 		} else if (pathname.startsWith("/canton")) {

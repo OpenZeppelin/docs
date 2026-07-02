@@ -1,0 +1,80 @@
+---
+title: "Using with Upgrades"
+---
+
+If your contract is going to be deployed with upgradeability — for example behind an ERC-1967, UUPS, or transparent proxy — you will need to use the Upgradeable variant of OpenZeppelin Contracts for Tron.
+
+This variant is available as a separate package called `@openzeppelin/tron-contracts-upgradeable`, hosted at [OpenZeppelin/tron-contracts-upgradeable](https://github.com/OpenZeppelin/tron-contracts-upgradeable). It uses `@openzeppelin/tron-contracts` as a peer dependency, and is generated automatically from it by OpenZeppelin's [Upgradeability Transpiler](https://github.com/OpenZeppelin/openzeppelin-transpiler).
+
+It follows all of the standard rules for writing upgradeable contracts: constructors are replaced by initializer functions, state variables are initialized inside those initializers rather than inline, and contract state is kept in ERC-7201 namespaced storage so layouts stay compatible across upgrades.
+
+<Callout>
+OpenZeppelin's Hardhat and Foundry Upgrades Plugins target EVM chains and do not deploy to the Tron network. On Tron you deploy the proxy yourself with your Tron toolchain (see [deployment](#deploying-behind-a-proxy) below); the contract-authoring rules on this page apply unchanged.
+</Callout>
+
+## Overview
+
+### Installation
+
+```console
+$ npm install @openzeppelin/tron-contracts-upgradeable @openzeppelin/tron-contracts
+```
+
+### Usage
+
+The Upgradeable package replicates the structure of the main OpenZeppelin Contracts package, but every file and contract has the suffix `Upgradeable`.
+
+```diff
+-import {TRC721} from "@openzeppelin/tron-contracts/token/TRC721/TRC721.sol";
++import {TRC721Upgradeable} from "@openzeppelin/tron-contracts-upgradeable/token/TRC721/TRC721Upgradeable.sol";
+
+-contract MyCollectible is TRC721 {
++contract MyCollectible is TRC721Upgradeable {
+```
+
+<Callout>
+Interfaces and libraries are not included in the Upgradeable package, but are instead imported from the `@openzeppelin/tron-contracts` peer package.
+</Callout>
+
+Constructors are replaced by internal initializer functions following the naming convention `__{ContractName}_init`. Since these are internal, you must always define your own public initializer function and call the parent initializer of the contract you extend.
+
+```diff
+-    constructor() TRC721("MyCollectible", "MCO") public {
++    function initialize() initializer public {
++        __TRC721_init("MyCollectible", "MCO");
+     }
+```
+
+<Callout type='warn'>
+Use with multiple inheritance requires special attention. See the section below titled [Multiple Inheritance](#multiple-inheritance).
+</Callout>
+
+### Deploying behind a proxy
+
+Once this contract is set up and compiled, deploy it **behind a proxy** and call your `initialize` function exactly once. The implementation contract is never used directly. The flow is:
+
+1. Deploy the implementation contract (`MyCollectible`).
+2. Deploy a proxy — for example a `TRC1967Proxy` from `@openzeppelin/tron-contracts` — pointing at the implementation, passing the ABI-encoded `initialize(...)` call as its initialization data. This runs `initialize` in the proxy's storage context, atomically with deployment.
+3. Interact with the **proxy** address using the implementation's ABI.
+
+Because the EVM Upgrades Plugins do not support Tron, perform these steps with a Tron deployment toolchain such as [TronBox](https://github.com/tronprotocol/tronbox) or [`@openzeppelin/hardhat-tron`](https://github.com/OpenZeppelin/hardhat-tron) (which routes deploys through TronWeb). For UUPS proxies, the upgrade authorization (`_authorizeUpgrade`) lives in the implementation, so wire up its access control inside `initialize`.
+
+<Callout type='warn'>
+Never call `initialize` on the implementation contract directly, and do not leave the implementation uninitialized in a way that lets someone else initialize it. Protect it by calling `_disableInitializers()` in the implementation's constructor — this is one of the few places a constructor is still used in an upgradeable contract.
+</Callout>
+
+## Further Notes
+
+### Multiple Inheritance
+
+Initializer functions are not linearized by the compiler like constructors. Because of this, each `__{ContractName}_init` function embeds the linearized calls to all parent initializers. As a consequence, calling two of these `init` functions can potentially initialize the same contract twice.
+
+The function `__{ContractName}_init_unchained` found in every contract is the initializer function minus the calls to parent initializers, and can be used to avoid the double initialization problem, but doing this manually is not recommended.
+
+### Namespaced Storage
+
+You may notice that contracts use a struct with the `@custom:storage-location erc7201:<NAMESPACE_ID>` annotation to store the contract's state variables. This follows the [ERC-7201: Namespaced Storage Layout](https://eips.ethereum.org/EIPS/eip-7201) pattern, where each contract has its own storage layout in a namespace that is separate from other contracts in the inheritance chain.
+
+Without namespaced storage, it isn't safe to simply add a state variable because it "shifts down" all of the state variables below in the inheritance chain. This makes the storage layouts incompatible, as explained in [Backwards Compatibility](/tron-contracts/backwards-compatibility).
+
+The namespaced storage pattern used in the Upgradeable package allows us to freely add new state variables in the future without compromising the storage compatibility with existing deployments. It also allows changing the inheritance order with no impact on the resulting storage layout, as long as all inherited contracts use namespaced storage.

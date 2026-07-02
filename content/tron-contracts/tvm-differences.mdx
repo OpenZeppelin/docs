@@ -1,0 +1,34 @@
+---
+title: "TVM Differences"
+---
+
+The TRON Virtual Machine (TVM) is EVM-compatible, but it is **not identical**. A handful of differences are silent footguns: code that compiles and looks correct on Ethereum can produce the wrong address, accept unintended assets, or misvalue amounts on TRON. This page highlights the divergences that matter when building with OpenZeppelin Contracts for TRON and how the library handles each one. It is a summary — each adaptation is documented in detail in the affected contract's NatSpec.
+
+<Callout>
+Most standards are also **renamed** to their TRON identifiers (`ERC20` → `TRC20`, `ERC165` → `TRC165`, `EIP712` → `TIP712`, and so on). See the [Overview](/tron-contracts) for the full TRON ↔ Ethereum mapping.
+</Callout>
+
+## Summary
+
+| Area | TVM behaviour | What this library does |
+| --- | --- | --- |
+| `CREATE2` address derivation | Preimage uses a `0x41` prefix (TIP-26), not `0xff` | `Create2` and `Clones` predict addresses with the TRON prefix so predict-then-deploy flows resolve to the real address. |
+| P256 / RIP-7212 precompile | The secp256r1 precompile is inactive on mainnet (gated behind a future fork) | `P256.verify` routes to the Solidity verifier; `verifyNative` is kept as an explicit native-only entry point. |
+| EIP-7702 | Not supported on the TVM | The EIP-7702 utilities are not ported. |
+| ERC-4337 | Compiles, but TRON has no native bundler / EntryPoint | Retained but treated as compile-only; account-abstraction flows are not functional today. |
+| TRX decimals | TRX has **6** decimals, not 18 — so a `1 ether` literal evaluates to 10¹² TRX | Guidance and examples use SUN-denominated literals; avoid `ether` / `gwei` literals. |
+| USDT-TRON `transfer` | Returns `false` (or no value) even on a successful transfer | `SafeTRC20.safeTransferUSDT` verifies the recipient's balance delta instead of trusting the return value. |
+| TIP-712 / address format | Addresses are 21-byte, `0x41`-prefixed; off-chain SDKs sign over the 21-byte form | NatSpec advisories on the contracts whose typed-data or address handling crosses the signing boundary. |
+| Divergent precompiles | Addresses `0x03` / `0x09` / `0x0A` are shadowed or repurposed (TIP-43, TIP-60); real RIPEMD-160 lives at `0x20003` | The library never hard-codes calls to these addresses. |
+| Resource model | Execution is metered in **energy + bandwidth**, not gas; `tx.gasprice` returns the committee-set energy price | No change required — the library does not depend on EVM gas-forwarding rules. |
+| `SELFDESTRUCT` (TIP-6780) | Matches EIP-6780 semantics, which strengthens `_disableInitializers` on the TVM | Documented via NatSpec; no behaviour is weakened. |
+| Block cadence | ~3 second blocks, versus Ethereum's ~12 seconds | Prefer timestamp-based (EIP-6372) mode for time-bounded `Governor` windows rather than block counts. |
+
+<Callout>
+OpenZeppelin Contracts reads `block.chainid` dynamically, so TIP-712 domain separators are automatically correct for whichever TRON network you deploy to.
+</Callout>
+
+## Learn more
+
+- [Backwards Compatibility](/tron-contracts/backwards-compatibility) — versioning and storage-layout guarantees.
+- [Using with Upgrades](/tron-contracts/upgradeable) — proxy patterns and upgrade safety on the TVM.
