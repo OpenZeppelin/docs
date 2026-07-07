@@ -1,0 +1,317 @@
+---
+title: Spend Vault
+---
+
+<Callout type="warn">
+The example code snippets used in this guide are experimental and have not been audited. They simply help exemplify usage of the OpenZeppelin Sui Package.
+</Callout>
+
+The `spend_vault` module provides a cap-keyed, multi-coin allowance primitive for Sui Move. A shared, key-only `Vault` escrows any number of coin types untyped: funds are not struct fields but object-owned address balances held at the vault's address, and a `LinkedTable` ledger maps each `(cap, coin type)` pair to a budget. Each `SpenderCap` is a **bearer instrument**: whoever presents it to `spend<T>` exercises the full authority of every budget keyed by that cap, regardless of who signed the transaction. One vault mints as many spender caps as the owner needs, typically one per delegate or user, each with its own per-`(cap, coin)` budgets. A single `OwnerCap` grants, revokes, and withdraws across all of them; funding is permissionless, and transferring the `OwnerCap` is owner rotation.
+
+## Use cases
+
+Use `spend_vault` when your protocol needs:
+
+- Keeper or automation top-ups drawn from an owner-set budget without the owner signing each spend.
+- Delegated treasury spending, where a teammate or contract draws against a ceiling.
+- Subscription-style pull payments a payee collects on their own schedule.
+- Per-partner budgets across multiple coin types from a single escrow.
+
+## Import
+
+```move
+use openzeppelin_allowance::spend_vault::{Self, Vault, OwnerCap, SpenderCap};
+```
+
+## Object model
+
+| Object | Role | Who holds it |
+|---|---|---|
+| `Vault` | Shared, key-only escrow for N coin types plus the `(cap, coin)` allowance ledger. Funds live as address balances at the vault's address, not in a struct field. | Shared object; everyone references it. |
+| `OwnerCap` | Sole owner authority: mint caps, set budgets, revoke, withdraw, destroy. Exactly one per vault for its whole life. | The vault owner. Transferring it rotates ownership. |
+| `SpenderCap` | Bearer spend authority, untyped: the coin dimension is the `T` at the `spend<T>` call site. Carries no budget itself. One of many: a vault mints a separate cap per grantee. | One per grantee: a delegate, a user, or a protocol custodying it. |
+| Allowance entry | Private ledger record per `(cap, coin type)`: `remaining` budget and `expires_at_ms`. The single source of truth for what a cap may draw. | Inside the vault; managed by the owner via `set_allowance`. |
+
+Two `u64::MAX` sentinels apply, tested by equality only: `remaining == u64::MAX` means unlimited (never decremented) and `expires_at_ms == u64::MAX` means no expiry. A `(cap, coin)` pair is in one of three states: **absent** (never granted, or revoked), **suspended** (entry present with `remaining == 0`), or **live**. Reads alone cannot tell absent from suspended (`allowance<T>` returns `0` for both), so use `contains<T>` to disambiguate.
+
+## Quickstart
+
+Compose the whole setup in one function: create the vault, fund it, mint a cap, and grant a budget, returning all three objects by value so the enclosing PTB decides where each goes:
+
+```move
+module my_protocol::delegation;
+
+use openzeppelin_allowance::spend_vault::{Self, Vault, OwnerCap, SpenderCap};
+use sui::clock::Clock;
+use sui::coin::Coin;
+
+public fun open_allowance<T>(
+    funding: Coin<T>,
+    budget: u64,
+    expires_at_ms: u64, // pass std::u64::max_value!() for "no expiry"
+    clock: &Clock,
+    ctx: &mut TxContext,
+): (Vault, SpenderCap, OwnerCap) {
+    let (mut vault, owner_cap) = spend_vault::new(ctx);
+
+    // Permissionless top-up. Confers no rights; the funds become the owner's pool.
+    vault.deposit(funding, ctx);
+
+    // Bare cap, no budget yet. Returned by value, so the caller chooses its destination.
+    let cap = vault.mint_cap(&owner_cap, ctx);
+    let cap_id = object::id(&cap);
+
+    // Create the (cap, T) budget. `option::none()` = no CAS guard on a fresh create.
+    vault.set_allowance<T>(&owner_cap, cap_id, budget, expires_at_ms, option::none(), clock, ctx);
+
+    // Hand the objects back; the caller shares the vault and routes the caps.
+    (vault, cap, owner_cap)
+}
+```
+
+The caller wires the edges in the same transaction:
+
+```move
+let (vault, cap, owner_cap) = delegation::open_allowance<EXAMPLE_COIN>(
+    stake, 400, now_ms + 30 * DAY_MS, &clock, ctx,
+);
+
+// Compose the edges in the SAME tx: share the vault LAST, hand the cap to the delegate.
+vault.share();
+transfer::public_transfer(cap, delegate);
+transfer::public_transfer(owner_cap, ctx.sender());
+```
+
+`Vault` has `key` only and no `drop`, so the creating transaction must consume it with `share` or `destroy`, and `share` must come last, after every fund, mint, and grant step, because a shared vault is only addressable as a shared input in *later* transactions.
+
+## Spending
+
+`spend<T>` draws exactly `amount` of `T` against the presented cap and returns a `Balance<T>`. `Balance<T>` has no `drop`, so it must be consumed in the same PTB. Convert it to a `Coin`, route it into another call, or deposit it somewhere:
+
+```move
+/// `spend` returns Balance<T>, which has no `drop`: it must be consumed in the same PTB.
+public fun spend_to_wallet<T>(
+    vault: &mut Vault,
+    cap: &SpenderCap,
+    amount: u64,
+    clock: &Clock,
+    ctx: &mut TxContext,
+): Coin<T> {
+    let bal = vault.spend<T>(cap, amount, clock, ctx);
+    bal.into_coin(ctx)
+}
+```
+
+Spends are exact-amount-or-abort: there is no partial fill, and on any abort the pool and ledger are bit-identical to their pre-call state. The abort order is deterministic and documented as an integrator ABI: `EWrongVault`, then `ENoAllowance`, `EAllowanceExpired`, `EZeroAmount`, `EAllowanceExceeded`, then the framework failure modes; see the [Allowance API reference](/contracts-sui/1.x/api/allowance#spend_vault) for each condition. A pool shortfall is *not* a Move abort at all (see the [FAQ](#faq)).
+
+## Integrating into a protocol
+
+A protocol custodies a user's `SpenderCap` and spends on their behalf, within the owner's budget, without the user signing each spend. This is the pattern the primitive is primarily built for: a custody layer holds the cap, an operator drives the spends, and the vault owner still holds the only authority over the budget.
+
+Two custody rules are load-bearing:
+
+- **The borrow entrypoint MUST be sender-gated.** A `SpenderCap` is a bearer instrument, and the library is cap-gated, never sender-gated: any code that gets the library to see `&cap` exercises its full authority. An ungated public function that borrows a custodied cap is world-drainable, so the operator check is the integration's security boundary, not optional hygiene.
+- **Validate the cap's vault binding before taking custody.** Check `spender_cap_vault_id` against the vault you intend to spend from at register time, so a cap bound to a different vault is rejected on entry rather than discovered at spend time.
+
+A minimal custody module, condensed from the [keeper service](/contracts-sui/1.x/guides/delegated-spending#build-the-keeper-service) built in the Delegated Spending tutorial:
+
+```move
+module my_protocol::keeper;
+
+use openzeppelin_allowance::spend_vault::{Vault, SpenderCap};
+use sui::balance::Balance;
+use sui::clock::Clock;
+use sui::table::{Self, Table};
+
+#[error(code = 0)]
+const ENotOperator: vector<u8> = "Caller is not the service operator";
+#[error(code = 1)]
+const EWrongVaultForService: vector<u8> =
+    "Cap is bound to a different vault than this service serves";
+#[error(code = 2)]
+const ENotRegistered: vector<u8> = "No cap registered under this user address";
+
+/// Shared keeper service. Serves exactly one `Vault` and custodies at most one cap
+/// per user. Untyped, so one service drives every coin a cap is budgeted for.
+public struct Service has key {
+    id: UID,
+    operator: address,
+    vault_id: ID,
+    caps: Table<address, SpenderCap>,
+}
+
+/// Create the service pinned to one vault id; the creator becomes the operator.
+/// Key-only, so the caller shares it with this module's `share` (as with the vault).
+public fun create(vault_id: ID, ctx: &mut TxContext): Service {
+    Service { id: object::new(ctx), operator: ctx.sender(), vault_id, caps: table::new(ctx) }
+}
+
+/// Share the service so users can register caps against it.
+public fun share(service: Service) {
+    transfer::share_object(service);
+}
+
+/// Validate the cap's vault binding BEFORE taking custody: the rule for ANY
+/// protocol that accepts a `SpenderCap`. Keyed by the registering sender.
+public fun register(s: &mut Service, cap: SpenderCap, ctx: &mut TxContext) {
+    assert!(cap.spender_cap_vault_id() == s.vault_id, EWrongVaultForService);
+    s.caps.add(ctx.sender(), cap);
+}
+
+/// SENDER-GATED: the library never checks who calls `spend`, so the custody layer
+/// must. Generic over `T`, so one custodied cap serves every budgeted coin; an
+/// ungranted coin fails safe inside the library with `ENoAllowance`.
+public fun execute<T>(
+    s: &mut Service,
+    v: &mut Vault,
+    user: address,
+    amount: u64,
+    clock: &Clock,
+    ctx: &mut TxContext,
+): Balance<T> {
+    assert!(ctx.sender() == s.operator, ENotOperator);
+    assert!(s.caps.contains(user), ENotRegistered);
+    let cap = s.caps.borrow(user);
+    v.spend<T>(cap, amount, clock, ctx)
+}
+
+/// Take a cap back out of custody, keyed to the registering sender. The grant stays
+/// live in the vault; only custody of the cap changes hands.
+public fun unregister(s: &mut Service, ctx: &mut TxContext): SpenderCap {
+    assert!(s.caps.contains(ctx.sender()), ENotRegistered);
+    s.caps.remove(ctx.sender())
+}
+```
+
+**Design properties to preserve:**
+
+- Keep exit self-service: `unregister` is keyed to the registering sender, with no operator or admin seize path.
+- The `Service` is key-only, so share it through your own module's `share` rather than at creation.
+- Custody at most one cap per user, keyed by address.
+
+**Design tip.** Keep the `Service` untyped and `execute` generic over `T`, so a single custodied cap serves every coin the owner budgeted it for; a request for an ungranted coin fails safe inside the library with `ENoAllowance`.
+
+The owner keeps full control throughout: raising, lowering, suspending, or revoking the grant never changes the cap object, so a custodied cap keeps working with no re-registration, and custody of the cap confers no control over the budget.
+
+For the full worked walkthrough (register, operator-driven spend, owner maintenance mid-custody, and teardown), see [Build the Keeper Service](/contracts-sui/1.x/guides/delegated-spending#build-the-keeper-service) in the Delegated Spending tutorial.
+
+## Managing budgets
+
+`set_allowance<T>` is an **upsert** keyed on a bare `cap_id: ID` that is never validated against a live cap: a mistyped id silently provisions a fresh phantom budget instead of aborting. When you intend an update, confirm the emitted `AllowanceSet` event has `was_created == false`, or check `contains<T>` first.
+
+Setting `new_amount` to `0` is the **suspension** idiom: the entry and cap stay alive, and the spender's next attempt aborts `EAllowanceExceeded`, a signal to ask for a raise. A revoked or never-granted pair aborts `ENoAllowance` instead, a signal to ask for a grant. Re-setting always overwrites, never adds, and setting a fresh future expiry on an expired entry revives it in place. None of these updates changes the cap object, so a protocol holding a custodied cap keeps working across every owner budget change with no re-registration (see [Integrating into a protocol](#integrating-into-a-protocol)).
+
+Concurrent-safe updates use the compare-and-set guard: read the current budget with `allowance<T>` off-chain (or in a previous transaction), then pass that value as `expected` when you write. If a spend was sequenced after the read, the write aborts `EUnexpectedAllowance` instead of silently overwriting it. A read taken in the same transaction as the write trivially matches the guard and protects nothing: the shared vault is locked for the whole transaction, so an in-transaction read/write pair is already atomic without a guard.
+
+```move
+/// Raise / lower / renew with the CAS guard. `expected` is the budget the caller
+/// read via `allowance<T>` off-chain (or in a previous transaction). If a spend was
+/// sequenced between that read and this transaction, the entry's `remaining` no
+/// longer equals `expected` and the call aborts `EUnexpectedAllowance` instead of
+/// clobbering the concurrent spend.
+public fun change_budget<T>(
+    vault: &mut Vault,
+    owner_cap: &OwnerCap,
+    cap_id: ID,
+    expected: u64,
+    new_budget: u64,
+    new_expires_at_ms: u64,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    vault.set_allowance<T>(
+        owner_cap, cap_id, new_budget, new_expires_at_ms, option::some(expected), clock, ctx,
+    );
+}
+```
+
+The CAS guard matches `remaining` **only**; the upsert always overwrites `expires_at_ms` too, and any finite `new_expires_at_ms` must be strictly in the future or the call aborts `EExpiryInPast` (the `u64::MAX` sentinel always passes). A budget-only update must re-read the current expiry via `expiry<T>()` and pass it back, but that works only while the entry is unexpired: expired entries are not pruned, so `expiry<T>()` can return a past timestamp that `set_allowance` rejects. Updating an expired entry means choosing a new future expiry (or `u64::MAX`), which necessarily revives it.
+
+## Revoking and renouncing
+
+Four removal verbs with different scopes:
+
+- **`revoke<T>`** (owner): removes one `(cap, coin)` entry. Idempotent and never blocked by ledger state; returns `was_present`, where `false` is the typo'd-`cap_id` or wrong-coin signal. Strictly per-coin: the cap object survives and remains live authority for any other coins still granted to it; only `revoke_all`/`renounce` zero the whole cap.
+- **`revoke_all`** (owner): removes every entry of one cap across all coin types ever granted; the cap object survives in its holder's wallet as inert non-authority. The `cap_id` is unvalidated: a wrong id is a silent whole no-op that emits nothing and leaves the intended cap live; confirm via the emitted `Revoked` events or a `contains<T>` recheck.
+- **`renounce`** (spender): consumes the `SpenderCap` by value and removes all of its entries. Use it against a live vault.
+- **`delete_orphaned_cap`** (cap holder): consumes the cap by value, disposal only for a cap whose vault was already destroyed. It never aborts and touches no vault state.
+
+<Callout type="warn">
+Calling `delete_orphaned_cap` on a cap whose vault is still live strands every one of its ledger entries as inert garbage: unspendable, but still occupying storage and visible via `contains<T>`. On a live vault, spenders should `renounce` instead; if a live cap was already deleted, the owner cleans up with `revoke_all` using the `cap_id` from the `CapDeleted` event.
+</Callout>
+
+## Owner exit and teardown
+
+`withdraw<T>` and `withdraw_all<T>` consult only the `OwnerCap` binding and the pool, never the ledger. No spender state can block owner exit, and withdrawing may leave live allowances unbacked (intended: budgets are ceilings, not reservations).
+
+`withdraw_all<T>` drains the **settled** (start-of-checkpoint) pool via the `AccumulatorRoot` (`0xacc`). A spend or withdraw earlier in the same checkpoint (including an earlier command in the same PTB) lowers the live pool below that snapshot, making the drain over-ask and fail with the `InsufficientFundsForWithdraw` execution status (retry-safe next checkpoint); a same-checkpoint deposit is simply missed.
+
+Getting funds out needs no ceremony: `withdraw` / `withdraw_all` anytime, and you are done. The ordering below matters only when you also need a *durable* kill of a still-live cap. Because deposits are permissionless, a drained pool can be re-funded (by anyone, or by you later) and re-arm still-live budgets, so `withdraw_all` alone is a reversible freeze, not a kill. When a cap is compromised and the pool could be re-funded, revoke it first, then drain, in separate transactions. `revoke_all` ends one cap's authority across all its coins, so repeat it per compromised cap, or `destroy` the vault to end every cap at once:
+
+```move
+// Emergency stop, in TWO separate transactions, never one PTB:
+//
+// Tx 1: kill the compromised cap's authority. revoke_all is per cap (all its
+// coins), so repeat per cap or destroy the vault to end all. It never touches
+// the pool, so no allowance state can race it into failure. (Withdrawing first
+// is NOT durable: deposits are permissionless, so anyone can re-arm a live allowance.)
+vault.revoke_all(&owner_cap, cap_id, ctx);
+
+// Tx 2 (later tx): drain each coin. withdraw_all reads the settled accumulator
+// (root = 0xacc); a prior same-checkpoint spend/withdraw makes it over-ask and
+// abort, while a same-checkpoint deposit is simply missed.
+let bal = vault.withdraw_all<T>(&owner_cap, root, ctx);
+```
+
+Bundling them into one PTB is wrong in both orders: a pool-short `withdraw_all` would revert the `revoke_all` along with it.
+
+To destroy a vault, follow the drain ritual: enumerate the vault address's coin types off-chain with `suix_getAllBalances`, `squash<T>` any stray coins sent as owned objects, `withdraw_all<T>` each type, wait one checkpoint and re-check, then `destroy` in a separate transaction.
+
+<Callout type="warn">
+`destroy` deletes the vault and owner cap and drains the allowance ledger, but it does **not** drain the pool, and no on-chain guard stops a premature destroy. Any funds still sitting in the vault's address balances strand permanently: the UID is gone and there is no recovery path. Drain every coin type first, in a prior transaction.
+</Callout>
+
+## Security considerations
+
+- **Sender-gate any function that borrows a custodied `&SpenderCap`.** The library is cap-gated, never sender-gated: any code path that gets the library to see `&cap` exercises its full authority. A protocol that custodies caps and exposes an ungated public function borrowing one is world-drainable.
+- **Validate `spender_cap_vault_id` before taking custody.** A protocol accepting a user's cap must check the cap's vault binding against the expected vault at register time, not discover a mismatch at spend time.
+- **A leaked cap drains every budgeted coin.** One `SpenderCap` keys the budgets of all coin types granted to it; its exposure is the sum across coins. Treat caps like private keys, and mint one cap per delegate rather than sharing.
+- **`withdraw_all` is not a durable kill.** To exit, just withdraw. But deposits are permissionless, so a drained pool can be re-funded (by anyone, or by you later) and re-arm still-live budgets: withdrawing alone is a reversible freeze. To stop a live cap for good, use `revoke_all` or `destroy`.
+
+## Common mistakes
+
+| Mistake | What happens | How to fix |
+|---|---|---|
+| `destroy` before draining every coin type | Remaining pool funds strand permanently at the dead vault address | Follow the drain ritual: `suix_getAllBalances`, `squash`, `withdraw_all` per type, wait a checkpoint, then destroy. |
+| Relying on `withdraw_all` to *permanently* stop a live cap | Not durable: a permissionless deposit re-arms the still-live budgets (a plain exit is fine, this just is not a kill) | For a durable kill, `revoke_all` (or `destroy`) first, then `withdraw_all` in a later transaction. |
+| Bundling `revoke_all` with `withdraw_all` in one PTB | A pool-short `withdraw_all` reverts the `revoke_all` with it, leaving the cap live | Run `revoke_all` in its own transaction; drain in a later one. |
+| Ungated public function borrowing a custodied cap | World-drainable: anyone can route spends through it | Sender-gate the borrow (assert the operator) before calling `spend`. |
+| `delete_orphaned_cap` on a cap of a live vault | Strands all its ledger entries as inert storage garbage | Spenders `renounce`; the orphan path is only for caps of destroyed vaults. |
+| Treating `u64::MAX` as a finite volume | It is the unlimited sentinel: never decremented, wrong in volume math | Exclude `u64::MAX` from off-chain accounting; it means "unlimited". |
+| Typo'd `cap_id` in `set_allowance` | Silently creates a phantom budget (`was_created: true`) and permanently records the coin type | Confirm `was_created == false` on updates, or preflight with `contains<T>`. |
+
+## FAQ
+
+**How do I tell an absent grant from a suspended one?**
+`allowance<T>` returns `0` for both. `contains<T>` disambiguates: `allowance == 0 && contains == true` is suspended; `contains == false` is absent. The spender-side abort code carries the same signal: `EAllowanceExceeded` means suspended (ask for a raise), `ENoAllowance` means absent (ask for a grant).
+
+**Why doesn't a pool shortfall abort with a module error code?**
+Because the module deliberately does no pool pre-check. `spend` decrements the budget (`withdraw` touches no ledger state), then calls the framework's funds-accumulator withdraw; a shortfall surfaces as the `InsufficientFundsForWithdraw` execution status in effects and dry runs, not as a matchable Move abort code, and Move's atomic revert rolls any budget decrement back. Preflight by dry-running the transaction; don't try to match an abort code that intentionally does not exist.
+
+**Do two caps' budgets on the same coin sum against one pool?**
+Yes. Budgets are ceilings, not reservations: allowances may sum past the pool, and competing spenders are resolved by consensus sequencing (first sequenced, first served). If summing is not intended, size budgets against the pool or fund per-delegate vaults.
+
+## Examples
+
+Complete, runnable integration examples live in the package's [`examples/spend_vault/`](https://github.com/OpenZeppelin/contracts-sui/tree/main/contracts/allowance/examples/spend_vault) directory, one per integration boundary:
+
+- [`direct_delegation`](https://github.com/OpenZeppelin/contracts-sui/blob/main/contracts/allowance/examples/spend_vault/direct_delegation.move): the **direct delegation** pattern. An owner funds a vault and grants a capped, optionally expiring budget straight to a known address, which spends directly; the library API is the whole integration, no wrapper needed.
+- [`defi_keeper`](https://github.com/OpenZeppelin/contracts-sui/blob/main/contracts/allowance/examples/spend_vault/defi_keeper.move): the **protocol custody** pattern. A keeper service holds a user's `SpenderCap` and spends on their behalf within the owner's budget, showing the two custody rules: validate the cap's vault binding before taking custody, and sender-gate the borrowing entrypoint.
+
+<Callout type="warn">
+These are unaudited illustrations of how the primitive can be integrated, not production-ready code.
+</Callout>
+
+## Learn more
+
+For function-level signatures, parameters, events, and errors, see the [Allowance API reference](/contracts-sui/1.x/api/allowance#spend_vault). For an end-to-end walkthrough of custodied caps and keeper flows, see the [Delegated Spending](/contracts-sui/1.x/guides/delegated-spending) tutorial.
