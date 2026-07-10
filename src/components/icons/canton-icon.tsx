@@ -852,7 +852,7 @@ export function CantonHomeIcon({ className }: { className: string }) {
 	return (
 		<CantonGlyph
 			className={cn(
-				"[--canton-shape:#F4F4F5] [--canton-outline:#09090B]",
+				"[--canton-shape:#F3FF97] [--canton-outline:#09090B]",
 				className,
 			)}
 		/>
