@@ -11,7 +11,7 @@ import {
 import {
 	AnnotationDotsIcon,
 	ArbitrumIcon,
-	CantonIcon,
+	CantonHomeIcon,
 	ContractsLibraryIcon,
 	ContractsMcpIcon,
 	ContractsUpgradesIcon,
@@ -273,7 +273,7 @@ export default function HomePage() {
 
 						<EcosystemCard
 							href="/canton"
-							icon={<CantonIcon className="w-6 h-6" />}
+							icon={<CantonHomeIcon className="w-6 h-6" />}
 							title="Canton"
 							description="Build privacy-enabled Daml applications on the Canton Network with secure, reusable primitives"
 							glowColor="canton"
