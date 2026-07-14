@@ -2,12 +2,13 @@
 title: Contracts for Sui 1.x
 ---
 
-**OpenZeppelin Contracts for Sui v1.x** ships four core packages:
+**OpenZeppelin Contracts for Sui v1.x** ships these core packages:
 
 - `openzeppelin_math` for deterministic integer arithmetic, configurable rounding, and decimal scaling.
 - `openzeppelin_fp_math` for 9-decimal fixed-point arithmetic (`UD30x9`, `SD29x9`) backed by `u128`.
 - `openzeppelin_access` for role-based authorization and ownership-transfer wrappers around privileged `key + store` objects.
 - `openzeppelin_utils` for embeddable building blocks; its first module, `rate_limiter`, provides multi-strategy rate limiting.
+- `openzeppelin_sale` for fixed-price token sales (presale / IDO): a prefunded inventory sold in a capped window, with refunds, optional compliance gating, and optional vesting.
 
 ## Quickstart
 
@@ -35,6 +36,8 @@ mvr add @openzeppelin-move/utils
 
 You only need the dependencies your app actually uses. Add what you need and drop the others.
 
+Packages not yet on the Move Registry - currently `openzeppelin_sale` - are added by git revision instead of `mvr add` (see the next step).
+
 ### 3. Verify `Move.toml`
 
 `mvr add` updates `Move.toml` automatically. With all three installed it should include:
@@ -46,6 +49,14 @@ openzeppelin_math = { r.mvr = "@openzeppelin-move/integer-math" }
 openzeppelin_fp_math = { r.mvr = "@openzeppelin-move/fixed-point-math" }
 openzeppelin_utils = { r.mvr = "@openzeppelin-move/utils" }
 ```
+
+Since `openzeppelin_sale` isn't on MVR yet, add it manually, pinned to a git revision:
+
+```toml
+openzeppelin_sale = { git = "https://github.com/OpenZeppelin/contracts-sui.git", subdir = "contracts/finance", rev = "v1.5.0" }
+```
+
+Alternatively, copy the module sources directly into your package's `sources/` so you fully own the code - see each package guide for the per-package options.
 
 ### 4. Add a Minimal Module
 
@@ -83,13 +94,15 @@ sui move test
 - Need fractional values like prices, fees, rates, or signed deltas? Use [Fixed-Point Math](/contracts-sui/1.x/fixed-point).
 - Need integer arithmetic with safe overflow and explicit rounding? Use [Integer Math](/contracts-sui/1.x/math).
 - Need to throttle withdrawals, meter per-user budgets, gate action reuse, or delay an action? Use [Rate Limiter](/contracts-sui/1.x/rate-limiter).
+- Need to run a fixed-price token sale or presale with caps, refunds, and optional KYC or vesting? Use [Sale](/contracts-sui/1.x/sale).
 
 The packages compose. A typical protocol module imports `openzeppelin_math` for share math, `openzeppelin_fp_math` for rate and fee math, and `openzeppelin_access` for the admin capability that governs both.
 
 ## Next steps
 
-- Package guides: [Integer Math](/contracts-sui/1.x/math), [Fixed-Point Math](/contracts-sui/1.x/fixed-point), [Access](/contracts-sui/1.x/access), [Utilities](/contracts-sui/1.x/utils).
+- Package guides: [Integer Math](/contracts-sui/1.x/math), [Fixed-Point Math](/contracts-sui/1.x/fixed-point), [Access](/contracts-sui/1.x/access), [Utilities](/contracts-sui/1.x/utils), [Sale](/contracts-sui/1.x/sale).
 - Access modules: [RBAC](/contracts-sui/1.x/access-control), [Two-Step Transfer](/contracts-sui/1.x/two-step-transfer), [Delayed Transfer](/contracts-sui/1.x/delayed-transfer).
 - Utilities modules: [Rate Limiter](/contracts-sui/1.x/rate-limiter).
+- Sale modules: [Prefunded Sale](/contracts-sui/1.x/prefunded-sale).
 - Learn: [Role Based Access Control](/contracts-sui/1.x/guides/access-control).
-- API reference: [Integer Math](/contracts-sui/1.x/api/math), [Fixed-Point Math](/contracts-sui/1.x/api/fixed-point), [Access](/contracts-sui/1.x/api/access), [Utilities](/contracts-sui/1.x/api/utils).
+- API reference: [Integer Math](/contracts-sui/1.x/api/math), [Fixed-Point Math](/contracts-sui/1.x/api/fixed-point), [Access](/contracts-sui/1.x/api/access), [Utilities](/contracts-sui/1.x/api/utils), [Sale](/contracts-sui/1.x/api/sale).

@@ -1,0 +1,425 @@
+---
+title: Prefunded Sale
+---
+
+<Callout type="warn">
+The example code snippets used in this guide are experimental and have not been audited. They simply help exemplify usage of the OpenZeppelin Sui Package.
+</Callout>
+
+The `openzeppelin_sale` package runs a fixed-price token sale against a **fixed, pre-deposited inventory**. The issuer funds the sale with a `Balance<SaleCoin>` up front; buyers pay a `PaymentCoin` during a time window and each receives a non-transferable `Receipt`. After the window closes the sale resolves one of two ways: **finalize** (success - buyers claim tokens, the issuer withdraws proceeds) or **cancel** (failure - buyers recover their payment from an escrow vault). The sale never mints and never holds a `TreasuryCap`; it only routes the inventory and payments deposited into it.
+
+Token sales are otherwise reimplemented ad hoc by every project that raises, each re-deriving the same escrow, cap, refund, and receipt bookkeeping - and each getting the failure path subtly wrong. `prefunded_sale` factors that into a reusable primitive whose guarantees are structural: buyers can always recover funds on a failed sale without the issuer's cooperation, the issuer can never rug a sale that has met its goal, and pricing is delegated to a small, auditable curve rather than baked into the escrow.
+
+## Use cases
+
+Use `prefunded_sale` when your project needs:
+
+- An open public round (first-come-first-served) selling a fixed token allocation at a fixed price.
+- An anti-whale public round that caps each buyer's total contribution.
+- A minimum-raise sale that automatically refunds everyone if the soft cap is missed.
+- A compliance-gated strategic round where every buyer clears your own KYC/allowlist scheme first.
+- A raise whose tokens vest on a schedule the buyer cannot bypass, instead of unlocking at claim.
+
+## Import
+
+```move
+use openzeppelin_sale::prefunded_sale;
+use openzeppelin_sale::fixed_rate_curve;
+use openzeppelin_sale::refund_vault;
+```
+
+## The modules
+
+Most integrators interact with `prefunded_sale` and `fixed_rate_curve`. The rest are supporting types that appear in signatures and are covered in their own sections below.
+
+| Module | Role |
+| --- | --- |
+| [`prefunded_sale`](#lifecycle) | The sale object and its full lifecycle. **Start here.** |
+| [`fixed_rate_curve`](#pricing-the-fixed-rate-curve) | Built-in pricing: `allocation = paid * rate`, fixed for the whole sale. |
+| [`refund_vault`](#the-refund-vault) | Refundable escrow that guarantees buyers can recover funds on cancel. |
+| [`allowlist`](#compliance-with-an-allowlist) | Typed compliance slot; you wire your own KYC scheme against it. |
+| [`receipt`](#receipts) | The non-transferable, buyer-bound claim ticket. |
+
+The lifecycle `Phase` enum (`Init -> Active`, then terminal `Finalized` or `Cancelled`) lives in `prefunded_sale` itself; read it with `phase()`.
+
+## Lifecycle
+
+A sale moves through four phases. During `Init` it is an **owned** value held by its creator; on activation it becomes a **shared** object anyone can see and interact with.
+
+```text
+  create_sale ─┐
+  deposit      │
+  set_per_buyer_cap          │  Init - the sale is an OWNED value;
+  set_vesting_schedule_params├   holding it by &mut is the authority.
+  enable_allowlist           │   All setup happens here.
+  pair_refund_vault          │
+                             │
+  share_and_activate ────────┴──▶  Active - sale AND vault are SHARED.
+                                       │
+                                   purchase ×N   (within [opens_at_ms, closes_at_ms])
+                                       │
+                                       ├──▶ finalize             (permissionless; success)
+                                       │      claim / claim_all, withdraw_proceeds,
+                                       │      withdraw_unsold_inventory
+                                       │
+                                       ├──▶ cancel_after_close   (permissionless; soft-cap miss)
+                                       │      refund, withdraw_unsold_inventory
+                                       │
+                                       └──▶ cancel_emergency     (admin-only; in-window emergency)
+                                              refund, withdraw_unsold_inventory
+```
+
+`Finalized` and `Cancelled` are terminal. During `Init`, **all setup must complete before `share_and_activate`** - every setup function asserts the `Init` phase and aborts once the sale is `Active`.
+
+### Authority model
+
+- **Init setup** needs no capability. The sale is an owned value, so only the creator holding it by `&mut` can configure it.
+- **Permissionless once active:** `purchase`, `claim`, `claim_all`, `refund`, `finalize`, `cancel_after_close`. Buyers drive these once their conditions hold. **Buyer claims and refunds never depend on the issuer being online.**
+- **Admin-only** (via `SaleAdminCap<SaleCoin, PaymentCoin>`): `cancel_emergency` (in-window), `withdraw_proceeds`, `withdraw_unsold_inventory`. Losing this cap leaves the sale fully usable for buyers; only the issuer's emergency-cancel and withdrawal powers are forfeited.
+
+## Quickstart
+
+Everything below runs in `Init` and is typically threaded through one PTB. This launches a capped public round: a hard cap, an optional soft cap, and a per-buyer cap, priced by the built-in fixed-rate curve. `SALE` is the token being sold and `USDC` the payment coin.
+
+```move
+module my_project::launch;
+
+use openzeppelin_sale::prefunded_sale;
+use openzeppelin_sale::fixed_rate_curve::{Self, FixedRateCurve, Params as FrcParams};
+use openzeppelin_sale::refund_vault;
+use openzeppelin_finance::vesting_wallet_linear::{Linear, Params as VParams};
+use sui::clock::Clock;
+use sui::coin::Coin;
+
+/// Create a capped public round and hand the shared sale + vault to the world.
+public fun launch(
+    inventory: Coin<SALE>, // pre-acquired sale tokens
+    rate: u64,             // SALE smallest-units per 1 USDC smallest-unit
+    hard_cap: u64,
+    soft_cap: u64,         // 0 = none
+    per_buyer_cap: u64,
+    opens_at_ms: u64,
+    closes_at_ms: u64,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    // 1. Create the sale (Init). Returns the owned sale plus its admin cap.
+    //    The (Linear, VParams) slots are the unused vesting witness/params - see Optional vesting.
+    let (mut sale, admin_cap) = prefunded_sale::create_sale<
+        FixedRateCurve, FrcParams, SALE, USDC, Linear, VParams,
+    >(
+        fixed_rate_curve::params(rate),
+        hard_cap,
+        soft_cap,
+        opens_at_ms,
+        closes_at_ms,
+        ctx,
+    );
+
+    // 2. Fund the inventory (deposit takes a Balance).
+    sale.deposit(inventory.into_balance());
+
+    // 3. Optional knobs - all Init-only and one-shot.
+    sale.set_per_buyer_cap(per_buyer_cap, ctx);
+
+    // 4. Pair a fresh, empty, Active vault, then activate. share_and_activate takes the
+    //    vault by value and shares it together with the sale, so the permissionless
+    //    refund paths can never be bricked by a forgotten share step.
+    let (vault, vault_cap) = refund_vault::new<USDC>(ctx);
+    sale.pair_refund_vault(&vault, vault_cap);
+    let ticket = fixed_rate_curve::activation_ticket(&sale);
+    sale.share_and_activate(vault, ticket, clock); // consumes + shares sale AND vault
+
+    // 5. Park the admin cap somewhere recoverable (RBAC / multisig / governance).
+    transfer::public_transfer(admin_cap, ctx.sender());
+}
+```
+
+<Callout type="warn">
+Deposit enough inventory to back the whole raise before activating. A fixed-rate curve requires `hard_cap * rate` tokens (`activation_ticket` computes this), and `share_and_activate` aborts with `EInsufficientInventoryAtActivate` if the inventory falls short. Provisioned honestly, *sold out* and *hard cap reached* coincide.
+</Callout>
+
+## Buying
+
+A purchase is two calls threaded into one PTB: the curve mints a `Quote` that welds the payment to a curve-computed allocation, and `purchase` consumes it and delivers a `Receipt` to the sender. For a non-allowlist sale, pass `option::none()` for the entry.
+
+```move
+use openzeppelin_sale::prefunded_sale::PrefundedSale;
+use openzeppelin_sale::fixed_rate_curve::{Self, FixedRateCurve, Params as FrcParams};
+use openzeppelin_finance::vesting_wallet_linear::{Linear, Params as VParams};
+
+public fun buy(
+    sale: &mut PrefundedSale<FixedRateCurve, FrcParams, SALE, USDC, Linear, VParams>,
+    payment: Coin<USDC>,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    let quote = fixed_rate_curve::quote(sale, payment.into_balance());
+    sale.purchase(quote, option::none(), clock, ctx);
+    // The Receipt<SALE> is now owned by ctx.sender().
+}
+```
+
+<Callout type="warn">
+The hard cap is enforced **all-or-nothing**: a purchase whose payment would push `raised` past `hard_cap` aborts in full with `EHardCapExceeded` - there is no partial fill of the remaining capacity. Near sell-out, size the payment to the remaining room (`hard_cap() - raised()`, read off-chain) before minting the quote. A payment for exactly the remaining capacity closes the sale; anything larger reverts.
+</Callout>
+
+## Closing the sale
+
+A sale leaves `Active` exactly once, through one of three doors. `finalize` and `cancel_after_close` are **permissionless** - any caller can trigger them once the conditions hold, so closing never waits on the issuer.
+
+```move
+// Success. Permissionless. Callable once the window closes with the soft cap met,
+// or as soon as the hard cap is reached (which closes the sale early).
+sale.finalize(&mut vault, clock);
+
+// Failure: soft-cap miss. Permissionless once the window closes below soft cap.
+sale.cancel_after_close(&mut vault, clock);
+
+// Failure: emergency. Admin-only, in-window. Cannot cancel a goal-reaching sale.
+sale.cancel_emergency(&admin_cap, &mut vault, clock);
+```
+
+`cancel_emergency` is the issuer's only unilateral power over an active sale, and it is deliberately fenced: it aborts once the hard cap is reached (`ESaleAlreadyComplete`) or once a configured soft cap is met (`ESoftCapMet`), and it aborts after the window closes (`EEmergencyCancelAfterClose`, use `cancel_after_close` instead). A successful raise can only `finalize`.
+
+## Redeeming
+
+The redemption path depends on how the sale closed.
+
+### After a successful close
+
+Buyers redeem receipts for tokens; the issuer withdraws proceeds and any unsold slack. All of these return a `Balance`; settle it straight into a recipient's address balance with `balance::send_funds` - no `Coin` object is minted, and there is nothing to route or clean up.
+
+```move
+// Buyer redeems one receipt; the tokens settle into the buyer's address balance.
+let tokens: Balance<SALE> = sale.claim(receipt, ctx);
+balance::send_funds(tokens, ctx.sender());
+
+// A buyer holding several receipts batches them into one balance, then settles once.
+let tokens: Balance<SALE> = sale.claim_all(receipts, ctx);
+balance::send_funds(tokens, ctx.sender());
+
+// Admin (cap-gated) withdrawals. Pass any address to send_funds - the caller here,
+// a treasury, or a governance account.
+let proceeds: Balance<USDC> = sale.withdraw_proceeds(&admin_cap);
+balance::send_funds(proceeds, ctx.sender());
+let unsold: Balance<SALE> = sale.withdraw_unsold_inventory(&admin_cap); // only the slack
+balance::send_funds(unsold, ctx.sender());
+```
+
+`withdraw_unsold_inventory` releases strictly the unallocated portion (`inventory - total_allocated`); tokens backing outstanding receipts stay locked until their buyer claims. Both withdrawals are idempotent - a second call returns an empty balance.
+
+### After a cancel
+
+Every buyer recovers exactly what they paid, in any order, straight from the vault - no issuer involvement.
+
+```move
+let money_back: Balance<USDC> = sale.refund(&mut vault, receipt, ctx);
+balance::send_funds(money_back, ctx.sender()); // straight into the buyer's address balance
+```
+
+On cancel the entire proceeds balance moves into the vault, so `vault.locked == raised`: refund solvency is guaranteed for every buyer.
+
+## Pricing: the fixed-rate curve
+
+The sale does not price a purchase itself. It is generic over a **curve** that computes each buyer's allocation, and applies the result verbatim, bounded only by unallocated inventory and overflow guards. The built-in `fixed_rate_curve` is the common case: `allocation = paid * rate`, with `rate` fixed at construction.
+
+```move
+// SALE smallest-units allocated per 1 USDC smallest-unit.
+let params = fixed_rate_curve::params(rate); // aborts ERateZero if rate == 0
+```
+
+What keeps this design safe is a **witness gate**. A `Quote` for a `PrefundedSale<FixedRateCurve, ..>` can only be minted by `fixed_rate_curve::quote`, because minting requires a `FixedRateCurve` value whose constructor is private to that module. So a sale parameterized on the fixed-rate curve can be priced by no other code.
+
+<Callout type="warn">
+**The curve is a trusted component.** The sale applies the curve's allocation verbatim - there is no independent `max_rate` check. A buggy or dishonest custom curve can over-allocate per payment up to the inventory ceiling (it can never create tokens beyond inventory, and no payment is taken without an atomic allocation, but it can make the sale sell out early). Treat any custom curve as security-critical and audit it alongside the sale. The provided `fixed_rate_curve` is honest by construction.
+</Callout>
+
+## Sale shapes and caps
+
+Four orthogonal, independent configuration axes, all set during `Init`:
+
+- **Hard cap (required, `> 0`).** Bounds the maximum raise. Inventory backing is enforced at activation, so *sold-out* and *hard-cap-reached* coincide.
+- **Soft cap (optional, `0 = none`).** Minimum raise to `finalize`. If the window closes below it, anyone can `cancel_after_close` and every buyer can refund.
+- **Per-buyer cap (optional).** A cumulative cap on a single buyer's total payment, enforced against the running per-buyer total. Configure with `set_per_buyer_cap`.
+- **Allowlist (optional).** Compliance-gated mode: every `purchase` must consume an `AllowEntry`. Configure with `enable_allowlist`.
+
+Combined, these give the three shapes a fixed-price sale typically takes:
+
+| Shape | KYC | Soft cap | Per-buyer cap | Typical use |
+| --- | --- | --- | --- | --- |
+| Public round | no | no | no | Open public sale, first-come-first-served |
+| Capped public round | no | optional | yes | Anti-whale public sale |
+| Strategic round | yes | yes | yes | Compliance-gated raise |
+
+## Compliance with an allowlist
+
+The library ships **no** KYC logic. Instead, `allowlist` defines two typed slots you wire your own scheme against: an `AllowlistAdmin<SaleCoin>` (the authority to approve buyers) and a single-use `AllowEntry<SaleCoin>` (a per-purchase approval ticket). Calling `enable_allowlist` during `Init` switches the sale into compliance-gated mode and hands you the admin to wrap in your own module:
+
+```move
+// During Init. Wrap the returned admin inside your compliance module (a shared
+// object that runs KYC checks), then activate the sale as usual.
+let allow_admin = sale.enable_allowlist(ctx);
+```
+
+Your compliance module runs whatever verification it requires (a KYC table lookup, a merkle proof, a tier check) and, on success, mints an entry with `allowlist::new_entry`. The buyer threads that entry into the same PTB as `purchase`, which consumes it and asserts it was issued for *this* sale and *this* buyer:
+
+```move
+// Allowlist purchase: the entry is minted by your compliance module and consumed here.
+let quote = fixed_rate_curve::quote(sale, payment.into_balance());
+sale.purchase(quote, option::some(entry), clock, ctx);
+```
+
+`AllowEntry` has **no abilities**, so it cannot be stored, copied, replayed across transactions, or transferred - the only legal path is mint-then-consume in one PTB. Because a receipt is buyer-bound, KYC enforced at purchase carries all the way through to distribution: a verified buyer cannot forward a claim to an unverified address.
+
+<Callout type="warn">
+Losing the `AllowlistAdmin` bricks an allowlist sale: no entries can be minted, so every `purchase` aborts. There is no library override (that would be a centralization vector). Hold the admin - like the `SaleAdminCap` - in a recoverable [`openzeppelin_access`](/contracts-sui/1.x/access), multisig, or governance container.
+</Callout>
+
+## Optional vesting
+
+By default `claim` hands the buyer their tokens immediately. To lock them instead, attach an issuer-defined schedule during `Init` with `set_vesting_schedule_params`. When set, the plain `claim` path aborts and the only redemption route is `claim_into_vesting`, which returns a funded [`VestingWallet`](/contracts-sui/1.x/vesting-wallet) (from [`openzeppelin_finance`](/contracts-sui/1.x/finance)) plus the wallet's `DestroyCap`.
+
+```move
+use openzeppelin_finance::vesting_wallet::{VestingWallet, DestroyCap};
+use openzeppelin_finance::vesting_wallet_linear::{Linear, Params as VParams};
+
+// Redeem a receipt into a funded vesting wallet. Every type argument is inferred from
+// the sale, which pins the schedule witness and params fixed at create_sale.
+let (wallet, cap): (VestingWallet<Linear, VParams, SALE>, DestroyCap) =
+    prefunded_sale::claim_into_vesting(&mut sale, receipt, ctx);
+
+transfer::public_share_object(wallet);        // shared: anyone can poke release; funds land in the buyer's balance
+transfer::public_transfer(cap, ctx.sender()); // hold the cap to reclaim storage once the wallet is drained
+```
+
+The schedule is **issuer-defined and unbypassable**: the wallet is built with `beneficiary` forced to the buyer and the sale's fixed schedule params, under a vesting witness pinned in the sale's type at `create_sale`. A buyer cannot substitute a permissive witness of their own to release early. To choose the schedule shape, set the `VestingWitness`/`VestingScheduleParams` type arguments (for example `vesting_wallet_linear::{Linear, Params}`) when you call `create_sale`, and attach concrete params with `set_vesting_schedule_params`. For a non-vesting sale the slots are inert - pick any `drop` witness and never attach a schedule.
+
+## The refund vault
+
+Every sale is paired with a `RefundVault<PaymentCoin>` **before activation**, even when `soft_cap == 0` - `cancel_emergency` always needs a refund destination. The vault must be **`Active` and empty** when paired (pre-existing funds would be stranded). `share_and_activate` then takes the vault by value and shares it together with the sale, so the permissionless refund paths can never be bricked by a forgotten sharing step.
+
+Once paired, the sale owns the vault's controller cap and drives its state: `finalize` flips it to `Closed`, a cancel flips it to `Refunding` and funds it with the proceeds. Buyers refund directly from the vault. The vault is a generic refundable escrow with no knowledge of sales, so it is also usable standalone.
+
+## Receipts
+
+Each `purchase` delivers one `Receipt<SaleCoin>` to the buyer. It has `key` only (no `store`), so it cannot be transferred, wrapped, or stored elsewhere, and `claim` / `refund` additionally assert `ctx.sender() == receipt.buyer`. Two consequences:
+
+- **No wallet rotation** between purchase and redemption - the buying address is the redeeming address.
+- **KYC enforced at purchase carries through to distribution** - a verified buyer cannot forward a claim to an unverified address.
+
+A buyer with several purchases holds several receipts; `claim_all` batches them into one call.
+
+## Key concepts
+
+- **Prefunded, never minting.** The sale draws from a fixed `Balance<SaleCoin>` inventory deposited up front and never holds a `TreasuryCap`. Inventory backing is checked at activation, so the raise can never over-sell the tokens on hand.
+
+- **Owned during setup, shared when live.** In `Init` the sale is an owned value and holding it by `&mut` is the only authority setup needs. `share_and_activate` shares the sale and its vault together, atomically.
+
+- **The curve is trusted; the sale is not the pricer.** Allocation comes from a witness-gated curve and is applied verbatim, bounded only by inventory and overflow. The witness gate is the security boundary - a first-party, audited curve is un-priceable by any other code.
+
+- **Buyer redemption never depends on issuer liveness.** `purchase`, `claim`, `refund`, `finalize`, and `cancel_after_close` are permissionless. Losing the `SaleAdminCap` forfeits only emergency-cancel and the issuer's withdrawals.
+
+- **Redemptions return a `Balance`, not a `Coin`.** `claim`, `claim_all`, `refund`, and the admin withdrawals hand back a `Balance` you credit to a recipient with `balance::send_funds` - it settles into that address's balance directly, minting no payout `Coin` object to route or clean up. The vesting path settles the same way when its wallet releases.
+
+- **Hot potatoes weld intent to funds.** `Quote` (payment + allocation) and `AllowEntry` (compliance approval) have no abilities, so they must be minted and consumed in the same PTB - no warehousing, no replay across transactions.
+
+- **The sale object is permanent.** There is no teardown: a terminal phase is not a delete, and even a fully-redeemed sale remains a shared object forever. Do not expect a storage rebate from winding a sale down.
+
+## Common mistakes
+
+| Mistake | What happens | How to fix |
+| --- | --- | --- |
+| Configuring (deposit / caps / allowlist / vesting) after `share_and_activate` | Aborts `ENotInit` | Do all setup in `Init`, before activating. |
+| Pairing a vault that already holds funds, or is shared/closed | Aborts `EVaultNotEmpty` / `EVaultNotActive` | Pair a fresh, empty, `Active` vault; `share_and_activate` shares it for you. |
+| Activating with under-provisioned inventory | Aborts `EInsufficientInventoryAtActivate` | Deposit `>= hard_cap * rate` before activating. |
+| Sending a payment larger than the remaining capacity near sell-out | Aborts `EHardCapExceeded` (no partial fill) | Size the payment to `hard_cap() - raised()` before quoting. |
+| Plain `claim` on a vesting sale, or `claim_into_vesting` on a non-vesting sale | Aborts `EClaimRequiresVesting` / `ENoVestingScheduleAttached` | Match the redemption path to whether a schedule is attached. |
+| Buying then redeeming from a different wallet | Aborts `EBuyerOnly` | Redeem from the purchasing address; receipts are buyer-bound. |
+| Losing the `SaleAdminCap` or `AllowlistAdmin` | Issuer loses withdrawals / the allowlist sale can no longer sell | Hold every cap in a recoverable RBAC / multisig / governance wrapper. |
+| Expecting `cancel_emergency` to stop a successful sale | Aborts `ESaleAlreadyComplete` / `ESoftCapMet` | A goal-reaching sale can only `finalize`; emergency cancel is fenced by design. |
+
+## Security notes
+
+- **The curve is trusted.** A custom curve is security-critical and must be audited with the sale. The witness gate makes a `FixedRateCurve` sale un-priceable by anything but the fixed-rate module.
+- **Buyer funds are never stranded by a lost cap.** All buyer-facing flows are permissionless; losing the `SaleAdminCap` forfeits only `cancel_emergency`, `withdraw_proceeds`, and `withdraw_unsold_inventory`.
+- **The issuer cannot rug a goal-reaching sale.** `cancel_emergency` is blocked once the hard cap (or a configured soft cap) is reached, and is window-bounded.
+- **Refund solvency is guaranteed.** On cancel the entire proceeds balance moves into the vault, so every buyer can recover exactly their payment, in any order.
+- **Stale receipts pin funds.** There is no grace-period sweep. An unclaimed receipt keeps its allocation pinned in inventory (Finalized) or its payment locked in the vault (Cancelled) indefinitely. This is buyer-protective by design.
+
+## PTB / TypeScript integration
+
+A buyer's purchase from the TypeScript SDK. The payment coin becomes a `Balance`, the curve mints the `Quote`, and `purchase` consumes it - all in one PTB. The `Receipt` is transferred to the sender automatically.
+
+```typescript
+import { Transaction } from '@mysten/sui/transactions';
+
+const PKG = '0x…';                 // openzeppelin_sale package id
+const SALE = `${PROJECT_PKG}::coin::SALE`;
+const USDC = '0x…::usdc::USDC';
+const VWITNESS = `${FINANCE_PKG}::vesting_wallet_linear::Linear`;
+const VPARAMS = `${FINANCE_PKG}::vesting_wallet_linear::Params`;
+const CURVE = `${PKG}::fixed_rate_curve::FixedRateCurve`;
+const FRC_PARAMS = `${PKG}::fixed_rate_curve::Params`;
+
+const tx = new Transaction();
+
+// 1. Coin<USDC> -> Balance<USDC>
+const payBalance = tx.moveCall({
+  target: '0x2::coin::into_balance',
+  typeArguments: [USDC],
+  arguments: [tx.object(usdcCoinId)],
+});
+
+// 2. Mint the Quote from the curve module.
+const quote = tx.moveCall({
+  target: `${PKG}::fixed_rate_curve::quote`,
+  typeArguments: [SALE, USDC, VWITNESS, VPARAMS],
+  arguments: [tx.object(SALE_ID), payBalance],
+});
+
+// 3. allow = option::none<AllowEntry<SALE>>() for a non-allowlist sale.
+const noEntry = tx.moveCall({
+  target: '0x1::option::none',
+  typeArguments: [`${PKG}::allowlist::AllowEntry<${SALE}>`],
+  arguments: [],
+});
+
+// 4. Purchase. (typeArguments: Curve, CurveParams, SaleCoin, PaymentCoin, VestingWitness, VestingScheduleParams)
+tx.moveCall({
+  target: `${PKG}::prefunded_sale::purchase`,
+  typeArguments: [CURVE, FRC_PARAMS, SALE, USDC, VWITNESS, VPARAMS],
+  arguments: [tx.object(SALE_ID), quote, noEntry, tx.object('0x6')], // 0x6 = Clock
+});
+```
+
+For an **allowlist** sale, replace step 3 with a call into your compliance module's mint function (which returns an `AllowEntry`) and thread that into `purchase` - minted and consumed in the same PTB. `claim`, `refund`, `withdraw_proceeds`, and `withdraw_unsold_inventory` all return a `Balance`; a follow-up `0x2::balance::send_funds` settles it into the recipient's address balance with no coin object (use `0x2::coin::from_balance` only if you specifically need a `Coin`).
+
+## FAQ
+
+**Who can close the sale?**
+Anyone. `finalize` and `cancel_after_close` are permissionless once their conditions hold, so a sale never waits on the issuer to close. Only `cancel_emergency` is admin-gated, and it cannot touch a goal-reaching sale.
+
+**What happens to buyers if the issuer disappears?**
+On a successful sale, buyers `claim` their tokens without the issuer. On a failed sale, buyers `refund` directly from the vault. Neither path needs the `SaleAdminCap`; only the issuer's own proceeds/inventory withdrawals do.
+
+**Can I run a sale without a soft cap?**
+Yes. Pass `soft_cap = 0`. The sale can then finalize at any raise once the window closes (or the hard cap is hit), and `cancel_after_close` is unavailable. A refund vault is still required, because `cancel_emergency` needs one.
+
+**How do buyers avoid a failed transaction near sell-out?**
+The hard cap is all-or-nothing, so read `hard_cap() - raised()` off-chain and size the payment to at most the remaining room. A payment for exactly the remaining capacity closes the sale.
+
+**Does the module emit events?**
+Yes. `create_sale`, `deposit`, cap/vesting/allowlist setup, `share_and_activate`, `purchase`, `finalize`, cancels, claims, refunds, and both admin withdrawals each emit a stamped event for indexers.
+
+## Examples
+
+The full unit-test suite under [`contracts/sale/tests/`](https://github.com/OpenZeppelin/contracts-sui/tree/v1.5.0/contracts/sale/tests) doubles as an executable specification: `test_utils.move` shows the canonical `Init -> Active` setup, and the thematic files exercise every purchase, close, redemption, and failure path.
+
+<Callout type="warn">
+These are unaudited illustrations of how the primitive is wired up, not production-ready code.
+</Callout>
+
+## Learn more
+
+For function-level signatures, parameters, events, and errors, see the [Sale API reference](/contracts-sui/1.x/api/sale).
