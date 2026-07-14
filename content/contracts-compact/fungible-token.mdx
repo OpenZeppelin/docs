@@ -6,7 +6,7 @@ title: FungibleToken
 [fungible tokens]: ../contracts/5.x/tokens.mdx#different-kinds-of-tokens
 [EIP-20]: https://eips.ethereum.org/EIPS/eip-20
 [Module/Contract Pattern]: ./extensibility.mdx#the_module_contract_pattern
-[_mint]: api/fungibleToken#FungibleToken-_mint
+[_mint]: api/fungible-token#FungibleToken-_mint
 
 FungibleToken is a specification for [fungible tokens],
 a type of token where all the units are exactly equal to each other.
@@ -26,7 +26,7 @@ the library uses the Compact type `Uint<128>`.
 ***Features and specifications NOT supported***
 
 * ***Events*** - Midnight does not currently support events, but this is planned on being supported in the future.
-* ***Uint256 type*** - There’s ongoing research on ways to support uint256 in the future.
+* ***Uint256 type*** - There's ongoing research on ways to support uint256 in the future.
 * ***Interface*** - Compact currently does not have a way to define a contract interface.
 This library offers modules of contracts with free floating circuits;
 nevertheless, there are no means of enforcing that all circuits are provided.
@@ -46,13 +46,13 @@ The `unsafe` circuits will eventually be deprecated after Compact supports contr
 ## Usage
 
 Import the FungibleToken module into the implementing contract.
-It’s recommended to prefix the module with `FungibleToken_` to avoid circuit signature clashes.
+It's recommended to prefix the module with `FungibleToken_` to avoid circuit signature clashes.
 
 ```typescript
 pragma language_version >= {{compact_language_version}};
 
 import CompactStandardLibrary;
-import "./compact-contracts/node_modules/@openzeppelin-compact/contracts/src/token/FungibleToken"
+import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken"
   prefix FungibleToken_;
 
 constructor(
@@ -87,20 +87,20 @@ export circuit decimals(): Uint<8> {
 (...)
 ```
 
-The following example is a simple token contract with a fixed supply that’s minted to the passed recipient upon construction.
+The following example is a simple token contract with a fixed supply that's minted to the passed recipient upon construction.
 
 ```typescript
 pragma language_version >= {{compact_language_version}};
 
 import CompactStandardLibrary;
-import "./compact-contracts/node_modules/@openzeppelin-compact/contracts/src/token/FungibleToken"
+import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken"
   prefix FungibleToken_;
 
 constructor(
   name: Opaque<"string">,
   symbol: Opaque<"string">,
   decimals: Uint<8>,
-  recipient: Either<ZswapCoinPublicKey, ContractAddress>,
+  recipient: Either<Bytes<32>, ContractAddress>,
   fixedSupply: Uint<128>,
 ) {
   FungibleToken_initialize(name, symbol, decimals);
@@ -123,30 +123,30 @@ export circuit totalSupply(): Uint<128> {
   return FungibleToken_totalSupply();
 }
 
-export circuit balanceOf(account: Either<ZswapCoinPublicKey, ContractAddress>): Uint<128> {
+export circuit balanceOf(account: Either<Bytes<32>, ContractAddress>): Uint<128> {
   return FungibleToken_balanceOf(account);
 }
 
 export circuit allowance(
-  owner: Either<ZswapCoinPublicKey, ContractAddress>,
-  spender: Either<ZswapCoinPublicKey, ContractAddress>
+  owner: Either<Bytes<32>, ContractAddress>,
+  spender: Either<Bytes<32>, ContractAddress>
 ): Uint<128> {
   return FungibleToken_allowance(owner, spender);
 }
 
-export circuit transfer(to: Either<ZswapCoinPublicKey, ContractAddress>, value: Uint<128>): Boolean {
+export circuit transfer(to: Either<Bytes<32>, ContractAddress>, value: Uint<128>): Boolean {
   return FungibleToken_transfer(to, value);
 }
 
 export circuit transferFrom(
-  from: Either<ZswapCoinPublicKey, ContractAddress>,
-  to: Either<ZswapCoinPublicKey, ContractAddress>,
+  fromAddress: Either<Bytes<32>, ContractAddress>,
+  to: Either<Bytes<32>, ContractAddress>,
   value: Uint<128>,
 ): Boolean {
-  return FungibleToken_transferFrom(from, to, value);
+  return FungibleToken_transferFrom(fromAddress, to, value);
 }
 
-export circuit approve(spender: Either<ZswapCoinPublicKey, ContractAddress>, value: Uint<128>): Boolean {
+export circuit approve(spender: Either<Bytes<32>, ContractAddress>, value: Uint<128>): Boolean {
   return FungibleToken_approve(spender, value);
 }
 
