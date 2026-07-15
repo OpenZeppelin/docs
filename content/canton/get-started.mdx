@@ -14,8 +14,14 @@ This guide covers the prerequisites and the basic project wiring for building on
 ## Prerequisites
 
 *   **JDK 21**: the Daml toolchain runs on Java. Install a recent OpenJDK 21 build and make sure `JAVA_HOME` points at it.
-*   **DPM (Daml Package Manager)**: Digital Asset's package manager and SDK installer. Install it from Digital Asset's public installer, then use it to provision the Daml SDK / Canton baseline.
-*   **A Daml project**: a directory with a `daml.yaml` (single package) or a `multi-package.yaml` (workspace of packages).
+*   **DPM (Daml Package Manager)**: Digital Asset's package manager and SDK installer. Install it, then use it to provision the Daml SDK / Canton baseline:
+
+```bash
+curl https://get.digitalasset.com/install/install.sh | sh
+dpm install 3.4.11   # or the baseline pinned in your project's daml.yaml
+```
+
+*   **A Daml project**: a directory with a `daml.yaml` (single package) or a `multi-package.yaml` (workspace of packages). New to Daml? Start with the [Daml documentation](https://docs.digitalasset.com/) and the [Canton Network overview](https://www.canton.network/).
 
 ## Add OpenZeppelin packages
 
@@ -32,7 +38,24 @@ Refer to each component's page for the module path to import and the templates a
 *   [Ownable](/canton/library/ownable)
 *   [Pausable](/canton/library/pausable)
 
+## Test against a local Canton ledger
+
+Daml Script tests run in-memory by default, but you can point the same scripts at a real local Canton ledger over gRPC — useful for validating time semantics, party visibility, and DAR uploads before targeting a shared network:
+
+```bash
+# start a local sandbox with your DAR uploaded
+dpm sandbox --dar .daml/dist/<your-package>.dar
+
+# run a script against it over the Ledger API
+dpm script --dar .daml/dist/<your-package>.dar \
+  --script-name My.Module:myScript \
+  --ledger-host localhost --ledger-port 6865
+```
+
+If your scripts control ledger time with `setTime`, start the sandbox with `--static-time` and pass `--static-time` to `dpm script` as well — both default to wall-clock time, and ledger time only moves forward.
+
 ## Explore further
 
 *   The **[Settlement (CIP-112)](/canton/settlement)** primitive shows how to compose the library into an atomic, value-moving settlement flow.
 *   The **[Reference Implementations](/canton/reference-implementations)** walk through complete application blueprints built on these pieces.
+*   The [Canton Improvement Proposals (CIPs)](https://github.com/canton-foundation/cips) repository holds the ecosystem standards these packages align with.
