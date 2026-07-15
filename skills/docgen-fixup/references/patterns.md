@@ -2,12 +2,14 @@
 
 Every pattern the `docgen-fixup` skill knows how to detect and fix. Add new entries as new regressions emerge; do not delete entries even when the underlying pipeline bug is fixed — pinned regens against old tags can still hit them.
 
+All patterns apply to any of the three source-repo receivers unless the entry says otherwise: `contracts` (versioned, `content/contracts/<major>.x/`), `community-contracts` (unversioned, `content/community-contracts/`), `confidential-contracts` (unversioned, `content/confidential-contracts/`).
+
 Each entry:
 
 - **Symptom** — what the reader sees in the generated MDX.
-- **Detection** — a grep or scan that finds hits.
-- **Root cause** — where in the pipeline (docgen resolver, regex, template, `downdoc`, upstream NatSpec, upstream `.adoc`) it comes from.
-- **Upstream fix** — the change to the source `.sol` / `.adoc` so the next regen produces correct output. `n/a` if there is no clean upstream fix.
+- **Detection** — a grep or scan that finds hits. Scope globs to the docs slice from the PR body — see Step 2 of `process.md`.
+- **Root cause** — where in the pipeline (docgen resolver, regex, template, `downdoc`, upstream NatSpec, upstream `.adoc`, docs-side decision) it comes from.
+- **Upstream fix** — the change to the source `.sol` / `.adoc` so the next regen produces correct output. `n/a` if there is no clean upstream fix (e.g. the value depends on a docs-side decision, or the pattern is a transformer bug fixable only in the docs repo).
 - **MDX patch** — the direct patch to apply on the current PR.
 - **Example** — one concrete case from a prior regen.
 
@@ -160,3 +162,26 @@ For each match, resolve `/<path>` → `content/<path>.mdx` and grep the file for
 **MDX patch**: repoint the link to the correct target page. Drop the fragment if the whole page is the target.
 
 **Example** (PR #206): `content/contracts/5.x/governance.mdx:39` and `:114` — both `Defender Proposals` links pointed at `/defender/module/actions#transaction-proposals-reference` (anchor did not exist). Correct target: `/defender/module/transaction-proposals`. Upstream fixed in [OpenZeppelin/openzeppelin-contracts#6612](https://github.com/OpenZeppelin/openzeppelin-contracts/pull/6612).
+
+---
+
+## 8. `<OZWizard />` rendered without a `version=` prop
+
+**Symptom**: an `<OZWizard>` component in the generated MDX has no `version="…"` attribute. Renders the Wizard against an unpinned default that may not match the release the docs page targets.
+
+**Detection**:
+```
+grep -rnE '<OZWizard(\s+[a-z]+="[^"]*")*\s*/>' content/**/*.mdx \
+  | grep -v 'version='
+```
+Applies to every slice that references the Wizard component (currently `content/contracts/<major>.x/*.mdx`, `content/contracts-cairo/*/wizard.mdx`, `content/stellar-contracts/get-started.mdx`).
+
+**Root cause**: The source `.adoc` uses the legacy `<oz-wizard>` HTML custom element (`<oz-wizard></oz-wizard>` or `<oz-wizard data-tab="Account"></oz-wizard>`). `scripts/convert-adoc.js` translates the tag to the `<OZWizard />` React component and maps `data-tab` → `tab`, `data-lang` → `lang`, but it cannot infer a `version=` — the version is a **docs-side decision**, chosen per release by the docs maintainers, not encoded in the source `.adoc`.
+
+**Upstream fix**: `n/a`. The `.adoc` source deliberately does not carry a version. See the guiding principle in `SKILL.md`: some patterns cross the boundary between what upstream owns and what the docs repo owns.
+
+**MDX patch**: add `version="<current-major>.<current-minor>.<current-patch>"` to every `<OZWizard />` occurrence in the slice. Match the release the PR targets — for `contracts`, use the tag from the PR body's **Reference** line, dropping the leading `v` and any `-rc.N` suffix. For unversioned slices (`community-contracts`, `confidential-contracts`), use the version pinned in the source repo's `package.json` at the ref being generated, unless the docs maintainers have a slice-specific convention.
+
+**Examples** (PR #206):
+- `content/contracts/5.x/wizard.mdx:12` — `<OZWizard />` → `<OZWizard version="5.5.0" />` ([review comment](https://github.com/OpenZeppelin/docs/pull/206#discussion_r3589847696))
+- `content/contracts/5.x/accounts.mdx:13` — `<OZWizard tab="Account" />` → `<OZWizard tab="Account" version="5.5.0" />` ([review comment](https://github.com/OpenZeppelin/docs/pull/206#discussion_r3590455407))

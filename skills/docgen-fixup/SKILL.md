@@ -1,6 +1,6 @@
 ---
 name: docgen-fixup
-description: Review an auto-generated OZ API docs PR (from `.github/workflows/generate-api-docs-*.yml`) and fix the known regression patterns the docgen pipeline introduces on each run. Trigger when the user says "review PR <N>", "check the v5.x docs regen", "fix the regressions on the latest bot PR", or "run docgen-fixup". Scans the diff for cross-ref leaks, broken code blocks, dangling struct anchors, mangled admonitions, wrong URL rewrites, and other patterns cataloged in `references/patterns.md`, then applies direct MDX patches. Also flags NatSpec / `.adoc` mistakes that should be fixed upstream in the source contracts repo.
+description: Review an auto-generated OZ API docs PR (from any of the three `.github/workflows/generate-api-docs-*.yml` receivers — contracts, community-contracts, confidential-contracts) and fix the known regression patterns the docgen pipeline introduces on each run. Trigger when the user says "review PR <N>", "check the v5.x docs regen", "fix the regressions on the latest bot PR", or "run docgen-fixup". Scans the diff for cross-ref leaks, broken code blocks, dangling struct anchors, mangled admonitions, wrong URL rewrites, missing docs-side props, and other patterns cataloged in `references/patterns.md`, then applies direct MDX patches. Also flags NatSpec / `.adoc` mistakes that should be fixed upstream in the source contracts repo.
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 inputs:
   pr_number:
@@ -9,11 +9,11 @@ inputs:
     required: true
   contracts_repo_path:
     type: text
-    prompt: "Absolute path to the source contracts repo. Leave blank to auto-detect a sibling `solidity/` / `openzeppelin-community-contracts/` / `openzeppelin-confidential-contracts/` matching the PR body's source-repo hint."
+    prompt: "Absolute path to the source contracts repo. Leave blank to auto-detect from the PR body's source-repo hint (matches a sibling `solidity/`, `openzeppelin-community-contracts/`, `community/`, or `openzeppelin-confidential-contracts/`)."
     required: false
   contracts_tag:
     type: text
-    prompt: "Source tag / branch the PR was generated from (e.g. v5.7.0-rc.0). Leave blank to parse from the PR body."
+    prompt: "Source tag / branch the PR was generated from (e.g. v5.7.0-rc.0, master). Leave blank to parse from the PR body."
     required: false
   mode:
     type: choice
@@ -27,7 +27,15 @@ inputs:
 
 # docgen-fixup
 
-Fix the known regression patterns in an auto-generated API docs PR before it merges. The docs bot (`.github/workflows/generate-api-docs-*.yml`) runs on every contracts release tag and opens a PR against `content/**/api/**/*.mdx`. The transformation pipeline (docgen + `scripts/convert-adoc.js` + `scripts/process-mdx.js`) is intentionally kept simple — it does not paper over upstream NatSpec / `.adoc` mistakes, and it does not try to be exhaustive about every edge case. Those get caught here.
+Fix the known regression patterns in an auto-generated API docs PR before it merges. The docs bot runs three receivers — one per source repo — each on a release tag / master commit, and opens a PR against `content/<slice>/**/*.mdx`:
+
+| Workflow                                            | Source repo                                       | Docs slice                     | Versioned |
+|-----------------------------------------------------|---------------------------------------------------|--------------------------------|-----------|
+| `.github/workflows/generate-api-docs-contracts.yml` | `OpenZeppelin/openzeppelin-contracts`             | `content/contracts/<major>.x/` | yes       |
+| `.github/workflows/generate-api-docs-community-contracts.yml` | `OpenZeppelin/openzeppelin-community-contracts` | `content/community-contracts/` | no        |
+| `.github/workflows/generate-api-docs-confidential-contracts.yml` | `OpenZeppelin/openzeppelin-confidential-contracts` | `content/confidential-contracts/` | no        |
+
+All three run the same transformer (`docgen/templates-md/` + `scripts/convert-adoc.js` + `scripts/process-mdx.js`), so the same regression patterns apply to all three. The transformer is intentionally kept simple — it does not paper over upstream NatSpec / `.adoc` mistakes, and it does not try to be exhaustive about every edge case. Those get caught here.
 
 ## When to use
 
@@ -48,6 +56,8 @@ The docgen transformer stays minimal. It fixes only genuine regex / template bug
 2. **Patched directly** in the generated MDX for the current PR, so the PR is correct without waiting for a regen.
 
 Both. Upstream fixes drop the pattern from future PRs; direct patches unblock the current one.
+
+Some patterns have **no clean upstream fix** because the value depends on a docs-side decision (e.g. which Wizard `version=` to pin for a given release). Those are `n/a` for upstream and are re-applied on every regen. That is not a bug — it is the boundary between what upstream owns and what the docs repo owns.
 
 ## Inputs
 
@@ -93,7 +103,7 @@ Edit only:
 Do **not**:
 
 - Modify `docgen/templates-md/` or `scripts/convert-adoc.js`. If a pattern seems to demand a transformer change, stop and surface it to the user — that is a separate design decision, not a fixup.
-- Touch other docs slices in the same PR (`content/confidential-contracts/`, `content/contracts-sui/`, etc. unless the current PR is scoped to that slice).
+- Touch docs slices the current PR is not scoped to. Each of the three docgen workflows targets a single slice (`content/contracts/<major>.x/`, `content/community-contracts/`, or `content/confidential-contracts/`); patch only inside that slice.
 - Rewrite prose beyond what a specific pattern requires.
 
 ## End of run

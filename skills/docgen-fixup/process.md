@@ -25,20 +25,36 @@ gh pr view <pr_number> --repo OpenZeppelin/docs \
 
 Record `headRefName` (branch), `baseRefName` (target — usually `main`), and the body.
 
-## Step 2 — Resolve source repo and tag
+## Step 2 — Resolve source repo, docs slice, and tag
 
 Parse the PR body:
 
-- **Repository** line names the source repo (e.g. `OpenZeppelin/openzeppelin-contracts`).
-- **Reference** line names the tag / branch (e.g. `v5.7.0-rc.0`).
+- **Repository** line names the source repo (e.g. `OpenZeppelin/openzeppelin-contracts`, `OpenZeppelin/openzeppelin-community-contracts`, `OpenZeppelin/openzeppelin-confidential-contracts`).
+- **Reference** line names the tag / branch (e.g. `v5.7.0-rc.0`, `master`).
+- **Output Directory** line names the docs slice (e.g. `content/contracts/5.x/api`, `content/community-contracts/api`, `content/confidential-contracts/api`).
 
 Fill in `contracts_repo_path` and `contracts_tag` from inputs if provided; otherwise from the body. Then:
 
-- Auto-detect the local checkout: look for a sibling directory (`../solidity/`, `../openzeppelin-community-contracts/`, `../openzeppelin-confidential-contracts/`, …) whose `git remote get-url origin` matches the parsed repo.
-- Fetch the tag: `git -C <CONTRACTS_REPO_PATH> fetch origin refs/tags/<contracts_tag>:refs/tags/<contracts_tag>` (or the equivalent for branches).
-- Create a read-only worktree pinned at the tag: `git -C <CONTRACTS_REPO_PATH> worktree add /tmp/oz-src-<tag> <contracts_tag>`. Remove it in the final cleanup step.
+- Auto-detect the local checkout. Walk the parent of `<DOCS_REPO_PATH>` and any known sibling roots. For each candidate directory, run `git -C <candidate> remote get-url origin 2>/dev/null` and match against the parsed source repo. Common names to try, per source repo:
 
-If auto-detection or fetching fails, stop with a clear error.
+  | Source repo                                            | Candidate dir names                                    |
+  |--------------------------------------------------------|--------------------------------------------------------|
+  | `OpenZeppelin/openzeppelin-contracts`                  | `solidity`, `openzeppelin-contracts`                   |
+  | `OpenZeppelin/openzeppelin-community-contracts`        | `community`, `openzeppelin-community-contracts`        |
+  | `OpenZeppelin/openzeppelin-confidential-contracts`     | `confidential`, `openzeppelin-confidential-contracts`  |
+
+  Fall back to a `git remote -v | grep <repo>` sweep across all directories under the workspace root if none of the common names hit. Do not invent a path.
+
+- Fetch the tag: `git -C <CONTRACTS_REPO_PATH> fetch origin refs/tags/<contracts_tag>:refs/tags/<contracts_tag>` for a tag, or `git -C <CONTRACTS_REPO_PATH> fetch origin <contracts_tag>` for a branch (community-contracts and confidential-contracts often generate against `master`).
+- Create a read-only worktree pinned at the ref:
+  ```
+  git -C <CONTRACTS_REPO_PATH> worktree add /tmp/oz-src-<slug> <contracts_tag>
+  ```
+  Use a slug that includes both the repo short-name and the ref so parallel runs don't collide: `oz-src-contracts-v5.7.0-rc.0`, `oz-src-community-master`, etc. Remove in Step 11.
+
+Note the docs slice from the PR body so pattern-scan globs stay scoped to that slice (`content/<slice>/**/*.mdx`) and don't false-positive on other slices.
+
+If auto-detection or fetching fails, stop with a clear error naming both the parsed repo and the candidate paths that were tried.
 
 ## Step 3 — Check out the PR branch locally
 
