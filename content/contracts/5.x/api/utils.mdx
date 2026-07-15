@@ -9283,7 +9283,7 @@ own storage:
   interval. Suitable when a strict cap on usage within a rolling window is required. Each successful consumption
   appends a checkpoint, making it a more expensive option with a larger storage footprint.
 
-### Limiter vs. entries ===
+### Limiter vs. entries
 
 Each storage struct is a _limiter_: it pairs a single, shared configuration (the `window`, together with the
 `capacity` of a [`RateLimiter.RefillingBucket`](#RateLimiter-RefillingBucket) or the `limit` of a [`RateLimiter.SlidingWindow`](#RateLimiter-SlidingWindow)) with a mapping of independent _entries_
@@ -9336,6 +9336,112 @@ function withdraw(uint256 amount) external {
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
 - [RateLimitExceeded()](#RateLimiter-RateLimitExceeded--)
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Structs</h3>
+<div className="font-mono">
+- [RefillingBucketItem](#RateLimiter-RefillingBucketItem)
+- [RefillingBucket](#RateLimiter-RefillingBucket)
+- [SlidingWindow](#RateLimiter-SlidingWindow)
+</div>
+</div>
+
+<a id="RateLimiter-RefillingBucketItem"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">struct RefillingBucketItem</p>
+<div className="flex flex-row items-center gap-2">
+<a className="peer" data-card href="#RateLimiter-RefillingBucketItem">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+The per-`key` state of a [`RefillingBucket`](#RateLimiter-RefillingBucket) entry.
+`lastUsed` and `lastTimepoint` record the used quantity and the time it was recorded at the entry's last
+update. The current state is reconstructed lazily from these two fields on read (see `state`), keeping storage
+cost constant at one packed slot per entry regardless of how many times the entry has been consumed.
+
+```solidity
+struct RefillingBucketItem {
+    uint208 lastUsed;
+    uint48 lastTimepoint;
+}
+```
+
+</div>
+</div>
+
+<a id="RateLimiter-RefillingBucket"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">struct RefillingBucket</p>
+<div className="flex flex-row items-center gap-2">
+<a className="peer" data-card href="#RateLimiter-RefillingBucket">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+A token-bucket limiter: shared configuration plus a mapping of independent per-`key` buckets.
+`capacity` and `window` are shared by every entry: each bucket has a maximum `capacity` and refills at a rate
+of `capacity / window` per second, so that an empty bucket fully refills in `window` seconds. `items` holds the
+individual buckets, each tracking its own consumption under its `key` (see [`RefillingBucketItem`](#RateLimiter-RefillingBucketItem)).
+
+```solidity
+struct RefillingBucket {
+    uint208 capacity;
+    uint48 window;
+    mapping(bytes32 => struct RateLimiter.RefillingBucketItem) items;
+}
+```
+
+</div>
+</div>
+
+<a id="RateLimiter-SlidingWindow"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">struct SlidingWindow</p>
+<div className="flex flex-row items-center gap-2">
+<a className="peer" data-card href="#RateLimiter-SlidingWindow">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+A moving-window limiter: shared configuration plus a mapping of independent per-`key` counters.
+`limit` and `window` are shared by every entry, and cap the cumulative consumption of each entry within any
+`window`-second interval. `items` holds the individual counters: each entry keeps its own checkpoint history
+(a `Checkpoints.Trace208`) under its `key`, recording the running cumulative total. An entry's current `used`
+quantity is the difference between its cumulative total at `block.timestamp` and at `block.timestamp - window`.
+
+<Callout>
+The cumulative total of each entry is stored as a `uint208`. Once it reaches `2²⁰⁸ - 1`, further
+consumption of that entry will revert in [`SafeCast`](/contracts/5.x/api/utils#SafeCast). This bound is unreachable for any realistic `limit`, but
+consumers should be aware of it.
+</Callout>
+
+<Callout>
+An entry's checkpoint history is not a reliable log of past consumptions--previous entries may be
+overwritten in place. The storage footprint of an entry grows with the number of
+[`tryConsume`](#RateLimiter-tryConsume-struct-RateLimiter-SlidingWindow-bytes32-uint256-) calls on that `key` that succeed with a non-zero
+`quantity`.
+</Callout>
+
+```solidity
+struct SlidingWindow {
+    uint208 limit;
+    uint48 window;
+    mapping(bytes32 => struct Checkpoints.Trace208) items;
+}
+```
+
 </div>
 </div>
 
@@ -21123,6 +21229,52 @@ _Available since v5.1._
 <div className="font-mono">
 - [MerkleTreeUpdateInvalidIndex(index, length)](#MerkleTree-MerkleTreeUpdateInvalidIndex-uint256-uint256-)
 - [MerkleTreeUpdateInvalidProof()](#MerkleTree-MerkleTreeUpdateInvalidProof--)
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Structs</h3>
+<div className="font-mono">
+- [Bytes32PushTree](#MerkleTree-Bytes32PushTree)
+</div>
+</div>
+
+<a id="MerkleTree-Bytes32PushTree"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">struct Bytes32PushTree</p>
+<div className="flex flex-row items-center gap-2">
+<a className="peer" data-card href="#MerkleTree-Bytes32PushTree">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+A complete `bytes32` Merkle tree.
+The `sides` and `zero` arrays are set to have a length equal to the depth of the tree during setup.
+Struct members have an underscore prefix indicating that they are "private" and should not be read or written to
+directly. Use the functions provided below instead. Modifying the struct manually may violate assumptions and
+lead to unexpected behavior.
+
+<Callout>
+The `root` and the updates history is not stored within the tree. Consider using a secondary structure to
+store a list of historical roots from the values returned from `setup` and `push` (e.g. a mapping, `BitMaps` or
+`Checkpoints`).
+</Callout>
+
+<Callout type="warn">
+Updating any of the tree's parameters after the first insertion will result in a corrupted tree.
+</Callout>
+
+```solidity
+struct Bytes32PushTree {
+    uint256 _nextLeafIndex;
+    bytes32[] _sides;
+    bytes32[] _zeros;
+}
+```
+
 </div>
 </div>
 
