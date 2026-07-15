@@ -25,11 +25,47 @@ dpm install 3.4.11   # or the baseline pinned in your project's daml.yaml
 
 ## Add OpenZeppelin packages
 
-OpenZeppelin's Canton library is distributed as Daml packages. Add the packages you need as dependencies of your Daml project, then build:
+OpenZeppelin's Canton library is distributed as Daml packages — each primitive is its own DAR, so you add only the ones you need.
+
+**1. Get the DARs.** Clone [`OpenZeppelin/canton-contracts`](https://github.com/OpenZeppelin/canton-contracts) and build the library packages:
+
+```bash
+git clone https://github.com/OpenZeppelin/canton-contracts.git
+cd canton-contracts
+dpm build --all
+```
+
+Each package's DAR lands in its own `.daml/dist/` directory (for example `pausable/.daml/dist/oz-pausable-0.1.0.dar`).
+
+**2. Declare them as data-dependencies.** In your project's `daml.yaml`, reference the built DARs under `data-dependencies` (not `dependencies`, which is for the SDK's own libraries):
+
+```yaml
+sdk-version: 3.4.11
+name: my-app
+source: daml
+version: 0.1.0
+dependencies:
+  - daml-prim
+  - daml-stdlib
+data-dependencies:
+  - ../canton-contracts/access-control/.daml/dist/oz-access-control-0.1.0.dar
+  - ../canton-contracts/ownable/.daml/dist/oz-ownable-0.1.0.dar
+  - ../canton-contracts/pausable/.daml/dist/oz-pausable-0.1.0.dar
+build-options:
+  - --target=2.1
+```
+
+Adjust the paths to wherever you cloned the repo, and pin the exact versions from its package manifests. If you only need one primitive, list only that DAR.
+
+**3. Import and build.** Import the modules you declared and build your project:
+
+```daml
+import OpenZeppelin.Pausable
+```
 
 ```bash
 # from your project root, with DPM on PATH
-dpm build --all
+dpm build
 ```
 
 Refer to each component's page for the module path to import and the templates and interfaces it exposes:
