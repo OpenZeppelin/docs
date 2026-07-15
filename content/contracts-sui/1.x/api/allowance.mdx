@@ -93,7 +93,7 @@ Shared, untyped escrow plus per-`(cap, coin)` allowance ledger. One vault holds 
 
 The pool is not a struct field: per-coin funds live as object-owned address balances at the vault's id address, readable via [`balance_value`](#spend_vault-balance_value). `allowances` is a `LinkedTable` so drains recover per-entry storage rebates.
 
-`granted_coin_types` is the owner-writable enumeration handle iterated by `revoke_all` and `renounce`. It is written only by a `set_allowance` call that creates an entry (permissionless deposits cannot grow it) and it grows only: `revoke<T>` never prunes `T`. It is not the drain-before-destroy list; enumerate pool coin types off-chain with `suix_getAllBalances`.
+`granted_coin_types` is the owner-writable enumeration handle iterated by `revoke_all` and `renounce`. It is written only by a `set_allowance` call that creates an entry (permissionless deposits cannot grow it) and it grows only: `revoke<T>` never prunes `T`. It is not the drain-before-destroy list; enumerate pool coin types off-chain with the GraphQL `balances` query.
 </APIItem>
 
 <APIItem
@@ -164,7 +164,7 @@ Aborts with `EWrongOwnerCap` if `cap.vault_id` does not match the vault.
 Emits `VaultDestroyed`.
 
 <Callout type="warn">
-`destroy` does not drain the pool. Funds still sitting in the vault's address balances strand permanently once the UID is deleted. Drain first, in a prior transaction: enumerate coin types off-chain with `suix_getAllBalances`, `squash<T>` any loose coins, `withdraw_all<T>` each type, wait one checkpoint and re-check, then destroy. See the [Spend Vault guide](/contracts-sui/1.x/spend-vault) for the full drain ritual.
+`destroy` does not drain the pool. Funds still sitting in the vault's address balances strand permanently once the UID is deleted. Drain first, in a prior transaction: enumerate coin types off-chain with the GraphQL `balances` query, `squash<T>` any loose coins, `withdraw_all<T>` each type, wait one checkpoint and re-check, then destroy. See the [Spend Vault guide](/contracts-sui/1.x/spend-vault) for the full drain ritual.
 </Callout>
 </APIItem>
 
@@ -418,7 +418,7 @@ Returns the settled `T` pool at the vault's address (start-of-checkpoint snapsho
   id="spend_vault-granted_coin_types"
   kind="public"
 >
-Returns exactly the coin-type set that `revoke_all` and `renounce` iterate. Grows-only, never pruned, and not the drain-before-destroy list (use `suix_getAllBalances` off-chain for that). Total; never aborts.
+Returns exactly the coin-type set that `revoke_all` and `renounce` iterate. Grows-only, never pruned, and not the drain-before-destroy list (use the GraphQL `balances` query off-chain for that). Total; never aborts.
 </APIItem>
 
 <APIItem

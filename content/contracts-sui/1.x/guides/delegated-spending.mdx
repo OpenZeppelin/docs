@@ -30,7 +30,7 @@ The tutorial is linear: one happy path, with a named failure checkpoint at each 
 
 ## Prerequisites
 
-Before starting, install the Sui CLI and the MVR CLI, and complete the Quickstart on the [Contracts for Sui overview](/contracts-sui/1.x) so you can publish packages and run PTBs against your target network. You need three funded accounts: an owner, a delegate, and a keeper operator. Familiarity with shared objects and programmable transaction blocks (PTBs) helps; the tutorial names the signing account before every transaction.
+Before starting, install the Sui CLI and complete the Quickstart on the [Contracts for Sui overview](/contracts-sui/1.x) so you can publish packages and run PTBs against your target network. You need three funded accounts: an owner, a delegate, and a keeper operator. Familiarity with shared objects and programmable transaction blocks (PTBs) helps; the tutorial names the signing account before every transaction.
 
 ## Add the dependency
 
@@ -100,21 +100,164 @@ sequenceDiagram
     PTB-->>Owner: OwnerCap
 ```
 
-Publish the package:
+Publishing is a one-time step, so write both modules in full before you run it. The sections below introduce the remaining functions one at a time, and a second `sui client publish` is rejected because the package is already published. Forcing one anyway mints a fresh `spend_vault`, and the vault you create in the next step would no longer match its `Vault` type. Add everything now, then publish once.
 
-```bash
-sui client publish
+<details>
+<summary>Complete `sources/delegation.move` and `sources/keeper.move`</summary>
+
+Each function is explained in its own section below; paste both files now so the single publish covers them.
+
+```move
+module my_defi::delegation;
+
+use openzeppelin_allowance::spend_vault::{Self, Vault, OwnerCap, SpenderCap};
+use sui::accumulator::AccumulatorRoot;
+use sui::clock::Clock;
+use sui::coin::Coin;
+
+public fun open_allowance<T>(
+    funding: Coin<T>,
+    budget: u64,
+    expires_at_ms: u64,
+    clock: &Clock,
+    ctx: &mut TxContext,
+): (Vault, SpenderCap, OwnerCap) {
+    let (mut vault, owner_cap) = spend_vault::new(ctx);
+    vault.deposit(funding, ctx);
+    let cap = vault.mint_cap(&owner_cap, ctx);
+    let cap_id = object::id(&cap);
+    vault.set_allowance<T>(&owner_cap, cap_id, budget, expires_at_ms, option::none(), clock, ctx);
+    (vault, cap, owner_cap)
+}
+
+public fun spend_to_address<T>(
+    vault: &mut Vault,
+    cap: &SpenderCap,
+    recipient: address,
+    amount: u64,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    vault.spend<T>(cap, amount, clock, ctx).send_funds(recipient);
+}
+
+public fun change_budget<T>(
+    vault: &mut Vault,
+    owner_cap: &OwnerCap,
+    cap_id: ID,
+    expected: u64,
+    new_budget: u64,
+    new_expires_at_ms: u64,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    vault.set_allowance<T>(
+        owner_cap,
+        cap_id,
+        new_budget,
+        new_expires_at_ms,
+        option::some(expected),
+        clock,
+        ctx,
+    );
+}
+
+public fun kill_authority(
+    vault: &mut Vault,
+    owner_cap: &OwnerCap,
+    cap_id: ID,
+    ctx: &mut TxContext,
+) {
+    vault.revoke_all(owner_cap, cap_id, ctx);
+}
+
+public fun drain_coin<T>(
+    vault: &mut Vault,
+    owner_cap: &OwnerCap,
+    root: &AccumulatorRoot,
+    ctx: &mut TxContext,
+): Coin<T> {
+    vault.withdraw_all<T>(owner_cap, root, ctx).into_coin(ctx)
+}
 ```
 
-Record the package IDs and account addresses. `$ALLOWANCE` is the published OpenZeppelin allowance package address on your target network:
+```move
+module my_defi::keeper;
+
+use openzeppelin_allowance::spend_vault::{Vault, SpenderCap};
+use sui::balance::Balance;
+use sui::clock::Clock;
+use sui::table::{Self, Table};
+
+#[error(code = 0)]
+const ENotOperator: vector<u8> = "Caller is not the service operator";
+#[error(code = 1)]
+const EWrongVaultForService: vector<u8> =
+    "Cap is bound to a different vault than this service serves";
+#[error(code = 2)]
+const ENotRegistered: vector<u8> = "No cap registered under this user address";
+
+public struct Service has key {
+    id: UID,
+    operator: address,
+    vault_id: ID,
+    caps: Table<address, SpenderCap>,
+}
+
+public fun create(vault_id: ID, ctx: &mut TxContext): Service {
+    Service {
+        id: object::new(ctx),
+        operator: ctx.sender(),
+        vault_id,
+        caps: table::new(ctx),
+    }
+}
+
+public fun share(service: Service) {
+    transfer::share_object(service);
+}
+
+public fun register(service: &mut Service, cap: SpenderCap, ctx: &mut TxContext) {
+    assert!(cap.spender_cap_vault_id() == service.vault_id, EWrongVaultForService);
+    service.caps.add(ctx.sender(), cap);
+}
+
+public fun execute_topup<T>(
+    service: &mut Service,
+    vault: &mut Vault,
+    user: address,
+    amount: u64,
+    clock: &Clock,
+    ctx: &mut TxContext,
+): Balance<T> {
+    assert!(ctx.sender() == service.operator, ENotOperator);
+    assert!(service.caps.contains(user), ENotRegistered);
+    let cap = service.caps.borrow(user);
+    vault.spend<T>(cap, amount, clock, ctx)
+}
+
+public fun unregister(service: &mut Service, ctx: &mut TxContext): SpenderCap {
+    assert!(service.caps.contains(ctx.sender()), ENotRegistered);
+    service.caps.remove(ctx.sender())
+}
+```
+
+</details>
+
+`openzeppelin_allowance` is a source dependency with no on-chain address (OpenZeppelin does not publish it on-chain), so pass `--with-unpublished-dependencies` to bundle its modules into yours. The publish emits a single package object holding all three modules, `delegation`, `keeper`, and `spend_vault` together:
+
+```bash
+sui client publish --with-unpublished-dependencies
+```
+
+Record the package ID and account addresses from the output. There is only one: `$PACKAGE` contains `spend_vault` alongside your own modules, so every library call below is addressed as `$PACKAGE::spend_vault`. Bundling gives you your own copy of the library at your own package id rather than an OpenZeppelin-hosted address, which also means your `Vault` type is distinct from any other integrator's:
 
 ```bash
 export PACKAGE=0x...
-export ALLOWANCE=0x...
 export OWNER=0x...
 export DELEGATE=0x...
 export OPERATOR=0x...
-export RPC_URL=https://fullnode.testnet.sui.io:443
+export GRAPHQL_URL=https://graphql.testnet.sui.io/graphql
 export EXPIRES_AT_MS=$((($(date +%s) + 30 * 24 * 60 * 60) * 1000))
 ```
 
@@ -131,7 +274,7 @@ sui client ptb \
     $EXPIRES_AT_MS \
     @0x6 \
   --assign r \
-  --move-call $ALLOWANCE::spend_vault::share r.0 \
+  --move-call $PACKAGE::spend_vault::share r.0 \
   --transfer-objects "[r.1]" @$DELEGATE \
   --transfer-objects "[r.2]" @$OWNER
 ```
@@ -158,7 +301,7 @@ The owner grants or updates later budgets by calling the library directly. Run t
 
 ```bash
 sui client ptb \
-  --move-call $ALLOWANCE::spend_vault::set_allowance \
+  --move-call $PACKAGE::spend_vault::set_allowance \
     "<0x2::sui::SUI>" \
     @$VAULT \
     @$OWNER_CAP \
@@ -169,51 +312,56 @@ sui client ptb \
     @0x6
 ```
 
-**Checkpoint.** Read the entry back with a dev-inspect call to the view functions:
+**Checkpoint.** Read the entry back with a dev-inspect call to each view function. Use `sui client call --dev-inspect --json`, which reports return values under `command_outputs`; `sui client ptb --dev-inspect` executes the same reads but prints no return values:
 
 ```bash
-sui client ptb --dev-inspect \
-  --move-call $ALLOWANCE::spend_vault::allowance "<0x2::sui::SUI>" @$VAULT @$SPENDER_CAP \
-  --move-call $ALLOWANCE::spend_vault::expiry "<0x2::sui::SUI>" @$VAULT @$SPENDER_CAP
+sui client call --dev-inspect --json \
+  --package $PACKAGE --module spend_vault --function allowance \
+  --type-args 0x2::sui::SUI --args $VAULT $SPENDER_CAP
+
+sui client call --dev-inspect --json \
+  --package $PACKAGE --module spend_vault --function expiry \
+  --type-args 0x2::sui::SUI --args $VAULT $SPENDER_CAP
 ```
 
-`allowance` must return `600000000` and `expiry` your `$EXPIRES_AT_MS`, and the transaction's `AllowanceSet` event must show `was_created: false`.
+Each prints its result at `command_outputs[0].returnValues[0].json`: `allowance` must return `600000000` and `expiry` your `$EXPIRES_AT_MS`. The transaction's `AllowanceSet` event must show `was_created: false`.
 
 ## Spend as the Delegate
 
-`spend` returns a `Balance<T>` with no `drop`: the caller must consume it in the same PTB. The delegate-facing wrapper converts it into a wallet `Coin<T>`. Add this to the same module:
+`spend` returns a `Balance<T>` with no `drop`: the caller must consume it in the same PTB. Because the library's pool already lives as [address balances](https://docs.sui.io/onchain-finance/asset-custody/address-balances), the delegate-facing wrapper hands the drawn balance straight to a recipient's address balance with `send_funds`, creating no new object. That wrapper is already in your module:
 
 ```move
 /// `spend` returns Balance<T>, which has no `drop`: it must be consumed in the
-/// same PTB. Here we turn it into a `Coin` and return it, so the caller (or the
-/// enclosing PTB) decides where the coin goes.
-public fun spend_to_wallet<T>(
+/// same PTB. Here we hand it straight to `recipient`'s address balance with
+/// `send_funds`, so the funds land natively with no `Coin` object created.
+public fun spend_to_address<T>(
     vault: &mut Vault,
     cap: &SpenderCap,
+    recipient: address,
     amount: u64,
     clock: &Clock,
     ctx: &mut TxContext,
-): Coin<T> {
-    let bal = vault.spend<T>(cap, amount, clock, ctx);
-    bal.into_coin(ctx)
+) {
+    vault.spend<T>(cap, amount, clock, ctx).send_funds(recipient);
 }
 ```
 
-Run the spend from the delegate account, drawing 0.15 SUI:
+Reach for a `Coin<T>` only when a downstream call needs a coin object to compose with: return `vault.spend<T>(...).into_coin(ctx)` instead and let the PTB route the object. The [Spend Vault guide](/contracts-sui/1.x/spend-vault#spending) shows both forms.
+
+Run the spend from the delegate account, drawing 0.15 SUI straight into the delegate's address balance:
 
 ```bash
 sui client ptb \
-  --move-call $PACKAGE::delegation::spend_to_wallet \
+  --move-call $PACKAGE::delegation::spend_to_address \
     "<0x2::sui::SUI>" \
     @$VAULT \
     @$SPENDER_CAP \
+    @$DELEGATE \
     150000000 \
-    @0x6 \
-  --assign payout \
-  --transfer-objects "[payout]" @$DELEGATE
+    @0x6
 ```
 
-**Checkpoint.** The transaction emits one `Spent` event: `amount: 150000000`, `remaining: 450000000` (the raw post-call budget), `caller` equal to `$DELEGATE`, and the `coin_type` and `cap_id` you expect. Re-running the dev-inspect from the previous step shows `allowance` decremented to `450000000`.
+**Checkpoint.** The transaction emits one `Spent` event: `amount: 150000000`, `remaining: 450000000` (the raw post-call budget), `caller` equal to `$DELEGATE`, and the `coin_type` and `cap_id` you expect. No new coin object is created: the 0.15 SUI merges into `$DELEGATE`'s SUI address balance. Re-running the dev-inspect from the previous step shows `allowance` decremented to `450000000`.
 
 ## Build the Keeper Service
 
@@ -223,7 +371,7 @@ Direct spending proves the primitive. The library's primary use case wraps it: a
 A `SpenderCap` is a bearer instrument and the library never checks who calls `spend`; any code that gets the library to see `&cap` exercises its full authority. A public function that borrows a custodied cap without a sender gate is world-drainable. The operator assert below is the integration's security boundary, not optional hygiene.
 </Callout>
 
-The service is pinned to exactly one vault id at creation; pinning up front is what makes the register-time binding check meaningful. Put it in a second module:
+The service is pinned to exactly one vault id at creation; pinning up front is what makes the register-time binding check meaningful. It is the second module you already published:
 
 ```move
 module my_defi::keeper;
@@ -314,7 +462,7 @@ sequenceDiagram
     Vault-->>Operator: Balance<T>
 ```
 
-After republishing (or upgrading) your package, create and share the service from the operator account, pinning it to your vault id:
+The `keeper` module is already part of `$PACKAGE`, so no further publish is needed. Create and share the service from the operator account, pinning it to your vault id:
 
 ```bash
 sui client ptb \
@@ -336,7 +484,7 @@ sui client ptb \
   --move-call $PACKAGE::keeper::register @$SERVICE @$SPENDER_CAP
 ```
 
-Now the operator drives a spend. `execute_topup` returns a `Balance<T>`, so the PTB converts it to a `Coin` and routes it. In a real keeper this would flow into a position; here it goes to the user. Run this from the operator account:
+Now the operator drives a spend. `execute_topup` returns a `Balance<T>`, which the PTB delivers straight to the user's address balance with `send_funds`, creating no coin object. In a real keeper this balance would flow into a position; here it tops up the user. Run this from the operator account:
 
 ```bash
 sui client ptb \
@@ -348,9 +496,7 @@ sui client ptb \
     50000000 \
     @0x6 \
   --assign bal \
-  --move-call 0x2::coin::from_balance "<0x2::sui::SUI>" bal \
-  --assign topup \
-  --transfer-objects "[topup]" @$DELEGATE
+  --move-call 0x2::balance::send_funds "<0x2::sui::SUI>" bal @$DELEGATE
 ```
 
 **Checkpoint.** The `Spent` event shows `remaining: 400000000` and `caller` equal to `$OPERATOR`: attribution follows whoever drove the spend, not the user who owns the budget. Repeating the PTB from the delegate or owner account aborts with the keeper module's `ENotOperator`, proving the gate holds.
@@ -359,7 +505,7 @@ sui client ptb \
 
 The owner keeps full control while the cap sits in custody, because every owner verb keys on the `cap_id` alone and never touches the cap object. `cap_id` is stable across create, raise, lower, suspend, and renew; a custodied cap keeps working with no re-registration.
 
-A plain `set_allowance` computed from an earlier read can clobber a spend sequenced in between. The race-free idiom is compare-and-set: read the current budget with `allowance<T>` off-chain (or in a previous transaction), then pass that value as `expected` when you write. If a spend landed after the read, the entry's `remaining` no longer matches and the write aborts [`EUnexpectedAllowance`](/contracts-sui/1.x/api/allowance#spend_vault-EUnexpectedAllowance) instead of silently overwriting; re-read and retry. Add this to `my_defi::delegation`:
+A plain `set_allowance` computed from an earlier read can clobber a spend sequenced in between. The race-free idiom is compare-and-set: read the current budget with `allowance<T>` off-chain (or in a previous transaction), then pass that value as `expected` when you write. If a spend landed after the read, the entry's `remaining` no longer matches and the write aborts [`EUnexpectedAllowance`](/contracts-sui/1.x/api/allowance#spend_vault-EUnexpectedAllowance) instead of silently overwriting; re-read and retry. The wrapper is already in `my_defi::delegation`:
 
 ```move
 /// Raise / lower / renew with the race-free CAS idiom. `expected` is the budget
@@ -418,7 +564,7 @@ Three conditions stop a spender, and the spender can tell them apart by abort co
 
 ## Emergency Stop
 
-This section is for *durably* stopping a cap that must not spend again, not for routine exit: to just recover funds the owner withdraws anytime (see Teardown), and with a single funder that is the whole story. When a cap is compromised or a keeper misbehaves and the pool could be re-funded, the order of operations matters. Kill that cap's authority first, then move the funds, in two separate transactions. `revoke_all` acts on the one cap you name; this tutorial has a single delegate, but a vault serving many spenders revokes each compromised cap, or `destroy`s the whole vault to end every cap at once. Add these two functions to `my_defi::delegation`, along with `use sui::accumulator::AccumulatorRoot;` in its imports:
+This section is for *durably* stopping a cap that must not spend again, not for routine exit: to just recover funds the owner withdraws anytime (see Teardown), and with a single funder that is the whole story. When a cap is compromised or a keeper misbehaves and the pool could be re-funded, the order of operations matters. Kill that cap's authority first, then move the funds, in two separate transactions. `revoke_all` acts on the one cap you name; this tutorial has a single delegate, but a vault serving many spenders revokes each compromised cap, or `destroy`s the whole vault to end every cap at once. These two functions are already in `my_defi::delegation`, which imports `use sui::accumulator::AccumulatorRoot;` for the second:
 
 ```move
 // Emergency stop, in TWO separate transactions, never one PTB.
@@ -456,7 +602,7 @@ Transaction 1, from the owner account. Note `revoke_all` takes the bare `cap_id`
 
 ```bash
 sui client ptb \
-  --move-call $ALLOWANCE::spend_vault::revoke_all @$VAULT @$OWNER_CAP @$SPENDER_CAP
+  --move-call $PACKAGE::spend_vault::revoke_all @$VAULT @$OWNER_CAP @$SPENDER_CAP
 ```
 
 **Checkpoint.** The transaction emits one `Revoked { was_present: true }` event per removed coin: for this vault, exactly one, for `0x2::sui::SUI`. Zero `Revoked` events means the `cap_id` missed; fix it before proceeding.
@@ -465,7 +611,7 @@ Transaction 2, later, from the owner account. `withdraw_all` returns a possibly-
 
 ```bash
 sui client ptb \
-  --move-call $ALLOWANCE::spend_vault::withdraw_all \
+  --move-call $PACKAGE::spend_vault::withdraw_all \
     "<0x2::sui::SUI>" \
     @$VAULT \
     @$OWNER_CAP \
@@ -486,21 +632,21 @@ If this fails with `InsufficientFundsForWithdraw`, a same-checkpoint pool change
 
 The drain ritual, in order:
 
-1. Enumerate every coin type at the vault address off-chain; the on-chain `granted_coin_types` view is not the drain list, since anyone can deposit coin types that were never granted:
+1. Enumerate every coin type at the vault address off-chain; the on-chain `granted_coin_types` view is not the drain list, since anyone can deposit coin types that were never granted. The GraphQL `balances` query reports the vault's address balances, including coin types deposited with a raw `send_funds` that no grant ever mentioned:
 
    ```bash
-   curl -s $RPC_URL -X POST -H 'Content-Type: application/json' \
-     -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"suix_getAllBalances\",\"params\":[\"$VAULT\"]}"
+   curl -s $GRAPHQL_URL -X POST -H 'Content-Type: application/json' \
+     -d "{\"query\":\"{ address(address: \\\"$VAULT\\\") { balances { nodes { coinType { repr } totalBalance } } } }\"}"
    ```
 
 2. If any loose `Coin` objects were transferred to the vault address (rather than deposited), recover them into the pool with `squash<T>`, passing the receiving ticket.
 3. Run the `withdraw_all` PTB from the previous section once per coin type reported.
-4. Wait one checkpoint, then re-run `suix_getAllBalances`; a same-checkpoint deposit is missed by the settled read, so the re-check is what catches late arrivals.
+4. Wait one checkpoint, then re-run the balances query; a same-checkpoint deposit is missed by the settled read, so the re-check is what catches late arrivals.
 5. Only when every balance reads zero, destroy the vault. Run this from the owner account; it consumes both the vault and the `OwnerCap`:
 
    ```bash
    sui client ptb \
-     --move-call $ALLOWANCE::spend_vault::destroy @$VAULT @$OWNER_CAP
+     --move-call $PACKAGE::spend_vault::destroy @$VAULT @$OWNER_CAP
    ```
 
 **Checkpoint.** The transaction emits `VaultDestroyed`. If the delegate's cap was never reclaimed and destroyed, it is now orphaned; its holder can dispose of it with [`delete_orphaned_cap`](/contracts-sui/1.x/api/allowance#spend_vault-delete_orphaned_cap) (ungated, but the cap is consumed by value, so only its owner can call it). In this tutorial the cap is still custodied by the keeper `Service`, so the delegate must first take it back with `keeper::unregister`, then call `delete_orphaned_cap`.
@@ -510,7 +656,7 @@ The drain ritual, in order:
 - Validate `spender_cap_vault_id` against the expected vault before taking any `SpenderCap` into custody.
 - Sender-gate every function that borrows a custodied cap; the library never checks the caller, so the custody layer's gate is the security boundary.
 - To recover funds, the owner withdraws anytime, unconditionally. To *durably* stop a compromised cap (so a later deposit cannot re-arm it), `revoke_all` that cap first in its own transaction, then `withdraw_all` per coin in a later one; never bundle them, and repeat per cap (or `destroy` the vault to end all).
-- Drain every coin type (off-chain enumeration via `suix_getAllBalances`, then `squash`, then `withdraw_all`, then wait a checkpoint and re-check) before calling `destroy`.
+- Drain every coin type (off-chain enumeration via the GraphQL `balances` query, then `squash`, then `withdraw_all`, then wait a checkpoint and re-check) before calling `destroy`.
 - Confirm `AllowanceSet.was_created == false` on every budget update; `true` on an intended update means a mistyped `cap_id` provisioned a phantom budget.
 - On budget-only CAS updates, re-read and re-pass the current expiry; the upsert always overwrites `expires_at_ms`.
 - Treat pool-short failures as execution statuses, not Move aborts: preflight `spend`, `withdraw`, and `withdraw_all` with a dry run instead of matching an abort code.

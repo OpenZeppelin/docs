@@ -6,7 +6,7 @@ title: Spend Vault
 The example code snippets used in this guide are experimental and have not been audited. They simply help exemplify usage of the OpenZeppelin Sui Package.
 </Callout>
 
-The `spend_vault` module provides a cap-keyed, multi-coin allowance primitive for Sui Move. A shared, key-only `Vault` escrows any number of coin types untyped: funds are not struct fields but object-owned address balances held at the vault's address, and a `LinkedTable` ledger maps each `(cap, coin type)` pair to a budget. Each `SpenderCap` is a **bearer instrument**: whoever presents it to `spend<T>` exercises the full authority of every budget keyed by that cap, regardless of who signed the transaction. One vault mints as many spender caps as the owner needs, typically one per delegate or user, each with its own per-`(cap, coin)` budgets. A single `OwnerCap` grants, revokes, and withdraws across all of them; funding is permissionless, and transferring the `OwnerCap` is owner rotation.
+The `spend_vault` module provides a cap-keyed, multi-coin allowance primitive for Sui Move. A shared, key-only `Vault` escrows any number of coin types untyped: funds are not struct fields but object-owned address balances held at the vault's address, and a [`LinkedTable`](https://docs.sui.io/references/framework/sui/linked_table) ledger maps each `(cap, coin type)` pair to a budget. Each `SpenderCap` is a **bearer instrument**: whoever presents it to `spend<T>` exercises the full authority of every budget keyed by that cap, regardless of who signed the transaction. One vault mints as many spender caps as the owner needs, typically one per delegate or user, each with its own per-`(cap, coin)` budgets. A single `OwnerCap` grants, revokes, and withdraws across all of them; funding is permissionless, and transferring the `OwnerCap` is owner rotation.
 
 ## Use cases
 
@@ -86,7 +86,23 @@ transfer::public_transfer(owner_cap, ctx.sender());
 
 ## Spending
 
-`spend<T>` draws exactly `amount` of `T` against the presented cap and returns a `Balance<T>`. `Balance<T>` has no `drop`, so it must be consumed in the same PTB. Convert it to a `Coin`, route it into another call, or deposit it somewhere:
+`spend<T>` draws exactly `amount` of `T` against the presented cap and returns a `Balance<T>`. `Balance<T>` has no `drop`, so it must be consumed in the same PTB. Because the vault's pool already lives as [address balances](https://docs.sui.io/onchain-finance/asset-custody/address-balances), the idiomatic delivery is to hand the drawn balance straight to a recipient's address balance with `balance::send_funds`, which creates no new object:
+
+```move
+/// Deliver the drawn balance directly to `recipient`'s address balance.
+public fun spend_to_address<T>(
+    vault: &mut Vault,
+    cap: &SpenderCap,
+    recipient: address,
+    amount: u64,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    vault.spend<T>(cap, amount, clock, ctx).send_funds(recipient);
+}
+```
+
+Reach for a `Coin<T>` only when you need an object to compose with Coin-based APIs, such as splitting, merging, or routing into another call. `into_coin` mints one from the drawn balance, at the cost of creating a new object:
 
 ```move
 /// `spend` returns Balance<T>, which has no `drop`: it must be consumed in the same PTB.
@@ -101,6 +117,8 @@ public fun spend_to_wallet<T>(
     bal.into_coin(ctx)
 }
 ```
+
+Both consume the `Balance<T>` in the same PTB: prefer `send_funds` for native address-balance delivery, where deposits merge into the recipient's balance with no object management, and fall back to `into_coin` when a downstream call specifically needs a `Coin` object.
 
 Spends are exact-amount-or-abort: there is no partial fill, and on any abort the pool and ledger are bit-identical to their pre-call state. The abort order is deterministic and documented as an integrator ABI: `EWrongVault`, then `ENoAllowance`, `EAllowanceExpired`, `EZeroAmount`, `EAllowanceExceeded`, then the framework failure modes; see the [Allowance API reference](/contracts-sui/1.x/api/allowance#spend_vault) for each condition. A pool shortfall is *not* a Move abort at all (see the [FAQ](#faq)).
 
@@ -244,7 +262,7 @@ Calling `delete_orphaned_cap` on a cap whose vault is still live strands every o
 
 `withdraw<T>` and `withdraw_all<T>` consult only the `OwnerCap` binding and the pool, never the ledger. No spender state can block owner exit, and withdrawing may leave live allowances unbacked (intended: budgets are ceilings, not reservations).
 
-`withdraw_all<T>` drains the **settled** (start-of-checkpoint) pool via the `AccumulatorRoot` (`0xacc`). A spend or withdraw earlier in the same checkpoint (including an earlier command in the same PTB) lowers the live pool below that snapshot, making the drain over-ask and fail with the `InsufficientFundsForWithdraw` execution status (retry-safe next checkpoint); a same-checkpoint deposit is simply missed.
+`withdraw_all<T>` drains the **settled** (start-of-checkpoint) pool via the [`AccumulatorRoot`](https://docs.sui.io/references/framework/sui/accumulator) (`0xacc`). A spend or withdraw earlier in the same checkpoint (including an earlier command in the same PTB) lowers the live pool below that snapshot, making the drain over-ask and fail with the `InsufficientFundsForWithdraw` execution status (retry-safe next checkpoint); a same-checkpoint deposit is simply missed.
 
 Getting funds out needs no ceremony: `withdraw` / `withdraw_all` anytime, and you are done. The ordering below matters only when you also need a *durable* kill of a still-live cap. Because deposits are permissionless, a drained pool can be re-funded (by anyone, or by you later) and re-arm still-live budgets, so `withdraw_all` alone is a reversible freeze, not a kill. When a cap is compromised and the pool could be re-funded, revoke it first, then drain, in separate transactions. `revoke_all` ends one cap's authority across all its coins, so repeat it per compromised cap, or `destroy` the vault to end every cap at once:
 
@@ -265,7 +283,7 @@ let bal = vault.withdraw_all<T>(&owner_cap, root, ctx);
 
 Bundling them into one PTB is wrong in both orders: a pool-short `withdraw_all` would revert the `revoke_all` along with it.
 
-To destroy a vault, follow the drain ritual: enumerate the vault address's coin types off-chain with `suix_getAllBalances`, `squash<T>` any stray coins sent as owned objects, `withdraw_all<T>` each type, wait one checkpoint and re-check, then `destroy` in a separate transaction.
+To destroy a vault, follow the drain ritual: enumerate the vault address's coin types off-chain with the GraphQL `balances` query, `squash<T>` any stray coins sent as owned objects, `withdraw_all<T>` each type, wait one checkpoint and re-check, then `destroy` in a separate transaction.
 
 <Callout type="warn">
 `destroy` deletes the vault and owner cap and drains the allowance ledger, but it does **not** drain the pool, and no on-chain guard stops a premature destroy. Any funds still sitting in the vault's address balances strand permanently: the UID is gone and there is no recovery path. Drain every coin type first, in a prior transaction.
@@ -282,7 +300,7 @@ To destroy a vault, follow the drain ritual: enumerate the vault address's coin 
 
 | Mistake | What happens | How to fix |
 |---|---|---|
-| `destroy` before draining every coin type | Remaining pool funds strand permanently at the dead vault address | Follow the drain ritual: `suix_getAllBalances`, `squash`, `withdraw_all` per type, wait a checkpoint, then destroy. |
+| `destroy` before draining every coin type | Remaining pool funds strand permanently at the dead vault address | Follow the drain ritual: GraphQL `balances` query, `squash`, `withdraw_all` per type, wait a checkpoint, then destroy. |
 | Relying on `withdraw_all` to *permanently* stop a live cap | Not durable: a permissionless deposit re-arms the still-live budgets (a plain exit is fine, this just is not a kill) | For a durable kill, `revoke_all` (or `destroy`) first, then `withdraw_all` in a later transaction. |
 | Bundling `revoke_all` with `withdraw_all` in one PTB | A pool-short `withdraw_all` reverts the `revoke_all` with it, leaving the cap live | Run `revoke_all` in its own transaction; drain in a later one. |
 | Ungated public function borrowing a custodied cap | World-drainable: anyone can route spends through it | Sender-gate the borrow (assert the operator) before calling `spend`. |
