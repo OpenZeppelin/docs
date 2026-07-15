@@ -18,6 +18,8 @@ There are a few core contracts that implement the behavior specified in the ERC-
 Additionally there are multiple custom extensions, including:
 
 * [`ERC20Permit`](#ERC20Permit): gasless approval of tokens (standardized as ERC-2612).
+* [`ERC3009`](#ERC3009): gasless transfer of tokens via signed authorizations (standardized as ERC-3009).
+* [`ERC20TransferAuthorization`](#ERC20TransferAuthorization): variant of [`ERC3009`](#ERC3009) using keyed sequential nonces and supporting ERC-1271 signatures.
 * [`ERC20Bridgeable`](#ERC20Bridgeable): compatibility with crosschain bridges through ERC-7802.
 * [`ERC20Burnable`](#ERC20Burnable): destruction of own tokens.
 * [`ERC20Capped`](#ERC20Capped): enforcement of a cap to the total supply when minting tokens.
@@ -56,6 +58,14 @@ This core set of contracts is designed to be unopinionated, allowing developers 
 
 [`ERC20Permit`](#ERC20Permit)
 
+[`IERC3009`](/contracts/5.x/api/interfaces#IERC3009)
+
+[`IERC3009Cancel`](/contracts/5.x/api/interfaces#IERC3009Cancel)
+
+[`ERC3009`](#ERC3009)
+
+[`ERC20TransferAuthorization`](#ERC20TransferAuthorization)
+
 [`ERC20Bridgeable`](#ERC20Bridgeable)
 
 [`ERC20Burnable`](#ERC20Burnable)
@@ -90,7 +100,7 @@ This core set of contracts is designed to be unopinionated, allowing developers 
 
 ## `ERC20` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC20/ERC20.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/token/ERC20/ERC20.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -574,7 +584,7 @@ Does not emit an [`IERC20.Approval`](#IERC20-Approval-address-address-uint256-) 
 
 ## `IERC20` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC20/IERC20.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/token/ERC20/IERC20.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -781,7 +791,7 @@ a call to [`ERC20.approve`](#ERC20-approve-address-uint256-). `value` is the new
 
 ## `ERC1363` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC20/extensions/ERC1363.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/token/ERC20/extensions/ERC1363.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1075,7 +1085,7 @@ Indicates a failure within the [`ERC20.approve`](#ERC20-approve-address-uint256-
 
 ## `ERC20Burnable` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC20/extensions/ERC20Burnable.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/token/ERC20/extensions/ERC20Burnable.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1186,7 +1196,7 @@ See [`ERC20._burn`](#ERC20-_burn-address-uint256-) and [`ERC20.allowance`](#ERC2
 
 Requirements:
 
-- the caller must have allowance for ``accounts``'s tokens of at least
+- the caller must have allowance for `account`'s tokens of at least
 `value`.
 
 </div>
@@ -1198,7 +1208,7 @@ Requirements:
 
 ## `ERC20Capped` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC20/extensions/ERC20Capped.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/token/ERC20/extensions/ERC20Capped.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1367,7 +1377,7 @@ The supplied cap is not a valid cap.
 
 ## `ERC20Crosschain` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC20/extensions/ERC20Crosschain.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/token/ERC20/extensions/ERC20Crosschain.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1554,7 +1564,7 @@ Variant of [`BridgeFungible.crosschainTransfer`](/contracts/5.x/api/crosschain#B
 
 ## `ERC20FlashMint` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC20/extensions/ERC20FlashMint.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/token/ERC20/extensions/ERC20FlashMint.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1696,7 +1706,7 @@ loans.
 <div className="px-4">
 
 Returns the fee applied when doing flash loans. By default this
-implementation has 0 fees. This function can be overloaded to make
+implementation has 0 fees. This function can be overridden to make
 the flash loan mechanism deflationary.
 
 </div>
@@ -1716,7 +1726,7 @@ the flash loan mechanism deflationary.
 
 Returns the receiver address of the flash fee. By default this
 implementation returns the address(0) which means the fee amount will be burnt.
-This function can be overloaded to change the fee receiver.
+This function can be overridden to change the fee receiver.
 
 </div>
 </div>
@@ -1799,7 +1809,7 @@ The receiver of a flashloan is not a valid [`IERC3156FlashBorrower.onFlashLoan`]
 
 ## `ERC20Pausable` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC20/extensions/ERC20Pausable.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/token/ERC20/extensions/ERC20Pausable.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1931,7 +1941,7 @@ Requirements:
 
 ## `ERC20Permit` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC20/extensions/ERC20Permit.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/token/ERC20/extensions/ERC20Permit.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2172,13 +2182,275 @@ Mismatched signature.
 </div>
 </div>
 
+<a id="ERC20TransferAuthorization"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC20TransferAuthorization` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/token/ERC20/extensions/ERC20TransferAuthorization.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20TransferAuthorization.sol";
+```
+
+Variant of `ERC-3009` that uses keyed sequential nonces as defined in [`NoncesKeyed`](/contracts/5.x/api/utils#NoncesKeyed).
+
+<Callout>
+This extension uses keyed sequential nonces following the
+[ERC-4337 semi-abstracted nonce system](https://eips.ethereum.org/EIPS/eip-4337#semi-abstracted-nonce-support).
+The #ERC20FlashMint-RETURN_VALUE-bytes32 nonce field is interpreted as a 192-bit key packed with a 64-bit sequence. Nonces with
+different keys are independent and can be submitted in parallel without ordering constraints, while nonces
+sharing the same key must be used sequentially. This is unlike [`ERC20Permit`](#ERC20Permit) which uses a single global
+sequential nonce.
+</Callout>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [authorizationState(authorizer, nonce)](#ERC20TransferAuthorization-authorizationState-address-bytes32-)
+- [transferWithAuthorization(from, to, value, validAfter, validBefore, nonce, signature)](#ERC20TransferAuthorization-transferWithAuthorization-address-address-uint256-uint256-uint256-bytes32-bytes-)
+- [receiveWithAuthorization(from, to, value, validAfter, validBefore, nonce, signature)](#ERC20TransferAuthorization-receiveWithAuthorization-address-address-uint256-uint256-uint256-bytes32-bytes-)
+- [cancelAuthorization(authorizer, nonce, signature)](#ERC20TransferAuthorization-cancelAuthorization-address-bytes32-bytes-)
+- [_consumeNonce(authorizer, nonce)](#ERC20TransferAuthorization-_consumeNonce-address-bytes32-)
+<details>
+<summary>NoncesKeyed</summary>
+
+- [nonces(owner, key)](#NoncesKeyed-nonces-address-uint192-)
+- [_useNonce(owner, key)](#NoncesKeyed-_useNonce-address-uint192-)
+- [_useCheckedNonce(owner, keyNonce)](#NoncesKeyed-_useCheckedNonce-address-uint256-)
+- [_useCheckedNonce(owner, key, nonce)](#NoncesKeyed-_useCheckedNonce-address-uint192-uint64-)
+
+</details>
+<details>
+<summary>Nonces</summary>
+
+- [nonces(owner)](#Nonces-nonces-address-)
+- [_useNonce(owner)](#Nonces-_useNonce-address-)
+
+</details>
+<details>
+<summary>ERC3009</summary>
+
+- [transferWithAuthorization(from, to, value, validAfter, validBefore, nonce, v, r, s)](#ERC3009-transferWithAuthorization-address-address-uint256-uint256-uint256-bytes32-uint8-bytes32-bytes32-)
+- [receiveWithAuthorization(from, to, value, validAfter, validBefore, nonce, v, r, s)](#ERC3009-receiveWithAuthorization-address-address-uint256-uint256-uint256-bytes32-uint8-bytes32-bytes32-)
+- [cancelAuthorization(authorizer, nonce, v, r, s)](#ERC3009-cancelAuthorization-address-bytes32-uint8-bytes32-bytes32-)
+- [_transferWithAuthorization(from, to, value, validAfter, validBefore, nonce)](#ERC3009-_transferWithAuthorization-address-address-uint256-uint256-uint256-bytes32-)
+- [_cancelAuthorization(authorizer, nonce)](#ERC3009-_cancelAuthorization-address-bytes32-)
+- [_checkValidity(validAfter, validBefore)](#ERC3009-_checkValidity-uint256-uint256-)
+
+</details>
+<details>
+<summary>EIP712</summary>
+
+- [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
+- [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
+- [eip712Domain()](#EIP712-eip712Domain--)
+- [_EIP712Name()](#EIP712-_EIP712Name--)
+- [_EIP712Version()](#EIP712-_EIP712Version--)
+
+</details>
+<details>
+<summary>ERC20</summary>
+
+- [name()](#ERC20-name--)
+- [symbol()](#ERC20-symbol--)
+- [decimals()](#ERC20-decimals--)
+- [totalSupply()](#ERC20-totalSupply--)
+- [balanceOf(account)](#ERC20-balanceOf-address-)
+- [transfer(to, value)](#ERC20-transfer-address-uint256-)
+- [allowance(owner, spender)](#ERC20-allowance-address-address-)
+- [approve(spender, value)](#ERC20-approve-address-uint256-)
+- [transferFrom(from, to, value)](#ERC20-transferFrom-address-address-uint256-)
+- [_transfer(from, to, value)](#ERC20-_transfer-address-address-uint256-)
+- [_update(from, to, value)](#ERC20-_update-address-address-uint256-)
+- [_mint(account, value)](#ERC20-_mint-address-uint256-)
+- [_burn(account, value)](#ERC20-_burn-address-uint256-)
+- [_approve(owner, spender, value)](#ERC20-_approve-address-address-uint256-)
+- [_approve(owner, spender, value, emitEvent)](#ERC20-_approve-address-address-uint256-bool-)
+- [_spendAllowance(owner, spender, value)](#ERC20-_spendAllowance-address-address-uint256-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+<details>
+<summary>IERC3009Cancel</summary>
+
+- [AuthorizationCanceled(authorizer, nonce)](#IERC3009Cancel-AuthorizationCanceled-address-bytes32-)
+
+</details>
+<details>
+<summary>IERC3009</summary>
+
+- [AuthorizationUsed(authorizer, nonce)](#IERC3009-AuthorizationUsed-address-bytes32-)
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
+- [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
+
+</details>
+<details>
+<summary>IERC20</summary>
+
+- [Transfer(from, to, value)](#IERC20-Transfer-address-address-uint256-)
+- [Approval(owner, spender, value)](#IERC20-Approval-address-address-uint256-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+<details>
+<summary>Nonces</summary>
+
+- [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
+
+</details>
+<details>
+<summary>ERC3009</summary>
+
+- [ERC3009InvalidSignature()](#ERC3009-ERC3009InvalidSignature--)
+- [ERC3009InvalidAuthorizationTime(validAfter, validBefore)](#ERC3009-ERC3009InvalidAuthorizationTime-uint256-uint256-)
+- [ERC3009UsedAuthorization(authorizer, nonce)](#ERC3009-ERC3009UsedAuthorization-address-bytes32-)
+
+</details>
+<details>
+<summary>IERC20Errors</summary>
+
+- [ERC20InsufficientBalance(sender, balance, needed)](#IERC20Errors-ERC20InsufficientBalance-address-uint256-uint256-)
+- [ERC20InvalidSender(sender)](#IERC20Errors-ERC20InvalidSender-address-)
+- [ERC20InvalidReceiver(receiver)](#IERC20Errors-ERC20InvalidReceiver-address-)
+- [ERC20InsufficientAllowance(spender, allowance, needed)](#IERC20Errors-ERC20InsufficientAllowance-address-uint256-uint256-)
+- [ERC20InvalidApprover(approver)](#IERC20Errors-ERC20InvalidApprover-address-)
+- [ERC20InvalidSpender(spender)](#IERC20Errors-ERC20InvalidSpender-address-)
+
+</details>
+</div>
+</div>
+
+<a id="ERC20TransferAuthorization-authorizationState-address-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">authorizationState(address authorizer, bytes32 nonce) → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC20TransferAuthorization-authorizationState-address-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See [`IERC3009.authorizationState`](/contracts/5.x/api/interfaces#IERC3009-authorizationState-address-bytes32-).
+
+<Callout>
+Returning `false` does not guarantee that the authorization is currently executable.
+With keyed sequential nonces, a nonce may be blocked by a predecessor in the same key's sequence
+that has not yet been consumed.
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC20TransferAuthorization-transferWithAuthorization-address-address-uint256-uint256-uint256-bytes32-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, bytes signature)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC20TransferAuthorization-transferWithAuthorization-address-address-uint256-uint256-uint256-bytes32-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Same as [`ERC20TransferAuthorization.transferWithAuthorization`](#ERC20TransferAuthorization-transferWithAuthorization-address-address-uint256-uint256-uint256-bytes32-bytes-) but with a bytes signature.
+
+</div>
+</div>
+
+<a id="ERC20TransferAuthorization-receiveWithAuthorization-address-address-uint256-uint256-uint256-bytes32-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">receiveWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, bytes signature)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC20TransferAuthorization-receiveWithAuthorization-address-address-uint256-uint256-uint256-bytes32-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Same as [`ERC20TransferAuthorization.receiveWithAuthorization`](#ERC20TransferAuthorization-receiveWithAuthorization-address-address-uint256-uint256-uint256-bytes32-bytes-) but with a bytes signature.
+
+</div>
+</div>
+
+<a id="ERC20TransferAuthorization-cancelAuthorization-address-bytes32-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">cancelAuthorization(address authorizer, bytes32 nonce, bytes signature)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC20TransferAuthorization-cancelAuthorization-address-bytes32-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Same as [`ERC20TransferAuthorization.cancelAuthorization`](#ERC20TransferAuthorization-cancelAuthorization-address-bytes32-bytes-) but with a bytes signature.
+
+<Callout>
+Due to the keyed sequential nonce model, only the next nonce in a given key's sequence
+can be cancelled. It is not possible to directly cancel a future nonce whose predecessors in the
+same key have not yet been consumed or cancelled. To invalidate a future authorization, all
+preceding nonces in the same key must first be consumed or cancelled in order.
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC20TransferAuthorization-_consumeNonce-address-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_consumeNonce(address authorizer, bytes32 nonce)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC20TransferAuthorization-_consumeNonce-address-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Override the internal nonce consumption logic to use the keyed sequential nonces from [`NoncesKeyed`](/contracts/5.x/api/utils#NoncesKeyed).
+
+<Callout>
+This override does not call `super._consumeNonce`, so any sibling override added by another extension
+is skipped under C3 linearization. Integrators combining this contract with extensions that introduce
+additional side effects through `_consumeNonce` must reintroduce those side effects themselves.
+</Callout>
+
+</div>
+</div>
+
 <a id="ERC20Votes"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
 ## `ERC20Votes` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC20/extensions/ERC20Votes.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/token/ERC20/extensions/ERC20Votes.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2227,7 +2499,7 @@ requires users to delegate to themselves in order to activate checkpoints and ha
 - [_transferVotingUnits(from, to, amount)](#Votes-_transferVotingUnits-address-address-uint256-)
 - [_moveDelegateVotes(from, to, amount)](#Votes-_moveDelegateVotes-address-address-uint256-)
 - [_numCheckpoints(account)](#Votes-_numCheckpoints-address-)
-- [_checkpoints(account, pos)](#Votes-_checkpoints-address-uint32-)
+- [_checkpoints(account, index)](#Votes-_checkpoints-address-uint32-)
 
 </details>
 <details>
@@ -2304,7 +2576,6 @@ requires users to delegate to themselves in order to activate checkpoints and ha
 <details>
 <summary>Votes</summary>
 
-- [ERC6372InconsistentClock()](#Votes-ERC6372InconsistentClock--)
 - [ERC5805FutureLookup(timepoint, clock)](#Votes-ERC5805FutureLookup-uint256-uint48-)
 
 </details>
@@ -2456,7 +2727,7 @@ Total supply cap has been exceeded, introducing a risk of votes overflowing.
 
 ## `ERC20Wrapper` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC20/extensions/ERC20Wrapper.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/token/ERC20/extensions/ERC20Wrapper.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2569,6 +2840,14 @@ for recovering value accrued to the wrapper.
 </div>
 <div className="px-4">
 
+See [`IERC20Metadata`](#IERC20Metadata). Uses [`Math.ternary`](/contracts/5.x/api/utils#Math-ternary-bool-uint256-uint256-) for branchless selection, which evaluates both branches. This is safe
+because the default [`ERC20.decimals`](#ERC20-decimals--) is commonly a constant.
+
+<Callout>
+If a derived contract overrides `super.decimals()` to read from
+storage, it should also override this function and use a conditional ternary instead.
+</Callout>
+
 </div>
 </div>
 
@@ -2664,7 +2943,7 @@ The underlying token couldn't be wrapped.
 
 ## `ERC4626` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC20/extensions/ERC4626.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/token/ERC20/extensions/ERC4626.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3465,7 +3744,7 @@ Attempted to redeem more shares than the max amount for `owner`.
 
 ## `IERC20Metadata` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC20/extensions/IERC20Metadata.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/token/ERC20/extensions/IERC20Metadata.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3567,7 +3846,7 @@ Returns the decimals places of the token.
 
 ## `IERC20Permit` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC20/extensions/IERC20Permit.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/token/ERC20/extensions/IERC20Permit.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3706,7 +3985,7 @@ Returns the domain separator used in the encoding of the signature for [`ERC20Pe
 
 ## `ERC20Bridgeable` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC20/extensions/draft-ERC20Bridgeable.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/token/ERC20/extensions/draft-ERC20Bridgeable.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3894,7 +4173,7 @@ customizing the list of allowed senders. Consider using [`AccessControl`](/contr
 
 ## `ERC20TemporaryApproval` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC20/extensions/draft-ERC20TemporaryApproval.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/token/ERC20/extensions/draft-ERC20TemporaryApproval.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -4080,13 +4359,370 @@ is enough to cover the spending.
 </div>
 </div>
 
+<a id="ERC3009"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC3009` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/token/ERC20/extensions/draft-ERC3009.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/contracts/token/ERC20/extensions/draft-ERC3009.sol";
+```
+
+Implementation of the ERC-3009 Transfer With Authorization extension allowing
+transfers to be made via signatures, as defined in [ERC-3009](https://eips.ethereum.org/EIPS/eip-3009).
+
+Adds the [`ERC20TransferAuthorization.transferWithAuthorization`](#ERC20TransferAuthorization-transferWithAuthorization-address-address-uint256-uint256-uint256-bytes32-bytes-) and [`ERC20TransferAuthorization.receiveWithAuthorization`](#ERC20TransferAuthorization-receiveWithAuthorization-address-address-uint256-uint256-uint256-bytes32-bytes-) methods, which
+can be used to change an account's ERC-20 balance by presenting a message signed
+by the account. By not relying on [`IERC20.approve`](#IERC20-approve-address-uint256-) and [`IERC20.transferFrom`](#IERC20-transferFrom-address-address-uint256-), the
+token holder account doesn't need to send a transaction, and thus is not required
+to hold native currency (e.g. ETH) at all.
+
+<Callout>
+To enable both timestamp-based and block-number-based validity windows, `validAfter` and
+`validBefore` use a dual-clock encoding mirroring [`ERC4337Utils`](/contracts/5.x/api/account#ERC4337Utils). Bit 47 ([`ERC4337Utils.BLOCK_RANGE_FLAG`](/contracts/5.x/api/account#ERC4337Utils-BLOCK_RANGE_FLAG-uint48)) acts as a
+clock selector: when *both* `validAfter` and `validBefore` have this bit set, the values are interpreted
+as block numbers; otherwise they are interpreted as Unix timestamps (the default, matching the ERC-3009
+specification). Since the current clock fits in 48 bits, any bit set at position 47 or above (other than
+the active clock-mode flag) makes the value point to an unreachable future. See [`ERC3009._checkValidity`](#ERC3009-_checkValidity-uint256-uint256-).
+</Callout>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [authorizationState(authorizer, nonce)](#ERC3009-authorizationState-address-bytes32-)
+- [transferWithAuthorization(from, to, value, validAfter, validBefore, nonce, v, r, s)](#ERC3009-transferWithAuthorization-address-address-uint256-uint256-uint256-bytes32-uint8-bytes32-bytes32-)
+- [receiveWithAuthorization(from, to, value, validAfter, validBefore, nonce, v, r, s)](#ERC3009-receiveWithAuthorization-address-address-uint256-uint256-uint256-bytes32-uint8-bytes32-bytes32-)
+- [cancelAuthorization(authorizer, nonce, v, r, s)](#ERC3009-cancelAuthorization-address-bytes32-uint8-bytes32-bytes32-)
+- [_transferWithAuthorization(from, to, value, validAfter, validBefore, nonce)](#ERC3009-_transferWithAuthorization-address-address-uint256-uint256-uint256-bytes32-)
+- [_cancelAuthorization(authorizer, nonce)](#ERC3009-_cancelAuthorization-address-bytes32-)
+- [_consumeNonce(authorizer, nonce)](#ERC3009-_consumeNonce-address-bytes32-)
+- [_checkValidity(validAfter, validBefore)](#ERC3009-_checkValidity-uint256-uint256-)
+<details>
+<summary>EIP712</summary>
+
+- [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
+- [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
+- [eip712Domain()](#EIP712-eip712Domain--)
+- [_EIP712Name()](#EIP712-_EIP712Name--)
+- [_EIP712Version()](#EIP712-_EIP712Version--)
+
+</details>
+<details>
+<summary>ERC20</summary>
+
+- [name()](#ERC20-name--)
+- [symbol()](#ERC20-symbol--)
+- [decimals()](#ERC20-decimals--)
+- [totalSupply()](#ERC20-totalSupply--)
+- [balanceOf(account)](#ERC20-balanceOf-address-)
+- [transfer(to, value)](#ERC20-transfer-address-uint256-)
+- [allowance(owner, spender)](#ERC20-allowance-address-address-)
+- [approve(spender, value)](#ERC20-approve-address-uint256-)
+- [transferFrom(from, to, value)](#ERC20-transferFrom-address-address-uint256-)
+- [_transfer(from, to, value)](#ERC20-_transfer-address-address-uint256-)
+- [_update(from, to, value)](#ERC20-_update-address-address-uint256-)
+- [_mint(account, value)](#ERC20-_mint-address-uint256-)
+- [_burn(account, value)](#ERC20-_burn-address-uint256-)
+- [_approve(owner, spender, value)](#ERC20-_approve-address-address-uint256-)
+- [_approve(owner, spender, value, emitEvent)](#ERC20-_approve-address-address-uint256-bool-)
+- [_spendAllowance(owner, spender, value)](#ERC20-_spendAllowance-address-address-uint256-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+<details>
+<summary>IERC3009Cancel</summary>
+
+- [AuthorizationCanceled(authorizer, nonce)](#IERC3009Cancel-AuthorizationCanceled-address-bytes32-)
+
+</details>
+<details>
+<summary>IERC3009</summary>
+
+- [AuthorizationUsed(authorizer, nonce)](#IERC3009-AuthorizationUsed-address-bytes32-)
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
+- [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
+
+</details>
+<details>
+<summary>IERC20</summary>
+
+- [Transfer(from, to, value)](#IERC20-Transfer-address-address-uint256-)
+- [Approval(owner, spender, value)](#IERC20-Approval-address-address-uint256-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [ERC3009InvalidSignature()](#ERC3009-ERC3009InvalidSignature--)
+- [ERC3009InvalidAuthorizationTime(validAfter, validBefore)](#ERC3009-ERC3009InvalidAuthorizationTime-uint256-uint256-)
+- [ERC3009UsedAuthorization(authorizer, nonce)](#ERC3009-ERC3009UsedAuthorization-address-bytes32-)
+<details>
+<summary>IERC20Errors</summary>
+
+- [ERC20InsufficientBalance(sender, balance, needed)](#IERC20Errors-ERC20InsufficientBalance-address-uint256-uint256-)
+- [ERC20InvalidSender(sender)](#IERC20Errors-ERC20InvalidSender-address-)
+- [ERC20InvalidReceiver(receiver)](#IERC20Errors-ERC20InvalidReceiver-address-)
+- [ERC20InsufficientAllowance(spender, allowance, needed)](#IERC20Errors-ERC20InsufficientAllowance-address-uint256-uint256-)
+- [ERC20InvalidApprover(approver)](#IERC20Errors-ERC20InvalidApprover-address-)
+- [ERC20InvalidSpender(spender)](#IERC20Errors-ERC20InvalidSpender-address-)
+
+</details>
+</div>
+</div>
+
+<a id="ERC3009-authorizationState-address-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">authorizationState(address authorizer, bytes32 nonce) → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC3009-authorizationState-address-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns whether the `nonce` has been used by `authorizer`. A `true` value means the authorization
+has already been consumed (either transferred or canceled) and can no longer be used; a `false` value
+means the nonce is still available.
+
+Nonces are randomly generated 32-byte values unique to the authorizer's address.
+
+</div>
+</div>
+
+<a id="ERC3009-transferWithAuthorization-address-address-uint256-uint256-uint256-bytes32-uint8-bytes32-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC3009-transferWithAuthorization-address-address-uint256-uint256-uint256-bytes32-uint8-bytes32-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Executes a transfer with a signed authorization.
+
+Requirements:
+
+* `validAfter` must be less than the current block timestamp.
+* `validBefore` must be greater than the current block timestamp.
+* `nonce` must not have been used by the `from` account.
+* the signature must be valid for the authorization.
+
+</div>
+</div>
+
+<a id="ERC3009-receiveWithAuthorization-address-address-uint256-uint256-uint256-bytes32-uint8-bytes32-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">receiveWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC3009-receiveWithAuthorization-address-address-uint256-uint256-uint256-bytes32-uint8-bytes32-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Receives a transfer with a signed authorization from the payer.
+
+Includes an additional check to ensure that the payee's address (`to`) matches the caller
+to prevent front-running attacks.
+
+Requirements:
+
+* `to` must be the caller of this function.
+* `validAfter` must be less than the current block timestamp.
+* `validBefore` must be greater than the current block timestamp.
+* `nonce` must not have been used by the `from` account.
+* the signature must be valid for the authorization.
+
+</div>
+</div>
+
+<a id="ERC3009-cancelAuthorization-address-bytes32-uint8-bytes32-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">cancelAuthorization(address authorizer, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#ERC3009-cancelAuthorization-address-bytes32-uint8-bytes32-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Cancels an authorization.
+
+Requirements:
+
+* `nonce` must not have been used by the `authorizer` account.
+* the signature must be valid for the cancellation.
+
+</div>
+</div>
+
+<a id="ERC3009-_transferWithAuthorization-address-address-uint256-uint256-uint256-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC3009-_transferWithAuthorization-address-address-uint256-uint256-uint256-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Performs the time and nonce checks, then executes the transfer.
+
+</div>
+</div>
+
+<a id="ERC3009-_cancelAuthorization-address-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_cancelAuthorization(address authorizer, bytes32 nonce)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC3009-_cancelAuthorization-address-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Consumes the nonce and emits the cancellation event.
+
+</div>
+</div>
+
+<a id="ERC3009-_consumeNonce-address-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_consumeNonce(address authorizer, bytes32 nonce)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC3009-_consumeNonce-address-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Marks `nonce` as used for `authorizer`. Reverts with [`ERC3009.ERC3009UsedAuthorization`](#ERC3009-ERC3009UsedAuthorization-address-bytes32-) if already consumed.
+
+</div>
+</div>
+
+<a id="ERC3009-_checkValidity-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_checkValidity(uint256 validAfter, uint256 validBefore)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC3009-_checkValidity-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Checks the validity of the authorization against the current clock.
+
+Following the ERC-4337-style dual-clock encoding, the clock is interpreted as block number only when
+*both* `validAfter` and `validBefore` carry the [`ERC4337Utils.BLOCK_RANGE_FLAG`](/contracts/5.x/api/account#ERC4337Utils-BLOCK_RANGE_FLAG-uint48); otherwise it falls back to
+timestamp (matching the ERC-3009 specification's default). Mixed-flag inputs therefore fall back to
+the timestamp clock rather than reverting, mirroring [`ERC4337Utils.parseValidationData`](/contracts/5.x/api/account#ERC4337Utils-parseValidationData-uint256-). The flag bit
+is masked off the values only when block-mode is engaged; in timestamp mode the full 256-bit value
+participates in the comparison.
+
+<Callout>
+Any `validAfter` or `validBefore` with a bit set at position 47 or above (other than the active
+clock-mode flag) is interpreted as an unreachable point in the future (i.e. never valid after or
+always valid before, respectively).
+</Callout>
+
+</div>
+</div>
+
+<a id="ERC3009-ERC3009InvalidSignature--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC3009InvalidSignature()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC3009-ERC3009InvalidSignature--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The signature is invalid
+
+</div>
+</div>
+
+<a id="ERC3009-ERC3009InvalidAuthorizationTime-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC3009InvalidAuthorizationTime(uint256 validAfter, uint256 validBefore)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC3009-ERC3009InvalidAuthorizationTime-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The authorization is not valid at the given time
+
+</div>
+</div>
+
+<a id="ERC3009-ERC3009UsedAuthorization-address-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC3009UsedAuthorization(address authorizer, bytes32 nonce)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#ERC3009-ERC3009UsedAuthorization-address-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The authorization has already been used or canceled
+
+</div>
+</div>
+
 <a id="ERC1363Utils"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
 ## `ERC1363Utils` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC20/utils/ERC1363Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/token/ERC20/utils/ERC1363Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -4202,7 +4838,7 @@ Indicates a failure with the token `spender`. Used in approvals.
 
 ## `SafeERC20` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/token/ERC20/utils/SafeERC20.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/token/ERC20/utils/SafeERC20.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -4232,6 +4868,7 @@ which allows you to call the safe operations as `token.safeTransfer(...)`, etc.
 - [transferAndCallRelaxed(token, to, value, data)](#SafeERC20-transferAndCallRelaxed-contract-IERC1363-address-uint256-bytes-)
 - [transferFromAndCallRelaxed(token, from, to, value, data)](#SafeERC20-transferFromAndCallRelaxed-contract-IERC1363-address-address-uint256-bytes-)
 - [approveAndCallRelaxed(token, to, value, data)](#SafeERC20-approveAndCallRelaxed-contract-IERC1363-address-uint256-bytes-)
+- [tryGetDecimals(token)](#SafeERC20-tryGetDecimals-contract-IERC20-)
 </div>
 </div>
 
@@ -4453,6 +5090,23 @@ once without retrying, and relies on the returned value to be true.
 </Callout>
 
 Reverts if the returned value is other than `true`.
+
+</div>
+</div>
+
+<a id="SafeERC20-tryGetDecimals-contract-IERC20-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">tryGetDecimals(contract IERC20 token) → bool success, uint8 decimals</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#SafeERC20-tryGetDecimals-contract-IERC20-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Attempts to fetch the token decimals. A return value of false indicates that the attempt failed in some way.
 
 </div>
 </div>

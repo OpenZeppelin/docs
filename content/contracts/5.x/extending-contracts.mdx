@@ -1,5 +1,5 @@
 ---
-title: Extending Contracts
+title: "Extending Contracts"
 ---
 
 Most of the OpenZeppelin Contracts are expected to be used via [inheritance](https://solidity.readthedocs.io/en/latest/contracts.html#inheritance): you will _inherit_ from them when writing your own contracts.
@@ -38,8 +38,6 @@ For more information on how overrides work, head over to the [official Solidity 
 Here is a modified version of [`AccessControl`](/contracts/5.x/api/access#AccessControl) where [`revokeRole`](/contracts/5.x/api/access#AccessControl-revokeRole-bytes32-address-) cannot be used to revoke the `DEFAULT_ADMIN_ROLE`:
 
 ```solidity
-// contracts/AccessControlNonRevokableAdmin.sol
-// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
 import {AccessControl} from "../../../access/AccessControl.sol";
@@ -52,8 +50,8 @@ contract AccessControlNonRevokableAdmin is AccessControl {
             revert AccessControlNonRevokable();
         }
 
-        super.revokeRole(role, account);
-    }
+    super.revokeRole(role, account);
+
 }
 ```
 
@@ -61,6 +59,19 @@ The `super.revokeRole` statement at the end will invoke ``AccessControl`’s ori
 
 <Callout>
 The same rule is implemented and extended in [`AccessControlDefaultAdminRules`](/contracts/5.x/api/access#AccessControlDefaultAdminRules), an extension that also adds enforced security measures for the `DEFAULT_ADMIN_ROLE`.
+</Callout>
+
+### Token Compatibility Assumptions
+
+Most token standards are written without considering non-standard transfer mechanisms like fees, rebases, or hooks that mutate balances outside of explicit transfers. This is a well-understood community convention: the standards specify a behavior, and integrations across the ecosystem rely on it. Contracts in this library follow the same convention. In particular, they assume that:
+
+* A successful [`transfer`](/contracts/5.x/api/token/ERC20#IERC20-transfer-address-uint256-) or [`transferFrom`](/contracts/5.x/api/token/ERC20#IERC20-transferFrom-address-address-uint256-) of `amount` reduces the sender’s [`balanceOf`](/contracts/5.x/api/token/ERC20#IERC20-balanceOf-address-) and increases the recipient’s [`balanceOf`](/contracts/5.x/api/token/ERC20#IERC20-balanceOf-address-) by exactly `amount`.
+* An account’s [`balanceOf`](/contracts/5.x/api/token/ERC20#IERC20-balanceOf-address-) only changes through explicit transfers, mints, or burns.
+
+Considering many ERCs are not compatible with these mechanisms, the library has taken a policy of not accounting for tokens that break these assumptions, such as fee-on-transfer and rebasing variants, since they could desynchronize a contract’s internal accounting from its on-chain balance. The resulting undercollateralization may cause later withdrawals, redemptions, or releases to revert.
+
+<Callout>
+When a contract custodies tokens and may accumulate excess balance (positive rebasing, accidental transfers, airdrops), consider exposing an access-controlled recovery function similar to [`ERC20Wrapper._recover`](/contracts/5.x/api/token/ERC20#ERC20Wrapper-_recover-address-) to retrieve the surplus. This only helps when the contract holds more than it owes, not the undercollateralization case above.
 </Callout>
 
 ## Security
