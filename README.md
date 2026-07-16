@@ -177,4 +177,4 @@ To learn more about the technologies used:
 
 ## Legal
 
-Your use of this Project is governed by the terms found at www.openzeppelin.com/tos (the "Terms"). To make contributions, you are required to sign our Contributor License Agreement.
+Your use of this Project is governed by the terms found at www.openzeppelin.com/tos (the "Terms"). To make contributions, you are required to sign our Contributor License Agreement implemented automatically through the Github PR process.
