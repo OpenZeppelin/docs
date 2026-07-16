@@ -2,11 +2,13 @@
 title: Contracts for Sui 1.x
 ---
 
-**OpenZeppelin Contracts for Sui v1.x** ships the following core packages:
+**OpenZeppelin Contracts for Sui v1.x** ships five core packages:
 
-- `openzeppelin_math` for deterministic arithmetic, configurable rounding, and decimal scaling.
-- `openzeppelin_access` for ownership-transfer wrappers around privileged `key + store` objects.
+- `openzeppelin_math` for deterministic integer arithmetic, configurable rounding, and decimal scaling.
+- `openzeppelin_fp_math` for 9-decimal fixed-point arithmetic (`UD30x9`, `SD29x9`) backed by `u128`.
+- `openzeppelin_access` for role-based authorization and ownership-transfer wrappers around privileged `key + store` objects.
 - `openzeppelin_collections` for ordered key/value and set data structures (`sorted_map`, `sorted_set`).
+- `openzeppelin_utils` for embeddable building blocks; its first module, `rate_limiter`, provides multi-strategy rate limiting.
 
 ## Quickstart
 
@@ -28,16 +30,22 @@ cd my_sui_app
 ```bash
 mvr add @openzeppelin-move/access
 mvr add @openzeppelin-move/integer-math
+mvr add @openzeppelin-move/fixed-point-math
+mvr add @openzeppelin-move/utils
 ```
+
+You only need the dependencies your app actually uses. Add what you need and drop the others.
 
 ### 3. Verify `Move.toml`
 
-`mvr add` updates `Move.toml` automatically. It should include:
+`mvr add` updates `Move.toml` automatically. With all four installed it should include:
 
 ```toml
 [dependencies]
 openzeppelin_access = { r.mvr = "@openzeppelin-move/access" }
 openzeppelin_math = { r.mvr = "@openzeppelin-move/integer-math" }
+openzeppelin_fp_math = { r.mvr = "@openzeppelin-move/fixed-point-math" }
+openzeppelin_utils = { r.mvr = "@openzeppelin-move/utils" }
 ```
 
 ### 4. Add a Minimal Module
@@ -54,7 +62,7 @@ use openzeppelin_math::u64::{mul_div, sqrt};
 
 public fun quote_with_fee(amount: u64): u64 {
     // 2.5% fee, rounded to nearest.
-    let quoted = mul_div(amount,1025u64, 1000u64, rounding::nearest());
+    let quoted = mul_div(amount, 1025u64, 1000u64, rounding::nearest());
     quoted.destroy_some()
 }
 
@@ -70,7 +78,20 @@ sui move build
 sui move test
 ```
 
-## Next Steps
+## Picking a package
 
-- Read package guides: [Integer Math](/contracts-sui/1.x/math), [Access](/contracts-sui/1.x/access), [Collections](/contracts-sui/1.x/collections).
-- Use API docs: [Integer Math](/contracts-sui/1.x/api/math), [Access](/contracts-sui/1.x/api/access), [Collections](/contracts-sui/1.x/api/collections).
+- Need role-based authorization for privileged functions or controlled transfer of admin/treasury/upgrade capabilities? Use [Access](/contracts-sui/1.x/access).
+- Need ordered maps or sets with deterministic iteration? Use [Collections](/contracts-sui/1.x/collections).
+- Need fractional values like prices, fees, rates, or signed deltas? Use [Fixed-Point Math](/contracts-sui/1.x/fixed-point).
+- Need integer arithmetic with safe overflow and explicit rounding? Use [Integer Math](/contracts-sui/1.x/math).
+- Need to throttle withdrawals, meter per-user budgets, gate action reuse, or delay an action? Use [Rate Limiter](/contracts-sui/1.x/rate-limiter).
+
+The packages compose. A typical protocol module imports `openzeppelin_math` for share math, `openzeppelin_fp_math` for rate and fee math, and `openzeppelin_access` for the admin capability that governs both.
+
+## Next steps
+
+- Package guides: [Integer Math](/contracts-sui/1.x/math), [Fixed-Point Math](/contracts-sui/1.x/fixed-point), [Access](/contracts-sui/1.x/access), [Collections](/contracts-sui/1.x/collections), [Utilities](/contracts-sui/1.x/utils).
+- Access modules: [RBAC](/contracts-sui/1.x/access-control), [Two-Step Transfer](/contracts-sui/1.x/two-step-transfer), [Delayed Transfer](/contracts-sui/1.x/delayed-transfer).
+- Utilities modules: [Rate Limiter](/contracts-sui/1.x/rate-limiter).
+- Learn: [Role Based Access Control](/contracts-sui/1.x/guides/access-control).
+- API reference: [Integer Math](/contracts-sui/1.x/api/math), [Fixed-Point Math](/contracts-sui/1.x/api/fixed-point), [Access](/contracts-sui/1.x/api/access), [Collections](/contracts-sui/1.x/api/collections), [Utilities](/contracts-sui/1.x/api/utils).

@@ -2,14 +2,14 @@
 title: Collections
 ---
 
-The `openzeppelin_collections` package is the ordered-collections family for OpenZeppelin Contracts for Sui. It provides `SortedMap<K, V>`, an ordered key/value collection kept in one sorted vector, and `SortedSet<K>`, a thin set wrapper over `SortedMap<K, Unit>` — the same relationship as Rust's `BTreeSet` over `BTreeMap`.
+The `openzeppelin_collections` package is the ordered-collections family for OpenZeppelin Contracts for Sui. It provides `SortedMap<K, V>`, an ordered key/value collection kept in one sorted vector, and `SortedSet<K>`, a thin set wrapper over `SortedMap<K, Unit>`, mirroring Rust's `BTreeSet` relationship to `BTreeMap`.
 
-Both are UID-less value types, shaped like `sui::vec_map::VecMap` and `sui::vec_set::VecSet` but kept in key order: you embed them as fields in your own `has key` objects, and every operation touches exactly one stored object. Beyond point lookups they answer ordered questions — head/tail, floor/ceiling, next/previous key, and sorted pages via `keys_from!`.
+Both are UID-less value types, shaped like `sui::vec_map::VecMap` and `sui::vec_set::VecSet` but kept in key order: you embed them as fields in your own `has key` objects, and every operation touches exactly one stored object. Beyond point lookups they answer ordered questions such as head/tail, floor/ceiling, next/previous key, and sorted pages via `keys_from!`.
 
 Order is comparator-driven. The bare macros (`upsert!`, `contains!`, `remove!`, ...) use the built-in integer `<` for unsigned-integer keys; the `_by` variants take a strict less-than comparator for custom key types or descending order.
 
 <Callout type="warn">
-Collections store no comparator. Order is defined per call by the `lt` closure you supply to the `_by` macros, and it must be a strict total order threaded consistently to every call on a given collection. The library cannot detect a violation: a non-strict (`<=`) or inconsistent comparator silently corrupts order — duplicate inserts, missed removes, wrong membership answers. For integer keys, the bare (non-`_by`) macros remove this footgun entirely.
+Collections store no comparator. Order is defined per call by the `lt` closure you supply to the `_by` macros, and it must be a strict total order threaded consistently to every call on a given collection. The library cannot detect a violation: a non-strict (`<=`) or inconsistent comparator silently corrupts order, causing duplicate inserts, missed removes, and wrong membership answers. For integer keys, the bare (non-`_by`) macros remove this footgun entirely.
 </Callout>
 
 ## Usage
@@ -74,7 +74,7 @@ public fun page(book: &PriceBook, from: u64, include: bool, limit: u64): vector<
 
 ### Watchlist with a `SortedSet`
 
-A watchlist embeds a `SortedSet<u64>` and uses `upsert!`'s `bool` return — `true` only on a fresh insert, never aborting on a duplicate — to emit an event exactly the first time an id is watched.
+A watchlist embeds a `SortedSet<u64>` and uses `upsert!`'s `bool` return (`true` only on a fresh insert, never aborting on a duplicate) to emit an event exactly the first time an id is watched.
 
 ```move
 module my_app::watchlist;
@@ -103,8 +103,8 @@ public fun watch(watchlist: &mut Watchlist, id: u64) {
 
 ## Choosing between `sorted_map` and `sorted_set`
 
-- Use `sorted_map` when each key carries a value — price levels, tick registries, leaderboards, payout vaults. Values may be resources like `Coin<T>`: drain every entry, then call `destroy_empty`.
-- Use `sorted_set` when only ordered membership matters — watchlists, allow/deny lists, deduplicated id registries. Its `upsert!` returns a `bool` instead of aborting on duplicates.
+- Use `sorted_map` when each key carries a value, such as price levels, tick registries, leaderboards, or payout vaults. Values may be resources like `Coin<T>`: drain every entry, then call `destroy_empty`.
+- Use `sorted_set` when only ordered membership matters, such as watchlists, allow/deny lists, or deduplicated id registries. Its `upsert!` returns a `bool` instead of aborting on duplicates.
 - Both answer the same ordered queries (`head`/`tail`, `find_next!`/`find_prev!`, `keys_from!` pages) and keep a single-object footprint; byte size is the only capacity ceiling.
 
 ## API Reference

@@ -1,0 +1,1236 @@
+---
+title: Fixed-Point Math API Reference
+---
+
+This page documents the public API of `openzeppelin_fp_math` for OpenZeppelin Contracts for Sui `v1.x`.
+
+The package provides two decimal fixed-point types with 9 decimals (matching Sui coin precision):
+
+- `UD30x9`: unsigned, backed by `u128`.
+- `SD29x9`: signed (two's complement), backed by `u128`.
+
+Each type has a base module that holds the arithmetic, comparison, and bitwise functions, and a conversion module that scales whole integers in and out of fixed-point form.
+
+### `ud30x9` [toc] [#ud30x9]
+
+<APIGithubLinkHeader
+  moduleName="ud30x9"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.3.0/math/fixed_point/sources/ud30x9/ud30x9.move"
+/>
+
+```move
+use openzeppelin_fp_math::ud30x9;
+```
+
+Defines the `UD30x9` unsigned decimal fixed-point type. Values represent unsigned real numbers as a `u128` scaled by `10^9`. The 9-decimal scale matches Sui coin precision and keeps offchain reasoning straightforward (`1.0` is `1_000_000_000`).
+
+This module owns the type, raw casting helpers (`wrap` / `unwrap`), and constant constructors. Arithmetic, comparison, and bitwise operations live in [`ud30x9_base`](#ud30x9_base). Whole-integer conversions live in [`ud30x9_convert`](#ud30x9_convert).
+
+Types
+
+- [`UD30x9`](#ud30x9-UD30x9)
+
+Functions
+
+- [`zero()`](#ud30x9-zero)
+- [`one()`](#ud30x9-one)
+- [`max()`](#ud30x9-max)
+- [`wrap(x)`](#ud30x9-wrap)
+- [`unwrap(x)`](#ud30x9-unwrap)
+
+#### Types [!toc] [#ud30x9-Types]
+
+<APIItem
+  functionSignature="struct UD30x9(u128) has copy, drop, store"
+  id="ud30x9-UD30x9"
+  kind="struct"
+>
+Unsigned decimal fixed-point type. The single `u128` field stores the raw bits of the value scaled by `10^9`.
+</APIItem>
+
+#### Functions [!toc] [#ud30x9-Functions]
+
+<APIItem
+  functionSignature="zero() -> UD30x9"
+  id="ud30x9-zero"
+  kind="public"
+>
+Returns the `UD30x9` representation of `0`.
+</APIItem>
+
+<APIItem
+  functionSignature="one() -> UD30x9"
+  id="ud30x9-one"
+  kind="public"
+>
+Returns the `UD30x9` representation of `1.0` (raw bits `10^9`).
+</APIItem>
+
+<APIItem
+  functionSignature="max() -> UD30x9"
+  id="ud30x9-max"
+  kind="public"
+>
+Returns the largest representable `UD30x9` value (raw bits `u128::MAX`).
+</APIItem>
+
+<APIItem
+  functionSignature="wrap(x: u128) -> UD30x9"
+  id="ud30x9-wrap"
+  kind="public"
+>
+Wraps raw `u128` bits into a `UD30x9` value without scaling. The input is interpreted as fixed-point bits already scaled by `10^9`.
+
+INFO: Use [`ud30x9_convert::from_u64`](#ud30x9_convert-from_u64) / [`from_u128`](#ud30x9_convert-from_u128) when the input is a whole integer that you mean as `x.0`.
+</APIItem>
+
+<APIItem
+  functionSignature="unwrap(x: UD30x9) -> u128"
+  id="ud30x9-unwrap"
+  kind="public"
+>
+Returns the raw `u128` bits of a `UD30x9` value.
+</APIItem>
+
+### `ud30x9_base` [toc] [#ud30x9_base]
+
+<APIGithubLinkHeader
+  moduleName="ud30x9_base"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.3.0/math/fixed_point/sources/ud30x9/ud30x9_base.move"
+/>
+
+```move
+use openzeppelin_fp_math::ud30x9_base;
+```
+
+Arithmetic, comparison, and bitwise functions for `UD30x9`. All entries are exported as method-style calls on `UD30x9` via `public use fun` declarations in `ud30x9`, so `x.add(y)` and `ud30x9_base::add(x, y)` are equivalent.
+
+Functions
+
+- Arithmetic: [`add`](#ud30x9_base-add), [`sub`](#ud30x9_base-sub), [`mul`](#ud30x9_base-mul), [`mul_trunc`](#ud30x9_base-mul_trunc), [`mul_away`](#ud30x9_base-mul_away), [`div`](#ud30x9_base-div), [`div_trunc`](#ud30x9_base-div_trunc), [`div_away`](#ud30x9_base-div_away), [`mod`](#ud30x9_base-mod), [`pow`](#ud30x9_base-pow), [`sqrt`](#ud30x9_base-sqrt), [`ln`](#ud30x9_base-ln), [`log2`](#ud30x9_base-log2), [`log10`](#ud30x9_base-log10), [`abs`](#ud30x9_base-abs), [`ceil`](#ud30x9_base-ceil), [`floor`](#ud30x9_base-floor), [`unchecked_add`](#ud30x9_base-unchecked_add), [`unchecked_sub`](#ud30x9_base-unchecked_sub)
+- Comparison: [`eq`](#ud30x9_base-eq), [`neq`](#ud30x9_base-neq), [`gt`](#ud30x9_base-gt), [`gte`](#ud30x9_base-gte), [`lt`](#ud30x9_base-lt), [`lte`](#ud30x9_base-lte), [`is_zero`](#ud30x9_base-is_zero)
+- Bitwise: [`and`](#ud30x9_base-and), [`and2`](#ud30x9_base-and2), [`or`](#ud30x9_base-or), [`xor`](#ud30x9_base-xor), [`not`](#ud30x9_base-not), [`lshift`](#ud30x9_base-lshift), [`unchecked_lshift`](#ud30x9_base-unchecked_lshift), [`rshift`](#ud30x9_base-rshift), [`unchecked_rshift`](#ud30x9_base-unchecked_rshift)
+- Cross-type casts: [`into_SD29x9`](#ud30x9_base-into_SD29x9), [`try_into_SD29x9`](#ud30x9_base-try_into_SD29x9)
+
+Errors
+
+- [`EOverflow`](#ud30x9_base-EOverflow)
+- [`EUnderflow`](#ud30x9_base-EUnderflow)
+- [`EDivideByZero`](#ud30x9_base-EDivideByZero)
+- [`ECannotBeConvertedToSD29x9`](#ud30x9_base-ECannotBeConvertedToSD29x9)
+- [`EInvalidShiftSize`](#ud30x9_base-EInvalidShiftSize)
+- [`ELogUndefined`](#ud30x9_base-ELogUndefined)
+- [`ELogResultUnrepresentable`](#ud30x9_base-ELogResultUnrepresentable)
+
+#### Functions [!toc] [#ud30x9_base-Functions]
+
+<APIItem
+  functionSignature="add(x: UD30x9, y: UD30x9) -> UD30x9"
+  id="ud30x9_base-add"
+  kind="public"
+>
+Returns the sum `x + y`.
+
+Aborts with `EOverflow` if the sum exceeds the representable `UD30x9` range.
+</APIItem>
+
+<APIItem
+  functionSignature="sub(x: UD30x9, y: UD30x9) -> UD30x9"
+  id="ud30x9_base-sub"
+  kind="public"
+>
+Returns the difference `x - y`.
+
+Aborts with `EUnderflow` if `y > x` (the result would be negative, which is unrepresentable in `UD30x9`).
+</APIItem>
+
+<APIItem
+  functionSignature="mul(x: UD30x9, y: UD30x9) -> UD30x9"
+  id="ud30x9_base-mul"
+  kind="public"
+>
+Returns the product `x * y`, rounded toward zero. Equivalent to [`mul_trunc`](#ud30x9_base-mul_trunc).
+
+Aborts with `EOverflow` if the result exceeds the representable `UD30x9` range.
+</APIItem>
+
+<APIItem
+  functionSignature="mul_trunc(x: UD30x9, y: UD30x9) -> UD30x9"
+  id="ud30x9_base-mul_trunc"
+  kind="public"
+>
+Returns the product `x * y`, rounded toward zero (truncating the fractional part).
+
+Aborts with `EOverflow` if the result exceeds the representable `UD30x9` range.
+</APIItem>
+
+<APIItem
+  functionSignature="mul_away(x: UD30x9, y: UD30x9) -> UD30x9"
+  id="ud30x9_base-mul_away"
+  kind="public"
+>
+Returns the product `x * y`, rounded away from zero when inexact.
+
+Aborts with `EOverflow` if the rounded result exceeds the representable `UD30x9` range.
+</APIItem>
+
+<APIItem
+  functionSignature="div(x: UD30x9, y: UD30x9) -> UD30x9"
+  id="ud30x9_base-div"
+  kind="public"
+>
+Returns the quotient `x / y`, rounded toward zero. Equivalent to [`div_trunc`](#ud30x9_base-div_trunc).
+
+Aborts with `EDivideByZero` if `y` is zero.
+Aborts with `EOverflow` if the result exceeds the representable `UD30x9` range.
+</APIItem>
+
+<APIItem
+  functionSignature="div_trunc(x: UD30x9, y: UD30x9) -> UD30x9"
+  id="ud30x9_base-div_trunc"
+  kind="public"
+>
+Returns the quotient `x / y`, rounded toward zero (truncating the fractional part).
+
+Aborts with `EDivideByZero` if `y` is zero.
+Aborts with `EOverflow` if the result exceeds the representable `UD30x9` range.
+</APIItem>
+
+<APIItem
+  functionSignature="div_away(x: UD30x9, y: UD30x9) -> UD30x9"
+  id="ud30x9_base-div_away"
+  kind="public"
+>
+Returns the quotient `x / y`, rounded away from zero when inexact. For example `1.0 / 3.0` returns `0.333333334`.
+
+Aborts with `EDivideByZero` if `y` is zero.
+Aborts with `EOverflow` if the rounded result exceeds the representable `UD30x9` range.
+</APIItem>
+
+<APIItem
+  functionSignature="mod(x: UD30x9, y: UD30x9) -> UD30x9"
+  id="ud30x9_base-mod"
+  kind="public"
+>
+Returns the remainder of `x` divided by `y`.
+
+Aborts with `EDivideByZero` if `y` is zero.
+</APIItem>
+
+<APIItem
+  functionSignature="pow(x: UD30x9, exp: u8) -> UD30x9"
+  id="ud30x9_base-pow"
+  kind="public"
+>
+Returns an approximation of `x^exp` computed using binary exponentiation with fixed-point multiplication. Each intermediate multiply or square applies fixed-point truncation.
+
+Aborts with `EOverflow` if any intermediate or the final result exceeds the representable `UD30x9` range.
+
+NOTE: Because truncation is applied at intermediate steps, `pow` is approximate for most fractional values. Rounding error compounds as `exp` grows; results are biased toward zero; for `0 < x < 1` intermediate values can reach zero before the final mathematically scaled result would. Fixed-point multiplication is not associative under truncation, so the grouping used by binary exponentiation can affect the value.
+</APIItem>
+
+<APIItem
+  functionSignature="sqrt(x: UD30x9) -> UD30x9"
+  id="ud30x9_base-sqrt"
+  kind="public"
+>
+Returns the largest `UD30x9` value `r` such that `r * r <= x`. The result is rounded down to the nearest representable `UD30x9` value.
+</APIItem>
+
+<APIItem
+  functionSignature="ln(x: UD30x9) -> UD30x9"
+  id="ud30x9_base-ln"
+  kind="public"
+>
+Returns the natural logarithm of `x`, derived from `log2` via `ln(x) = log2(x) * ln(2)`. The result is rounded down and may sit up to 2 ulps below the true value.
+
+Aborts with `ELogUndefined` if `x` is zero.
+Aborts with `ELogResultUnrepresentable` if `x` is in `(0, 1)` (the result would be negative and cannot be represented in `UD30x9`, so use [`SD29x9::ln`](#sd29x9_base-ln) instead).
+</APIItem>
+
+<APIItem
+  functionSignature="log2(x: UD30x9) -> UD30x9"
+  id="ud30x9_base-log2"
+  kind="public"
+>
+Returns the base-2 logarithm of `x`. The result is rounded down and sits at most 2 ulps below the true `log2(x)`. For inputs in `[1, 2)` the result is exact.
+
+Aborts with `ELogUndefined` if `x` is zero.
+Aborts with `ELogResultUnrepresentable` if `x` is in `(0, 1)` (the result would be negative and cannot be represented in `UD30x9`, so use [`SD29x9::log2`](#sd29x9_base-log2) instead).
+</APIItem>
+
+<APIItem
+  functionSignature="log10(x: UD30x9) -> UD30x9"
+  id="ud30x9_base-log10"
+  kind="public"
+>
+Returns the base-10 logarithm of `x`. Exact when `x` is an integer power of ten (`10^k`, `k >= 0`). Otherwise derived from `log2` via `log10(x) = log2(x) * log10(2)` and rounded down; the result may sit up to 2 ulps below the true value.
+
+Aborts with `ELogUndefined` if `x` is zero.
+Aborts with `ELogResultUnrepresentable` if `x` is in `(0, 1)` (the result would be negative and cannot be represented in `UD30x9`, so use [`SD29x9::log10`](#sd29x9_base-log10) instead).
+</APIItem>
+
+<APIItem
+  functionSignature="abs(x: UD30x9) -> UD30x9"
+  id="ud30x9_base-abs"
+  kind="public"
+>
+Returns `x` unchanged. `UD30x9` is unsigned, so the absolute value is identity. Provided for symmetry with `SD29x9::abs`.
+</APIItem>
+
+<APIItem
+  functionSignature="ceil(x: UD30x9) -> UD30x9"
+  id="ud30x9_base-ceil"
+  kind="public"
+>
+Rounds toward positive infinity to the next integer multiple of `10^9`. Returns `x` if it is already a whole multiple.
+
+Aborts with `EOverflow` if the rounded result exceeds the representable `UD30x9` range.
+</APIItem>
+
+<APIItem
+  functionSignature="floor(x: UD30x9) -> UD30x9"
+  id="ud30x9_base-floor"
+  kind="public"
+>
+Rounds toward zero to the nearest integer multiple of `10^9`.
+</APIItem>
+
+<APIItem
+  functionSignature="unchecked_add(x: UD30x9, y: UD30x9) -> UD30x9"
+  id="ud30x9_base-unchecked_add"
+  kind="public"
+>
+Returns the wrapping sum `x + y` modulo `2^128`. Does not abort on overflow.
+</APIItem>
+
+<APIItem
+  functionSignature="unchecked_sub(x: UD30x9, y: UD30x9) -> UD30x9"
+  id="ud30x9_base-unchecked_sub"
+  kind="public"
+>
+Returns the wrapping difference `x - y` modulo `2^128`. Does not abort on underflow.
+</APIItem>
+
+<APIItem
+  functionSignature="eq(x: UD30x9, y: UD30x9) -> bool"
+  id="ud30x9_base-eq"
+  kind="public"
+>
+Returns `true` if `x == y`.
+</APIItem>
+
+<APIItem
+  functionSignature="neq(x: UD30x9, y: UD30x9) -> bool"
+  id="ud30x9_base-neq"
+  kind="public"
+>
+Returns `true` if `x != y`.
+</APIItem>
+
+<APIItem
+  functionSignature="gt(x: UD30x9, y: UD30x9) -> bool"
+  id="ud30x9_base-gt"
+  kind="public"
+>
+Returns `true` if `x > y`.
+</APIItem>
+
+<APIItem
+  functionSignature="gte(x: UD30x9, y: UD30x9) -> bool"
+  id="ud30x9_base-gte"
+  kind="public"
+>
+Returns `true` if `x >= y`.
+</APIItem>
+
+<APIItem
+  functionSignature="lt(x: UD30x9, y: UD30x9) -> bool"
+  id="ud30x9_base-lt"
+  kind="public"
+>
+Returns `true` if `x < y`.
+</APIItem>
+
+<APIItem
+  functionSignature="lte(x: UD30x9, y: UD30x9) -> bool"
+  id="ud30x9_base-lte"
+  kind="public"
+>
+Returns `true` if `x <= y`.
+</APIItem>
+
+<APIItem
+  functionSignature="is_zero(x: UD30x9) -> bool"
+  id="ud30x9_base-is_zero"
+  kind="public"
+>
+Returns `true` if `x` is exactly zero.
+</APIItem>
+
+<APIItem
+  functionSignature="and(x: UD30x9, bits: u128) -> UD30x9"
+  id="ud30x9_base-and"
+  kind="public"
+>
+Returns the bitwise AND of `x`'s raw bits and the `u128` mask `bits`.
+</APIItem>
+
+<APIItem
+  functionSignature="and2(x: UD30x9, y: UD30x9) -> UD30x9"
+  id="ud30x9_base-and2"
+  kind="public"
+>
+Returns the bitwise AND of two `UD30x9` raw bit patterns.
+</APIItem>
+
+<APIItem
+  functionSignature="or(x: UD30x9, y: UD30x9) -> UD30x9"
+  id="ud30x9_base-or"
+  kind="public"
+>
+Returns the bitwise OR of two `UD30x9` raw bit patterns.
+</APIItem>
+
+<APIItem
+  functionSignature="xor(x: UD30x9, y: UD30x9) -> UD30x9"
+  id="ud30x9_base-xor"
+  kind="public"
+>
+Returns the bitwise XOR of two `UD30x9` raw bit patterns.
+</APIItem>
+
+<APIItem
+  functionSignature="not(x: UD30x9) -> UD30x9"
+  id="ud30x9_base-not"
+  kind="public"
+>
+Returns the bitwise NOT of `x`'s raw bits.
+</APIItem>
+
+<APIItem
+  functionSignature="lshift(x: UD30x9, bits: u8) -> UD30x9"
+  id="ud30x9_base-lshift"
+  kind="public"
+>
+Logical left shift on the underlying 128-bit representation by `bits` positions.
+
+Aborts with `EInvalidShiftSize` if `bits >= 128`.
+Aborts with `EOverflow` if the shift would consume non-zero high bits.
+</APIItem>
+
+<APIItem
+  functionSignature="unchecked_lshift(x: UD30x9, bits: u8) -> UD30x9"
+  id="ud30x9_base-unchecked_lshift"
+  kind="public"
+>
+Logical left shift that truncates high bits past the 128-bit boundary and returns zero when `bits >= 128`.
+
+NOTE: Use [`lshift`](#ud30x9_base-lshift) when you want shift-size and overflow checks to abort.
+</APIItem>
+
+<APIItem
+  functionSignature="rshift(x: UD30x9, bits: u8) -> UD30x9"
+  id="ud30x9_base-rshift"
+  kind="public"
+>
+Logical right shift on the underlying 128-bit representation by `bits` positions.
+
+Aborts with `EInvalidShiftSize` if `bits >= 128`.
+</APIItem>
+
+<APIItem
+  functionSignature="unchecked_rshift(x: UD30x9, bits: u8) -> UD30x9"
+  id="ud30x9_base-unchecked_rshift"
+  kind="public"
+>
+Logical right shift that returns zero when `bits >= 128`. Vacated high bits are filled with zeros.
+</APIItem>
+
+<APIItem
+  functionSignature="into_SD29x9(x: UD30x9) -> SD29x9"
+  id="ud30x9_base-into_SD29x9"
+  kind="public"
+>
+Casts a `UD30x9` value to `SD29x9` while preserving the scaled numeric meaning.
+
+Aborts with `ECannotBeConvertedToSD29x9` if `x` exceeds the maximum positive `SD29x9` magnitude (`2^127 - 1`).
+</APIItem>
+
+<APIItem
+  functionSignature="try_into_SD29x9(x: UD30x9) -> Option<SD29x9>"
+  id="ud30x9_base-try_into_SD29x9"
+  kind="public"
+>
+Returns `some(SD29x9)` when the cast fits in the positive `SD29x9` range, otherwise `none`.
+</APIItem>
+
+#### Errors [!toc] [#ud30x9_base-Errors]
+
+<APIItem
+  functionSignature="EOverflow (code 0)"
+  id="ud30x9_base-EOverflow"
+  kind="error"
+>
+Raised when an arithmetic or shift result exceeds the representable `UD30x9` range.
+</APIItem>
+
+<APIItem
+  functionSignature="EUnderflow (code 1)"
+  id="ud30x9_base-EUnderflow"
+  kind="error"
+>
+Raised when subtraction would produce a negative result, which is unrepresentable in `UD30x9`.
+</APIItem>
+
+<APIItem
+  functionSignature="EDivideByZero (code 2)"
+  id="ud30x9_base-EDivideByZero"
+  kind="error"
+>
+Raised when a division or modulo operation receives a zero divisor.
+</APIItem>
+
+<APIItem
+  functionSignature="ECannotBeConvertedToSD29x9 (code 3)"
+  id="ud30x9_base-ECannotBeConvertedToSD29x9"
+  kind="error"
+>
+Raised when [`into_SD29x9`](#ud30x9_base-into_SD29x9) is called on a value above the `SD29x9` positive range.
+</APIItem>
+
+<APIItem
+  functionSignature="EInvalidShiftSize (code 4)"
+  id="ud30x9_base-EInvalidShiftSize"
+  kind="error"
+>
+Raised when [`lshift`](#ud30x9_base-lshift) or [`rshift`](#ud30x9_base-rshift) is called with `bits >= 128`.
+</APIItem>
+
+<APIItem
+  functionSignature="ELogUndefined (code 5)"
+  id="ud30x9_base-ELogUndefined"
+  kind="error"
+>
+Raised when [`ln`](#ud30x9_base-ln), [`log2`](#ud30x9_base-log2), or [`log10`](#ud30x9_base-log10) is called with a zero input.
+</APIItem>
+
+<APIItem
+  functionSignature="ELogResultUnrepresentable (code 6)"
+  id="ud30x9_base-ELogResultUnrepresentable"
+  kind="error"
+>
+Raised when [`ln`](#ud30x9_base-ln), [`log2`](#ud30x9_base-log2), or [`log10`](#ud30x9_base-log10) is called with an input in `(0, 1)`. The result would be negative, which is unrepresentable in `UD30x9`; the signed `SD29x9` variants accept these inputs.
+</APIItem>
+
+### `ud30x9_convert` [toc] [#ud30x9_convert]
+
+<APIGithubLinkHeader
+  moduleName="ud30x9_convert"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.3.0/math/fixed_point/sources/ud30x9/conversions.move"
+/>
+
+```move
+use openzeppelin_fp_math::ud30x9_convert;
+```
+
+Scale-aware conversions between whole unsigned integers and `UD30x9`. These functions apply or remove the `10^9` scale factor, so use them when your input or output represents a whole-integer quantity (e.g. `42` as `42.0`).
+
+For raw, non-scaling casts, use [`ud30x9::wrap`](#ud30x9-wrap) and [`ud30x9::unwrap`](#ud30x9-unwrap) instead.
+
+Functions
+
+- [`from_u64(x)`](#ud30x9_convert-from_u64)
+- [`from_u128(x)`](#ud30x9_convert-from_u128)
+- [`try_from_u128(x)`](#ud30x9_convert-try_from_u128)
+- [`to_u128_trunc(x)`](#ud30x9_convert-to_u128_trunc)
+- [`to_u64_trunc(x)`](#ud30x9_convert-to_u64_trunc)
+- [`try_to_u64_trunc(x)`](#ud30x9_convert-try_to_u64_trunc)
+
+Errors
+
+- [`EOverflow`](#ud30x9_convert-EOverflow)
+- [`EIntegerOverflow`](#ud30x9_convert-EIntegerOverflow)
+
+#### Functions [!toc] [#ud30x9_convert-Functions]
+
+<APIItem
+  functionSignature="from_u64(x: u64) -> UD30x9"
+  id="ud30x9_convert-from_u64"
+  kind="public"
+>
+Converts a whole `u64` integer into `UD30x9` by multiplying it by `10^9`. Cannot overflow because `u64::MAX * 10^9` fits in `u128`.
+</APIItem>
+
+<APIItem
+  functionSignature="from_u128(x: u128) -> UD30x9"
+  id="ud30x9_convert-from_u128"
+  kind="public"
+>
+Converts a whole `u128` integer into `UD30x9` by multiplying it by `10^9`.
+
+Aborts with `EOverflow` if `x * 10^9` would overflow the `UD30x9` raw representation.
+</APIItem>
+
+<APIItem
+  functionSignature="try_from_u128(x: u128) -> Option<UD30x9>"
+  id="ud30x9_convert-try_from_u128"
+  kind="public"
+>
+Returns `some(UD30x9)` when `x * 10^9` fits in the raw representation, otherwise `none`.
+</APIItem>
+
+<APIItem
+  functionSignature="to_u128_trunc(x: UD30x9) -> u128"
+  id="ud30x9_convert-to_u128_trunc"
+  kind="public"
+>
+Returns the whole-number portion of `x`, computed as `floor(x)`.
+</APIItem>
+
+<APIItem
+  functionSignature="to_u64_trunc(x: UD30x9) -> u64"
+  id="ud30x9_convert-to_u64_trunc"
+  kind="public"
+>
+Returns the truncated whole-number portion of `x` as `u64`.
+
+Aborts with `EIntegerOverflow` if the truncated value exceeds `u64::MAX`.
+</APIItem>
+
+<APIItem
+  functionSignature="try_to_u64_trunc(x: UD30x9) -> Option<u64>"
+  id="ud30x9_convert-try_to_u64_trunc"
+  kind="public"
+>
+Returns `some(u64)` when the truncated whole-number portion fits in `u64`, otherwise `none`.
+</APIItem>
+
+#### Errors [!toc] [#ud30x9_convert-Errors]
+
+<APIItem
+  functionSignature="EOverflow (code 0)"
+  id="ud30x9_convert-EOverflow"
+  kind="error"
+>
+Raised when a whole integer cannot be scaled into the `UD30x9` raw representation.
+</APIItem>
+
+<APIItem
+  functionSignature="EIntegerOverflow (code 1)"
+  id="ud30x9_convert-EIntegerOverflow"
+  kind="error"
+>
+Raised when a truncated whole part does not fit in `u64`.
+</APIItem>
+
+### `sd29x9` [toc] [#sd29x9]
+
+<APIGithubLinkHeader
+  moduleName="sd29x9"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.3.0/math/fixed_point/sources/sd29x9/sd29x9.move"
+/>
+
+```move
+use openzeppelin_fp_math::sd29x9;
+```
+
+Defines the `SD29x9` signed decimal fixed-point type. Values represent signed real numbers as a two's complement `u128` scaled by `10^9`. Useful for balance deltas and any quantity that can dip below zero.
+
+This module owns the type, raw casting helpers (`wrap` / `unwrap`), and constant constructors (`zero`, `one`, `min`, `max`). Arithmetic, comparison, and cross-type casts live in [`sd29x9_base`](#sd29x9_base). Whole-integer conversions live in [`sd29x9_convert`](#sd29x9_convert).
+
+Types
+
+- [`SD29x9`](#sd29x9-SD29x9)
+
+Functions
+
+- [`zero()`](#sd29x9-zero)
+- [`one()`](#sd29x9-one)
+- [`min()`](#sd29x9-min)
+- [`max()`](#sd29x9-max)
+- [`wrap(x, is_negative)`](#sd29x9-wrap)
+- [`unwrap(x)`](#sd29x9-unwrap)
+
+Errors
+
+- [`EOverflow`](#sd29x9-EOverflow)
+
+#### Types [!toc] [#sd29x9-Types]
+
+<APIItem
+  functionSignature="struct SD29x9(u128) has copy, drop, store"
+  id="sd29x9-SD29x9"
+  kind="struct"
+>
+Signed decimal fixed-point type. The single `u128` field stores a two's complement representation scaled by `10^9`.
+</APIItem>
+
+#### Functions [!toc] [#sd29x9-Functions]
+
+<APIItem
+  functionSignature="zero() -> SD29x9"
+  id="sd29x9-zero"
+  kind="public"
+>
+Returns the `SD29x9` representation of `0`.
+</APIItem>
+
+<APIItem
+  functionSignature="one() -> SD29x9"
+  id="sd29x9-one"
+  kind="public"
+>
+Returns the `SD29x9` representation of `1.0` (raw bits `10^9`).
+</APIItem>
+
+<APIItem
+  functionSignature="min() -> SD29x9"
+  id="sd29x9-min"
+  kind="public"
+>
+Returns the smallest representable `SD29x9` value, namely `-2^127`.
+
+NOTE: `+2^127` is not representable, so several arithmetic operations (such as `abs` and `negate`) abort when called on `min`.
+</APIItem>
+
+<APIItem
+  functionSignature="max() -> SD29x9"
+  id="sd29x9-max"
+  kind="public"
+>
+Returns the largest representable `SD29x9` value, namely `2^127 - 1`.
+</APIItem>
+
+<APIItem
+  functionSignature="wrap(x: u128, is_negative: bool) -> SD29x9"
+  id="sd29x9-wrap"
+  kind="public"
+>
+Wraps a `u128` magnitude plus a sign flag into a raw `SD29x9` value. The input must be a pure magnitude and must not already include a sign bit. When `is_negative` is `true`, the value is converted to its two's complement form.
+
+Aborts with `EOverflow` if `x` exceeds the maximum positive magnitude (`2^127 - 1`).
+
+NOTE: Cannot construct the minimum value. Use [`min`](#sd29x9-min) for that.
+</APIItem>
+
+<APIItem
+  functionSignature="unwrap(x: SD29x9) -> u128"
+  id="sd29x9-unwrap"
+  kind="public"
+>
+Returns the raw `u128` two's complement bits of an `SD29x9` value.
+</APIItem>
+
+#### Errors [!toc] [#sd29x9-Errors]
+
+<APIItem
+  functionSignature="EOverflow (code 0)"
+  id="sd29x9-EOverflow"
+  kind="error"
+>
+Raised when [`wrap`](#sd29x9-wrap) is called with a magnitude that exceeds `2^127 - 1`.
+</APIItem>
+
+### `sd29x9_base` [toc] [#sd29x9_base]
+
+<APIGithubLinkHeader
+  moduleName="sd29x9_base"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.3.0/math/fixed_point/sources/sd29x9/sd29x9_base.move"
+/>
+
+```move
+use openzeppelin_fp_math::sd29x9_base;
+```
+
+Arithmetic, comparison, and cross-type casts for `SD29x9`. All entries are exported as method-style calls on `SD29x9` via `public use fun` declarations in `sd29x9`, so `x.add(y)` and `sd29x9_base::add(x, y)` are equivalent.
+
+Types
+
+- [`Components`](#sd29x9_base-Components)
+
+Functions
+
+- Arithmetic: [`add`](#sd29x9_base-add), [`sub`](#sd29x9_base-sub), [`mul`](#sd29x9_base-mul), [`mul_trunc`](#sd29x9_base-mul_trunc), [`mul_away`](#sd29x9_base-mul_away), [`div`](#sd29x9_base-div), [`div_trunc`](#sd29x9_base-div_trunc), [`div_away`](#sd29x9_base-div_away), [`mod`](#sd29x9_base-mod), [`rem`](#sd29x9_base-rem), [`pow`](#sd29x9_base-pow), [`sqrt`](#sd29x9_base-sqrt), [`ln`](#sd29x9_base-ln), [`log2`](#sd29x9_base-log2), [`log10`](#sd29x9_base-log10), [`negate`](#sd29x9_base-negate), [`abs`](#sd29x9_base-abs), [`ceil`](#sd29x9_base-ceil), [`floor`](#sd29x9_base-floor), [`unchecked_add`](#sd29x9_base-unchecked_add), [`unchecked_sub`](#sd29x9_base-unchecked_sub)
+- Comparison: [`eq`](#sd29x9_base-eq), [`neq`](#sd29x9_base-neq), [`gt`](#sd29x9_base-gt), [`gte`](#sd29x9_base-gte), [`lt`](#sd29x9_base-lt), [`lte`](#sd29x9_base-lte), [`is_zero`](#sd29x9_base-is_zero)
+- Cross-type casts: [`into_UD30x9`](#sd29x9_base-into_UD30x9), [`try_into_UD30x9`](#sd29x9_base-try_into_UD30x9)
+
+Errors
+
+- [`EOverflow`](#sd29x9_base-EOverflow)
+- [`EDivideByZero`](#sd29x9_base-EDivideByZero)
+- [`ECannotBeConvertedToUD30x9`](#sd29x9_base-ECannotBeConvertedToUD30x9)
+- [`ENegativeSqrt`](#sd29x9_base-ENegativeSqrt)
+- [`ELogUndefined`](#sd29x9_base-ELogUndefined)
+
+#### Types [!toc] [#sd29x9_base-Types]
+
+<APIItem
+  functionSignature="struct Components { neg: bool, mag: u256 } has copy, drop"
+  id="sd29x9_base-Components"
+  kind="struct"
+>
+Signed decomposition of an `SD29x9` value into a sign flag and a non-negative magnitude as `u256`. Returned by internal helpers; surfaced publicly so downstream tooling can pattern-match on it.
+</APIItem>
+
+#### Functions [!toc] [#sd29x9_base-Functions]
+
+<APIItem
+  functionSignature="add(x: SD29x9, y: SD29x9) -> SD29x9"
+  id="sd29x9_base-add"
+  kind="public"
+>
+Returns the sum `x + y`.
+
+Aborts with `EOverflow` if the resulting magnitude exceeds the representable `SD29x9` range.
+</APIItem>
+
+<APIItem
+  functionSignature="sub(x: SD29x9, y: SD29x9) -> SD29x9"
+  id="sd29x9_base-sub"
+  kind="public"
+>
+Returns the difference `x - y`.
+
+Aborts with `EOverflow` if the resulting magnitude exceeds the representable `SD29x9` range.
+</APIItem>
+
+<APIItem
+  functionSignature="mul(x: SD29x9, y: SD29x9) -> SD29x9"
+  id="sd29x9_base-mul"
+  kind="public"
+>
+Returns the product `x * y`, rounded toward zero. Equivalent to [`mul_trunc`](#sd29x9_base-mul_trunc).
+
+Aborts with `EOverflow` if the result exceeds the representable `SD29x9` range.
+</APIItem>
+
+<APIItem
+  functionSignature="mul_trunc(x: SD29x9, y: SD29x9) -> SD29x9"
+  id="sd29x9_base-mul_trunc"
+  kind="public"
+>
+Returns the product `x * y`, rounded toward zero (truncating).
+
+Aborts with `EOverflow` if the result exceeds the representable `SD29x9` range.
+</APIItem>
+
+<APIItem
+  functionSignature="mul_away(x: SD29x9, y: SD29x9) -> SD29x9"
+  id="sd29x9_base-mul_away"
+  kind="public"
+>
+Returns the product `x * y`, rounded away from zero when inexact. For example `1.000000001 * 1.000000001` returns `1.000000003`, and `-1.000000001 * 1.000000001` returns `-1.000000003`.
+
+Aborts with `EOverflow` if the rounded magnitude exceeds the representable `SD29x9` range.
+</APIItem>
+
+<APIItem
+  functionSignature="div(x: SD29x9, y: SD29x9) -> SD29x9"
+  id="sd29x9_base-div"
+  kind="public"
+>
+Returns the quotient `x / y`, rounded toward zero. Equivalent to [`div_trunc`](#sd29x9_base-div_trunc).
+
+Aborts with `EDivideByZero` if `y` is zero.
+Aborts with `EOverflow` if the result exceeds the representable `SD29x9` range.
+</APIItem>
+
+<APIItem
+  functionSignature="div_trunc(x: SD29x9, y: SD29x9) -> SD29x9"
+  id="sd29x9_base-div_trunc"
+  kind="public"
+>
+Returns the quotient `x / y`, rounded toward zero (truncating).
+
+Aborts with `EDivideByZero` if `y` is zero.
+Aborts with `EOverflow` if the result exceeds the representable `SD29x9` range.
+</APIItem>
+
+<APIItem
+  functionSignature="div_away(x: SD29x9, y: SD29x9) -> SD29x9"
+  id="sd29x9_base-div_away"
+  kind="public"
+>
+Returns the quotient `x / y`, rounded away from zero when inexact. For example `1.0 / 3.0` returns `0.333333334`, and `-1.0 / 3.0` returns `-0.333333334`.
+
+Aborts with `EDivideByZero` if `y` is zero.
+Aborts with `EOverflow` if the rounded magnitude exceeds the representable `SD29x9` range.
+</APIItem>
+
+<APIItem
+  functionSignature="rem(x: SD29x9, y: SD29x9) -> SD29x9"
+  id="sd29x9_base-rem"
+  kind="public"
+>
+Returns the truncating remainder of `x` divided by `y`. The magnitude is `abs(x) % abs(y)` and the sign of the result follows the dividend `x`.
+
+Aborts with `EDivideByZero` if `y` is zero.
+
+NOTE: `rem` follows truncating remainder semantics. Use [`mod`](#sd29x9_base-mod) for Euclidean (always non-negative) remainder.
+</APIItem>
+
+<APIItem
+  functionSignature="mod(x: SD29x9, y: SD29x9) -> SD29x9"
+  id="sd29x9_base-mod"
+  kind="public"
+>
+Returns the Euclidean remainder of `x` divided by `y`. The result is always non-negative and satisfies `0 <= result < abs(y)`.
+
+Aborts with `EDivideByZero` if `y` is zero.
+</APIItem>
+
+<APIItem
+  functionSignature="pow(x: SD29x9, exp: u8) -> SD29x9"
+  id="sd29x9_base-pow"
+  kind="public"
+>
+Returns an approximation of `x^exp` computed using binary exponentiation with fixed-point multiplication. Each intermediate multiply or square applies fixed-point truncation.
+
+Aborts with `EOverflow` if any intermediate or the final result exceeds the representable `SD29x9` range.
+
+NOTE: As with `UD30x9::pow`, results are biased toward zero, error compounds with `exp`, and binary-exponentiation grouping affects the value because fixed-point multiplication is not associative under truncation.
+</APIItem>
+
+<APIItem
+  functionSignature="sqrt(x: SD29x9) -> SD29x9"
+  id="sd29x9_base-sqrt"
+  kind="public"
+>
+Returns the largest non-negative `SD29x9` value `r` such that `r * r <= x`. The result is rounded down to the nearest representable `SD29x9` value.
+
+Aborts with `ENegativeSqrt` if `x` is negative.
+</APIItem>
+
+<APIItem
+  functionSignature="ln(x: SD29x9) -> SD29x9"
+  id="sd29x9_base-ln"
+  kind="public"
+>
+Returns the natural logarithm of `x`, derived from `log2` via `ln(x) = log2(x) * ln(2)`. Rounded toward zero; see [`log2`](#sd29x9_base-log2) for full rounding semantics on signed results.
+
+Aborts with `ELogUndefined` if `x` is zero or negative.
+</APIItem>
+
+<APIItem
+  functionSignature="log2(x: SD29x9) -> SD29x9"
+  id="sd29x9_base-log2"
+  kind="public"
+>
+Returns the base-2 logarithm of `x`, rounded toward zero (matching the convention used by `mul_trunc`, `div_trunc`, and `pow` in this module). For positive results (inputs `>= 1`) this coincides with rounding down and sits at most 2 ulps below the true value. For negative results (inputs in `(0, 1)`) the signed result usually sits closer to zero than the true value, but in narrow edge cases where the kernel's small upward magnitude bias crosses an integer boundary it may instead be 1 ulp further from zero.
+
+Aborts with `ELogUndefined` if `x` is zero or negative.
+</APIItem>
+
+<APIItem
+  functionSignature="log10(x: SD29x9) -> SD29x9"
+  id="sd29x9_base-log10"
+  kind="public"
+>
+Returns the base-10 logarithm of `x`. Exact when `x` is an integer power of ten, including sub-unit powers `10^-k` (`k` in `1..=9`). Otherwise derived from `log2` via `log10(x) = log2(x) * log10(2)` and rounded toward zero; see [`log2`](#sd29x9_base-log2) for full rounding semantics on signed results.
+
+Aborts with `ELogUndefined` if `x` is zero or negative.
+</APIItem>
+
+<APIItem
+  functionSignature="negate(x: SD29x9) -> SD29x9"
+  id="sd29x9_base-negate"
+  kind="public"
+>
+Returns `-x`.
+
+Aborts with `EOverflow` if `x` is the minimum representable value (`-2^127`), because `+2^127` is not representable.
+</APIItem>
+
+<APIItem
+  functionSignature="abs(x: SD29x9) -> SD29x9"
+  id="sd29x9_base-abs"
+  kind="public"
+>
+Returns the absolute value of `x`.
+
+Aborts with `EOverflow` if `x` is the minimum representable value (`-2^127`).
+</APIItem>
+
+<APIItem
+  functionSignature="ceil(x: SD29x9) -> SD29x9"
+  id="sd29x9_base-ceil"
+  kind="public"
+>
+Rounds toward positive infinity to the nearest integer multiple of `10^9`.
+
+Aborts with `EOverflow` if the rounded result exceeds the representable `SD29x9` range.
+</APIItem>
+
+<APIItem
+  functionSignature="floor(x: SD29x9) -> SD29x9"
+  id="sd29x9_base-floor"
+  kind="public"
+>
+Rounds toward negative infinity to the nearest integer multiple of `10^9`.
+
+Aborts with `EOverflow` if the rounded negative result magnitude exceeds the representable `SD29x9` range.
+</APIItem>
+
+<APIItem
+  functionSignature="unchecked_add(x: SD29x9, y: SD29x9) -> SD29x9"
+  id="sd29x9_base-unchecked_add"
+  kind="public"
+>
+Returns the wrapping sum of the raw bit patterns modulo `2^128`. Does not abort on overflow.
+</APIItem>
+
+<APIItem
+  functionSignature="unchecked_sub(x: SD29x9, y: SD29x9) -> SD29x9"
+  id="sd29x9_base-unchecked_sub"
+  kind="public"
+>
+Returns the wrapping difference of the raw bit patterns modulo `2^128`. Does not abort on underflow.
+</APIItem>
+
+<APIItem
+  functionSignature="eq(x: SD29x9, y: SD29x9) -> bool"
+  id="sd29x9_base-eq"
+  kind="public"
+>
+Returns `true` if `x` and `y` have identical underlying bits.
+</APIItem>
+
+<APIItem
+  functionSignature="neq(x: SD29x9, y: SD29x9) -> bool"
+  id="sd29x9_base-neq"
+  kind="public"
+>
+Returns `true` if `x != y`.
+</APIItem>
+
+<APIItem
+  functionSignature="gt(x: SD29x9, y: SD29x9) -> bool"
+  id="sd29x9_base-gt"
+  kind="public"
+>
+Returns `true` if `x > y` under signed comparison.
+</APIItem>
+
+<APIItem
+  functionSignature="gte(x: SD29x9, y: SD29x9) -> bool"
+  id="sd29x9_base-gte"
+  kind="public"
+>
+Returns `true` if `x >= y` under signed comparison.
+</APIItem>
+
+<APIItem
+  functionSignature="lt(x: SD29x9, y: SD29x9) -> bool"
+  id="sd29x9_base-lt"
+  kind="public"
+>
+Returns `true` if `x < y` under signed comparison.
+</APIItem>
+
+<APIItem
+  functionSignature="lte(x: SD29x9, y: SD29x9) -> bool"
+  id="sd29x9_base-lte"
+  kind="public"
+>
+Returns `true` if `x <= y` under signed comparison.
+</APIItem>
+
+<APIItem
+  functionSignature="is_zero(x: SD29x9) -> bool"
+  id="sd29x9_base-is_zero"
+  kind="public"
+>
+Returns `true` if `x` is exactly zero.
+</APIItem>
+
+<APIItem
+  functionSignature="into_UD30x9(x: SD29x9) -> UD30x9"
+  id="sd29x9_base-into_UD30x9"
+  kind="public"
+>
+Casts a non-negative `SD29x9` value to `UD30x9` while preserving the scaled numeric meaning.
+
+Aborts with `ECannotBeConvertedToUD30x9` if `x` is negative.
+</APIItem>
+
+<APIItem
+  functionSignature="try_into_UD30x9(x: SD29x9) -> Option<UD30x9>"
+  id="sd29x9_base-try_into_UD30x9"
+  kind="public"
+>
+Returns `some(UD30x9)` when `x` is non-negative, otherwise `none`.
+</APIItem>
+
+#### Errors [!toc] [#sd29x9_base-Errors]
+
+<APIItem
+  functionSignature="EOverflow (code 0)"
+  id="sd29x9_base-EOverflow"
+  kind="error"
+>
+Raised when an arithmetic result exceeds the representable `SD29x9` range.
+</APIItem>
+
+<APIItem
+  functionSignature="ECannotBeConvertedToUD30x9 (code 1)"
+  id="sd29x9_base-ECannotBeConvertedToUD30x9"
+  kind="error"
+>
+Raised when [`into_UD30x9`](#sd29x9_base-into_UD30x9) is called on a negative value.
+</APIItem>
+
+<APIItem
+  functionSignature="EDivideByZero (code 2)"
+  id="sd29x9_base-EDivideByZero"
+  kind="error"
+>
+Raised when a division, modulo, or remainder operation receives a zero divisor.
+</APIItem>
+
+<APIItem
+  functionSignature="ENegativeSqrt (code 3)"
+  id="sd29x9_base-ENegativeSqrt"
+  kind="error"
+>
+Raised when [`sqrt`](#sd29x9_base-sqrt) is called on a negative value.
+</APIItem>
+
+<APIItem
+  functionSignature="ELogUndefined (code 4)"
+  id="sd29x9_base-ELogUndefined"
+  kind="error"
+>
+Raised when [`ln`](#sd29x9_base-ln), [`log2`](#sd29x9_base-log2), or [`log10`](#sd29x9_base-log10) is called on a zero or negative value.
+</APIItem>
+
+### `sd29x9_convert` [toc] [#sd29x9_convert]
+
+<APIGithubLinkHeader
+  moduleName="sd29x9_convert"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.3.0/math/fixed_point/sources/sd29x9/conversions.move"
+/>
+
+```move
+use openzeppelin_fp_math::sd29x9_convert;
+```
+
+Scale-aware conversions between whole signed magnitudes and `SD29x9`. Inputs use an unsigned magnitude plus a sign flag because Move does not provide a native signed integer type for this package; outputs return either a single magnitude (when sign is asserted) or a `(magnitude, is_negative)` pair.
+
+For raw, non-scaling casts, use [`sd29x9::wrap`](#sd29x9-wrap) and [`sd29x9::unwrap`](#sd29x9-unwrap) instead.
+
+Functions
+
+- [`from_u64(x, is_negative)`](#sd29x9_convert-from_u64)
+- [`from_u128(x, is_negative)`](#sd29x9_convert-from_u128)
+- [`try_from_u128(x, is_negative)`](#sd29x9_convert-try_from_u128)
+- [`to_parts_trunc(x)`](#sd29x9_convert-to_parts_trunc)
+- [`to_u128_trunc(x)`](#sd29x9_convert-to_u128_trunc)
+- [`try_to_u128_trunc(x)`](#sd29x9_convert-try_to_u128_trunc)
+- [`to_u64_trunc(x)`](#sd29x9_convert-to_u64_trunc)
+- [`try_to_u64_trunc(x)`](#sd29x9_convert-try_to_u64_trunc)
+
+Errors
+
+- [`EOverflow`](#sd29x9_convert-EOverflow)
+- [`ENegativeValue`](#sd29x9_convert-ENegativeValue)
+- [`EIntegerOverflow`](#sd29x9_convert-EIntegerOverflow)
+
+#### Functions [!toc] [#sd29x9_convert-Functions]
+
+<APIItem
+  functionSignature="from_u64(x: u64, is_negative: bool) -> SD29x9"
+  id="sd29x9_convert-from_u64"
+  kind="public"
+>
+Converts a whole `u64` magnitude into `SD29x9` by multiplying it by `10^9` and applying the provided sign.
+</APIItem>
+
+<APIItem
+  functionSignature="from_u128(x: u128, is_negative: bool) -> SD29x9"
+  id="sd29x9_convert-from_u128"
+  kind="public"
+>
+Converts a whole `u128` magnitude into `SD29x9` by multiplying it by `10^9` and applying the provided sign.
+
+Aborts with `EOverflow` if `x * 10^9` would overflow the `SD29x9` raw representation.
+</APIItem>
+
+<APIItem
+  functionSignature="try_from_u128(x: u128, is_negative: bool) -> Option<SD29x9>"
+  id="sd29x9_convert-try_from_u128"
+  kind="public"
+>
+Returns `some(SD29x9)` when the scaled magnitude fits, otherwise `none`.
+</APIItem>
+
+<APIItem
+  functionSignature="to_parts_trunc(x: SD29x9) -> (u128, bool)"
+  id="sd29x9_convert-to_parts_trunc"
+  kind="public"
+>
+Returns `(magnitude, is_negative)` where `magnitude` is the truncated whole-number portion of `abs(x)`. `is_negative` is always `false` when the magnitude is zero.
+</APIItem>
+
+<APIItem
+  functionSignature="to_u128_trunc(x: SD29x9) -> u128"
+  id="sd29x9_convert-to_u128_trunc"
+  kind="public"
+>
+Returns the truncated whole-number portion of `x` as `u128`.
+
+Aborts with `ENegativeValue` if `x` is negative.
+</APIItem>
+
+<APIItem
+  functionSignature="try_to_u128_trunc(x: SD29x9) -> Option<u128>"
+  id="sd29x9_convert-try_to_u128_trunc"
+  kind="public"
+>
+Returns `some(u128)` when `x` is non-negative, otherwise `none`.
+</APIItem>
+
+<APIItem
+  functionSignature="to_u64_trunc(x: SD29x9) -> u64"
+  id="sd29x9_convert-to_u64_trunc"
+  kind="public"
+>
+Returns the truncated whole-number portion of `x` as `u64`.
+
+Aborts with `ENegativeValue` if `x` is negative.
+Aborts with `EIntegerOverflow` if the truncated magnitude exceeds `u64::MAX`.
+</APIItem>
+
+<APIItem
+  functionSignature="try_to_u64_trunc(x: SD29x9) -> Option<u64>"
+  id="sd29x9_convert-try_to_u64_trunc"
+  kind="public"
+>
+Returns `some(u64)` when `x` is non-negative and the truncated whole-number portion fits in `u64`, otherwise `none`.
+</APIItem>
+
+#### Errors [!toc] [#sd29x9_convert-Errors]
+
+<APIItem
+  functionSignature="EOverflow (code 0)"
+  id="sd29x9_convert-EOverflow"
+  kind="error"
+>
+Raised when a whole signed magnitude cannot be scaled into the `SD29x9` raw representation.
+</APIItem>
+
+<APIItem
+  functionSignature="ENegativeValue (code 1)"
+  id="sd29x9_convert-ENegativeValue"
+  kind="error"
+>
+Raised when a negative `SD29x9` value is converted to an unsigned integer type.
+</APIItem>
+
+<APIItem
+  functionSignature="EIntegerOverflow (code 2)"
+  id="sd29x9_convert-EIntegerOverflow"
+  kind="error"
+>
+Raised when a truncated whole part does not fit in `u64`.
+</APIItem>

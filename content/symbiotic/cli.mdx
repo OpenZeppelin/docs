@@ -1,0 +1,145 @@
+---
+title: CLI & API Reference
+---
+
+Command-line and HTTP interfaces for the Symbiotic template.
+
+When `activeProvider` is `layerzero`, `make send` and `make e2e` use the managed `ExampleOApp` starter contract. If `layerzero.oapp.enabled` is `false`, those commands are unavailable for that environment.
+
+## Core Commands
+
+### `make send`
+
+Send one test message through the active provider.
+
+```bash
+make send
+make send MSG="test message"
+make send ENV=testnet MSG="hello"
+```
+
+### `make watch`
+
+Watch a previously sent message until the destination path succeeds.
+
+```bash
+make watch
+make watch ENV=testnet TIMEOUT=300
+make watch GUID=0x...
+make watch TX=0x...
+```
+
+| Variable | Description |
+|----------|-------------|
+| `ENV` | Environment (default: local) |
+| `TIMEOUT` | Max wait in seconds |
+| `GUID` | Watch a specific message by GUID |
+| `TX` | Watch a message by source tx hash |
+
+### `make e2e`
+
+Send a message, then watch it to completion.
+
+```bash
+make e2e
+make e2e MSG="custom message"
+make e2e ENV=testnet MSG="hello" TIMEOUT=180
+```
+
+LayerZero starter OApp addresses are published under:
+
+```text
+deployments/<env>.json -> layerzero.oapp.{source,destination}
+```
+
+## Direct xtask Usage
+
+If you want to bypass `make`, use the Rust CLI directly:
+
+```bash
+cargo xtask --env local msg send "hello"
+cargo xtask --env local msg watch --timeout 120
+cargo xtask --env local msg e2e "hello" --timeout 120
+```
+
+Global xtask overrides:
+
+- `--env` selects the named environment
+- `--env-config` overrides the environment JSON path
+- `--deployments` overrides the deployments JSON path
+- `--generated-dir` overrides the generated runtime output directory
+
+## Manual Operator Invocation
+
+`make dev-operator` is the normal entrypoint, but the raw binary requires four flags:
+
+```bash
+cargo run -p operator -- \
+  --environment config/environments/local.json \
+  --deployments deployments/local.json \
+  --sidecar-address http://localhost:8081 \
+  --relayer-id operator-relayer-1
+```
+
+| Flag | Purpose |
+|------|---------|
+| `--environment` | Environment JSON input |
+| `--deployments` | Deployment addresses JSON input |
+| `--sidecar-address` | Symbiotic relay sidecar gRPC address |
+| `--relayer-id` | OZ Relayer identity to bind to the destination target |
+
+## Message Cache
+
+After `send`, xtask stores message details in:
+
+```text
+generated/<env>/msg-cache.json
+```
+
+`watch` uses this cache when `--id` and `--tx` are omitted.
+
+## HTTP API
+
+Each operator exposes HTTP endpoints on ports `3001-3003`.
+
+### Ingress Webhooks
+
+| Endpoint | Purpose | Auth |
+|----------|---------|------|
+| `POST /webhook/events` | Provider ingress events from OZ Monitor | `X-Signature` + `X-Timestamp` using `WEBHOOK_SECRET` |
+| `POST /api/v1/webhooks/oz-relayer` | Transaction status updates from OZ Relayer | `X-Signature` using `OZ_RELAYER_WEBHOOK_SECRET` |
+
+### Debug and Health
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /debug/v1/messages` | List messages with processing and submission state |
+| `GET /debug/v1/messages/:message_id` | Read one message by ID |
+| `GET /debug/v1/pending` | List pending Merkle roots |
+| `GET /healthz` | Liveness check |
+
+Example:
+
+```bash
+curl -s http://localhost:3001/debug/v1/messages
+curl "http://localhost:3001/debug/v1/messages?status=pending&limit=10"
+```
+
+### LayerZero Proof Endpoints
+
+LayerZero operators also expose:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /api/v1/layerzero/proof` | Return Merkle proofs for processed messages |
+| `POST /api/v1/layerzero/verify` | Verify a Merkle proof in test workflows |
+
+## Webhook Template Requirements
+
+OZ Monitor trigger templates live under `config/templates/oz-monitor/triggers/` and are copied into `generated/<env>/oz-monitor/triggers/`.
+
+Required settings:
+
+- `url.value`: operator webhook URL
+- `secret.value`: must match the operator webhook secret
+- `payload_mode: "raw"`
