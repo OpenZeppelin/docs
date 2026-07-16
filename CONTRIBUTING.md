@@ -641,6 +641,10 @@ For version-specific documentation:
 
 Please be respectful and constructive in all interactions. We strive to maintain a welcoming and inclusive environment for all contributors.
 
+## Contribution License Agreement
+
+In order to contribute, you will be required to agree to the Contributor License Agreement automatically through Github when you submit your PR.
+
 ## Questions?
 
 If you have questions about contributing, feel free to open an issue or reach out to the maintainers.
