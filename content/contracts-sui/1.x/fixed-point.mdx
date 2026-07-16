@@ -7,7 +7,7 @@ The example code snippets used in this guide are experimental and have not been 
 </Callout>
 
 The `openzeppelin_fp_math` package adds two decimal fixed-point types with 9 decimals of precision, matching Sui's native coin precision (`10^9`). It
-is the right tool whenever you need real-valued arithmetic such as prices, fees, rates, ratios, and balance deltas, without giving up determinism or onchain auditability.
+is the right tool whenever you need real-valued arithmetic such as prices, fees, rates, ratios, balance deltas, or standard-normal distribution functions, without giving up determinism or onchain auditability.
 
 The package complements `openzeppelin_math`, which covers integer arithmetic. Use `openzeppelin_math` when your values are whole numbers; reach
 for `openzeppelin_fp_math` when fractional values are part of the protocol.
@@ -25,7 +25,7 @@ for `openzeppelin_fp_math` when fractional values are part of the protocol.
 
 The names encode the layout: `UD30x9` uses up to 30 integer digits with 9 fractional digits, `SD29x9` is the signed counterpart with one bit reserved for the sign. Both fit in 16 bytes of storage, so swapping `u128` for either type costs nothing in storage or arithmetic budget.
 
-Pick **`UD30x9`** for any quantity that cannot be negative: token balances, prices, fees, exchange rates, supply totals. Pick **`SD29x9`** when the value can dip below zero: balance deltas, signed adjustments, P&L, position sides.
+Pick **`UD30x9`** for any quantity that cannot be negative: token balances, prices, fees, exchange rates, supply totals, and non-negative Gaussian inputs or quantiles. Pick **`SD29x9`** when the value can dip below zero: balance deltas, signed adjustments, P&L, position sides, and full-range Gaussian inputs or quantiles.
 
 ## Usage
 
@@ -100,6 +100,26 @@ public fun settle(amount: ud30x9::UD30x9): u64 {
 }
 ```
 
+### Evaluate the standard-normal distribution
+
+```move
+module my_sui_app::gaussian;
+
+use openzeppelin_fp_math::sd29x9::{Self, SD29x9};
+
+/// Return the cumulative probability and density at `z`.
+public fun evaluate(z: SD29x9): (SD29x9, SD29x9) {
+    (z.cdf(), z.pdf())
+}
+
+/// Return the lower and upper bounds of a central 95% interval.
+public fun central_95_bounds(): (SD29x9, SD29x9) {
+    let lower_p = sd29x9::wrap(25_000_000, false); // 0.025
+    let upper_p = sd29x9::wrap(975_000_000, false); // 0.975
+    (lower_p.inverse_cdf(), upper_p.inverse_cdf())
+}
+```
+
 ## Choosing a function
 
 - `mul`, `div`: round toward zero. Equivalent to `mul_trunc`, `div_trunc`. Use as the default when rounding direction does not matter.
@@ -107,6 +127,7 @@ public fun settle(amount: ud30x9::UD30x9): u64 {
 - `mul_away`, `div_away`: round away from zero when inexact. Use for fees, slippage caps, and protocol-side accounting where rounding should never favor the user against the protocol.
 - `unchecked_add`, `unchecked_sub`: wrap modulo `2^128` instead of aborting on overflow/underflow. Use only when you have already proved the operation is safe and you want to avoid the abort path. Otherwise prefer `add` / `sub`.
 - `pow`: approximate, biased toward zero, and not associative under truncation. Reasonable for small, integer exponents over typical fixed-point ranges. Verify expected behavior at your application's exponent and operand magnitudes before relying on it.
+- `cdf`, `pdf`, `inverse_cdf`: evaluate the standard-normal cumulative distribution, density, and quantile. Use `SD29x9` for signed inputs and full-range quantiles; use `UD30x9` for non-negative inputs and upper-half quantiles.
 
 For `SD29x9` specifically, prefer `mod` (Euclidean, always non-negative) over `rem` (truncating, sign follows dividend) unless your protocol explicitly wants the truncating variant.
 
@@ -240,7 +261,7 @@ Both directions truncate toward zero, so the vault never gives away fractional r
 
 ## Overflow and underflow
 
-Unlike `openzeppelin_math`, the fixed-point package does **not** return `Option<T>` from arithmetic. It aborts. The error constants come in three families:
+Unlike `openzeppelin_math`, the fixed-point package does **not** return `Option<T>` from arithmetic. It aborts. Arithmetic errors come in three families:
 
 - **`EOverflow`**: the result exceeds the representable range of the target type.
 - **`EUnderflow`**: applies to `UD30x9::sub` only. Subtraction would produce a negative value, which is unrepresentable in an unsigned type.
@@ -277,7 +298,7 @@ public fun try_add(x: UD30x9, y: UD30x9): Option<UD30x9> {
 
 ## Comparison and equality
 
-Comparison operators on `UD30x9` and `SD29x9` work as you would expect (`eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `is_zero`). There is one subtle point on the signed type:
+Comparison operators on `UD30x9` and `SD29x9` work as you would expect (`eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `is_zero`). The signed type also exposes `is_negative`. There is one subtle point on signed equality:
 
 ```move
 use openzeppelin_fp_math::sd29x9;
@@ -361,6 +382,30 @@ For small integer exponents over operands that are not far from `1.0`, `pow` is 
 - Restructure the computation to reduce the number of intermediate truncations, or
 - Switch to a pre-computed lookup or higher-precision representation in the worst-case region, or
 - Bound the rounding error analytically and check whether your protocol can absorb it.
+
+## Standard-normal distribution functions
+
+Both fixed-point types expose three standard-normal functions as method-style calls:
+
+| Function | `UD30x9` | `SD29x9` |
+|---|---|---|
+| `cdf(z)` | Accepts `z >= 0`; returns `Φ(z)` in `[0.5, 1]`. | Accepts signed `z`; returns `Φ(z)` in `[0, 1]`. |
+| `pdf(z)` | Accepts `z >= 0`; returns `φ(z)` in `[0, 0.398942280]`. | Accepts signed `z`; returns the non-negative density `φ(z)`. |
+| `inverse_cdf(p)` | Accepts `p` in `[0.5, 1]`; returns a non-negative quantile. | Accepts `p` in `[0, 1]`; returns a signed quantile. |
+
+`cdf` and `pdf` accept every value representable by their input type. They saturate once the mathematical result rounds to an endpoint at 9-decimal resolution:
+
+- `cdf(z)` returns exactly `0` for `z <= -6.109410205` and exactly `1` for `z >= 6.109410205`. The unsigned variant only covers the non-negative half.
+- `pdf(z)` returns exactly `0` for `|z| >= 6.402729806` and exactly `0.398942280` at `z = 0`.
+- `inverse_cdf(0)` and `inverse_cdf(1)` return `-6.109410205` and `6.109410205` on `SD29x9`. These are finite clamps for mathematical infinities. The unsigned variant accepts only the upper half and returns `6.109410205` at `p = 1`.
+
+The maximum absolute approximation error is at most `5 * 10^-9` (5 ULP at the fixed-point scale). The committed CDF and PDF fits have an empirical worst case of approximately `5 * 10^-10`. The inverse-CDF validation grid found no result more than 1 ULP from the correctly rounded output.
+
+The quantized CDF is monotone non-decreasing between adjacent representable inputs. The PDF is monotone non-increasing in `|z|`. Equal neighboring outputs are expected where 9-decimal quantization cannot distinguish the mathematical values. All three functions are pure, deterministic, and object-free.
+
+<Callout type="warn">
+`inverse_cdf` validates its probability input. The `SD29x9` variant aborts with `EProbabilityOutOfRange` for negative values or values above `1`. The `UD30x9` variant also aborts with `EProbabilityBelowHalf` below `0.5`, because an unsigned type cannot represent the negative quantile. Near `p = 1`, a 1-ULP change in probability can produce a much larger change in the quantile; this is an intrinsic property of the distribution's tail.
+</Callout>
 
 ## The `min()` gotcha on `SD29x9`
 

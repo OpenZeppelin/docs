@@ -9,13 +9,13 @@ The package provides two decimal fixed-point types with 9 decimals (matching Sui
 - `UD30x9`: unsigned, backed by `u128`.
 - `SD29x9`: signed (two's complement), backed by `u128`.
 
-Each type has a base module that holds the arithmetic, comparison, and bitwise functions, and a conversion module that scales whole integers in and out of fixed-point form.
+Each type has a base module that holds arithmetic, comparison, and standard-normal distribution functions, and a conversion module that scales whole integers in and out of fixed-point form. The unsigned type also exposes bitwise functions.
 
 ### `ud30x9` [toc] [#ud30x9]
 
 <APIGithubLinkHeader
   moduleName="ud30x9"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.3.0/math/fixed_point/sources/ud30x9/ud30x9.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.5.0/math/fixed_point/sources/ud30x9/ud30x9.move"
 />
 
 ```move
@@ -24,7 +24,7 @@ use openzeppelin_fp_math::ud30x9;
 
 Defines the `UD30x9` unsigned decimal fixed-point type. Values represent unsigned real numbers as a `u128` scaled by `10^9`. The 9-decimal scale matches Sui coin precision and keeps offchain reasoning straightforward (`1.0` is `1_000_000_000`).
 
-This module owns the type, raw casting helpers (`wrap` / `unwrap`), and constant constructors. Arithmetic, comparison, and bitwise operations live in [`ud30x9_base`](#ud30x9_base). Whole-integer conversions live in [`ud30x9_convert`](#ud30x9_convert).
+This module owns the type, raw casting helpers (`wrap` / `unwrap`), and constant constructors. Arithmetic, comparison, bitwise, and standard-normal distribution functions live in [`ud30x9_base`](#ud30x9_base). Whole-integer conversions live in [`ud30x9_convert`](#ud30x9_convert).
 
 Types
 
@@ -96,18 +96,19 @@ Returns the raw `u128` bits of a `UD30x9` value.
 
 <APIGithubLinkHeader
   moduleName="ud30x9_base"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.3.0/math/fixed_point/sources/ud30x9/ud30x9_base.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.5.0/math/fixed_point/sources/ud30x9/ud30x9_base.move"
 />
 
 ```move
 use openzeppelin_fp_math::ud30x9_base;
 ```
 
-Arithmetic, comparison, and bitwise functions for `UD30x9`. All entries are exported as method-style calls on `UD30x9` via `public use fun` declarations in `ud30x9`, so `x.add(y)` and `ud30x9_base::add(x, y)` are equivalent.
+Arithmetic, comparison, bitwise, and standard-normal distribution functions for `UD30x9`. All entries are exported as method-style calls on `UD30x9` via `public use fun` declarations in `ud30x9`, so `x.add(y)` and `ud30x9_base::add(x, y)` are equivalent.
 
 Functions
 
 - Arithmetic: [`add`](#ud30x9_base-add), [`sub`](#ud30x9_base-sub), [`mul`](#ud30x9_base-mul), [`mul_trunc`](#ud30x9_base-mul_trunc), [`mul_away`](#ud30x9_base-mul_away), [`div`](#ud30x9_base-div), [`div_trunc`](#ud30x9_base-div_trunc), [`div_away`](#ud30x9_base-div_away), [`mod`](#ud30x9_base-mod), [`pow`](#ud30x9_base-pow), [`sqrt`](#ud30x9_base-sqrt), [`ln`](#ud30x9_base-ln), [`log2`](#ud30x9_base-log2), [`log10`](#ud30x9_base-log10), [`abs`](#ud30x9_base-abs), [`ceil`](#ud30x9_base-ceil), [`floor`](#ud30x9_base-floor), [`unchecked_add`](#ud30x9_base-unchecked_add), [`unchecked_sub`](#ud30x9_base-unchecked_sub)
+- Standard-normal distributions: [`cdf`](#ud30x9_base-cdf), [`pdf`](#ud30x9_base-pdf), [`inverse_cdf`](#ud30x9_base-inverse_cdf)
 - Comparison: [`eq`](#ud30x9_base-eq), [`neq`](#ud30x9_base-neq), [`gt`](#ud30x9_base-gt), [`gte`](#ud30x9_base-gte), [`lt`](#ud30x9_base-lt), [`lte`](#ud30x9_base-lte), [`is_zero`](#ud30x9_base-is_zero)
 - Bitwise: [`and`](#ud30x9_base-and), [`and2`](#ud30x9_base-and2), [`or`](#ud30x9_base-or), [`xor`](#ud30x9_base-xor), [`not`](#ud30x9_base-not), [`lshift`](#ud30x9_base-lshift), [`unchecked_lshift`](#ud30x9_base-unchecked_lshift), [`rshift`](#ud30x9_base-rshift), [`unchecked_rshift`](#ud30x9_base-unchecked_rshift)
 - Cross-type casts: [`into_SD29x9`](#ud30x9_base-into_SD29x9), [`try_into_SD29x9`](#ud30x9_base-try_into_SD29x9)
@@ -121,6 +122,8 @@ Errors
 - [`EInvalidShiftSize`](#ud30x9_base-EInvalidShiftSize)
 - [`ELogUndefined`](#ud30x9_base-ELogUndefined)
 - [`ELogResultUnrepresentable`](#ud30x9_base-ELogResultUnrepresentable)
+- [`EProbabilityOutOfRange`](#ud30x9_base-EProbabilityOutOfRange)
+- [`EProbabilityBelowHalf`](#ud30x9_base-EProbabilityBelowHalf)
 
 #### Functions [!toc] [#ud30x9_base-Functions]
 
@@ -276,6 +279,43 @@ Aborts with `ELogResultUnrepresentable` if `x` is in `(0, 1)` (the result would 
   kind="public"
 >
 Returns `x` unchanged. `UD30x9` is unsigned, so the absolute value is identity. Provided for symmetry with `SD29x9::abs`.
+</APIItem>
+
+<APIItem
+  functionSignature="cdf(z: UD30x9) -> UD30x9"
+  id="ud30x9_base-cdf"
+  kind="public"
+>
+Returns the standard-normal cumulative probability `Φ(z)` for a non-negative `z`. The result is in `[0.5, 1]`; `cdf(0)` is exactly `0.5`, and inputs at or above `6.109410205` return exactly `1`.
+
+The result is monotone non-decreasing between adjacent representable inputs. Its maximum absolute approximation error is at most `5 * 10^-9` (5 ULP), with an empirical worst case of approximately `5 * 10^-10` for the committed fit.
+
+NOTE: The function is pure and deterministic. At 9-decimal resolution, adjacent inputs can return the same quantized probability.
+</APIItem>
+
+<APIItem
+  functionSignature="pdf(z: UD30x9) -> UD30x9"
+  id="ud30x9_base-pdf"
+  kind="public"
+>
+Returns the standard-normal probability density `φ(z)` for a non-negative `z`. The result is in `[0, 0.398942280]`; `pdf(0)` is exactly `0.398942280`, and inputs at or above `6.402729806` return exactly `0`.
+
+The result is monotone non-increasing in `|z|`. Its maximum absolute approximation error is at most `5 * 10^-9` (5 ULP), with an empirical worst case of approximately `5 * 10^-10` for the committed fit.
+
+NOTE: The function is pure and deterministic.
+</APIItem>
+
+<APIItem
+  functionSignature="inverse_cdf(p: UD30x9) -> UD30x9"
+  id="ud30x9_base-inverse_cdf"
+  kind="public"
+>
+Returns the non-negative standard-normal quantile `Φ⁻¹(p)`. The unsigned representation covers `p` in `[0.5, 1]`; `inverse_cdf(0.5)` is exactly `0`, and `inverse_cdf(1)` returns the finite endpoint clamp `6.109410205`.
+
+Aborts with `EProbabilityBelowHalf` if `p < 0.5` because the quantile would be negative.
+Aborts with `EProbabilityOutOfRange` if `p > 1`.
+
+NOTE: The maximum absolute approximation error is at most `5 * 10^-9` (5 ULP). Across the deterministic validation grid, no result is more than 1 ULP from the correctly rounded output. Near `p = 1`, a 1-ULP input change can produce a much larger quantile change because the mathematical function is intrinsically steep.
 </APIItem>
 
 <APIItem
@@ -523,11 +563,27 @@ Raised when [`ln`](#ud30x9_base-ln), [`log2`](#ud30x9_base-log2), or [`log10`](#
 Raised when [`ln`](#ud30x9_base-ln), [`log2`](#ud30x9_base-log2), or [`log10`](#ud30x9_base-log10) is called with an input in `(0, 1)`. The result would be negative, which is unrepresentable in `UD30x9`; the signed `SD29x9` variants accept these inputs.
 </APIItem>
 
+<APIItem
+  functionSignature="EProbabilityOutOfRange (code 7)"
+  id="ud30x9_base-EProbabilityOutOfRange"
+  kind="error"
+>
+Raised when [`inverse_cdf`](#ud30x9_base-inverse_cdf) receives a probability greater than `1`.
+</APIItem>
+
+<APIItem
+  functionSignature="EProbabilityBelowHalf (code 8)"
+  id="ud30x9_base-EProbabilityBelowHalf"
+  kind="error"
+>
+Raised when [`inverse_cdf`](#ud30x9_base-inverse_cdf) receives a probability below `0.5`, whose quantile is negative and unrepresentable in `UD30x9`.
+</APIItem>
+
 ### `ud30x9_convert` [toc] [#ud30x9_convert]
 
 <APIGithubLinkHeader
   moduleName="ud30x9_convert"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.3.0/math/fixed_point/sources/ud30x9/conversions.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.5.0/math/fixed_point/sources/ud30x9/conversions.move"
 />
 
 ```move
@@ -628,7 +684,7 @@ Raised when a truncated whole part does not fit in `u64`.
 
 <APIGithubLinkHeader
   moduleName="sd29x9"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.3.0/math/fixed_point/sources/sd29x9/sd29x9.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.5.0/math/fixed_point/sources/sd29x9/sd29x9.move"
 />
 
 ```move
@@ -637,7 +693,7 @@ use openzeppelin_fp_math::sd29x9;
 
 Defines the `SD29x9` signed decimal fixed-point type. Values represent signed real numbers as a two's complement `u128` scaled by `10^9`. Useful for balance deltas and any quantity that can dip below zero.
 
-This module owns the type, raw casting helpers (`wrap` / `unwrap`), and constant constructors (`zero`, `one`, `min`, `max`). Arithmetic, comparison, and cross-type casts live in [`sd29x9_base`](#sd29x9_base). Whole-integer conversions live in [`sd29x9_convert`](#sd29x9_convert).
+This module owns the type, raw casting helpers (`wrap` / `unwrap`), and constant constructors (`zero`, `one`, `min`, `max`). Arithmetic, comparison, standard-normal distribution functions, and cross-type casts live in [`sd29x9_base`](#sd29x9_base). Whole-integer conversions live in [`sd29x9_convert`](#sd29x9_convert).
 
 Types
 
@@ -736,14 +792,14 @@ Raised when [`wrap`](#sd29x9-wrap) is called with a magnitude that exceeds `2^12
 
 <APIGithubLinkHeader
   moduleName="sd29x9_base"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.3.0/math/fixed_point/sources/sd29x9/sd29x9_base.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.5.0/math/fixed_point/sources/sd29x9/sd29x9_base.move"
 />
 
 ```move
 use openzeppelin_fp_math::sd29x9_base;
 ```
 
-Arithmetic, comparison, and cross-type casts for `SD29x9`. All entries are exported as method-style calls on `SD29x9` via `public use fun` declarations in `sd29x9`, so `x.add(y)` and `sd29x9_base::add(x, y)` are equivalent.
+Arithmetic, comparison, standard-normal distribution functions, and cross-type casts for `SD29x9`. All entries are exported as method-style calls on `SD29x9` via `public use fun` declarations in `sd29x9`, so `x.add(y)` and `sd29x9_base::add(x, y)` are equivalent.
 
 Types
 
@@ -752,7 +808,8 @@ Types
 Functions
 
 - Arithmetic: [`add`](#sd29x9_base-add), [`sub`](#sd29x9_base-sub), [`mul`](#sd29x9_base-mul), [`mul_trunc`](#sd29x9_base-mul_trunc), [`mul_away`](#sd29x9_base-mul_away), [`div`](#sd29x9_base-div), [`div_trunc`](#sd29x9_base-div_trunc), [`div_away`](#sd29x9_base-div_away), [`mod`](#sd29x9_base-mod), [`rem`](#sd29x9_base-rem), [`pow`](#sd29x9_base-pow), [`sqrt`](#sd29x9_base-sqrt), [`ln`](#sd29x9_base-ln), [`log2`](#sd29x9_base-log2), [`log10`](#sd29x9_base-log10), [`negate`](#sd29x9_base-negate), [`abs`](#sd29x9_base-abs), [`ceil`](#sd29x9_base-ceil), [`floor`](#sd29x9_base-floor), [`unchecked_add`](#sd29x9_base-unchecked_add), [`unchecked_sub`](#sd29x9_base-unchecked_sub)
-- Comparison: [`eq`](#sd29x9_base-eq), [`neq`](#sd29x9_base-neq), [`gt`](#sd29x9_base-gt), [`gte`](#sd29x9_base-gte), [`lt`](#sd29x9_base-lt), [`lte`](#sd29x9_base-lte), [`is_zero`](#sd29x9_base-is_zero)
+- Standard-normal distributions: [`cdf`](#sd29x9_base-cdf), [`pdf`](#sd29x9_base-pdf), [`inverse_cdf`](#sd29x9_base-inverse_cdf)
+- Comparison: [`eq`](#sd29x9_base-eq), [`neq`](#sd29x9_base-neq), [`gt`](#sd29x9_base-gt), [`gte`](#sd29x9_base-gte), [`lt`](#sd29x9_base-lt), [`lte`](#sd29x9_base-lte), [`is_zero`](#sd29x9_base-is_zero), [`is_negative`](#sd29x9_base-is_negative)
 - Cross-type casts: [`into_UD30x9`](#sd29x9_base-into_UD30x9), [`try_into_UD30x9`](#sd29x9_base-try_into_UD30x9)
 
 Errors
@@ -762,6 +819,7 @@ Errors
 - [`ECannotBeConvertedToUD30x9`](#sd29x9_base-ECannotBeConvertedToUD30x9)
 - [`ENegativeSqrt`](#sd29x9_base-ENegativeSqrt)
 - [`ELogUndefined`](#sd29x9_base-ELogUndefined)
+- [`EProbabilityOutOfRange`](#sd29x9_base-EProbabilityOutOfRange)
 
 #### Types [!toc] [#sd29x9_base-Types]
 
@@ -963,6 +1021,42 @@ Aborts with `EOverflow` if the rounded result exceeds the representable `SD29x9`
 </APIItem>
 
 <APIItem
+  functionSignature="cdf(z: SD29x9) -> SD29x9"
+  id="sd29x9_base-cdf"
+  kind="public"
+>
+Returns the standard-normal cumulative probability `Φ(z)` as a non-negative `SD29x9`. `cdf(0)` is exactly `0.5`; inputs at or below `-6.109410205` return exactly `0`, and inputs at or above `6.109410205` return exactly `1`.
+
+Negative inputs are evaluated by reflection, so `z.cdf() + z.negate().cdf()` is exactly `1` except at `SD29x9::min()`, whose negation is unrepresentable. The result is monotone non-decreasing between adjacent representable inputs. Its maximum absolute approximation error is at most `5 * 10^-9` (5 ULP), with an empirical worst case of approximately `5 * 10^-10` for the committed fit.
+
+NOTE: The function is pure and deterministic. At 9-decimal resolution, adjacent inputs can return the same quantized probability.
+</APIItem>
+
+<APIItem
+  functionSignature="pdf(z: SD29x9) -> SD29x9"
+  id="sd29x9_base-pdf"
+  kind="public"
+>
+Returns the standard-normal probability density `φ(z)` as a non-negative `SD29x9`. The density is even, so equal magnitudes return equal results regardless of sign. `pdf(0)` is exactly `0.398942280`, and inputs with `|z| >= 6.402729806` return exactly `0`.
+
+The result is monotone non-increasing in `|z|`. Its maximum absolute approximation error is at most `5 * 10^-9` (5 ULP), with an empirical worst case of approximately `5 * 10^-10` for the committed fit.
+
+NOTE: The function is pure and deterministic.
+</APIItem>
+
+<APIItem
+  functionSignature="inverse_cdf(p: SD29x9) -> SD29x9"
+  id="sd29x9_base-inverse_cdf"
+  kind="public"
+>
+Returns the signed standard-normal quantile `Φ⁻¹(p)` for a probability in `[0, 1]`. `inverse_cdf(0.5)` is exactly `0`; the endpoints `0` and `1` return the finite clamps `-6.109410205` and `6.109410205` because the mathematical results are infinite.
+
+Aborts with `EProbabilityOutOfRange` if `p` is negative or greater than `1`.
+
+NOTE: The maximum absolute approximation error is at most `5 * 10^-9` (5 ULP). Across the deterministic validation grid, no result is more than 1 ULP from the correctly rounded output. Near `p = 0` or `p = 1`, a 1-ULP input change can produce a much larger quantile change because the mathematical function is intrinsically steep.
+</APIItem>
+
+<APIItem
   functionSignature="floor(x: SD29x9) -> SD29x9"
   id="sd29x9_base-floor"
   kind="public"
@@ -1045,6 +1139,14 @@ Returns `true` if `x` is exactly zero.
 </APIItem>
 
 <APIItem
+  functionSignature="is_negative(x: SD29x9) -> bool"
+  id="sd29x9_base-is_negative"
+  kind="public"
+>
+Returns `true` if `x` is strictly less than zero, otherwise `false`.
+</APIItem>
+
+<APIItem
   functionSignature="into_UD30x9(x: SD29x9) -> UD30x9"
   id="sd29x9_base-into_UD30x9"
   kind="public"
@@ -1104,11 +1206,19 @@ Raised when [`sqrt`](#sd29x9_base-sqrt) is called on a negative value.
 Raised when [`ln`](#sd29x9_base-ln), [`log2`](#sd29x9_base-log2), or [`log10`](#sd29x9_base-log10) is called on a zero or negative value.
 </APIItem>
 
+<APIItem
+  functionSignature="EProbabilityOutOfRange (code 6)"
+  id="sd29x9_base-EProbabilityOutOfRange"
+  kind="error"
+>
+Raised when [`inverse_cdf`](#sd29x9_base-inverse_cdf) receives a negative probability or a probability greater than `1`.
+</APIItem>
+
 ### `sd29x9_convert` [toc] [#sd29x9_convert]
 
 <APIGithubLinkHeader
   moduleName="sd29x9_convert"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.3.0/math/fixed_point/sources/sd29x9/conversions.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.5.0/math/fixed_point/sources/sd29x9/conversions.move"
 />
 
 ```move
