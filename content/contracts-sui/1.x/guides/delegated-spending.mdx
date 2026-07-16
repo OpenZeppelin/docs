@@ -30,11 +30,62 @@ The tutorial is linear: one happy path, with a named failure checkpoint at each 
 
 ## Prerequisites
 
-Before starting, install the Sui CLI and complete the Quickstart on the [Contracts for Sui overview](/contracts-sui/1.x) so you can publish packages and run PTBs against your target network. You need three funded accounts: an owner, a delegate, and a keeper operator. Familiarity with shared objects and programmable transaction blocks (PTBs) helps; the tutorial names the signing account before every transaction.
+This tutorial requires:
 
-## Add the dependency
+- The [Sui CLI](https://docs.sui.io/guides/developer/getting-started/sui-install), version 1.75.2 or newer (the modules rely on `sui::accumulator` and address balances, which older toolchains do not ship)
+- `jq`, used at checkpoints to extract values from JSON output (optional; each checkpoint names the raw path as a fallback)
 
-Add the allowance package to `Move.toml`, pinned to a git revision (it is not yet on the Move Registry):
+The tutorial runs on testnet, so register the environment and switch to it. If the first command reports the environment already exists, that is fine; the switch is what matters:
+
+```bash
+sui client new-env --alias testnet --rpc https://fullnode.testnet.sui.io:443
+sui client switch --env testnet
+```
+
+Familiarity with shared objects and programmable transaction blocks (PTBs) helps but is not required; every command is given in full. Which account signs matters at every step, so each transaction block below begins with a `sui client switch` to its signer.
+
+You need three funded accounts on your target network: an owner, a delegate, and a keeper operator. Create them with aliases so switching signers stays readable:
+
+```bash
+sui client new-address ed25519 owner
+sui client new-address ed25519 delegate
+sui client new-address ed25519 operator
+```
+
+On testnet, request tokens for the **owner** from the [web faucet](https://faucet.sui.io) (the CLI faucet, `sui client faucet`, redirects there). At the time of writing each request grants 1 SUI and the faucet rate-limits after a few requests, so request three times for the owner. 3 SUI covers the whole tutorial: the owner pays for the publish, deposits 1 SUI into the vault, and signs several more transactions, while the delegate and operator each only sign a few cheap ones.
+
+Each faucet request delivers a separate 1 SUI coin object, and the split below draws from a single gas coin, so first merge the three into one. `sui client gas owner` lists the coin IDs; paying all coins to yourself consolidates them:
+
+```bash
+sui client switch --address owner
+sui client pay-all-sui \
+  --input-coins <COIN_ID_1> <COIN_ID_2> <COIN_ID_3> \
+  --recipient <OWNER_ADDRESS> \
+  --gas-budget 10000000
+```
+
+Then split gas out to the delegate and operator (`sui client addresses` lists the three addresses):
+
+```bash
+sui client ptb \
+  --split-coins gas "[500000000, 500000000]" \
+  --assign c \
+  --transfer-objects "[c.0]" @<DELEGATE_ADDRESS> \
+  --transfer-objects "[c.1]" @<OPERATOR_ADDRESS>
+```
+
+This leaves the owner just under 2 SUI and the delegate and operator 0.5 SUI each, which is enough for everything that follows.
+
+## Set up the package
+
+Create the package first. The modules in this tutorial declare `module my_defi::delegation` and `module my_defi::keeper`, so the package must be named `my_defi`: the scaffold defines the `my_defi` named address the modules resolve against. A different name fails the build unless you rename the module declarations to match.
+
+```bash
+sui move new my_defi
+cd my_defi
+```
+
+Add the allowance package to `Move.toml` under the generated `[dependencies]` section, pinned to a git revision (it is not yet on the Move Registry):
 
 ```toml
 [dependencies]
@@ -100,7 +151,7 @@ sequenceDiagram
     PTB-->>Owner: OwnerCap
 ```
 
-Publishing is a one-time step, so write both modules in full before you run it. The sections below introduce the remaining functions one at a time, and a second `sui client publish` is rejected because the package is already published. Forcing one anyway mints a fresh `spend_vault`, and the vault you create in the next step would no longer match its `Vault` type. Add everything now, then publish once.
+Publishing is a one-time step: a republish creates a fresh package whose `Vault` type no longer matches any vault you already created. The sections below introduce the functions one at a time, but paste **both complete modules** now and publish once.
 
 <details>
 <summary>Complete `sources/delegation.move` and `sources/keeper.move`</summary>
@@ -244,7 +295,7 @@ public fun unregister(service: &mut Service, ctx: &mut TxContext): SpenderCap {
 
 </details>
 
-`openzeppelin_allowance` is a source dependency with no on-chain address (OpenZeppelin does not publish it on-chain), so pass `--with-unpublished-dependencies` to bundle its modules into yours. The publish emits a single package object holding all three modules, `delegation`, `keeper`, and `spend_vault` together:
+`openzeppelin_allowance` is a source dependency with no on-chain address (OpenZeppelin does not publish it on-chain), so pass `--with-unpublished-dependencies` to bundle its modules into yours. The publish emits a single package object holding all three modules, `delegation`, `keeper`, and `spend_vault` together. Run it from the owner account (`sui client switch --address owner`); the publisher pays the gas and receives the package's `UpgradeCap`:
 
 ```bash
 sui client publish --with-unpublished-dependencies
@@ -264,6 +315,7 @@ export EXPIRES_AT_MS=$((($(date +%s) + 30 * 24 * 60 * 60) * 1000))
 Run the creating PTB from the owner account. It funds the vault with 1 SUI, grants the cap a 0.4 SUI budget expiring in 30 days, shares the vault last, and routes the caps:
 
 ```bash
+sui client switch --address owner
 sui client ptb \
   --split-coins gas "[1000000000]" \
   --assign funding \
@@ -300,6 +352,7 @@ A budget is an entry keyed by `(cap_id, coin type)`. Two sentinel values use `u6
 The owner grants or updates later budgets by calling the library directly. Run this from the owner account to raise the budget to 0.6 SUI (unconditionally; the race-free variant comes later):
 
 ```bash
+sui client switch --address owner
 sui client ptb \
   --move-call $PACKAGE::spend_vault::set_allowance \
     "<0x2::sui::SUI>" \
@@ -312,19 +365,21 @@ sui client ptb \
     @0x6
 ```
 
-**Checkpoint.** Read the entry back with a dev-inspect call to each view function. Use `sui client call --dev-inspect --json`, which reports return values under `command_outputs`; `sui client ptb --dev-inspect` executes the same reads but prints no return values:
+**Checkpoint.** Read the entry back with a dev-inspect call to each view function. Use `sui client call --dev-inspect --json`, which reports return values under `command_outputs` (`sui client ptb --dev-inspect` executes the same reads but prints no return values); piping through `jq` extracts the value from the otherwise lengthy output:
 
 ```bash
 sui client call --dev-inspect --json \
   --package $PACKAGE --module spend_vault --function allowance \
-  --type-args 0x2::sui::SUI --args $VAULT $SPENDER_CAP
+  --type-args 0x2::sui::SUI --args $VAULT $SPENDER_CAP \
+  | jq '.command_outputs[0].returnValues[0].json'
 
 sui client call --dev-inspect --json \
   --package $PACKAGE --module spend_vault --function expiry \
-  --type-args 0x2::sui::SUI --args $VAULT $SPENDER_CAP
+  --type-args 0x2::sui::SUI --args $VAULT $SPENDER_CAP \
+  | jq '.command_outputs[0].returnValues[0].json'
 ```
 
-Each prints its result at `command_outputs[0].returnValues[0].json`: `allowance` must return `600000000` and `expiry` your `$EXPIRES_AT_MS`. The transaction's `AllowanceSet` event must show `was_created: false`.
+`allowance` must print `"600000000"` and `expiry` your `$EXPIRES_AT_MS` (without `jq`, find the same path by eye in the raw JSON). The transaction's `AllowanceSet` event must show `was_created: false`.
 
 ## Spend as the Delegate
 
@@ -351,6 +406,7 @@ Reach for a `Coin<T>` only when a downstream call needs a coin object to compose
 Run the spend from the delegate account, drawing 0.15 SUI straight into the delegate's address balance:
 
 ```bash
+sui client switch --address delegate
 sui client ptb \
   --move-call $PACKAGE::delegation::spend_to_address \
     "<0x2::sui::SUI>" \
@@ -465,6 +521,7 @@ sequenceDiagram
 The `keeper` module is already part of `$PACKAGE`, so no further publish is needed. Create and share the service from the operator account, pinning it to your vault id:
 
 ```bash
+sui client switch --address operator
 sui client ptb \
   --move-call $PACKAGE::keeper::create @$VAULT \
   --assign service \
@@ -480,6 +537,7 @@ export SERVICE=0x...
 The delegate hands the cap into custody. Run this from the delegate account:
 
 ```bash
+sui client switch --address delegate
 sui client ptb \
   --move-call $PACKAGE::keeper::register @$SERVICE @$SPENDER_CAP
 ```
@@ -487,6 +545,7 @@ sui client ptb \
 Now the operator drives a spend. `execute_topup` returns a `Balance<T>`, which the PTB delivers straight to the user's address balance with `send_funds`, creating no coin object. In a real keeper this balance would flow into a position; here it tops up the user. Run this from the operator account:
 
 ```bash
+sui client switch --address operator
 sui client ptb \
   --move-call $PACKAGE::keeper::execute_topup \
     "<0x2::sui::SUI>" \
@@ -540,6 +599,7 @@ Note that the CAS guard matches `remaining` only, while the upsert always overwr
 Read the current budget first (the last checkpoint's `Spent` event showed `remaining: 400000000`, or re-run the dev-inspect read), then raise it to 1 SUI from the owner account, passing the read value as `expected`:
 
 ```bash
+sui client switch --address owner
 sui client ptb \
   --move-call $PACKAGE::delegation::change_budget \
     "<0x2::sui::SUI>" \
@@ -601,6 +661,7 @@ Never bundle the two into one PTB. A pool-short `withdraw_all` fails with the `I
 Transaction 1, from the owner account. Note `revoke_all` takes the bare `cap_id` unvalidated, and a wrong id is a silent whole no-op with no event, leaving the intended cap live:
 
 ```bash
+sui client switch --address owner
 sui client ptb \
   --move-call $PACKAGE::spend_vault::revoke_all @$VAULT @$OWNER_CAP @$SPENDER_CAP
 ```
@@ -610,6 +671,7 @@ sui client ptb \
 Transaction 2, later, from the owner account. `withdraw_all` returns a possibly-zero `Balance<T>`, consumed here as a `Coin`:
 
 ```bash
+sui client switch --address owner
 sui client ptb \
   --move-call $PACKAGE::spend_vault::withdraw_all \
     "<0x2::sui::SUI>" \
@@ -645,9 +707,12 @@ The drain ritual, in order:
 5. Only when every balance reads zero, destroy the vault. Run this from the owner account; it consumes both the vault and the `OwnerCap`:
 
    ```bash
+   sui client switch --address owner
    sui client ptb \
      --move-call $PACKAGE::spend_vault::destroy @$VAULT @$OWNER_CAP
    ```
+
+In this tutorial the ritual collapses: only SUI was ever deposited, the pool is already drained, and there are no loose coins to `squash`, so steps 1, 4, and 5 are the whole run, and steps 2 and 3 are no-ops. On a live vault, never skip them: deposits are permissionless, so coin types you never granted can be sitting at the vault address.
 
 **Checkpoint.** The transaction emits `VaultDestroyed`. If the delegate's cap was never reclaimed and destroyed, it is now orphaned; its holder can dispose of it with [`delete_orphaned_cap`](/contracts-sui/1.x/api/allowance#spend_vault-delete_orphaned_cap) (ungated, but the cap is consumed by value, so only its owner can call it). In this tutorial the cap is still custodied by the keeper `Service`, so the delegate must first take it back with `keeper::unregister`, then call `delete_orphaned_cap`.
 
