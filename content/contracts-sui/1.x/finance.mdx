@@ -1,0 +1,56 @@
+---
+title: Finance
+---
+
+<Callout type="warn">
+The example code snippets used in this guide are experimental and have not been audited. They simply help exemplify usage of the OpenZeppelin Sui Package.
+</Callout>
+
+The `openzeppelin_finance` package provides vesting primitives for releasing a locked coin to a beneficiary over time. It locks a `Balance<C>` for a single beneficiary and pays it out on a schedule: a curve-agnostic core handles release accounting and conservation of funds, while the curve - linear, stepped, cliff, or a custom shape you write - is a separate, swappable concern. Use it for token grants, team and investor vesting, payroll streams, and emission schedules.
+
+## Usage
+
+There are two ways to pull the package into your project. Pick whichever fits how much you want to own the code.
+
+### Git dependency
+
+Add the dependency in `Move.toml`, pinned to a git revision:
+
+```toml
+[dependencies]
+openzeppelin_finance = { git = "https://github.com/OpenZeppelin/contracts-sui.git", subdir = "contracts/finance", rev = "v1.4.0" }
+```
+
+### Copy the source
+
+Alternatively, copy [`vesting_wallet.move`](https://github.com/OpenZeppelin/contracts-sui/blob/v1.4.0/contracts/finance/sources/vesting_wallet.move) and [`vesting_wallet_linear.move`](https://github.com/OpenZeppelin/contracts-sui/blob/v1.4.0/contracts/finance/sources/vesting_wallet_linear.move) directly into your package's `sources/` (renaming the module addresses to your own package). You then fully own the code - free to trim, fork, or extend the curve - at the cost of tracking upstream fixes yourself.
+
+### Import
+
+Once the package is available, import the module you want to use:
+
+```move
+use openzeppelin_finance::vesting_wallet_linear;   // the built-in linear-with-cliff curve
+use openzeppelin_finance::vesting_wallet;          // the curve-agnostic core
+```
+
+## Modules
+
+<Cards>
+  <Card href="/contracts-sui/1.x/vesting-wallet" title="Vesting Wallet">
+    Lock a coin for a single beneficiary and release it on a schedule - linear or stepped vesting with an optional cliff via `vesting_wallet_linear`, or a custom curve on the curve-agnostic `vesting_wallet` core.
+  </Card>
+</Cards>
+
+## Choosing a module
+
+| Module | Use it when |
+|---|---|
+| `vesting_wallet_linear` | You want standard token-grant vesting: a linear unlock, or `N` equal tranches, with an optional cliff. **Most integrators only need this module.** |
+| `vesting_wallet` | You're authoring a custom curve (milestone unlocks, oracle-gated release, exotic cliff shapes), or building a protocol that drives vesting wallets **curve-agnostically** - wrapping or gating release without committing to a schedule. |
+
+## Next steps
+
+- [Vesting Wallet](/contracts-sui/1.x/vesting-wallet) for the module guide, the linear curve, topologies, and building custom curves on the core.
+- [Finance API reference](/contracts-sui/1.x/api/finance) for function signatures, events, and errors.
+- [Access](/contracts-sui/1.x/access) for role-based authorization to gate a curve-agnostic wrapper's privileged operations.
