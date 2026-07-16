@@ -15,11 +15,11 @@ This page documents the public API of `openzeppelin_timelock` for OpenZeppelin C
 use openzeppelin_timelock::timelock;
 ```
 
-Hash-keyed operation timelock with typed, on-chain operation parameters and a typed hot-potato execution ticket — a Sui-native take on OpenZeppelin's [`TimelockController`](https://docs.openzeppelin.com/contracts/5.x/api/governance#TimelockController). A proposer schedules an operation with its typed params stored on-chain under a deterministic, off-chain reproducible id; after the per-op delay elapses and before the grace window closes (the ready window is half-open, `[ready_at_ms, expires_at_ms)`, and both bounds are locked at schedule time), an executor executes it, minting an `ExecutionTicket<Action, Params>` — a no-ability hot potato that must be consumed by `consume` in the same PTB. `Done` is sticky, so operations are non-replayable.
+Hash-keyed operation timelock with typed, on-chain operation parameters and a typed hot-potato execution ticket. It is a Sui-native take on OpenZeppelin's [`TimelockController`](https://docs.openzeppelin.com/contracts/5.x/api/governance#TimelockController). A proposer schedules an operation with its typed params stored on-chain under a deterministic, off-chain reproducible id. After the per-op delay elapses and before the grace window closes (the ready window is half-open, `[ready_at_ms, expires_at_ms)`, and both bounds are locked at schedule time), an executor executes it, minting an `ExecutionTicket<Action, Params>`, a no-ability hot potato that must be consumed by `consume` in the same PTB. `Done` is sticky, so operations are non-replayable.
 
 Authorization comes from a hard dependency on `openzeppelin_access`: every gated entry takes `&Auth<Role>` and asserts `Role` matches one of the four role types bound into the `Timelock` at creation (`proposer_role` / `executor_role` / `canceller_role` / `admin_role`). Role types are immutable; membership is managed in the consumer's `AccessControl`. Configuration (`min_delay_ms`, `grace_period_ms`, `open_executor`) is mutated only through the admin-gated `schedule_* / execute_*` pairs, so every configuration change is itself timelocked.
 
-The raw entries (`schedule` / `execute` / `execute_open` / `cancel`) do NOT bind the call to a specific `Timelock` id — a consumer using them must pin the canonical timelock id itself, or an actor holding the roles can route a self-created zero-delay timelock through the consumer. Prefer the `*_with` entries, which take a stored `OperationCap` that enforces the canonical-timelock binding structurally. `Action` witness types must be `drop`-only, one per consume function, and their construction must never leak across the package boundary.
+The raw entries (`schedule` / `execute` / `execute_open` / `cancel`) do NOT bind the call to a specific `Timelock` id. A consumer using them must pin the canonical timelock id itself, or an actor holding the roles can route a self-created zero-delay timelock through the consumer. Prefer the `*_with` entries, which take a stored `OperationCap` that enforces the canonical-timelock binding structurally. `Action` witness types must be `drop`-only, one per consume function, and their construction must never leak across the package boundary.
 
 Types
 
@@ -133,7 +133,7 @@ Timestamps and predecessor are locked at schedule time, so later `min_delay_ms` 
 >
 Deferred authorization for one typed operation, carrying the scheduled params.
 
-Hot potato — NO abilities, so it must be consumed in the same transaction it is minted. Minted by `execute` / `execute_open` (or in-module for self-admin ops); destroyed only by `consume` (or in-module for self-admin ops).
+Hot potato with NO abilities, so it must be consumed in the same transaction it is minted. Minted by `execute` / `execute_open` (or in-module for self-admin ops); destroyed only by `consume` (or in-module for self-admin ops).
 </APIItem>
 
 <APIItem
@@ -141,7 +141,7 @@ Hot potato — NO abilities, so it must be consumed in the same transaction it i
   id="timelock-OperationCap"
   kind="struct"
 >
-A stored handle that binds an operation kind `(Action, Params)` to ONE `Timelock` instance. Carries NO authority on its own — combine it with `&Auth<Role>` for role authorization.
+A stored handle that binds an operation kind `(Action, Params)` to ONE `Timelock` instance. Carries NO authority on its own; combine it with `&Auth<Role>` for role authorization.
 
 Mint one per operation kind at consumer `init` via `new_operation_cap` (against your canonical timelock) and store it inside the object you protect; the `*_with` entries then enforce the canonical-timelock binding for you, so you never hand-write the `object::id` assert. `store`-only: it cannot be copied or dropped, so it lives in your protected object.
 </APIItem>
@@ -246,7 +246,7 @@ Cross-check any off-chain implementation against this function before relying on
   id="timelock-schedule"
   kind="public"
 >
-Schedules an operation, storing its typed `params` on-chain. Caller must hold the proposer role. `predecessor` is the id of an op that must be `Done` before this one (or empty for none); `salt` disambiguates otherwise-identical operations; `delay_ms` must be at least `min_delay_ms`. Returns the operation id (pass to `execute` / `cancel`). This raw entry does not bind the `Timelock` id — prefer `schedule_with`.
+Schedules an operation, storing its typed `params` on-chain. Caller must hold the proposer role. `predecessor` is the id of an op that must be `Done` before this one (or empty for none); `salt` disambiguates otherwise-identical operations; `delay_ms` must be at least `min_delay_ms`. Returns the operation id (pass to `execute` / `cancel`). This raw entry does not bind the `Timelock` id. Prefer `schedule_with`.
 
 Aborts with `EWrongRole` if `Role` is not the bound `proposer_role`.
 
@@ -256,7 +256,7 @@ Aborts with `EScheduleOverflow` if `now + delay_ms` (or that sum plus `grace_per
 
 Aborts with `EInvalidPredecessor` if `predecessor` is non-empty and not a 32-byte id.
 
-Aborts with `EPredecessorIsSelf` if `predecessor` equals the computed id (defense in depth; unreachable in practice — the id hashes over `predecessor`).
+Aborts with `EPredecessorIsSelf` if `predecessor` equals the computed id (defense in depth; unreachable in practice because the id hashes over `predecessor`).
 
 Aborts with `EOperationAlreadyExists` if the id is already scheduled.
 
@@ -268,7 +268,7 @@ Emits an `OperationScheduled` event.
   id="timelock-execute"
   kind="public"
 >
-Executes a ready operation by id. Caller must hold the executor role. Marks the op `Done` (sticky), removes the stored params, and returns an `ExecutionTicket<Action, Params>` carrying them: a no-ability hot potato that must be consumed by `consume` in the same PTB. This raw entry does not bind the `Timelock` id — prefer `execute_with`.
+Executes a ready operation by id. Caller must hold the executor role. Marks the op `Done` (sticky), removes the stored params, and returns an `ExecutionTicket<Action, Params>` carrying them: a no-ability hot potato that must be consumed by `consume` in the same PTB. This raw entry does not bind the `Timelock` id. Prefer `execute_with`.
 
 Aborts with `EWrongRole` if `Role` is not the bound `executor_role`.
 
@@ -296,7 +296,7 @@ Emits an `OperationExecuted` event.
   id="timelock-execute_open"
   kind="public"
 >
-Executes a ready operation in open-executor mode (no `Auth` required). Open mode lifts only the executor-role gate on minting the ticket; consumption stays witness-gated, so a caller who cannot construct `Action` cannot `consume` the returned ticket — and since it has no abilities, their transaction aborts (reverting the state change atomically).
+Executes a ready operation in open-executor mode (no `Auth` required). Open mode lifts only the executor-role gate on minting the ticket; consumption stays witness-gated, so a caller who cannot construct `Action` cannot `consume` the returned ticket. Since it has no abilities, their transaction aborts and reverts the state change atomically.
 
 Aborts with `EOpenExecutorDisabled` if `open_executor` is `false`.
 
@@ -310,7 +310,7 @@ Emits an `OperationExecuted` event.
   id="timelock-consume"
   kind="public"
 >
-Redeems an execution ticket. Two gates fire: timelock-binding and witness-by-value (`Action` is consumed, so only a module that can construct `Action` can call this). Returns `(op_id, params)` — the operation id and the exact typed params committed at schedule time; there is no payload to re-supply or mismatch.
+Redeems an execution ticket. Two gates fire: timelock-binding and witness-by-value (`Action` is consumed, so only a module that can construct `Action` can call this). Returns `(op_id, params)`, the operation id and the exact typed params committed at schedule time; there is no payload to re-supply or mismatch.
 
 Aborts with `EWrongTimelock` if the ticket was minted by a different `Timelock`.
 </APIItem>
@@ -320,7 +320,7 @@ Aborts with `EWrongTimelock` if the ticket was minted by a different `Timelock`.
   id="timelock-cancel"
   kind="public"
 >
-Cancels a scheduled operation by id, dropping its stored params. Caller must hold the canceller role. Allowed on `Waiting` / `Ready` / `Expired` operations; not on `Done`. The operation's `Params` type must be named so the stored params can be cleaned up. This raw entry does not bind the `Timelock` id — prefer `cancel_with`.
+Cancels a scheduled operation by id, dropping its stored params. Caller must hold the canceller role. Allowed on `Waiting` / `Ready` / `Expired` operations; not on `Done`. The operation's `Params` type must be named so the stored params can be cleaned up. This raw entry does not bind the `Timelock` id. Prefer `cancel_with`.
 
 Aborts with `EWrongRole` if `Role` is not the bound `canceller_role`.
 
@@ -354,7 +354,7 @@ Returns the `Timelock` id an `OperationCap` is bound to.
   id="timelock-destroy_operation_cap"
   kind="public"
 >
-Destroys an `OperationCap`, e.g. when decommissioning the object that stored it. An `OperationCap` has `store` but not `drop`, so it cannot be discarded implicitly; this is the explicit disposal. The cap carries no authority — a fresh one is always mintable via `new_operation_cap`.
+Destroys an `OperationCap`, e.g. when decommissioning the object that stored it. An `OperationCap` has `store` but not `drop`, so it cannot be discarded implicitly; this is the explicit disposal. The cap carries no authority; a fresh one is always mintable via `new_operation_cap`.
 </APIItem>
 
 <APIItem
@@ -574,7 +574,7 @@ Returns the role type bound for the self-administered configuration pipeline.
   id="timelock-is_operation"
   kind="public"
 >
-Returns `true` if an operation with this id exists in the timelock — any state but `Unset` (`Waiting`, `Ready`, `Expired`, or `Done`); `false` otherwise.
+Returns `true` if an operation with this id exists in the timelock (any state but `Unset`: `Waiting`, `Ready`, `Expired`, or `Done`); `false` otherwise.
 </APIItem>
 
 <APIItem
@@ -584,7 +584,7 @@ Returns `true` if an operation with this id exists in the timelock — any state
 >
 Returns `true` if the operation is on the execution track: `Waiting` or `Ready`. `Expired`, `Done`, and `Unset` operations return `false`.
 
-Narrower than [`isOperationPending`](https://docs.openzeppelin.com/contracts/5.x/api/governance#TimelockController-isOperationPending-bytes32-) in OpenZeppelin's Solidity `TimelockController`, where operations never expire and pending doubles as the cancellability check. Here an `Expired` operation is no longer pending but is still cancellable — to gate cancellation or cleanup, use `is_operation(id) && !is_operation_done(id)` (or match on `operation_state`).
+Narrower than [`isOperationPending`](https://docs.openzeppelin.com/contracts/5.x/api/governance#TimelockController-isOperationPending-bytes32-) in OpenZeppelin's Solidity `TimelockController`, where operations never expire and pending doubles as the cancellability check. Here an `Expired` operation is no longer pending but is still cancellable. To gate cancellation or cleanup, use `is_operation(id) && !is_operation_done(id)` (or match on `operation_state`).
 </APIItem>
 
 <APIItem
@@ -600,7 +600,7 @@ Returns `true` if the operation is `Ready`: its delay has elapsed and its grace 
   id="timelock-is_operation_expired"
   kind="public"
 >
-Returns `true` if the operation is `Expired`: its grace window has closed, so it can no longer be executed — only cancelled; `false` otherwise.
+Returns `true` if the operation is `Expired`: its grace window has closed, so it can no longer be executed and can only be cancelled; `false` otherwise.
 </APIItem>
 
 <APIItem
@@ -624,7 +624,7 @@ Returns the observable `OperationState` of an operation at the current clock tim
   id="timelock-operation_params"
   kind="public"
 >
-Borrows the typed params of a scheduled, not-yet-executed operation — `Waiting`, `Ready`, or `Expired` (for off-chain inspection / UIs).
+Borrows the typed params of a scheduled, not-yet-executed operation (`Waiting`, `Ready`, or `Expired`) for off-chain inspection and UIs.
 
 Aborts with `sui::dynamic_field::EFieldDoesNotExist` if the id has no stored params (`Unset` or already `Done`).
 
@@ -646,7 +646,7 @@ Emitted by `new` when a `Timelock` is created, recording its initial config and 
   id="timelock-OperationScheduled"
   kind="event"
 >
-Emitted when an operation is committed — by `schedule` and by the self-administered `schedule_update_min_delay` / `schedule_update_grace_period` / `schedule_set_open_executor` (whose `proposer` is an admin-role holder). `payload_digest` is `keccak256(bcs(params))`; the params themselves are not emitted.
+Emitted when an operation is committed by `schedule` or by the self-administered `schedule_update_min_delay` / `schedule_update_grace_period` / `schedule_set_open_executor` (whose `proposer` is an admin-role holder). `payload_digest` is `keccak256(bcs(params))`; the params themselves are not emitted.
 </APIItem>
 
 <APIItem
@@ -654,7 +654,7 @@ Emitted when an operation is committed — by `schedule` and by the self-adminis
   id="timelock-OperationExecuted"
   kind="event"
 >
-Emitted when an operation is executed and its ticket minted — by `execute` / `execute_open` and by the self-administered `execute_update_min_delay` / `execute_update_grace_period` / `execute_set_open_executor`, which emit it alongside the corresponding `*Changed` event in the same call.
+Emitted when an operation is executed and its ticket minted by `execute` / `execute_open` or by the self-administered `execute_update_min_delay` / `execute_update_grace_period` / `execute_set_open_executor`, which emit it alongside the corresponding `*Changed` event in the same call.
 </APIItem>
 
 <APIItem
@@ -776,7 +776,7 @@ Raised when the named predecessor is not present in the timelock.
   id="timelock-EPredecessorIsSelf"
   kind="error"
 >
-Raised when an operation names itself as its predecessor. Defense in depth: the id is the keccak256 of a preimage that includes `predecessor`, so a match would require a hash fixed point — unreachable in practice.
+Raised when an operation names itself as its predecessor. Defense in depth: the id is the keccak256 of a preimage that includes `predecessor`, so a match would require a hash fixed point and is unreachable in practice.
 </APIItem>
 
 <APIItem
@@ -808,7 +808,7 @@ Raised when scheduling this operation would overflow the u64 deadline arithmetic
   id="timelock-EWrongParams"
   kind="error"
 >
-Raised when the supplied `Params` type does not match the type the operation was scheduled with. Reachable on either path: the raw `&Auth` path takes `Params` explicitly, and the `*_with` (cap) path pins it via the `OperationCap` — but supplying a cap for a different `(Action, Params)` than the op was scheduled with still mismatches.
+Raised when the supplied `Params` type does not match the type the operation was scheduled with. Reachable on either path: the raw `&Auth` path takes `Params` explicitly, and the `*_with` (cap) path pins it via the `OperationCap`. Supplying a cap for a different `(Action, Params)` than the op was scheduled with still mismatches.
 </APIItem>
 
 <APIItem

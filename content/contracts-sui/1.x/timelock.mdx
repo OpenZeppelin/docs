@@ -4,10 +4,10 @@ title: Timelock
 
 The `openzeppelin_timelock` package is a Sui-native take on OpenZeppelin's `TimelockController`: it enforces a minimum on-chain delay between scheduling a privileged operation and executing it, giving users a window to react before the change takes effect.
 
-Because Move has no `target.call(data)`, the timelock stores each operation's typed parameters on-chain and, at execution time, hands them back through a no-ability `ExecutionTicket<Action, Params>` hot potato that the consumer redeems in the same transaction — the consumer dispatches to itself. An integration binds to a specific `Timelock` through a stored `OperationCap`, so the canonical-timelock check is enforced by the library rather than by hand-written asserts. Roles (proposer, executor, canceller, admin) come from a hard dependency on `openzeppelin_access::access_control`.
+Because Move has no `target.call(data)`, the timelock stores each operation's typed parameters on-chain and, at execution time, hands them back through a no-ability `ExecutionTicket<Action, Params>` hot potato that the consumer redeems in the same transaction. The consumer dispatches to itself. An integration binds to a specific `Timelock` through a stored `OperationCap`, so the canonical-timelock check is enforced by the library rather than by hand-written asserts. Roles (proposer, executor, canceller, admin) come from a hard dependency on `openzeppelin_access::access_control`.
 
 <Callout type="warn">
-Prefer the `OperationCap`-bound entries (`schedule_with`, `execute_with`, `cancel_with`). The raw `schedule` / `execute` / `cancel` entries do not bind the timelock id: if you use them you must assert `object::id(timelock)` against your canonical timelock in every wrapper, and forgetting it silently disables the delay. Also, `ExecutionTicket` has no abilities — always follow `execute` with `consume` in the same PTB, or the transaction aborts.
+Prefer the `OperationCap`-bound entries (`schedule_with`, `execute_with`, `cancel_with`). The raw `schedule` / `execute` / `cancel` entries do not bind the timelock id: if you use them you must assert `object::id(timelock)` against your canonical timelock in every wrapper, and forgetting it silently disables the delay. Also, `ExecutionTicket` has no abilities. Always follow `execute` with `consume` in the same PTB, or the transaction aborts.
 </Callout>
 
 ## Usage
@@ -113,7 +113,7 @@ More complete integrations (an AMM with self-administered config, dual governanc
 - `OperationCap<Action, Params>` (stored): binds one operation kind to one `Timelock`. Minted at `init` and stored in the object you protect; carries no authority on its own.
 - `ExecutionTicket<Action, Params>` (hot potato): minted by `execute` / `execute_with`, carries the typed params, and must be redeemed with `consume` (witness-gated) in the same PTB.
 - Roles: every gated entry takes `&Auth<Role>` from `openzeppelin_access` and checks it against the proposer / executor / canceller / admin role type bound at creation. Optional open-executor mode makes execution permissionless.
-- Delay and expiry: an operation is executable in the half-open window `[ready_at_ms, expires_at_ms)`, locked at schedule time — later config changes never move an in-flight op, and `Done` is sticky, so operations are non-replayable. `min_delay_ms`, `grace_period_ms`, and `open_executor` are self-administered: every change is itself timelocked.
+- Delay and expiry: an operation is executable in the half-open window `[ready_at_ms, expires_at_ms)`, locked at schedule time. Later config changes never move an in-flight op, and `Done` is sticky, so operations are non-replayable. `min_delay_ms`, `grace_period_ms`, and `open_executor` are self-administered: every change is itself timelocked.
 
 ## API Reference
 

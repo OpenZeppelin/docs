@@ -1,5 +1,5 @@
 import { HomeLayout } from "fumadocs-ui/layouts/home";
-import { ArrowDown, SendIcon } from "lucide-react";
+import { ArrowDown } from "lucide-react";
 import { Footer } from "@/components/footer";
 import {
 	BannerCard,
@@ -304,19 +304,12 @@ export default function HomePage() {
 						</p>
 					</div>
 
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+					<div className="grid grid-cols-1 gap-4 sm:gap-5">
 						<CommunityCard
 							href="https://forum.openzeppelin.com/"
 							icon={<AnnotationDotsIcon className="h-6 w-6 sm:h-8 sm:w-8" />}
 							title="Forum"
 							description="Engage in technical deep-dives and architectural discussions. Get detailed answers, share your implementations, and learn from experienced developers building in production."
-						/>
-
-						<CommunityCard
-							href="https://t.me/openzeppelin_tg"
-							icon={<SendIcon className="h-6 w-6 sm:h-8 sm:w-8" />}
-							title="Telegram"
-							description="Get quick help and connect with the community in real-time. Ask questions, share updates, and stay informed about the latest OpenZeppelin developments and announcements."
 						/>
 					</div>
 				</div>

@@ -11,6 +11,7 @@ A collection of contracts and libraries that implement various signature validat
 * [`SignatureChecker`](#SignatureChecker): A library helper to support regular ECDSA from EOAs as well as ERC-1271 signatures for smart contracts.
 * [`Hashes`](#Hashes): Commonly used hash functions.
 * [`MerkleProof`](#MerkleProof): Functions for verifying [Merkle Tree](https://en.wikipedia.org/wiki/Merkle_tree) proofs.
+* [`TrieProof`](#TrieProof): Library for verifying Ethereum Merkle-Patricia trie inclusion proofs.
 * [`EIP712`](#EIP712): Contract with functions to allow processing signed typed structure data according to [EIP-712](https://eips.ethereum.org/EIPS/eip-712).
 * [`ERC7739Utils`](#ERC7739Utils): Utilities library that implements a defensive rehashing mechanism to prevent replayability of smart contract signatures based on ERC-7739.
 * [`WebAuthn`](#WebAuthn): Library for verifying WebAuthn Authentication Assertions.
@@ -37,6 +38,8 @@ A collection of contracts and libraries that implement various signature validat
 [`Hashes`](#Hashes)
 
 [`MerkleProof`](#MerkleProof)
+
+[`TrieProof`](#TrieProof)
 
 [`EIP712`](#EIP712)
 
@@ -76,9 +79,9 @@ A collection of contracts and libraries that implement various signature validat
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ECDSA`
+## `ECDSA` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/ECDSA.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/ECDSA.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -263,7 +266,7 @@ See [ERC-2098 short signatures](https://eips.ethereum.org/EIPS/eip-2098)
 </div>
 <div className="px-4">
 
-Overload of [`ECDSA.recover`](#ECDSA-recover-bytes32-uint8-bytes32-bytes32-) that receives the `r and `vs` short-signature fields separately.
+Overload of [`ECDSA.recover`](#ECDSA-recover-bytes32-uint8-bytes32-bytes32-) that receives the `r` and `vs` short-signature fields separately.
 
 </div>
 </div>
@@ -339,7 +342,7 @@ Consider validating the result before use, or use [`ECDSA.tryRecover`](#ECDSA-tr
 </div>
 <div className="px-4">
 
-Variant of [`CAIP10.parse`](#CAIP10-parse-string-) that takes a signature in calldata
+Variant of [`ECDSA.parse`](#ECDSA-parse-bytes-) that takes a signature in calldata
 
 </div>
 </div>
@@ -356,7 +359,7 @@ Variant of [`CAIP10.parse`](#CAIP10-parse-string-) that takes a signature in cal
 </div>
 <div className="px-4">
 
-The signature derives the `address(0)`.
+The signature is invalid.
 
 </div>
 </div>
@@ -399,9 +402,9 @@ The signature has an S value that is in the upper half order.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `EIP712`
+## `EIP712` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/EIP712.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/EIP712.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -445,15 +448,18 @@ separator from the immutable values, which is cheaper than accessing a cached ve
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### IERC5267 [!toc]
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
+
+</details>
 </div>
 </div>
 
@@ -478,7 +484,8 @@ The meaning of `name` and `version` is specified in
 - `version`: the current major version of the signing domain.
 
 <Callout>
-These parameters cannot be changed except through a [smart contract upgrade](/contracts/5.x/learn/upgrading-smart-contracts).
+These parameters cannot be changed except through a [smart
+contract upgrade](/contracts/5.x/learn/upgrading-smart-contracts).
 </Callout>
 
 </div>
@@ -596,9 +603,9 @@ It only reads from storage if necessary (in case the value is too large to fit i
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `Hashes`
+## `Hashes` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/Hashes.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/Hashes.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -662,9 +669,9 @@ Implementation of keccak256(abi.encode(a, b)) that doesn't allocate or expand me
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `MerkleProof`
+## `MerkleProof` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/MerkleProof.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/MerkleProof.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -923,7 +930,9 @@ Returns true if the `leaves` can be simultaneously proven to be a part of a Merk
 
 This version handles multiproofs in memory with the default hashing function.
 
-CAUTION: Not all Merkle trees admit multiproofs. See [`MerkleProof.processMultiProof`](#MerkleProof-processMultiProof-bytes32---bool---bytes32---function--bytes32-bytes32--view-returns--bytes32--) for details.
+<Callout type="warn">
+Not all Merkle trees admit multiproofs. See [`MerkleProof.processMultiProof`](#MerkleProof-processMultiProof-bytes32---bool---bytes32---function--bytes32-bytes32--view-returns--bytes32--) for details.
+</Callout>
 
 <Callout>
 Consider the case where `root == proof[0] && leaves.length == 0` as it will return `true`.
@@ -952,9 +961,11 @@ respectively.
 
 This version handles multiproofs in memory with the default hashing function.
 
-CAUTION: Not all Merkle trees admit multiproofs. To use multiproofs, it is sufficient to ensure that: 1) the tree
+<Callout type="warn">
+Not all Merkle trees admit multiproofs. To use multiproofs, it is sufficient to ensure that: 1) the tree
 is complete (but not necessarily perfect), 2) the leaves to be proven are in the opposite order they are in the
 tree (i.e., as seen from right to left starting at the deepest layer and continuing at the next layer).
+</Callout>
 
 <Callout>
 The _empty set_ (i.e. the case where `proof.length == 1 && leaves.length == 0`) is considered a no-op,
@@ -982,7 +993,9 @@ Returns true if the `leaves` can be simultaneously proven to be a part of a Merk
 
 This version handles multiproofs in memory with a custom hashing function.
 
-CAUTION: Not all Merkle trees admit multiproofs. See [`MerkleProof.processMultiProof`](#MerkleProof-processMultiProof-bytes32---bool---bytes32---function--bytes32-bytes32--view-returns--bytes32--) for details.
+<Callout type="warn">
+Not all Merkle trees admit multiproofs. See [`MerkleProof.processMultiProof`](#MerkleProof-processMultiProof-bytes32---bool---bytes32---function--bytes32-bytes32--view-returns--bytes32--) for details.
+</Callout>
 
 <Callout>
 Consider the case where `root == proof[0] && leaves.length == 0` as it will return `true`.
@@ -1011,9 +1024,11 @@ respectively.
 
 This version handles multiproofs in memory with a custom hashing function.
 
-CAUTION: Not all Merkle trees admit multiproofs. To use multiproofs, it is sufficient to ensure that: 1) the tree
+<Callout type="warn">
+Not all Merkle trees admit multiproofs. To use multiproofs, it is sufficient to ensure that: 1) the tree
 is complete (but not necessarily perfect), 2) the leaves to be proven are in the opposite order they are in the
 tree (i.e., as seen from right to left starting at the deepest layer and continuing at the next layer).
+</Callout>
 
 <Callout>
 The _empty set_ (i.e. the case where `proof.length == 1 && leaves.length == 0`) is considered a no-op,
@@ -1041,7 +1056,9 @@ Returns true if the `leaves` can be simultaneously proven to be a part of a Merk
 
 This version handles multiproofs in calldata with the default hashing function.
 
-CAUTION: Not all Merkle trees admit multiproofs. See [`MerkleProof.processMultiProof`](#MerkleProof-processMultiProof-bytes32---bool---bytes32---function--bytes32-bytes32--view-returns--bytes32--) for details.
+<Callout type="warn">
+Not all Merkle trees admit multiproofs. See [`MerkleProof.processMultiProof`](#MerkleProof-processMultiProof-bytes32---bool---bytes32---function--bytes32-bytes32--view-returns--bytes32--) for details.
+</Callout>
 
 <Callout>
 Consider the case where `root == proof[0] && leaves.length == 0` as it will return `true`.
@@ -1070,9 +1087,11 @@ respectively.
 
 This version handles multiproofs in calldata with the default hashing function.
 
-CAUTION: Not all Merkle trees admit multiproofs. To use multiproofs, it is sufficient to ensure that: 1) the tree
+<Callout type="warn">
+Not all Merkle trees admit multiproofs. To use multiproofs, it is sufficient to ensure that: 1) the tree
 is complete (but not necessarily perfect), 2) the leaves to be proven are in the opposite order they are in the
 tree (i.e., as seen from right to left starting at the deepest layer and continuing at the next layer).
+</Callout>
 
 <Callout>
 The _empty set_ (i.e. the case where `proof.length == 1 && leaves.length == 0`) is considered a no-op,
@@ -1100,7 +1119,9 @@ Returns true if the `leaves` can be simultaneously proven to be a part of a Merk
 
 This version handles multiproofs in calldata with a custom hashing function.
 
-CAUTION: Not all Merkle trees admit multiproofs. See [`MerkleProof.processMultiProof`](#MerkleProof-processMultiProof-bytes32---bool---bytes32---function--bytes32-bytes32--view-returns--bytes32--) for details.
+<Callout type="warn">
+Not all Merkle trees admit multiproofs. See [`MerkleProof.processMultiProof`](#MerkleProof-processMultiProof-bytes32---bool---bytes32---function--bytes32-bytes32--view-returns--bytes32--) for details.
+</Callout>
 
 <Callout>
 Consider the case where `root == proof[0] && leaves.length == 0` as it will return `true`.
@@ -1129,9 +1150,11 @@ respectively.
 
 This version handles multiproofs in calldata with a custom hashing function.
 
-CAUTION: Not all Merkle trees admit multiproofs. To use multiproofs, it is sufficient to ensure that: 1) the tree
+<Callout type="warn">
+Not all Merkle trees admit multiproofs. To use multiproofs, it is sufficient to ensure that: 1) the tree
 is complete (but not necessarily perfect), 2) the leaves to be proven are in the opposite order they are in the
 tree (i.e., as seen from right to left starting at the deepest layer and continuing at the next layer).
+</Callout>
 
 <Callout>
 The _empty set_ (i.e. the case where `proof.length == 1 && leaves.length == 0`) is considered a no-op,
@@ -1163,9 +1186,9 @@ The multiproof provided is not valid.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `MessageHashUtils`
+## `MessageHashUtils` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/MessageHashUtils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/MessageHashUtils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1189,6 +1212,16 @@ specifications.
 - [toDataWithIntendedValidatorHash(validator, data)](#MessageHashUtils-toDataWithIntendedValidatorHash-address-bytes-)
 - [toDataWithIntendedValidatorHash(validator, messageHash)](#MessageHashUtils-toDataWithIntendedValidatorHash-address-bytes32-)
 - [toTypedDataHash(domainSeparator, structHash)](#MessageHashUtils-toTypedDataHash-bytes32-bytes32-)
+- [toDomainSeparator(fields, name, version, chainId, verifyingContract, salt)](#MessageHashUtils-toDomainSeparator-bytes1-string-string-uint256-address-bytes32-)
+- [toDomainSeparator(fields, nameHash, versionHash, chainId, verifyingContract, salt)](#MessageHashUtils-toDomainSeparator-bytes1-bytes32-bytes32-uint256-address-bytes32-)
+- [toDomainTypeHash(fields)](#MessageHashUtils-toDomainTypeHash-bytes1-)
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [ERC5267ExtensionsNotSupported()](#MessageHashUtils-ERC5267ExtensionsNotSupported--)
 </div>
 </div>
 
@@ -1281,7 +1314,7 @@ See [`ECDSA.recover`](#ECDSA-recover-bytes32-uint8-bytes32-bytes32-).
 </div>
 <div className="px-4">
 
-Variant of #MessageHashUtils-toDataWithIntendedValidatorHash-address-bytes- optimized for cases where `data` is a bytes32.
+Variant of `toDataWithIntendedValidatorHash-address-bytes` optimized for cases where `data` is a bytes32.
 
 </div>
 </div>
@@ -1309,13 +1342,91 @@ See [`ECDSA.recover`](#ECDSA-recover-bytes32-uint8-bytes32-bytes32-).
 </div>
 </div>
 
+<a id="MessageHashUtils-toDomainSeparator-bytes1-string-string-uint256-address-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">toDomainSeparator(bytes1 fields, string name, string version, uint256 chainId, address verifyingContract, bytes32 salt) → bytes32 hash</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#MessageHashUtils-toDomainSeparator-bytes1-string-string-uint256-address-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the EIP-712 domain separator constructed from an `eip712Domain`. See [`IERC5267.eip712Domain`](/contracts/5.x/api/interfaces#IERC5267-eip712Domain--)
+
+This function dynamically constructs the domain separator based on which fields are present in the
+`fields` parameter. It contains flags that indicate which domain fields are present:
+
+* Bit 0 (0x01): name
+* Bit 1 (0x02): version
+* Bit 2 (0x04): chainId
+* Bit 3 (0x08): verifyingContract
+* Bit 4 (0x10): salt
+
+Arguments that correspond to fields which are not present in `fields` are ignored. For example, if `fields` is
+`0x0f` (`0b01111`), then the `salt` parameter is ignored.
+
+</div>
+</div>
+
+<a id="MessageHashUtils-toDomainSeparator-bytes1-bytes32-bytes32-uint256-address-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">toDomainSeparator(bytes1 fields, bytes32 nameHash, bytes32 versionHash, uint256 chainId, address verifyingContract, bytes32 salt) → bytes32 hash</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#MessageHashUtils-toDomainSeparator-bytes1-bytes32-bytes32-uint256-address-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Variant of `toDomainSeparator-bytes1-string-string-uint256-address-bytes32` that uses hashed name and version.
+
+</div>
+</div>
+
+<a id="MessageHashUtils-toDomainTypeHash-bytes1-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">toDomainTypeHash(bytes1 fields) → bytes32 hash</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#MessageHashUtils-toDomainTypeHash-bytes1-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Builds an EIP-712 domain type hash depending on the `fields` provided, following [ERC-5267](https://eips.ethereum.org/EIPS/eip-5267)
+
+</div>
+</div>
+
+<a id="MessageHashUtils-ERC5267ExtensionsNotSupported--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">ERC5267ExtensionsNotSupported()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#MessageHashUtils-ERC5267ExtensionsNotSupported--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
 <a id="P256"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `P256`
+## `P256` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/P256.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/P256.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1379,7 +1490,7 @@ bytecode.
 </div>
 <div className="px-4">
 
-Same as [`IERC7913SignatureVerifier.verify`](../interfaces#IERC7913SignatureVerifier-verify-bytes-bytes32-bytes-), but it will revert if the required precompile is not available.
+Same as [`MerkleProof.verify`](#MerkleProof-verify-bytes32---bytes32-bytes32-function--bytes32-bytes32--view-returns--bytes32--), but it will revert if the required precompile is not available.
 
 Make sure any logic (code or precompile) deployed at that address is the expected one,
 otherwise the returned value may be misinterpreted as a positive boolean.
@@ -1399,7 +1510,7 @@ otherwise the returned value may be misinterpreted as a positive boolean.
 </div>
 <div className="px-4">
 
-Same as [`IERC7913SignatureVerifier.verify`](../interfaces#IERC7913SignatureVerifier-verify-bytes-bytes32-bytes-), but only the Solidity implementation is used.
+Same as [`MerkleProof.verify`](#MerkleProof-verify-bytes32---bytes32-bytes32-function--bytes32-bytes32--view-returns--bytes32--), but only the Solidity implementation is used.
 
 </div>
 </div>
@@ -1434,7 +1545,7 @@ Public key recovery
 <div className="px-4">
 
 Checks if (x, y) are valid coordinates of a point on the curve.
-In particular this function checks that x < P and y < P.
+In particular this function checks that x &lt; P and y &lt; P.
 
 </div>
 </div>
@@ -1443,9 +1554,9 @@ In particular this function checks that x < P and y < P.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `RSA`
+## `RSA` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/RSA.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/RSA.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1530,9 +1641,9 @@ using a low exponent out of security concerns.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `SignatureChecker`
+## `SignatureChecker` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/SignatureChecker.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/SignatureChecker.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1556,6 +1667,7 @@ See [ERC-1271](https://eips.ethereum.org/EIPS/eip-1271) and [ERC-7913](https://e
 - [isValidSignatureNow(signer, hash, signature)](#SignatureChecker-isValidSignatureNow-address-bytes32-bytes-)
 - [isValidSignatureNowCalldata(signer, hash, signature)](#SignatureChecker-isValidSignatureNowCalldata-address-bytes32-bytes-)
 - [isValidERC1271SignatureNow(signer, hash, signature)](#SignatureChecker-isValidERC1271SignatureNow-address-bytes32-bytes-)
+- [isValidERC1271SignatureNowCalldata(signer, hash, signature)](#SignatureChecker-isValidERC1271SignatureNowCalldata-address-bytes32-bytes-)
 - [isValidSignatureNow(signer, hash, signature)](#SignatureChecker-isValidSignatureNow-bytes-bytes32-bytes-)
 - [areValidSignaturesNow(hash, signers, signatures)](#SignatureChecker-areValidSignaturesNow-bytes32-bytes---bytes---)
 </div>
@@ -1582,7 +1694,7 @@ change through time. It could return true at block N and false at block N+1 (or 
 </Callout>
 
 <Callout>
-For an extended version of this function that supports ERC-7913 signatures, see #SignatureChecker-isValidSignatureNow-bytes-bytes32-bytes-.
+For an extended version of this function that supports ERC-7913 signatures, see `isValidSignatureNow-bytes-bytes32-bytes-`.
 </Callout>
 
 </div>
@@ -1628,6 +1740,21 @@ change through time. It could return true at block N and false at block N+1 (or 
 </div>
 </div>
 
+<a id="SignatureChecker-isValidERC1271SignatureNowCalldata-address-bytes32-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">isValidERC1271SignatureNowCalldata(address signer, bytes32 hash, bytes signature) → bool result</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#SignatureChecker-isValidERC1271SignatureNowCalldata-address-bytes32-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
 <a id="SignatureChecker-isValidSignatureNow-bytes-bytes32-bytes-"></a>
 
 <div className="border rounded-md mb-4">
@@ -1647,9 +1774,9 @@ The signer is a `bytes` object that is the concatenation of an address and optio
 
 Verification is done as follows:
 
-* If `signer.length < 20`: verification fails
+* If `signer.length &lt; 20`: verification fails
 * If `signer.length == 20`: verification is done using [`SignatureChecker.isValidSignatureNow`](#SignatureChecker-isValidSignatureNow-bytes-bytes32-bytes-)
-* Otherwise: verification is done using [`IERC7913SignatureVerifier`](../interfaces#IERC7913SignatureVerifier)
+* Otherwise: verification is done using [`IERC7913SignatureVerifier`](/contracts/5.x/api/interfaces#IERC7913SignatureVerifier)
 
 <Callout>
 Unlike ECDSA signatures, contract signatures are revocable, and the outcome of this function can thus
@@ -1685,13 +1812,134 @@ change through time. It could return true at block N and false at block N+1 (or 
 </div>
 </div>
 
+<a id="TrieProof"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `TrieProof` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/TrieProof.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/contracts/utils/cryptography/TrieProof.sol";
+```
+
+Library for verifying Ethereum Merkle-Patricia trie inclusion proofs.
+
+The [`TrieProof.traverse`](#TrieProof-traverse-bytes32-bytes-bytes---) and [`MerkleProof.verify`](#MerkleProof-verify-bytes32---bytes32-bytes32-function--bytes32-bytes32--view-returns--bytes32--) functions can be used to prove the following value:
+
+* Transaction against the transactionsRoot of a block.
+* Event against receiptsRoot of a block.
+* Account details (RLP encoding of [nonce, balance, storageRoot, codeHash]) against the stateRoot of a block.
+* Storage slot (RLP encoding of the value) against the storageRoot of a account.
+
+Proving a storage slot is usually done in 3 steps:
+
+* From the stateRoot of a block, process the account proof (see `eth_getProof`) to get the account details.
+* RLP decode the account details to extract the storageRoot.
+* Use storageRoot of that account to process the storageProof (again, see `eth_getProof`).
+
+See [Merkle-Patricia trie](https://ethereum.org/en/developers/docs/data-structures-and-encoding/patricia-merkle-trie)
+
+Based on [this implementation from optimism](https://github.com/ethereum-optimism/optimism/blob/ef970556e668b271a152124023a8d6bb5159bacf/packages/contracts-bedrock/src/libraries/trie/MerkleTrie.sol).
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [verify(value, root, key, proof)](#TrieProof-verify-bytes-bytes32-bytes-bytes---)
+- [traverse(root, key, proof)](#TrieProof-traverse-bytes32-bytes-bytes---)
+- [tryTraverse(root, key, proof)](#TrieProof-tryTraverse-bytes32-bytes-bytes---)
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [TrieProofTraversalError(err)](#TrieProof-TrieProofTraversalError-enum-TrieProof-ProofError-)
+</div>
+</div>
+
+<a id="TrieProof-verify-bytes-bytes32-bytes-bytes---"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">verify(bytes value, bytes32 root, bytes key, bytes[] proof) → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#TrieProof-verify-bytes-bytes32-bytes-bytes---">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Verifies a `proof` against a given `key`, `value`, `and root` hash.
+
+</div>
+</div>
+
+<a id="TrieProof-traverse-bytes32-bytes-bytes---"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">traverse(bytes32 root, bytes key, bytes[] proof) → bytes</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#TrieProof-traverse-bytes32-bytes-bytes---">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Traverses a proof with a given key and returns the value.
+
+Reverts with [`TrieProof.TrieProofTraversalError`](#TrieProof-TrieProofTraversalError-enum-TrieProof-ProofError-) if proof is invalid.
+
+</div>
+</div>
+
+<a id="TrieProof-tryTraverse-bytes32-bytes-bytes---"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">tryTraverse(bytes32 root, bytes key, bytes[] proof) → bytes value, enum TrieProof.ProofError err</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#TrieProof-tryTraverse-bytes32-bytes-bytes---">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Traverses a proof with a given key and returns the value and an error flag
+instead of reverting if the proof is invalid. This function may still revert if
+malformed input leads to RLP decoding errors.
+
+</div>
+</div>
+
+<a id="TrieProof-TrieProofTraversalError-enum-TrieProof-ProofError-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">TrieProofTraversalError(enum TrieProof.ProofError err)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#TrieProof-TrieProofTraversalError-enum-TrieProof-ProofError-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
 <a id="WebAuthn"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `WebAuthn`
+## `WebAuthn` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/WebAuthn.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/WebAuthn.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1711,15 +1959,18 @@ signatures generated during WebAuthn authentication ceremonies as specified in t
 
 For blockchain use cases, the following WebAuthn validations are intentionally omitted:
 
-* Origin validation: Origin verification in `clientDataJSON` is omitted as blockchain
-  contexts rely on authenticator and dapp frontend enforcement. Standard authenticators
-  implement proper origin validation.
+* Origin validation: Origin verification in `clientDataJSON` is omitted. This check is the
+  responsibility of the authenticator and does not have a meaningful on-chain use case; standard
+  authenticators implement proper origin validation before signing.
 * RP ID hash validation: Verification of `rpIdHash` in authenticatorData against expected
-  RP ID hash is omitted. This is typically handled by platform-level security measures.
-  Including an expiry timestamp in signed data is recommended for enhanced security.
-* Signature counter: Verification of signature counter increments is omitted. While
-  useful for detecting credential cloning, on-chain operations typically include nonce
-  protection, making this check redundant.
+  RP ID hash is omitted. This check is the responsibility of the authenticator and does not have
+  a meaningful on-chain use case; it is typically enforced at the platform level.
+* Signature counter: Verification of signature counter increments is omitted. The
+  signature counter is maintained by authenticators per the WebAuthn spec to detect
+  credential cloning, but validating it requires storing per-credential mutable state
+  (the last seen counter value) which is impractical for most smart contract applications.
+  Additionally, counter enforcement is primarily an authenticator responsibility, not a
+  contract-level concern.
 * Extension outputs: Extension output value verification is omitted as these are not
   essential for core authentication security in blockchain applications.
 * Attestation: Attestation object verification is omitted as this implementation
@@ -1810,9 +2061,9 @@ cause revert/panic.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC7739Utils`
+## `ERC7739Utils` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/draft-ERC7739Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/draft-ERC7739Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1825,7 +2076,8 @@ import "@openzeppelin/contracts/utils/cryptography/draft-ERC7739Utils.sol";
 Utilities to process [ERC-7739](https://ercs.ethereum.org/ERCS/erc-7739) typed data signatures
 that are specific to an EIP-712 domain.
 
-This library provides methods to wrap, unwrap and operate over typed data signatures with a defensive rehashing mechanism that includes the app's [EIP-712](/contracts/5.x/api/utils/cryptography#EIP712-_domainSeparatorV4)
+This library provides methods to wrap, unwrap and operate over typed data signatures with a defensive
+rehashing mechanism that includes the app's xref:api:utils/cryptography#EIP712-_domainSeparatorV4[EIP-712]
 and preserves readability of the signed content using an EIP-712 nested approach.
 
 A smart contract domain can validate a signature for a typed data structure in two ways:
@@ -1837,7 +2089,8 @@ A smart contract domain can validate a signature for a typed data structure in t
 A provider for a smart contract wallet would need to return this signature as the
 result of a call to `personal_sign` or `eth_signTypedData`, and this may be unsupported by
 API clients that expect a return value of 129 bytes, or specifically the `r,s,v` parameters
-of an [ECDSA](/contracts/5.x/api/utils/cryptography#ECDSA) signature, as is for example specified for [EIP-712](/contracts/5.x/api/utils/cryptography#EIP712).
+of an xref:api:utils/cryptography#ECDSA[ECDSA] signature, as is for example specified for
+xref:api:utils/cryptography#EIP712[EIP-712].
 </Callout>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
@@ -1899,7 +2152,6 @@ Constructed as follows:
 
 <Callout>
 This function returns empty if the input format is invalid instead of reverting.
-data instead.
 </Callout>
 
 </div>
@@ -1921,7 +2173,7 @@ Nests an `ERC-191` digest into a `PersonalSign` EIP-712 struct, and returns the 
 This struct hash must be combined with a domain separator, using [`MessageHashUtils.toTypedDataHash`](#MessageHashUtils-toTypedDataHash-bytes32-bytes32-) before
 being verified/recovered.
 
-This is used to simulates the `personal_sign` RPC method in the context of smart contracts.
+This is used to simulate the `personal_sign` RPC method in the context of smart contracts.
 
 </div>
 </div>
@@ -1957,7 +2209,7 @@ before being verified/recovered.
 </div>
 <div className="px-4">
 
-Variant of #ERC7739Utils-typedDataSignStructHash-string-string-bytes32-bytes- that takes a content descriptor
+Variant of `typedDataSignStructHash-string-string-bytes32-bytes` that takes a content descriptor
 and decodes the `contentsName` and `contentsType` out of it.
 
 </div>
@@ -2008,9 +2260,9 @@ length.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `AbstractSigner`
+## `AbstractSigner` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/signers/AbstractSigner.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/signers/AbstractSigner.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2022,7 +2274,7 @@ import "@openzeppelin/contracts/utils/cryptography/signers/AbstractSigner.sol";
 
 Abstract contract for signature validation.
 
-Developers must implement [`AccountERC7579._rawSignatureValidation`](../account#AccountERC7579-_rawSignatureValidation-bytes32-bytes-) and use it as the lowest-level signature validation mechanism.
+Developers must implement [`AbstractSigner._rawSignatureValidation`](#AbstractSigner-_rawSignatureValidation-bytes32-bytes-) and use it as the lowest-level signature validation mechanism.
 
 @custom:stateless
 
@@ -2049,8 +2301,9 @@ Signature validation algorithm.
 
 <Callout type="warn">
 Implementing a signature validation algorithm is a security-sensitive operation as it involves
-cryptographic verification. It is important to review and test thoroughly before deployment. Consider using one of the signature verification libraries ([ECDSA](/contracts/5.x/api/utils/cryptography#ECDSA),
-[P256](/contracts/5.x/api/utils/cryptography#P256) or [RSA](/contracts/5.x/api/utils/cryptography#RSA)).
+cryptographic verification. It is important to review and test thoroughly before deployment. Consider
+using one of the signature verification libraries (xref:api:utils/cryptography#ECDSA[ECDSA],
+xref:api:utils/cryptography#P256[P256] or xref:api:utils/cryptography#RSA[RSA]).
 </Callout>
 
 </div>
@@ -2060,9 +2313,9 @@ cryptographic verification. It is important to review and test thoroughly before
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `MultiSignerERC7913`
+## `MultiSignerERC7913` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/signers/MultiSignerERC7913.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/signers/MultiSignerERC7913.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2123,7 +2376,6 @@ either front-runnable or unusable.
 - [_rawSignatureValidation(hash, signature)](#MultiSignerERC7913-_rawSignatureValidation-bytes32-bytes-)
 - [_validateSignatures(hash, signers, signatures)](#MultiSignerERC7913-_validateSignatures-bytes32-bytes---bytes---)
 - [_validateThreshold(validatingSigners)](#MultiSignerERC7913-_validateThreshold-bytes---)
-#### AbstractSigner [!toc]
 </div>
 </div>
 
@@ -2133,7 +2385,6 @@ either front-runnable or unusable.
 - [ERC7913SignerAdded(signers)](#MultiSignerERC7913-ERC7913SignerAdded-bytes-)
 - [ERC7913SignerRemoved(signers)](#MultiSignerERC7913-ERC7913SignerRemoved-bytes-)
 - [ERC7913ThresholdSet(threshold)](#MultiSignerERC7913-ERC7913ThresholdSet-uint64-)
-#### AbstractSigner [!toc]
 </div>
 </div>
 
@@ -2145,7 +2396,6 @@ either front-runnable or unusable.
 - [MultiSignerERC7913InvalidSigner(signer)](#MultiSignerERC7913-MultiSignerERC7913InvalidSigner-bytes-)
 - [MultiSignerERC7913ZeroThreshold()](#MultiSignerERC7913-MultiSignerERC7913ZeroThreshold--)
 - [MultiSignerERC7913UnreachableThreshold(signers, threshold)](#MultiSignerERC7913-MultiSignerERC7913UnreachableThreshold-uint64-uint64-)
-#### AbstractSigner [!toc]
 </div>
 </div>
 
@@ -2259,6 +2509,15 @@ Requirements:
 
 * Each of `newSigners` must be at least 20 bytes long. Reverts with [`MultiSignerERC7913.MultiSignerERC7913InvalidSigner`](#MultiSignerERC7913-MultiSignerERC7913InvalidSigner-bytes-) if not.
 * Each of `newSigners` must not be authorized. See [`MultiSignerERC7913.isSigner`](#MultiSignerERC7913-isSigner-bytes-). Reverts with [`MultiSignerERC7913.MultiSignerERC7913AlreadyExists`](#MultiSignerERC7913-MultiSignerERC7913AlreadyExists-bytes-) if so.
+
+<Callout>
+This function does not validate that signers are controlled or represent appropriate entities. Integrators
+must ensure signers are properly validated before adding them. Problematic signers can compromise
+the multisig's security or functionality. Examples include uncontrolled addresses (e.g., `address(0)`),
+the account's own address (which may cause recursive validation loops), or contracts that may unintentionally
+allow arbitrary validation (e.g. using the identity precompile at `address(0x04)`, which would return the
+ERC-1271 magic value for any `isValidSignature` call).
+</Callout>
 
 </div>
 </div>
@@ -2562,9 +2821,9 @@ The `threshold` is unreachable given the number of `signers`.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `MultiSignerERC7913Weighted`
+## `MultiSignerERC7913Weighted` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/signers/MultiSignerERC7913Weighted.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/signers/MultiSignerERC7913Weighted.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2625,7 +2884,9 @@ least two signers (e.g., one with weight 1 and one with weight 3). See [`MultiSi
 - [_removeSigners(signers)](#MultiSignerERC7913Weighted-_removeSigners-bytes---)
 - [_validateReachableThreshold()](#MultiSignerERC7913Weighted-_validateReachableThreshold--)
 - [_validateThreshold(signers)](#MultiSignerERC7913Weighted-_validateThreshold-bytes---)
-#### MultiSignerERC7913 [!toc]
+<details>
+<summary>MultiSignerERC7913</summary>
+
 - [getSigners(start, end)](#MultiSignerERC7913-getSigners-uint64-uint64-)
 - [getSignerCount()](#MultiSignerERC7913-getSignerCount--)
 - [isSigner(signer)](#MultiSignerERC7913-isSigner-bytes-)
@@ -2633,7 +2894,8 @@ least two signers (e.g., one with weight 1 and one with weight 3). See [`MultiSi
 - [_setThreshold(newThreshold)](#MultiSignerERC7913-_setThreshold-uint64-)
 - [_rawSignatureValidation(hash, signature)](#MultiSignerERC7913-_rawSignatureValidation-bytes32-bytes-)
 - [_validateSignatures(hash, signers, signatures)](#MultiSignerERC7913-_validateSignatures-bytes32-bytes---bytes---)
-#### AbstractSigner [!toc]
+
+</details>
 </div>
 </div>
 
@@ -2641,11 +2903,14 @@ least two signers (e.g., one with weight 1 and one with weight 3). See [`MultiSi
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
 - [ERC7913SignerWeightChanged(signer, weight)](#MultiSignerERC7913Weighted-ERC7913SignerWeightChanged-bytes-uint64-)
-#### MultiSignerERC7913 [!toc]
+<details>
+<summary>MultiSignerERC7913</summary>
+
 - [ERC7913SignerAdded(signers)](#MultiSignerERC7913-ERC7913SignerAdded-bytes-)
 - [ERC7913SignerRemoved(signers)](#MultiSignerERC7913-ERC7913SignerRemoved-bytes-)
 - [ERC7913ThresholdSet(threshold)](#MultiSignerERC7913-ERC7913ThresholdSet-uint64-)
-#### AbstractSigner [!toc]
+
+</details>
 </div>
 </div>
 
@@ -2654,13 +2919,16 @@ least two signers (e.g., one with weight 1 and one with weight 3). See [`MultiSi
 <div className="font-mono">
 - [MultiSignerERC7913WeightedInvalidWeight(signer, weight)](#MultiSignerERC7913Weighted-MultiSignerERC7913WeightedInvalidWeight-bytes-uint64-)
 - [MultiSignerERC7913WeightedMismatchedLength()](#MultiSignerERC7913Weighted-MultiSignerERC7913WeightedMismatchedLength--)
-#### MultiSignerERC7913 [!toc]
+<details>
+<summary>MultiSignerERC7913</summary>
+
 - [MultiSignerERC7913AlreadyExists(signer)](#MultiSignerERC7913-MultiSignerERC7913AlreadyExists-bytes-)
 - [MultiSignerERC7913NonexistentSigner(signer)](#MultiSignerERC7913-MultiSignerERC7913NonexistentSigner-bytes-)
 - [MultiSignerERC7913InvalidSigner(signer)](#MultiSignerERC7913-MultiSignerERC7913InvalidSigner-bytes-)
 - [MultiSignerERC7913ZeroThreshold()](#MultiSignerERC7913-MultiSignerERC7913ZeroThreshold--)
 - [MultiSignerERC7913UnreachableThreshold(signers, threshold)](#MultiSignerERC7913-MultiSignerERC7913UnreachableThreshold-uint64-uint64-)
-#### AbstractSigner [!toc]
+
+</details>
 </div>
 </div>
 
@@ -2893,9 +3161,9 @@ Thrown when the arrays lengths don't match. See [`MultiSignerERC7913Weighted._se
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `SignerECDSA`
+## `SignerECDSA` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/signers/SignerECDSA.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/signers/SignerECDSA.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2905,9 +3173,9 @@ Thrown when the arrays lengths don't match. See [`MultiSignerERC7913Weighted._se
 import "@openzeppelin/contracts/utils/cryptography/signers/SignerECDSA.sol";
 ```
 
-Implementation of [`AbstractSigner`](#AbstractSigner) using [ECDSA](/contracts/5.x/api/utils/cryptography#ECDSA) signatures.
+Implementation of [`AbstractSigner`](#AbstractSigner) using xref:api:utils/cryptography#ECDSA[ECDSA] signatures.
 
-For [`Account`](../account#Account) usage, a [`SignerECDSA._setSigner`](#SignerECDSA-_setSigner-address-) function is provided to set the [`SignerECDSA.signer`](#SignerECDSA-signer--) address.
+For [`Account`](/contracts/5.x/api/account#Account) usage, a [`SignerECDSA._setSigner`](#SignerECDSA-_setSigner-address-) function is provided to set the [`SignerECDSA.signer`](#SignerECDSA-signer--) address.
 Doing so is easier for a factory, who is likely to use initializable clones of this contract.
 
 Example of usage:
@@ -2932,7 +3200,6 @@ or during initialization (if used as a clone) may leave the signer either front-
 - [_setSigner(signerAddr)](#SignerECDSA-_setSigner-address-)
 - [signer()](#SignerECDSA-signer--)
 - [_rawSignatureValidation(hash, signature)](#SignerECDSA-_rawSignatureValidation-bytes32-bytes-)
-#### AbstractSigner [!toc]
 </div>
 </div>
 
@@ -3002,7 +3269,9 @@ Signature validation algorithm.
 
 <Callout type="warn">
 Implementing a signature validation algorithm is a security-sensitive operation as it involves
-cryptographic verification. It is important to review and test thoroughly before deployment. Consider using one of the signature verification libraries ([ECDSA](/contracts/5.x/api/utils/cryptography#ECDSA), [P256](/contracts/5.x/api/utils/cryptography#P256) or [RSA](/contracts/5.x/api/utils/cryptography#RSA)).
+cryptographic verification. It is important to review and test thoroughly before deployment. Consider
+using one of the signature verification libraries (xref:api:utils/cryptography#ECDSA[ECDSA],
+xref:api:utils/cryptography#P256[P256] or xref:api:utils/cryptography#RSA[RSA]).
 </Callout>
 
 </div>
@@ -3012,9 +3281,9 @@ cryptographic verification. It is important to review and test thoroughly before
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `SignerEIP7702`
+## `SignerEIP7702` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/signers/SignerEIP7702.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/signers/SignerEIP7702.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3024,7 +3293,7 @@ cryptographic verification. It is important to review and test thoroughly before
 import "@openzeppelin/contracts/utils/cryptography/signers/SignerEIP7702.sol";
 ```
 
-Implementation of [`AbstractSigner`](#AbstractSigner) for implementation for an EOA. Useful for ERC-7702 accounts.
+Implementation of [`AbstractSigner`](#AbstractSigner) for implementation for an EOA. Useful for EIP-7702 accounts.
 
 @custom:stateless
 
@@ -3032,7 +3301,6 @@ Implementation of [`AbstractSigner`](#AbstractSigner) for implementation for an 
 <h3 style={{ marginTop: "0"}}>Functions</h3>
 <div className="font-mono">
 - [_rawSignatureValidation(hash, signature)](#SignerEIP7702-_rawSignatureValidation-bytes32-bytes-)
-#### AbstractSigner [!toc]
 </div>
 </div>
 
@@ -3057,9 +3325,9 @@ Validates the signature using the EOA's address (i.e. `address(this)`).
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `SignerERC7913`
+## `SignerERC7913` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/signers/SignerERC7913.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/signers/SignerERC7913.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3072,7 +3340,7 @@ import "@openzeppelin/contracts/utils/cryptography/signers/SignerERC7913.sol";
 Implementation of [`AbstractSigner`](#AbstractSigner) using
 [ERC-7913](https://eips.ethereum.org/EIPS/eip-7913) signature verification.
 
-For [`Account`](../account#Account) usage, a [`SignerECDSA._setSigner`](#SignerECDSA-_setSigner-address-) function is provided to set the ERC-7913 formatted [`SignerECDSA.signer`](#SignerECDSA-signer--).
+For [`Account`](/contracts/5.x/api/account#Account) usage, a [`SignerECDSA._setSigner`](#SignerECDSA-_setSigner-address-) function is provided to set the ERC-7913 formatted [`SignerECDSA.signer`](#SignerECDSA-signer--).
 Doing so is easier for a factory, who is likely to use initializable clones of this contract.
 
 The signer is a `bytes` object that concatenates a verifier address and a key: `verifier || key`.
@@ -3103,7 +3371,6 @@ or during initialization (if used as a clone) may leave the signer either front-
 - [signer()](#SignerERC7913-signer--)
 - [_setSigner(signer_)](#SignerERC7913-_setSigner-bytes-)
 - [_rawSignatureValidation(hash, signature)](#SignerERC7913-_rawSignatureValidation-bytes32-bytes-)
-#### AbstractSigner [!toc]
 </div>
 </div>
 
@@ -3168,7 +3435,7 @@ Sets the signer (i.e. `verifier || key`) with an ERC-7913 formatted signer.
 </div>
 <div className="px-4">
 
-Verifies a signature using #SignatureChecker-isValidSignatureNow-bytes-bytes32-bytes-
+Verifies a signature using `SignatureChecker-isValidSignatureNow-bytes-bytes32-bytes-`
 with [`SignerECDSA.signer`](#SignerECDSA-signer--), `hash` and `signature`.
 
 </div>
@@ -3178,9 +3445,9 @@ with [`SignerECDSA.signer`](#SignerECDSA-signer--), `hash` and `signature`.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `SignerP256`
+## `SignerP256` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/signers/SignerP256.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/signers/SignerP256.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3190,9 +3457,9 @@ with [`SignerECDSA.signer`](#SignerECDSA-signer--), `hash` and `signature`.
 import "@openzeppelin/contracts/utils/cryptography/signers/SignerP256.sol";
 ```
 
-Implementation of [`AbstractSigner`](#AbstractSigner) using [P256](/contracts/5.x/api/utils/cryptography#P256) signatures.
+Implementation of [`AbstractSigner`](#AbstractSigner) using xref:api:utils/cryptography#P256[P256] signatures.
 
-For [`Account`](../account#Account) usage, a [`SignerECDSA._setSigner`](#SignerECDSA-_setSigner-address-) function is provided to set the [`SignerECDSA.signer`](#SignerECDSA-signer--) public key.
+For [`Account`](/contracts/5.x/api/account#Account) usage, a [`SignerECDSA._setSigner`](#SignerECDSA-_setSigner-address-) function is provided to set the [`SignerECDSA.signer`](#SignerECDSA-signer--) public key.
 Doing so is easier for a factory, who is likely to use initializable clones of this contract.
 
 Example of usage:
@@ -3217,7 +3484,6 @@ or during initialization (if used as a clone) may leave the signer either front-
 - [_setSigner(qx, qy)](#SignerP256-_setSigner-bytes32-bytes32-)
 - [signer()](#SignerP256-signer--)
 - [_rawSignatureValidation(hash, signature)](#SignerP256-_rawSignatureValidation-bytes32-bytes-)
-#### AbstractSigner [!toc]
 </div>
 </div>
 
@@ -3225,7 +3491,6 @@ or during initialization (if used as a clone) may leave the signer either front-
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
 - [SignerP256InvalidPublicKey(qx, qy)](#SignerP256-SignerP256InvalidPublicKey-bytes32-bytes32-)
-#### AbstractSigner [!toc]
 </div>
 </div>
 
@@ -3295,7 +3560,9 @@ Signature validation algorithm.
 
 <Callout type="warn">
 Implementing a signature validation algorithm is a security-sensitive operation as it involves
-cryptographic verification. It is important to review and test thoroughly before deployment. Consider using one of the signature verification libraries ([ECDSA](/contracts/5.x/api/utils/cryptography#ECDSA), [P256](/contracts/5.x/api/utils/cryptography#P256) or [RSA](/contracts/5.x/api/utils/cryptography#RSA)).
+cryptographic verification. It is important to review and test thoroughly before deployment. Consider
+using one of the signature verification libraries (xref:api:utils/cryptography#ECDSA[ECDSA],
+xref:api:utils/cryptography#P256[P256] or xref:api:utils/cryptography#RSA[RSA]).
 </Callout>
 
 </div>
@@ -3320,9 +3587,9 @@ cryptographic verification. It is important to review and test thoroughly before
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `SignerRSA`
+## `SignerRSA` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/signers/SignerRSA.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/signers/SignerRSA.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3332,9 +3599,9 @@ cryptographic verification. It is important to review and test thoroughly before
 import "@openzeppelin/contracts/utils/cryptography/signers/SignerRSA.sol";
 ```
 
-Implementation of [`AbstractSigner`](#AbstractSigner) using [RSA](/contracts/5.x/api/utils/cryptography#RSA) signatures.
+Implementation of [`AbstractSigner`](#AbstractSigner) using xref:api:utils/cryptography#RSA[RSA] signatures.
 
-For [`Account`](../account#Account) usage, a [`SignerECDSA._setSigner`](#SignerECDSA-_setSigner-address-) function is provided to set the [`SignerECDSA.signer`](#SignerECDSA-signer--) public key.
+For [`Account`](/contracts/5.x/api/account#Account) usage, a [`SignerECDSA._setSigner`](#SignerECDSA-_setSigner-address-) function is provided to set the [`SignerECDSA.signer`](#SignerECDSA-signer--) public key.
 Doing so is easier for a factory, who is likely to use initializable clones of this contract.
 
 Example of usage:
@@ -3359,7 +3626,6 @@ or during initialization (if used as a clone) may leave the signer either front-
 - [_setSigner(e, n)](#SignerRSA-_setSigner-bytes-bytes-)
 - [signer()](#SignerRSA-signer--)
 - [_rawSignatureValidation(hash, signature)](#SignerRSA-_rawSignatureValidation-bytes32-bytes-)
-#### AbstractSigner [!toc]
 </div>
 </div>
 
@@ -3441,9 +3707,9 @@ encoding as per section 9.2 (step 1) of the RFC.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `SignerWebAuthn`
+## `SignerWebAuthn` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/signers/SignerWebAuthn.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/signers/SignerWebAuthn.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3480,19 +3746,25 @@ or during initialization (if used as a clone) may leave the signer either front-
 <h3 style={{ marginTop: "0"}}>Functions</h3>
 <div className="font-mono">
 - [_rawSignatureValidation(hash, signature)](#SignerWebAuthn-_rawSignatureValidation-bytes32-bytes-)
-#### SignerP256 [!toc]
+<details>
+<summary>SignerP256</summary>
+
 - [_setSigner(qx, qy)](#SignerP256-_setSigner-bytes32-bytes32-)
 - [signer()](#SignerP256-signer--)
-#### AbstractSigner [!toc]
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-#### SignerP256 [!toc]
+<details>
+<summary>SignerP256</summary>
+
 - [SignerP256InvalidPublicKey(qx, qy)](#SignerP256-SignerP256InvalidPublicKey-bytes32-bytes32-)
-#### AbstractSigner [!toc]
+
+</details>
 </div>
 </div>
 
@@ -3510,9 +3782,7 @@ or during initialization (if used as a clone) may leave the signer either front-
 
 Validates a raw signature using the WebAuthn authentication assertion.
 
-In case the signature can't be validated, it falls back to the
-[`SignerP256._rawSignatureValidation`](#SignerP256-_rawSignatureValidation-bytes32-bytes-) method for raw P256 signature validation by passing
-the raw `r` and `s` values from the signature.
+Returns `false` if the signature is not a valid WebAuthn authentication assertion.
 
 </div>
 </div>
@@ -3521,9 +3791,9 @@ the raw `r` and `s` values from the signature.
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC7739`
+## `ERC7739` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/signers/draft-ERC7739.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/signers/draft-ERC7739.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3538,11 +3808,13 @@ Validates signatures wrapping the message hash in a nested EIP712 type. See [`ER
 Linking the signature to the EIP-712 domain separator is a security measure to prevent signature replay across different
 EIP-712 domains (e.g. a single offchain owner of multiple contracts).
 
-This contract requires implementing the [`AccountERC7579._rawSignatureValidation`](../account#AccountERC7579-_rawSignatureValidation-bytes32-bytes-) function, which passes the wrapped message hash,
+This contract requires implementing the [`AbstractSigner._rawSignatureValidation`](#AbstractSigner-_rawSignatureValidation-bytes32-bytes-) function, which passes the wrapped message hash,
 which may be either an typed data or a personal sign nested type.
 
 <Callout>
-[EIP-712](/contracts/5.x/api/utils/cryptography#EIP712) uses [ShortStrings](/contracts/5.x/api/utils/cryptography#ShortStrings) to optimize gas costs for short strings (up to 31 characters). Consider that strings longer than that will use storage, which may limit the ability of the signer to be used within the ERC-4337 validation phase (due to
+xref:api:utils/cryptography#EIP712[EIP-712] uses xref:api:utils/cryptography#ShortStrings[ShortStrings] to
+optimize gas costs for short strings (up to 31 characters). Consider that strings longer than that will use storage,
+which may limit the ability of the signer to be used within the ERC-4337 validation phase (due to
 [ERC-7562 storage access rules](https://eips.ethereum.org/EIPS/eip-7562#storage-rules)).
 </Callout>
 
@@ -3550,27 +3822,34 @@ which may be either an typed data or a personal sign nested type.
 <h3 style={{ marginTop: "0"}}>Functions</h3>
 <div className="font-mono">
 - [isValidSignature(hash, signature)](#ERC7739-isValidSignature-bytes32-bytes-)
-#### IERC1271 [!toc]
-#### EIP712 [!toc]
+<details>
+<summary>EIP712</summary>
+
 - [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
 - [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
 - [eip712Domain()](#EIP712-eip712Domain--)
 - [_EIP712Name()](#EIP712-_EIP712Name--)
 - [_EIP712Version()](#EIP712-_EIP712Version--)
-#### IERC5267 [!toc]
-#### AbstractSigner [!toc]
+
+</details>
+<details>
+<summary>AbstractSigner</summary>
+
 - [_rawSignatureValidation(hash, signature)](#AbstractSigner-_rawSignatureValidation-bytes32-bytes-)
+
+</details>
 </div>
 </div>
 
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Events</h3>
 <div className="font-mono">
-#### IERC1271 [!toc]
-#### EIP712 [!toc]
-#### IERC5267 [!toc]
+<details>
+<summary>IERC5267</summary>
+
 - [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
-#### AbstractSigner [!toc]
+
+</details>
 </div>
 </div>
 
@@ -3600,9 +3879,9 @@ A nested EIP-712 type might be presented in 2 different ways:
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC7913P256Verifier`
+## `ERC7913P256Verifier` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/verifiers/ERC7913P256Verifier.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/verifiers/ERC7913P256Verifier.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3620,7 +3899,6 @@ ERC-7913 signature verifier that support P256 (secp256r1) keys.
 <h3 style={{ marginTop: "0"}}>Functions</h3>
 <div className="font-mono">
 - [verify(key, hash, signature)](#ERC7913P256Verifier-verify-bytes-bytes32-bytes-)
-#### IERC7913SignatureVerifier [!toc]
 </div>
 </div>
 
@@ -3649,9 +3927,9 @@ SHOULD return 0xffffffff or revert if the key is empty
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC7913RSAVerifier`
+## `ERC7913RSAVerifier` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/verifiers/ERC7913RSAVerifier.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/verifiers/ERC7913RSAVerifier.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3669,7 +3947,6 @@ ERC-7913 signature verifier that support RSA keys.
 <h3 style={{ marginTop: "0"}}>Functions</h3>
 <div className="font-mono">
 - [verify(key, hash, signature)](#ERC7913RSAVerifier-verify-bytes-bytes32-bytes-)
-#### IERC7913SignatureVerifier [!toc]
 </div>
 </div>
 
@@ -3698,9 +3975,9 @@ SHOULD return 0xffffffff or revert if the key is empty
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
-## `ERC7913WebAuthnVerifier`
+## `ERC7913WebAuthnVerifier` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.5.0/contracts/utils/cryptography/verifiers/ERC7913WebAuthnVerifier.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/utils/cryptography/verifiers/ERC7913WebAuthnVerifier.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3716,7 +3993,7 @@ This verifier enables the validation of WebAuthn signatures using P256 public ke
 The key is expected to be a 64-byte concatenation of the P256 public key coordinates (qx || qy).
 The signature is expected to be an abi-encoded [`WebAuthn.WebAuthnAuth`](#WebAuthn-WebAuthnAuth) struct.
 
-Uses `WebAuthn-verifyMinimal` for signature verification, which performs the essential
+Uses [`WebAuthn.verify`](#WebAuthn-verify-bytes-struct-WebAuthn-WebAuthnAuth-bytes32-bytes32-bool-) for signature verification, which performs the essential
 WebAuthn checks: type validation, challenge matching, and cryptographic signature verification.
 
 <Callout>
@@ -3729,7 +4006,6 @@ Wallets that may require default P256 validation may install a P256 verifier sep
 <h3 style={{ marginTop: "0"}}>Functions</h3>
 <div className="font-mono">
 - [verify(key, hash, signature)](#ERC7913WebAuthnVerifier-verify-bytes-bytes32-bytes-)
-#### IERC7913SignatureVerifier [!toc]
 </div>
 </div>
 
@@ -3753,3 +4029,4 @@ SHOULD return 0xffffffff or revert if the key is empty
 
 </div>
 </div>
+
