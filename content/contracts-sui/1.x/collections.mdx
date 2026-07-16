@@ -1,0 +1,112 @@
+---
+title: Collections
+---
+
+The `openzeppelin_collections` package is the ordered-collections family for OpenZeppelin Contracts for Sui. It provides `SortedMap<K, V>`, an ordered key/value collection kept in one sorted vector, and `SortedSet<K>`, a thin set wrapper over `SortedMap<K, Unit>` — the same relationship as Rust's `BTreeSet` over `BTreeMap`.
+
+Both are UID-less value types, shaped like `sui::vec_map::VecMap` and `sui::vec_set::VecSet` but kept in key order: you embed them as fields in your own `has key` objects, and every operation touches exactly one stored object. Beyond point lookups they answer ordered questions — head/tail, floor/ceiling, next/previous key, and sorted pages via `keys_from!`.
+
+Order is comparator-driven. The bare macros (`upsert!`, `contains!`, `remove!`, ...) use the built-in integer `<` for unsigned-integer keys; the `_by` variants take a strict less-than comparator for custom key types or descending order.
+
+<Callout type="warn">
+Collections store no comparator. Order is defined per call by the `lt` closure you supply to the `_by` macros, and it must be a strict total order threaded consistently to every call on a given collection. The library cannot detect a violation: a non-strict (`<=`) or inconsistent comparator silently corrupts order — duplicate inserts, missed removes, wrong membership answers. For integer keys, the bare (non-`_by`) macros remove this footgun entirely.
+</Callout>
+
+## Usage
+
+The package is not yet published to the Move Registry (MVR), so install it as a git dependency pinned to the release tag in `Move.toml`:
+
+```toml
+[dependencies]
+openzeppelin_collections = { git = "https://github.com/OpenZeppelin/contracts-sui.git", subdir = "collections", rev = "v1.5.0" }
+```
+
+Import the module you need:
+
+```move
+use openzeppelin_collections::sorted_map;
+// or
+use openzeppelin_collections::sorted_set;
+```
+
+## Examples
+
+### Price book with a `SortedMap`
+
+A shared book embeds a `SortedMap<u64, u64>` (price to resting size). `u64` keys sort under the built-in integer `<`, so every call uses the bare macros.
+
+```move
+module my_protocol::price_book;
+
+use openzeppelin_collections::sorted_map::{Self, SortedMap};
+
+public struct PriceBook has key {
+    id: UID,
+    levels: SortedMap<u64, u64>, // price -> resting size, ascending (best = head)
+}
+
+public fun create_and_share(ctx: &mut TxContext) {
+    let book = PriceBook { id: object::new(ctx), levels: sorted_map::new() };
+    transfer::share_object(book);
+}
+
+/// Add `size` at `price`, merging into an existing level if present.
+public fun place(book: &mut PriceBook, price: u64, size: u64) {
+    if (book.levels.contains!(&price)) {
+        let level = book.levels.borrow_mut!(&price);
+        *level = *level + size;
+    } else {
+        book.levels.upsert!(price, size);
+    };
+}
+
+/// Best (lowest) price, or `none` if the book is empty.
+public fun best_price(book: &PriceBook): Option<u64> {
+    book.levels.head()
+}
+
+/// Up to `limit` prices ascending from the first price `>= from`. Resume a page by
+/// passing the last returned price back as `from` with `include = false`.
+public fun page(book: &PriceBook, from: u64, include: bool, limit: u64): vector<u64> {
+    book.levels.keys_from!(&from, include, limit)
+}
+```
+
+### Watchlist with a `SortedSet`
+
+A watchlist embeds a `SortedSet<u64>` and uses `upsert!`'s `bool` return — `true` only on a fresh insert, never aborting on a duplicate — to emit an event exactly the first time an id is watched.
+
+```move
+module my_app::watchlist;
+
+use openzeppelin_collections::sorted_set::{Self, SortedSet};
+use sui::event;
+
+public struct Watchlist has key {
+    id: UID,
+    ids: SortedSet<u64>,
+}
+
+public struct IdWatched has copy, drop { id: u64 }
+
+public fun create(ctx: &mut TxContext): Watchlist {
+    Watchlist { id: object::new(ctx), ids: sorted_set::new() }
+}
+
+/// Add a token id; emit only the first time it is watched.
+public fun watch(watchlist: &mut Watchlist, id: u64) {
+    if (watchlist.ids.upsert!(id)) {
+        event::emit(IdWatched { id });
+    }
+}
+```
+
+## Choosing between `sorted_map` and `sorted_set`
+
+- Use `sorted_map` when each key carries a value — price levels, tick registries, leaderboards, payout vaults. Values may be resources like `Coin<T>`: drain every entry, then call `destroy_empty`.
+- Use `sorted_set` when only ordered membership matters — watchlists, allow/deny lists, deduplicated id registries. Its `upsert!` returns a `bool` instead of aborting on duplicates.
+- Both answer the same ordered queries (`head`/`tail`, `find_next!`/`find_prev!`, `keys_from!` pages) and keep a single-object footprint; byte size is the only capacity ceiling.
+
+## API Reference
+
+Use the full function-level reference here: [Collections API](/contracts-sui/1.x/api/collections).
