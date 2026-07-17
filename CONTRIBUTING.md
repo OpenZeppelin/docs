@@ -641,6 +641,10 @@ For version-specific documentation:
 
 Please be respectful and constructive in all interactions. We strive to maintain a welcoming and inclusive environment for all contributors.
 
+## Contributor License Agreement
+
+You will be required to agree to the Contributor License Agreement through the PR process.
+
 ## Questions?
 
 If you have questions about contributing, feel free to open an issue or reach out to the maintainers.
