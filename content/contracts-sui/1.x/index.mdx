@@ -2,13 +2,15 @@
 title: Contracts for Sui 1.x
 ---
 
-**OpenZeppelin Contracts for Sui v1.x** ships five core packages:
+**OpenZeppelin Contracts for Sui v1.x** ships these core packages:
 
 - `openzeppelin_math` for deterministic integer arithmetic, configurable rounding, and decimal scaling.
 - `openzeppelin_fp_math` for 9-decimal fixed-point arithmetic (`UD30x9`, `SD29x9`) backed by `u128`.
 - `openzeppelin_access` for role-based authorization and ownership-transfer wrappers around privileged `key + store` objects.
 - `openzeppelin_collections` for ordered key/value and set data structures (`sorted_map`, `sorted_set`).
+- `openzeppelin_finance` for vesting: locking a coin for a beneficiary and releasing it on a schedule, with a built-in linear-with-cliff curve and a curve-agnostic core for custom schedules.
 - `openzeppelin_utils` for embeddable building blocks; its first module, `rate_limiter`, provides multi-strategy rate limiting.
+- `openzeppelin_allowance` for cap-keyed spending allowances; its first module, `spend_vault`, escrows multi-coin funds behind owner-set, expiring budgets.
 
 ## Quickstart
 
@@ -36,6 +38,8 @@ mvr add @openzeppelin-move/utils
 
 You only need the dependencies your app actually uses. Add what you need and drop the others.
 
+Packages not yet on the Move Registry - currently `openzeppelin_allowance` and `openzeppelin_finance` - are added by git revision instead of `mvr add` (see the next step).
+
 ### 3. Verify `Move.toml`
 
 `mvr add` updates `Move.toml` automatically. With all four installed it should include:
@@ -47,6 +51,15 @@ openzeppelin_math = { r.mvr = "@openzeppelin-move/integer-math" }
 openzeppelin_fp_math = { r.mvr = "@openzeppelin-move/fixed-point-math" }
 openzeppelin_utils = { r.mvr = "@openzeppelin-move/utils" }
 ```
+
+Since `openzeppelin_allowance` and `openzeppelin_finance` aren't on MVR yet, add them manually, pinned to a git revision:
+
+```toml
+openzeppelin_allowance = { git = "https://github.com/OpenZeppelin/contracts-sui.git", subdir = "contracts/allowance", rev = "v1.4.0" }
+openzeppelin_finance = { git = "https://github.com/OpenZeppelin/contracts-sui.git", subdir = "contracts/finance", rev = "v1.4.0" }
+```
+
+Alternatively, copy the module sources directly into your package's `sources/` so you fully own the code; see each package guide for the per-package options.
 
 ### 4. Add a Minimal Module
 
@@ -82,16 +95,20 @@ sui move test
 
 - Need role-based authorization for privileged functions or controlled transfer of admin/treasury/upgrade capabilities? Use [Access](/contracts-sui/1.x/access).
 - Need ordered maps or sets with deterministic iteration? Use [Collections](/contracts-sui/1.x/collections).
+- Need to vest a token grant, team/investor allocation, or payroll stream to a beneficiary over time? Use [Vesting Wallet](/contracts-sui/1.x/vesting-wallet).
 - Need fractional values like prices, fees, rates, or signed deltas? Use [Fixed-Point Math](/contracts-sui/1.x/fixed-point).
 - Need integer arithmetic with safe overflow and explicit rounding? Use [Integer Math](/contracts-sui/1.x/math).
 - Need to throttle withdrawals, meter per-user budgets, gate action reuse, or delay an action? Use [Rate Limiter](/contracts-sui/1.x/rate-limiter).
+- Need to delegate bounded, expiring spending of escrowed coins to a keeper, service, or teammate, without signing each spend? Use [Spend Vault](/contracts-sui/1.x/spend-vault).
 
 The packages compose. A typical protocol module imports `openzeppelin_math` for share math, `openzeppelin_fp_math` for rate and fee math, and `openzeppelin_access` for the admin capability that governs both.
 
 ## Next steps
 
-- Package guides: [Integer Math](/contracts-sui/1.x/math), [Fixed-Point Math](/contracts-sui/1.x/fixed-point), [Access](/contracts-sui/1.x/access), [Collections](/contracts-sui/1.x/collections), [Utilities](/contracts-sui/1.x/utils).
+- Package guides: [Integer Math](/contracts-sui/1.x/math), [Fixed-Point Math](/contracts-sui/1.x/fixed-point), [Access](/contracts-sui/1.x/access), [Collections](/contracts-sui/1.x/collections), [Utilities](/contracts-sui/1.x/utils), [Allowance](/contracts-sui/1.x/allowance), [Finance](/contracts-sui/1.x/finance).
 - Access modules: [RBAC](/contracts-sui/1.x/access-control), [Two-Step Transfer](/contracts-sui/1.x/two-step-transfer), [Delayed Transfer](/contracts-sui/1.x/delayed-transfer).
 - Utilities modules: [Rate Limiter](/contracts-sui/1.x/rate-limiter).
-- Learn: [Role Based Access Control](/contracts-sui/1.x/guides/access-control).
-- API reference: [Integer Math](/contracts-sui/1.x/api/math), [Fixed-Point Math](/contracts-sui/1.x/api/fixed-point), [Access](/contracts-sui/1.x/api/access), [Collections](/contracts-sui/1.x/api/collections), [Utilities](/contracts-sui/1.x/api/utils).
+- Allowance modules: [Spend Vault](/contracts-sui/1.x/spend-vault).
+- Finance modules: [Vesting Wallet](/contracts-sui/1.x/vesting-wallet).
+- Learn: [Role Based Access Control](/contracts-sui/1.x/guides/access-control), [Delegated Spending](/contracts-sui/1.x/guides/delegated-spending).
+- API reference: [Integer Math](/contracts-sui/1.x/api/math), [Fixed-Point Math](/contracts-sui/1.x/api/fixed-point), [Access](/contracts-sui/1.x/api/access), [Collections](/contracts-sui/1.x/api/collections), [Utilities](/contracts-sui/1.x/api/utils), [Allowance](/contracts-sui/1.x/api/allowance), [Finance](/contracts-sui/1.x/api/finance).
