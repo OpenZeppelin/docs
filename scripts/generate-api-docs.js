@@ -126,6 +126,27 @@ function derivePackageName(repoName) {
 	return withoutPrefix;
 }
 
+// Helpers and properties exported by templates-md/{helpers,properties}.js,
+// used to generate ESM shim files when injecting into the new layout. The
+// hardhat3-style docgen plugin only loads helpers.ts/properties.ts via
+// `await import()`, so it needs real named exports — kebab-case CJS keys
+// don't survive ESM interop.
+const HELPER_EXPORTS = [
+	"ozVersion", "readmePath", "readme", "names", "simpleId",
+	"resetFunctionCounts", "eq", "stripContractsPrefix", "startsWith",
+	"processNatspec", "typedParams", "slug", "title", "description",
+	"withPrelude",
+];
+const PROPERTY_EXPORTS = [
+	"anchor", "fullname", "inheritance", "hasFunctions", "hasEvents",
+	"hasErrors", "internalVariables", "hasInternalVariables", "functions",
+	"returns2", "inheritedFunctions",
+];
+
+function tsShim(sourcePath, exports) {
+	return `export { ${exports.join(", ")} } from "${sourcePath}";\n`;
+}
+
 async function injectTemplates(tempDir, options) {
 	const { contractsRepo, contractsBranch, apiOutputDir } = options;
 	const repoInfo = extractRepoInfo(contractsRepo);
@@ -133,24 +154,80 @@ async function injectTemplates(tempDir, options) {
 
 	console.log("📋 Injecting canonical MDX templates...");
 
-	const templatesTarget = path.join(tempDir, "docs", "templates-md");
-	// Overwrite the cloned repo's docs/config.js with our canonical config.
-	// The cloned repo's hardhat config and prepare-docs.sh scripts both load
-	// `./docs/config`, so this single overwrite covers both paths without
-	// needing a separate config-md.js write or a hardhat-config regex patch.
-	const configTarget = path.join(tempDir, "docs", "config.js");
+	// Detect new layout (hardhat3-style): docs/config.mjs + docs/templates/.
+	// Legacy layout uses docs/config.js + docs/templates-md/.
+	const newLayout = await fs.access(path.join(tempDir, "docs", "config.mjs")).then(() => true, () => false);
 
+	const templatesTarget = path.join(
+		tempDir,
+		"docs",
+		newLayout ? "templates" : "templates-md",
+	);
+	const configTarget = path.join(
+		tempDir,
+		"docs",
+		newLayout ? "config.mjs" : "config.js",
+	);
+	const configSource = path.join(
+		DOCGEN_DIR,
+		newLayout ? "config-md.mjs" : "config-md.js",
+	);
+
+	if (newLayout) {
+		console.log("  ✓ Detected new layout (config.mjs + docs/templates/)");
+	}
+
+	// Wipe target templates dir to avoid stale files from the cloned repo
+	// (e.g. the hardhat3 branch's helpers.ts/properties.ts/contract.hbs).
+	await fs.rm(templatesTarget, { recursive: true, force: true });
 	await fs.mkdir(templatesTarget, { recursive: true });
 	await copyDirRecursive(
 		path.join(DOCGEN_DIR, "templates-md"),
 		templatesTarget,
 	);
 
-	await fs.copyFile(path.join(DOCGEN_DIR, "config-md.js"), configTarget);
+	await fs.copyFile(configSource, configTarget);
 
-	// Customize API_DOCS_PATH in helpers.js (URL path = file path minus content/)
+	// The new plugin loads helpers via `require.resolve(dir + '/helpers.ts')`
+	// and `await import(...)` — only `.ts` is searched and only ESM named
+	// function exports are picked up. Rename our CJS .js files to .cjs and
+	// emit thin .ts shims that re-export each function.
+	const helpersFileName = newLayout ? "helpers.cjs" : "helpers.js";
+	const propertiesFileName = newLayout ? "properties.cjs" : "properties.js";
+	if (newLayout) {
+		await fs.rename(
+			path.join(templatesTarget, "helpers.js"),
+			path.join(templatesTarget, helpersFileName),
+		);
+		await fs.rename(
+			path.join(templatesTarget, "properties.js"),
+			path.join(templatesTarget, propertiesFileName),
+		);
+		// `require('./helpers')` in properties.cjs no longer resolves once
+		// the file is renamed (Node's CJS resolver does not search for
+		// `.cjs` by default). Patch the import to use the explicit name.
+		const propertiesCjsPath = path.join(templatesTarget, propertiesFileName);
+		let propertiesSource = await fs.readFile(propertiesCjsPath, "utf8");
+		propertiesSource = propertiesSource.replace(
+			/require\(['"]\.\/helpers['"]\)/g,
+			"require('./helpers.cjs')",
+		);
+		await fs.writeFile(propertiesCjsPath, propertiesSource, "utf8");
+		await fs.writeFile(
+			path.join(templatesTarget, "helpers.ts"),
+			tsShim("./helpers.cjs", HELPER_EXPORTS),
+			"utf8",
+		);
+		await fs.writeFile(
+			path.join(templatesTarget, "properties.ts"),
+			tsShim("./properties.cjs", PROPERTY_EXPORTS),
+			"utf8",
+		);
+	}
+
+	// Customize API_DOCS_PATH in helpers (URL path = file path minus content/)
 	const apiDocsPath = apiOutputDir.replace(/^content\//, "");
-	const helpersPath = path.join(templatesTarget, "helpers.js");
+	const helpersPath = path.join(templatesTarget, helpersFileName);
 	let helpers = await fs.readFile(helpersPath, "utf8");
 	helpers = helpers.replace(
 		/const API_DOCS_PATH = ['"][^'"]+['"]/,
@@ -173,7 +250,7 @@ async function injectTemplates(tempDir, options) {
 	// /blob/v0.0.1/... when community-contracts package.json has a placeholder
 	// version that doesn't correspond to an actual tag.
 	contract = contract.replace(
-		/blob\/v\{\{oz-version\}\}/g,
+		/blob\/v\{\{ozVersion\}\}/g,
 		`blob/${contractsBranch}`,
 	);
 
@@ -182,11 +259,11 @@ async function injectTemplates(tempDir, options) {
 	// (npm package is `@openzeppelin/contracts`, file path keeps the prefix).
 	// For other packages (community-contracts, confidential-contracts), the
 	// npm package is published with `contracts/` as the package root, so the
-	// import skips that prefix — strip it via the strip-contracts-prefix helper.
+	// import skips that prefix via the stripContractsPrefix helper.
 	if (packageName !== "contracts") {
 		contract = contract.replace(
 			/import "@openzeppelin\/\{\{__item_context\.file\.absolutePath\}\}";/g,
-			`import "@openzeppelin/${packageName}/{{strip-contracts-prefix __item_context.file.absolutePath}}";`,
+			`import "@openzeppelin/${packageName}/{{stripContractsPrefix __item_context.file.absolutePath}}";`,
 		);
 	}
 	await fs.writeFile(contractPath, contract, "utf8");
