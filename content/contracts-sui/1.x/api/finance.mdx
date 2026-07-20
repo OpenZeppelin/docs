@@ -1,0 +1,556 @@
+---
+title: Finance API Reference
+---
+
+This page documents the public API of `openzeppelin_finance` for OpenZeppelin Contracts for Sui `v1.x`.
+
+The package splits into two modules: `vesting_wallet_linear`, the built-in linear-with-cliff curve most integrators use directly, and `vesting_wallet`, the curve-agnostic core it is built on. All functions that observe time take `&Clock` (the shared Sui `Clock` singleton at `0x6`).
+
+### `vesting_wallet_linear` [toc] [#vesting_wallet_linear]
+
+<APIGithubLinkHeader
+  moduleName="vesting_wallet_linear"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.4.0/contracts/finance/sources/vesting_wallet_linear.move"
+/>
+
+```move
+use openzeppelin_finance::vesting_wallet_linear;
+```
+
+The stepped (tranche) schedule for `vesting_wallet`: `1/N` every period, after an optional cliff, with continuous linear vesting available as the `period_ms = 1` limit. This module declares the `Linear` witness and its `Params`, and the full integrator API around them. An integrator who wants standard vesting touches only this module and never constructs a bare wallet or mints a `VestedAmount` by hand.
+
+Types
+
+- [`Linear`](#vesting_wallet_linear-Linear)
+- [`Params`](#vesting_wallet_linear-Params)
+
+Functions
+
+- [`params(start_ms, cliff_ms, period_ms, steps)`](#vesting_wallet_linear-params)
+- [`params_continuous(start_ms, cliff_ms, duration_ms)`](#vesting_wallet_linear-params_continuous)
+- [`new(beneficiary, start_ms, cliff_ms, period_ms, steps, ctx)`](#vesting_wallet_linear-new)
+- [`new_continuous(beneficiary, start_ms, cliff_ms, duration_ms, ctx)`](#vesting_wallet_linear-new_continuous)
+- [`create_and_share(beneficiary, start_ms, cliff_ms, period_ms, steps, ctx)`](#vesting_wallet_linear-create_and_share)
+- [`create_and_share_continuous(beneficiary, start_ms, cliff_ms, duration_ms, ctx)`](#vesting_wallet_linear-create_and_share_continuous)
+- [`vested_amount(wallet, clock)`](#vesting_wallet_linear-vested_amount)
+- [`release(wallet, clock)`](#vesting_wallet_linear-release)
+- [`releasable(wallet, clock)`](#vesting_wallet_linear-releasable)
+- [`destroy(receipt, cap, clock)`](#vesting_wallet_linear-destroy)
+- [`start_ms(wallet)`](#vesting_wallet_linear-start_ms)
+- [`period_ms(wallet)`](#vesting_wallet_linear-period_ms)
+- [`steps(wallet)`](#vesting_wallet_linear-steps)
+- [`duration_ms(wallet)`](#vesting_wallet_linear-duration_ms)
+- [`end_ms(wallet)`](#vesting_wallet_linear-end_ms)
+- [`cliff_ms(wallet)`](#vesting_wallet_linear-cliff_ms)
+
+Errors
+
+- [`EZeroPeriod`](#vesting_wallet_linear-EZeroPeriod)
+- [`EZeroSteps`](#vesting_wallet_linear-EZeroSteps)
+- [`EInvalidCliff`](#vesting_wallet_linear-EInvalidCliff)
+- [`EScheduleOverflow`](#vesting_wallet_linear-EScheduleOverflow)
+- [`ENotEnded`](#vesting_wallet_linear-ENotEnded)
+
+#### Types [!toc] [#vesting_wallet_linear-Types]
+
+<APIItem
+  functionSignature="struct Linear has drop"
+  id="vesting_wallet_linear-Linear"
+  kind="struct"
+>
+The schedule witness for the stepped curve. Empty and `drop`-only: it carries no data and exists solely as the authority token `vesting_wallet` requires. Declared here, so only this module can construct a `Linear` and therefore only this module can mint a `VestedAmount<Linear>` or tear down a `VestingWallet<Linear, Params, C>`.
+</APIItem>
+
+<APIItem
+  functionSignature="struct Params has copy, drop, store"
+  id="vesting_wallet_linear-Params"
+  kind="struct"
+>
+The stepped-schedule parameters stored in the wallet: `start_ms` (when vesting begins), `period_ms` (length of each tranche), `steps` (number of equal tranches), and `cliff_ms` (`0` for no cliff). The schedule ends at `start_ms + period_ms * steps`. Obtain a validated value via `params` or `params_continuous`.
+</APIItem>
+
+#### Functions [!toc] [#vesting_wallet_linear-Functions]
+
+<APIItem
+  functionSignature="params(start_ms: u64, cliff_ms: u64, period_ms: u64, steps: u64) -> Params"
+  id="vesting_wallet_linear-params"
+  kind="public"
+>
+Builds a validated `Params` for the stepped schedule, running the same construction guards as `new`. This is the only way to obtain a `Params` outside this module, so a curve-agnostic protocol that drives `vesting_wallet` directly can mint the wallet itself via `vesting_wallet::new<Linear, Params, C>(params(..), beneficiary, ctx)`.
+
+Aborts with `EZeroPeriod` if `period_ms == 0`.
+
+Aborts with `EZeroSteps` if `steps == 0`.
+
+Aborts with `EScheduleOverflow` if `period_ms * steps`, or `start_ms` plus that duration, would overflow `u64`.
+
+Aborts with `EInvalidCliff` if `cliff_ms > period_ms * steps`.
+</APIItem>
+
+<APIItem
+  functionSignature="params_continuous(start_ms: u64, cliff_ms: u64, duration_ms: u64) -> Params"
+  id="vesting_wallet_linear-params_continuous"
+  kind="public"
+>
+Builds a validated `Params` for the continuous linear-with-cliff schedule: the stepped curve in the `period_ms = 1` limit (`steps = duration_ms`).
+
+Aborts with `EZeroSteps` if `duration_ms == 0`.
+
+Aborts with `EInvalidCliff` if `cliff_ms > duration_ms`.
+
+Aborts with `EScheduleOverflow` if `start_ms + duration_ms` would overflow `u64`.
+</APIItem>
+
+<APIItem
+  functionSignature="new<C>(beneficiary: address, start_ms: u64, cliff_ms: u64, period_ms: u64, steps: u64, ctx: &mut TxContext) -> (VestingWallet<Linear, Params, C>, DestroyCap)"
+  id="vesting_wallet_linear-new"
+  kind="public"
+>
+Builds a `VestingWallet<Linear, Params, C>` on the stepped schedule and returns it by value, plus the `DestroyCap` that authorizes its teardown, so the caller can chain deposit and topology selection in one PTB. Use `create_and_share` for the common "share immediately" case.
+
+Aborts with `EZeroPeriod`, `EZeroSteps`, `EScheduleOverflow`, or `EInvalidCliff` under the same conditions as `params`.
+</APIItem>
+
+<APIItem
+  functionSignature="new_continuous<C>(beneficiary: address, start_ms: u64, cliff_ms: u64, duration_ms: u64, ctx: &mut TxContext) -> (VestingWallet<Linear, Params, C>, DestroyCap)"
+  id="vesting_wallet_linear-new_continuous"
+  kind="public"
+>
+Sugar for a continuous linear-with-cliff schedule: the stepped curve in the `period_ms = 1` limit, where every millisecond is its own tranche and the curve rises linearly. Returns the wallet by value plus its `DestroyCap`.
+
+Aborts with `EZeroSteps`, `EInvalidCliff`, or `EScheduleOverflow` under the same conditions as `params_continuous`.
+</APIItem>
+
+<APIItem
+  functionSignature="create_and_share<C>(beneficiary: address, start_ms: u64, cliff_ms: u64, period_ms: u64, steps: u64, ctx: &mut TxContext) -> (ID, DestroyCap)"
+  id="vesting_wallet_linear-create_and_share"
+  kind="public"
+>
+Builds a stepped wallet and immediately shares it via `transfer::public_share_object`, returning the shared wallet's `ID` and its `DestroyCap`. The cap holder can later tear the wallet down.
+
+Aborts with `EZeroPeriod`, `EZeroSteps`, `EScheduleOverflow`, or `EInvalidCliff` under the same conditions as `params`.
+</APIItem>
+
+<APIItem
+  functionSignature="create_and_share_continuous<C>(beneficiary: address, start_ms: u64, cliff_ms: u64, duration_ms: u64, ctx: &mut TxContext) -> (ID, DestroyCap)"
+  id="vesting_wallet_linear-create_and_share_continuous"
+  kind="public"
+>
+Builds a continuous wallet and immediately shares it, returning the shared wallet's `ID` and its `DestroyCap`.
+
+Aborts with `EZeroSteps`, `EInvalidCliff`, or `EScheduleOverflow` under the same conditions as `params_continuous`.
+</APIItem>
+
+<APIItem
+  functionSignature="vested_amount<C>(wallet: &VestingWallet<Linear, Params, C>, clock: &Clock) -> VestedAmount<Linear>"
+  id="vesting_wallet_linear-vested_amount"
+  kind="public"
+>
+Evaluates the stepped curve at `clock.timestamp_ms()` and mints the resulting cumulative vested total as a `VestedAmount<Linear>`, ready to pass to `vesting_wallet::release` (or this module's `release`). Used when driving the wallet through a curve-agnostic wrapper.
+</APIItem>
+
+<APIItem
+  functionSignature="release<C>(wallet: &mut VestingWallet<Linear, Params, C>, clock: &Clock)"
+  id="vesting_wallet_linear-release"
+  kind="public"
+>
+Evaluates the curve and releases the not-yet-released portion to the beneficiary in one call - the common path. Permissionless and idempotent: a no-op if nothing new has vested since the last release.
+</APIItem>
+
+<APIItem
+  functionSignature="releasable<C>(wallet: &VestingWallet<Linear, Params, C>, clock: &Clock) -> u64"
+  id="vesting_wallet_linear-releasable"
+  kind="public"
+>
+How much `release` would pay out right now, without the caller minting a `VestedAmount`. The client-friendly "what can I claim?" query.
+</APIItem>
+
+<APIItem
+  functionSignature="destroy(receipt: DestroyReceipt<Linear, Params>, cap: DestroyCap, clock: &Clock)"
+  id="vesting_wallet_linear-destroy"
+  kind="public"
+>
+Finalizes teardown of a drained wallet by consuming the `DestroyReceipt<Linear, Params>` that `vesting_wallet::destroy_empty` returns, along with the wallet's `DestroyCap`. Authority comes from the cap, not the caller's address, so a wallet whose `beneficiary` is an object address can still be torn down. The receipt is a hot potato consumed in the same PTB it was produced, so a failed gate here reverts the whole teardown.
+
+Aborts with `EWrongCap` if `cap` was minted for a different wallet.
+
+Aborts with `ENotEnded` if called before the schedule's end (`start_ms + period_ms * steps`).
+</APIItem>
+
+<APIItem
+  functionSignature="start_ms<C>(wallet: &VestingWallet<Linear, Params, C>) -> u64"
+  id="vesting_wallet_linear-start_ms"
+  kind="public"
+>
+Timestamp (ms) at which vesting begins.
+</APIItem>
+
+<APIItem
+  functionSignature="period_ms<C>(wallet: &VestingWallet<Linear, Params, C>) -> u64"
+  id="vesting_wallet_linear-period_ms"
+  kind="public"
+>
+Length of each tranche period (ms). `1` for a continuous schedule.
+</APIItem>
+
+<APIItem
+  functionSignature="steps<C>(wallet: &VestingWallet<Linear, Params, C>) -> u64"
+  id="vesting_wallet_linear-steps"
+  kind="public"
+>
+Number of equal tranches.
+</APIItem>
+
+<APIItem
+  functionSignature="duration_ms<C>(wallet: &VestingWallet<Linear, Params, C>) -> u64"
+  id="vesting_wallet_linear-duration_ms"
+  kind="public"
+>
+Length of the vesting period (ms): `period_ms * steps`.
+</APIItem>
+
+<APIItem
+  functionSignature="end_ms<C>(wallet: &VestingWallet<Linear, Params, C>) -> u64"
+  id="vesting_wallet_linear-end_ms"
+  kind="public"
+>
+Timestamp (ms) at which the schedule ends (`start_ms + period_ms * steps`).
+</APIItem>
+
+<APIItem
+  functionSignature="cliff_ms<C>(wallet: &VestingWallet<Linear, Params, C>) -> u64"
+  id="vesting_wallet_linear-cliff_ms"
+  kind="public"
+>
+The configured cliff length (ms from `start_ms`). `0` means no cliff.
+</APIItem>
+
+#### Errors [!toc] [#vesting_wallet_linear-Errors]
+
+<APIItem functionSignature="EZeroPeriod (code 0)" id="vesting_wallet_linear-EZeroPeriod" kind="error">
+Raised by `params` / `new` when `period_ms == 0`; each tranche must span a positive period.
+</APIItem>
+
+<APIItem functionSignature="EZeroSteps (code 1)" id="vesting_wallet_linear-EZeroSteps" kind="error">
+Raised when `steps == 0` (or `duration_ms == 0` for the continuous constructors); a schedule must have at least one tranche.
+</APIItem>
+
+<APIItem functionSignature="EInvalidCliff (code 2)" id="vesting_wallet_linear-EInvalidCliff" kind="error">
+Raised when `cliff_ms` exceeds the schedule duration (`period_ms * steps`); the cliff must fall within the schedule.
+</APIItem>
+
+<APIItem functionSignature="EScheduleOverflow (code 3)" id="vesting_wallet_linear-EScheduleOverflow" kind="error">
+Raised when `period_ms * steps`, or `start_ms` plus that duration, would overflow `u64`.
+</APIItem>
+
+<APIItem functionSignature="ENotEnded (code 4)" id="vesting_wallet_linear-ENotEnded" kind="error">
+Raised by `destroy` when called before the schedule's end (`start_ms + period_ms * steps`).
+</APIItem>
+
+### `vesting_wallet` [toc] [#vesting_wallet]
+
+<APIGithubLinkHeader
+  moduleName="vesting_wallet"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.4.0/contracts/finance/sources/vesting_wallet.move"
+/>
+
+```move
+use openzeppelin_finance::vesting_wallet;
+```
+
+The curve-agnostic core. `VestingWallet<S, P, C>` locks a `Balance<C>` for a single `beneficiary` and tracks how much has been paid out. It never interprets the schedule - a curve module evaluates its curve, mints a `VestedAmount<S>`, and `release` pays out the not-yet-released portion. Parameterized by the schedule witness `S` (`drop`), the schedule parameters `P` (`copy + drop + store`), and the coin type `C`, all fixed at construction.
+
+Types
+
+- [`VestingWallet<S, P, C>`](#vesting_wallet-VestingWallet)
+- [`VestedAmount<S>`](#vesting_wallet-VestedAmount)
+- [`DestroyReceipt<S, P>`](#vesting_wallet-DestroyReceipt)
+- [`DestroyCap`](#vesting_wallet-DestroyCap)
+
+Functions
+
+- [`new(schedule_params, beneficiary, ctx)`](#vesting_wallet-new)
+- [`mint_vested_amount(wallet, w, amount)`](#vesting_wallet-mint_vested_amount)
+- [`deposit(wallet, balance)`](#vesting_wallet-deposit)
+- [`sweep_settled(wallet, root)`](#vesting_wallet-sweep_settled)
+- [`receive_and_deposit(wallet, receiving)`](#vesting_wallet-receive_and_deposit)
+- [`release(wallet, vested)`](#vesting_wallet-release)
+- [`destroy_empty(wallet, root)`](#vesting_wallet-destroy_empty)
+- [`consume_receipt(receipt, cap, w)`](#vesting_wallet-consume_receipt)
+- [`releasable(wallet, vested)`](#vesting_wallet-releasable)
+- [`amount(vested)`](#vesting_wallet-amount)
+- [`schedule_params(wallet)`](#vesting_wallet-schedule_params)
+- [`beneficiary(wallet)`](#vesting_wallet-beneficiary)
+- [`released(wallet)`](#vesting_wallet-released)
+- [`balance(wallet)`](#vesting_wallet-balance)
+
+Events
+
+- [`Created`](#vesting_wallet-Created)
+- [`Deposited`](#vesting_wallet-Deposited)
+- [`Swept`](#vesting_wallet-Swept)
+- [`Received`](#vesting_wallet-Received)
+- [`Released`](#vesting_wallet-Released)
+- [`Destroyed`](#vesting_wallet-Destroyed)
+
+Errors
+
+- [`ENotEmpty`](#vesting_wallet-ENotEmpty)
+- [`EWalletMismatch`](#vesting_wallet-EWalletMismatch)
+- [`EVestedBelowReleased`](#vesting_wallet-EVestedBelowReleased)
+- [`EBalanceOverflow`](#vesting_wallet-EBalanceOverflow)
+- [`EInsufficientBalance`](#vesting_wallet-EInsufficientBalance)
+- [`EWrongCap`](#vesting_wallet-EWrongCap)
+- [`EUnsweptFunds`](#vesting_wallet-EUnsweptFunds)
+
+#### Types [!toc] [#vesting_wallet-Types]
+
+<APIItem
+  functionSignature="struct VestingWallet<phantom S: drop, P: copy + drop + store, phantom C> has key, store"
+  id="vesting_wallet-VestingWallet"
+  kind="struct"
+>
+The vesting wallet. `schedule_params` and `beneficiary` are fixed at construction; only `balance` and `released` change over time. Curve modules read `balance + released` as the wallet's current total when evaluating the schedule, so deposits made after the schedule starts participate retroactively. `key + store`, so the constructor returns it by value and the consumer picks the topology (share or transfer).
+</APIItem>
+
+<APIItem
+  functionSignature="struct VestedAmount<phantom S> has drop"
+  id="vesting_wallet-VestedAmount"
+  kind="struct"
+>
+A transient attestation that curve `S` has vested a cumulative `amount` for a specific wallet. `drop`-only - no `copy`, `store`, or `key` - so it cannot be duplicated, stored, or held across transactions; it lives only within the PTB that mints it. Not a hot potato: `release` and `releasable` borrow it. Only the module that declares `S` can mint one (via `mint_vested_amount`), and its `wallet_id` stamp binds it to the wallet it was minted against, so `release` rejects it against any other wallet.
+</APIItem>
+
+<APIItem
+  functionSignature="struct DestroyReceipt<phantom S, P>"
+  id="vesting_wallet-DestroyReceipt"
+  kind="struct"
+>
+A hot potato carrying a destroyed wallet's id and schedule params back to its curve. Only `consume_receipt` (witness-gated and cap-gated) can consume it, which drags the curve into the teardown PTB and lets it veto by aborting. Returned by `destroy_empty`.
+</APIItem>
+
+<APIItem
+  functionSignature="struct DestroyCap has key, store"
+  id="vesting_wallet-DestroyCap"
+  kind="struct"
+>
+Authority to finalize the teardown of one specific wallet. Minted by `new` alongside the wallet and bound to it by id; consumed by `consume_receipt`, which rejects any cap whose wallet id does not match. Teardown authority travels with the cap, not with the wallet's `beneficiary` - this is what makes teardown reachable for a wallet whose beneficiary is an object address. It has no `drop`, so it is retired only by tearing the wallet down.
+</APIItem>
+
+#### Functions [!toc] [#vesting_wallet-Functions]
+
+<APIItem
+  functionSignature="new<S: drop, P: copy + drop + store, C>(schedule_params: P, beneficiary: address, ctx: &mut TxContext) -> (VestingWallet<S, P, C>, DestroyCap)"
+  id="vesting_wallet-new"
+  kind="public"
+>
+Builds a new wallet around a schedule and returns it by value, together with the `DestroyCap` that authorizes its eventual teardown. Returning by value lets the caller chain creation, funding, and topology selection in one PTB. Emits `Created`. Taking `P` by value is the authority proof - only the module that declares `P` can produce one.
+</APIItem>
+
+<APIItem
+  functionSignature="mint_vested_amount<S: drop, P: copy + drop + store, C>(wallet: &VestingWallet<S, P, C>, _w: S, amount: u64) -> VestedAmount<S>"
+  id="vesting_wallet-mint_vested_amount"
+  kind="public"
+>
+Mints a `VestedAmount<S>` recording `amount` as the cumulative vested total for `wallet`. Witness-gated: only the module that declares `S` can construct one, so the `amount` is unforgeable elsewhere. The `amount` is **not** validated here - the wallet only stamps it with this wallet's id; the curve module is responsible for keeping `amount` a monotonically non-decreasing, `balance + released`-bounded function of the schedule.
+</APIItem>
+
+<APIItem
+  functionSignature="deposit<S: drop, P: copy + drop + store, C>(wallet: &mut VestingWallet<S, P, C>, balance: Balance<C>)"
+  id="vesting_wallet-deposit"
+  kind="public"
+>
+Adds a `Balance<C>` to the wallet's balance. Permissionless - anyone may fund. A zero-value deposit is a no-op and emits no event; otherwise emits `Deposited`.
+
+Aborts with `EBalanceOverflow` if the deposit would push the wallet's lifetime total (`balance + released`) past `u64::MAX`.
+</APIItem>
+
+<APIItem
+  functionSignature="sweep_settled<S: drop, P: copy + drop + store, C>(wallet: &mut VestingWallet<S, P, C>, root: &AccumulatorRoot)"
+  id="vesting_wallet-sweep_settled"
+  kind="public"
+>
+Sweeps all settled funds from the wallet's own object address balance into its on-book `balance`. Used to pull in `Balance<C>` settled to an owned wallet's address. A wallet with no settled funds is a no-op and emits no event; otherwise emits `Swept`.
+
+Aborts with `EBalanceOverflow` if sweeping would overflow the lifetime total. Can also abort from the underlying Sui accumulator withdrawal if object-funds withdrawal is not enabled or the withdrawal cannot be redeemed.
+</APIItem>
+
+<APIItem
+  functionSignature="receive_and_deposit<S: drop, P: copy + drop + store, C>(wallet: &mut VestingWallet<S, P, C>, receiving: Receiving<Coin<C>>)"
+  id="vesting_wallet-receive_and_deposit"
+  kind="public"
+>
+Claims a `Coin<C>` that an upstream emitter `public_transfer`'d to this wallet's object address, then adds it to the balance. Used by emission schedules and payroll robots that don't hold a wallet reference. Requires `&mut wallet`; a wrapper that keeps `&mut inner` private must re-expose this or such a coin stays stranded. A zero-value claim is a no-op; otherwise emits `Received`.
+
+Aborts with `EBalanceOverflow` if claiming would overflow the lifetime total - and because the coin was already transferred, an abort here leaves it stranded at the wallet's address.
+
+Aborts with `sui::transfer::EUnableToReceiveObject` (code 3) if `receiving` is no longer receivable (already claimed, wrapped, transferred away, or absent at that version).
+</APIItem>
+
+<APIItem
+  functionSignature="release<S: drop, P: copy + drop + store, C>(wallet: &mut VestingWallet<S, P, C>, vested: &VestedAmount<S>)"
+  id="vesting_wallet-release"
+  kind="public"
+>
+Pays the not-yet-released portion attested by `vested` into the beneficiary's address balance via `balance::send_funds` - no `Coin<C>` object is minted. Permissionless: anyone holding the wallet and a `VestedAmount` can poke it. The recipient is read fresh from `wallet.beneficiary`. `vested` is borrowed, not consumed. A no-op (no event) if nothing new is vested.
+
+Aborts with `EWalletMismatch` if `vested` was not minted for this wallet.
+
+Aborts with `EVestedBelowReleased` if `vested.amount` is below the amount already released.
+
+Aborts with `EInsufficientBalance` if the balance cannot cover the releasable amount (the curve attested more than `balance + released`).
+</APIItem>
+
+<APIItem
+  functionSignature="destroy_empty<S: drop, P: copy + drop + store, C>(wallet: VestingWallet<S, P, C>, root: &AccumulatorRoot) -> DestroyReceipt<S, P>"
+  id="vesting_wallet-destroy_empty"
+  kind="public"
+>
+Consumes a drained wallet to reclaim its storage rebate, emits `Destroyed`, and returns a `DestroyReceipt<S, P>` for the curve to finalize via `consume_receipt`. Permissionless (no witness, no cap), so a curve-agnostic holder can drain the rebate; but the receipt can only be retired by the witness-and-cap-gated `consume_receipt`, so a `destroy_empty` whose matching consume never runs reverts the whole PTB.
+
+Aborts with `ENotEmpty` if the wallet still holds a balance.
+
+Aborts with `EUnsweptFunds` if the wallet has pending settled funds at its object address (call `sweep_settled` first).
+</APIItem>
+
+<APIItem
+  functionSignature="consume_receipt<S: drop, P: copy + drop + store>(receipt: DestroyReceipt<S, P>, cap: DestroyCap, _w: S) -> P"
+  id="vesting_wallet-consume_receipt"
+  kind="public"
+>
+Unwraps a `DestroyReceipt<S, P>` to recover the destroyed wallet's schedule parameters, consuming the wallet's `DestroyCap`. Gated two ways: the witness `S` (only the declaring curve can call it, run teardown logic, and abort to veto) and the `DestroyCap` (teardown authority, decoupled from `beneficiary`). The cap is retired here.
+
+Aborts with `EWrongCap` if `cap` was minted for a different wallet than this receipt's.
+</APIItem>
+
+<APIItem
+  functionSignature="releasable<S: drop, P: copy + drop + store, C>(wallet: &VestingWallet<S, P, C>, vested: &VestedAmount<S>) -> u64"
+  id="vesting_wallet-releasable"
+  kind="public"
+>
+What `release` would pay out for the supplied `VestedAmount<S>` right now: `vested.amount - wallet.released`. Borrows `vested`.
+
+Aborts with `EWalletMismatch` if `vested` was not minted for this wallet.
+
+Aborts with `EVestedBelowReleased` if `vested.amount` is below the amount already released.
+</APIItem>
+
+<APIItem
+  functionSignature="amount<S>(vested: &VestedAmount<S>) -> u64"
+  id="vesting_wallet-amount"
+  kind="public"
+>
+Reads the cumulative vested total recorded in a `VestedAmount<S>` without consuming it.
+</APIItem>
+
+<APIItem
+  functionSignature="schedule_params<S: drop, P: copy + drop + store, C>(wallet: &VestingWallet<S, P, C>) -> P"
+  id="vesting_wallet-schedule_params"
+  kind="public"
+>
+Reads the wallet's schedule parameters. Ungated - curve parameters are public information.
+</APIItem>
+
+<APIItem
+  functionSignature="beneficiary<S: drop, P: copy + drop + store, C>(wallet: &VestingWallet<S, P, C>) -> address"
+  id="vesting_wallet-beneficiary"
+  kind="public"
+>
+Address that receives every `release`.
+</APIItem>
+
+<APIItem
+  functionSignature="released<S: drop, P: copy + drop + store, C>(wallet: &VestingWallet<S, P, C>) -> u64"
+  id="vesting_wallet-released"
+  kind="public"
+>
+Cumulative amount released so far. Monotonically non-decreasing.
+</APIItem>
+
+<APIItem
+  functionSignature="balance<S: drop, P: copy + drop + store, C>(wallet: &VestingWallet<S, P, C>) -> u64"
+  id="vesting_wallet-balance"
+  kind="public"
+>
+Funds currently held by the wallet and not yet released.
+</APIItem>
+
+#### Events [!toc] [#vesting_wallet-Events]
+
+<APIItem
+  functionSignature="Created<phantom S, P, phantom C>(wallet_id: ID, beneficiary: address, schedule_params: P)"
+  id="vesting_wallet-Created"
+  kind="event"
+>
+Emitted by `new` when a wallet is created.
+</APIItem>
+
+<APIItem
+  functionSignature="Deposited<phantom S, phantom C>(wallet_id: ID, amount: u64)"
+  id="vesting_wallet-Deposited"
+  kind="event"
+>
+Emitted by `deposit` when a non-zero amount is added. `amount` is the amount added by this deposit.
+</APIItem>
+
+<APIItem
+  functionSignature="Swept<phantom S, phantom C>(wallet_id: ID, amount: u64)"
+  id="vesting_wallet-Swept"
+  kind="event"
+>
+Emitted by `sweep_settled` when non-zero settled funds are added.
+</APIItem>
+
+<APIItem
+  functionSignature="Received<phantom S, phantom C>(wallet_id: ID, amount: u64)"
+  id="vesting_wallet-Received"
+  kind="event"
+>
+Emitted by `receive_and_deposit` when a non-zero coin is claimed.
+</APIItem>
+
+<APIItem
+  functionSignature="Released<phantom S, phantom C>(wallet_id: ID, beneficiary: address, amount: u64)"
+  id="vesting_wallet-Released"
+  kind="event"
+>
+Emitted by `release` when a non-zero amount is paid to the beneficiary. `amount` is the incremental portion paid by this release, not the cumulative `released` total.
+</APIItem>
+
+<APIItem
+  functionSignature="Destroyed<phantom S, phantom C>(wallet_id: ID, beneficiary: address, total_released: u64)"
+  id="vesting_wallet-Destroyed"
+  kind="event"
+>
+Emitted by `destroy_empty` when a drained wallet is torn down. `total_released` is the total released over the wallet's lifetime.
+</APIItem>
+
+#### Errors [!toc] [#vesting_wallet-Errors]
+
+<APIItem functionSignature="ENotEmpty (code 0)" id="vesting_wallet-ENotEmpty" kind="error">
+Raised by `destroy_empty` when the wallet still holds a balance.
+</APIItem>
+
+<APIItem functionSignature="EWalletMismatch (code 1)" id="vesting_wallet-EWalletMismatch" kind="error">
+Raised by `release` / `releasable` when a `VestedAmount` is used against a different wallet than the one it was minted for.
+</APIItem>
+
+<APIItem functionSignature="EVestedBelowReleased (code 2)" id="vesting_wallet-EVestedBelowReleased" kind="error">
+Raised when a `VestedAmount` attests a cumulative total below what the wallet has already released - a stale attestation or a curve that regressed.
+</APIItem>
+
+<APIItem functionSignature="EBalanceOverflow (code 3)" id="vesting_wallet-EBalanceOverflow" kind="error">
+Raised by `deposit` / `sweep_settled` / `receive_and_deposit` when the addition would push the wallet's lifetime total (`balance + released`) past `u64::MAX`.
+</APIItem>
+
+<APIItem functionSignature="EInsufficientBalance (code 4)" id="vesting_wallet-EInsufficientBalance" kind="error">
+Raised by `release` when the attested amount exceeds the wallet's funded total (`balance + released`), so the current balance cannot cover the releasable amount.
+</APIItem>
+
+<APIItem functionSignature="EWrongCap (code 5)" id="vesting_wallet-EWrongCap" kind="error">
+Raised by `consume_receipt` when the `DestroyCap` was minted for a different wallet than the one being torn down.
+</APIItem>
+
+<APIItem functionSignature="EUnsweptFunds (code 6)" id="vesting_wallet-EUnsweptFunds" kind="error">
+Raised by `destroy_empty` when the wallet still has unswept settled funds at its object address. Call `sweep_settled` first.
+</APIItem>
