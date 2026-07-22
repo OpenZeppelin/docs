@@ -1,0 +1,902 @@
+---
+title: Collections API Reference
+---
+
+This page documents the public API of `openzeppelin_collections` for OpenZeppelin Contracts for Sui `v1.x`.
+
+### `sorted_map` [toc] [#sorted_map]
+
+<APIGithubLinkHeader
+  moduleName="sorted_map"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.5.0/collections/sources/sorted_map.move"
+/>
+
+```move
+use openzeppelin_collections::sorted_map;
+```
+
+A generic, ordered key-value map with O(log N) lookup and ordered navigation (head/tail, floor/ceiling, next key, sorted pages). Every operation loads exactly one stored object, so capacity is bounded by Sui's object size limit (~250 KB), not by any per-transaction dynamic-field cap. `SortedMap<K, V>` is a UID-less value shaped like `sui::vec_map::VecMap`, with no identity of its own or dynamic fields, so you embed it in your own `has key` object and gate access with your own entry functions. The module emits no events.
+
+The API splits into bare and `_by` forms. Bare macros (`upsert!`, `borrow!`, ...) assume the built-in integer `<` and compile only for integer keys; `_by` macros take a strict less-than comparator lambda and are required for `address`, struct, or any other non-integer key. Values only need `store`, so a resource `V` like `Coin<T>` is supported. Such a map cannot be dropped; drain every value via `remove!`/`pop_front`/`pop_back`, then call `destroy_empty`.
+
+<Callout type="warn">
+The map stores no comparator. Ordering is defined per call by the strict less-than lambda you supply, and it MUST be a strict total order threaded consistently to every call on a given map. The library cannot detect a violation, and the failure is silent: a non-strict `<=` causes duplicate inserts and missed lookups/removes, and mixing `<` with `>` across calls corrupts order. In tests, call `is_well_formed_by!` after a `_by` sequence to catch comparator mistakes.
+</Callout>
+
+Types
+
+- [`Entry<K, V>`](#sorted_map-Entry)
+- [`SortedMap<K, V>`](#sorted_map-SortedMap)
+
+Functions
+
+- [`new()`](#sorted_map-new)
+- [`singleton(key, value)`](#sorted_map-singleton)
+- [`destroy_empty(map)`](#sorted_map-destroy_empty)
+- [`length(map)`](#sorted_map-length)
+- [`is_empty(map)`](#sorted_map-is_empty)
+- [`head(map)`](#sorted_map-head)
+- [`tail(map)`](#sorted_map-tail)
+- [`pop_front(map)`](#sorted_map-pop_front)
+- [`pop_back(map)`](#sorted_map-pop_back)
+- [`keys(map)`](#sorted_map-keys)
+
+Macros
+
+- [`from_sorted_keys_values_by!(keys, values, lt)`](#sorted_map-from_sorted_keys_values_by)
+- [`from_sorted_keys_values!(keys, values)`](#sorted_map-from_sorted_keys_values)
+- [`contains_by!(map, key, lt)`](#sorted_map-contains_by)
+- [`contains!(map, key)`](#sorted_map-contains)
+- [`borrow_by!(map, key, lt)`](#sorted_map-borrow_by)
+- [`borrow!(map, key)`](#sorted_map-borrow)
+- [`borrow_mut_by!(map, key, lt)`](#sorted_map-borrow_mut_by)
+- [`borrow_mut!(map, key)`](#sorted_map-borrow_mut)
+- [`add_by!(map, key, value, lt)`](#sorted_map-add_by)
+- [`add!(map, key, value)`](#sorted_map-add)
+- [`upsert_by!(map, key, value, lt)`](#sorted_map-upsert_by)
+- [`upsert!(map, key, value)`](#sorted_map-upsert)
+- [`remove_by!(map, key, lt)`](#sorted_map-remove_by)
+- [`remove!(map, key)`](#sorted_map-remove)
+- [`find_next_by!(map, key, include, lt)`](#sorted_map-find_next_by)
+- [`find_next!(map, key, include)`](#sorted_map-find_next)
+- [`find_prev_by!(map, key, include, lt)`](#sorted_map-find_prev_by)
+- [`find_prev!(map, key, include)`](#sorted_map-find_prev)
+- [`next_key_by!(map, key, lt)`](#sorted_map-next_key_by)
+- [`next_key!(map, key)`](#sorted_map-next_key)
+- [`prev_key_by!(map, key, lt)`](#sorted_map-prev_key_by)
+- [`prev_key!(map, key)`](#sorted_map-prev_key)
+- [`keys_from_by!(map, from, include, limit, lt)`](#sorted_map-keys_from_by)
+- [`keys_from!(map, from, include, limit)`](#sorted_map-keys_from)
+- [`is_well_formed_by!(map, lt)`](#sorted_map-is_well_formed_by)
+- [`is_well_formed!(map)`](#sorted_map-is_well_formed)
+
+Errors
+
+- [`EKeyNotFound`](#sorted_map-EKeyNotFound)
+- [`ENotEmpty`](#sorted_map-ENotEmpty)
+- [`EEmpty`](#sorted_map-EEmpty)
+- [`EKeysNotStrictlyIncreasing`](#sorted_map-EKeysNotStrictlyIncreasing)
+- [`EUnequalLengths`](#sorted_map-EUnequalLengths)
+- [`EKeyAlreadyExists`](#sorted_map-EKeyAlreadyExists)
+
+#### Types [!toc] [#sorted_map-Types]
+
+<APIItem
+  functionSignature="struct Entry<K, V>"
+  id="sorted_map-Entry"
+  kind="struct"
+>
+One key-value pair, stored inline in the map's vector. Its fields are private; read them through the forced-public `key`/`value` accessors if a macro body requires it.
+
+Abilities materialize jointly over `K` and `V`: `Entry<u64, u64>` is `copy + drop + store`, while `Entry<u64, Coin<T>>` is store-only.
+</APIItem>
+
+<APIItem
+  functionSignature="struct SortedMap<K, V>"
+  id="sorted_map-SortedMap"
+  kind="struct"
+>
+A map kept sorted by key. Every operation loads exactly one stored object, so it is bounded by object size (~250 KB), not by any per-transaction dynamic-field cap; lookup is O(log N) and writes are O(N).
+
+A pure value with no `UID` or dynamic fields, so it embeds directly in an integrator's object, exactly like `sui::vec_map::VecMap`. `copy`/`drop` materialize only when both `K` and `V` allow them: `SortedMap<u64, u64>` is `copy + drop + store`; `SortedMap<u64, Coin<T>>` is store-only and must be drained then `destroy_empty`'d.
+
+Across the supported (macro) API the backing vector is strictly increasing under the consistently supplied comparator: sorted, with no duplicate keys.
+</APIItem>
+
+#### Functions [!toc] [#sorted_map-Functions]
+
+<APIItem
+  functionSignature="new<K, V>() -> SortedMap<K, V>"
+  id="sorted_map-new"
+  kind="public"
+>
+Creates a new, empty map. Takes no `&mut TxContext`: a `SortedMap` is a value, not an object.
+</APIItem>
+
+<APIItem
+  functionSignature="singleton<K, V>(key: K, value: V) -> SortedMap<K, V>"
+  id="sorted_map-singleton"
+  kind="public"
+>
+Creates a map holding a single `key`/`value` entry. O(1); needs no comparator, since one entry is trivially sorted. For more than one entry from pre-sorted data, use `from_sorted_keys_values!`.
+</APIItem>
+
+<APIItem
+  functionSignature="destroy_empty<K, V>(map: SortedMap<K, V>)"
+  id="sorted_map-destroy_empty"
+  kind="public"
+>
+Destroys an empty map. This is the only terminal for a map whose value type lacks `drop` (e.g. `SortedMap<K, Coin<T>>`): drain every value via `remove!`/`pop_front`/`pop_back` first, then call this.
+
+Aborts with `ENotEmpty` if the map still holds entries.
+</APIItem>
+
+<APIItem
+  functionSignature="length<K, V>(map: &SortedMap<K, V>) -> u64"
+  id="sorted_map-length"
+  kind="public"
+>
+Returns the number of entries.
+</APIItem>
+
+<APIItem
+  functionSignature="is_empty<K, V>(map: &SortedMap<K, V>) -> bool"
+  id="sorted_map-is_empty"
+  kind="public"
+>
+Returns `true` iff the map holds no entries.
+</APIItem>
+
+<APIItem
+  functionSignature="head<K: copy, V>(map: &SortedMap<K, V>) -> Option<K>"
+  id="sorted_map-head"
+  kind="public"
+>
+Returns the smallest key under the comparator, or `none` if the map is empty. O(1). With a reverse comparator this returns the largest numeric key.
+</APIItem>
+
+<APIItem
+  functionSignature="tail<K: copy, V>(map: &SortedMap<K, V>) -> Option<K>"
+  id="sorted_map-tail"
+  kind="public"
+>
+Returns the largest key under the comparator, or `none` if the map is empty. O(1).
+</APIItem>
+
+<APIItem
+  functionSignature="pop_front<K, V>(map: &mut SortedMap<K, V>) -> (K, V)"
+  id="sorted_map-pop_front"
+  kind="public"
+>
+Removes and returns the smallest entry as a `(key, value)` pair. O(N), as it shifts every remaining entry; prefer `pop_back` for bulk drains, which is O(1).
+
+Aborts with `EEmpty` if the map is empty.
+</APIItem>
+
+<APIItem
+  functionSignature="pop_back<K, V>(map: &mut SortedMap<K, V>) -> (K, V)"
+  id="sorted_map-pop_back"
+  kind="public"
+>
+Removes and returns the largest entry as a `(key, value)` pair. O(1) (no shift).
+
+Aborts with `EEmpty` if the map is empty.
+</APIItem>
+
+<APIItem
+  functionSignature="keys<K: copy, V>(map: &SortedMap<K, V>) -> vector<K>"
+  id="sorted_map-keys"
+  kind="public"
+>
+Returns all keys in ascending comparator order as an owned `vector<K>`. O(N) in output size with no `limit`; for large or near-ceiling maps prefer the paged `keys_from!`. Loads exactly one stored object regardless of N.
+</APIItem>
+
+#### Macros [!toc] [#sorted_map-Macros]
+
+<APIItem
+  functionSignature="from_sorted_keys_values_by!<$K, $V>(keys: vector<$K>, values: vector<$V>, lt: |&$K, &$K| -> bool) -> SortedMap<$K, $V>"
+  id="sorted_map-from_sorted_keys_values_by"
+  kind="macro"
+>
+Builds a map from parallel `keys`/`values` that MUST already be strictly increasing under `lt` (sorted, no duplicate keys). O(n): one pass validates each adjacent pair, then appends at the back without a per-element search. Prefer this to a loop of `upsert_by!`, which is O(n^2) for unsorted input. If your keys are not yet ordered, sort them under the same comparator first, then call this.
+
+Unlike `sorted_set::from_keys!` (which de-duplicates), this aborts on any out-of-order or duplicate key: values are conserved (a resource `V` can never be silently displaced), so a duplicate cannot be collapsed away.
+
+Aborts with `EUnequalLengths` if `keys` and `values` differ in length.
+
+Aborts with `EKeysNotStrictlyIncreasing` if `keys` is not strictly increasing under `lt`.
+</APIItem>
+
+<APIItem
+  functionSignature="from_sorted_keys_values!<$K, $V>(keys: vector<$K>, values: vector<$V>) -> SortedMap<$K, $V>"
+  id="sorted_map-from_sorted_keys_values"
+  kind="macro"
+>
+`from_sorted_keys_values_by!` with the built-in integer `<`.
+
+Aborts with `EUnequalLengths` or `EKeysNotStrictlyIncreasing`; see `from_sorted_keys_values_by!`.
+</APIItem>
+
+<APIItem
+  functionSignature="contains_by!<$K, $V>(map: &SortedMap<$K, $V>, key: &$K, lt: |&$K, &$K| -> bool) -> bool"
+  id="sorted_map-contains_by"
+  kind="macro"
+>
+Returns `true` iff `key` is present, under `lt`. Pure, total read: agrees exactly with `borrow_by!` succeeding, since both route through the same binary search.
+</APIItem>
+
+<APIItem
+  functionSignature="contains!<$K, $V>(map: &SortedMap<$K, $V>, key: &$K) -> bool"
+  id="sorted_map-contains"
+  kind="macro"
+>
+`contains_by!` with the built-in integer `<`.
+</APIItem>
+
+<APIItem
+  functionSignature="borrow_by!<$K, $V>(map: &SortedMap<$K, $V>, key: &$K, lt: |&$K, &$K| -> bool) -> &$V"
+  id="sorted_map-borrow_by"
+  kind="macro"
+>
+Immutably borrows `key`'s value, under `lt`. There is deliberately no non-aborting `Option<&V>` variant (Move cannot put a reference in an `Option`); use `contains_by!` first when the key may be absent.
+
+Aborts with `EKeyNotFound` if `key` is absent.
+</APIItem>
+
+<APIItem
+  functionSignature="borrow!<$K, $V>(map: &SortedMap<$K, $V>, key: &$K) -> &$V"
+  id="sorted_map-borrow"
+  kind="macro"
+>
+`borrow_by!` with the built-in integer `<`.
+
+Aborts with `EKeyNotFound` if `key` is absent.
+</APIItem>
+
+<APIItem
+  functionSignature="borrow_mut_by!<$K, $V>(map: &mut SortedMap<$K, $V>, key: &$K, lt: |&$K, &$K| -> bool) -> &mut $V"
+  id="sorted_map-borrow_mut_by"
+  kind="macro"
+>
+Mutably borrows `key`'s value, under `lt`. Yields `&mut V`, never a mutable entry reference, so the key cannot be desynced from its sorted position.
+
+Aborts with `EKeyNotFound` if `key` is absent.
+</APIItem>
+
+<APIItem
+  functionSignature="borrow_mut!<$K, $V>(map: &mut SortedMap<$K, $V>, key: &$K) -> &mut $V"
+  id="sorted_map-borrow_mut"
+  kind="macro"
+>
+`borrow_mut_by!` with the built-in integer `<`.
+
+Aborts with `EKeyNotFound` if `key` is absent.
+</APIItem>
+
+<APIItem
+  functionSignature="add_by!<$K, $V>(map: &mut SortedMap<$K, $V>, key: $K, value: $V, lt: |&$K, &$K| -> bool)"
+  id="sorted_map-add_by"
+  kind="macro"
+>
+Inserts `key`/`value` under `lt`, aborting if `key` is already present (length + 1). `key` is taken by value and moved into storage; nothing is returned.
+
+Matches `sui::vec_map::insert`: a strict insert that refuses to touch an existing entry, so a duplicate is always a caller bug rather than a silent overwrite. Use `upsert_by!` instead when replacing an existing value is the intended behavior; it returns the displaced value rather than aborting.
+
+Aborts with `EKeyAlreadyExists` if `key` is already present.
+</APIItem>
+
+<APIItem
+  functionSignature="add!<$K, $V>(map: &mut SortedMap<$K, $V>, key: $K, value: $V)"
+  id="sorted_map-add"
+  kind="macro"
+>
+`add_by!` with the built-in integer `<`.
+
+Aborts with `EKeyAlreadyExists` if `key` is already present.
+</APIItem>
+
+<APIItem
+  functionSignature="upsert_by!<$K: drop, $V>(map: &mut SortedMap<$K, $V>, key: $K, value: $V, lt: |&$K, &$K| -> bool) -> Option<$V>"
+  id="sorted_map-upsert_by"
+  kind="macro"
+>
+Inserts `key`/`value`, or replaces the value if `key` is already present, under `lt`. Returns `some(old_value)` on replace (length unchanged), `none` on a fresh insert (length + 1). The displaced value is returned and never dropped, so a resource `V` is safe; `K` must be `drop` only because the previously stored key is dropped on replace (last-write-wins for the key bytes, observable only under a coarse comparator).
+
+This is a deliberate divergence from `sui::vec_map::insert`, which aborts on a duplicate key: `upsert_by!` is a total upsert. For abort-on-duplicate, prefer `add!` (a strict insert); or, when `V` has `drop`, assert on the returned option (`assert!(m.upsert!(k, v).is_none(), E)`). For a resource `V` the returned option cannot be dropped, so bind it, assert `is_none()`, and consume it with `destroy_none()`.
+</APIItem>
+
+<APIItem
+  functionSignature="upsert!<$K: drop, $V>(map: &mut SortedMap<$K, $V>, key: $K, value: $V) -> Option<$V>"
+  id="sorted_map-upsert"
+  kind="macro"
+>
+`upsert_by!` with the built-in integer `<`. Returns `some(old)` on replace, `none` on a fresh insert.
+</APIItem>
+
+<APIItem
+  functionSignature="remove_by!<$K, $V>(map: &mut SortedMap<$K, $V>, key: &$K, lt: |&$K, &$K| -> bool) -> ($K, $V)"
+  id="sorted_map-remove_by"
+  kind="macro"
+>
+Removes `key`'s entry and returns the removed `(key, value)` tuple, under `lt` (length - 1, order preserved). Both the key and the value are returned, so a non-`drop` key or resource value is conserved, not destroyed.
+
+Aborts with `EKeyNotFound` if `key` is absent.
+</APIItem>
+
+<APIItem
+  functionSignature="remove!<$K, $V>(map: &mut SortedMap<$K, $V>, key: &$K) -> ($K, $V)"
+  id="sorted_map-remove"
+  kind="macro"
+>
+`remove_by!` with the built-in integer `<`.
+
+Aborts with `EKeyNotFound` if `key` is absent.
+</APIItem>
+
+<APIItem
+  functionSignature="find_next_by!<$K: copy, $V>(map: &SortedMap<$K, $V>, key: &$K, include: bool, lt: |&$K, &$K| -> bool) -> Option<$K>"
+  id="sorted_map-find_next_by"
+  kind="macro"
+>
+Returns the smallest key `>= key` when `include` (the ceiling), else the smallest key `> key` (strict next); `none` if there is no such key. Pure, total read. Any returned key satisfies `contains_by!`.
+</APIItem>
+
+<APIItem
+  functionSignature="find_next!<$K: copy, $V>(map: &SortedMap<$K, $V>, key: &$K, include: bool) -> Option<$K>"
+  id="sorted_map-find_next"
+  kind="macro"
+>
+`find_next_by!` with the built-in integer `<`.
+</APIItem>
+
+<APIItem
+  functionSignature="find_prev_by!<$K: copy, $V>(map: &SortedMap<$K, $V>, key: &$K, include: bool, lt: |&$K, &$K| -> bool) -> Option<$K>"
+  id="sorted_map-find_prev_by"
+  kind="macro"
+>
+Returns the largest key `<= key` when `include` (the floor), else the largest key `< key` (strict prev); `none` if there is no such key. Pure, total read. Any returned key satisfies `contains_by!`.
+</APIItem>
+
+<APIItem
+  functionSignature="find_prev!<$K: copy, $V>(map: &SortedMap<$K, $V>, key: &$K, include: bool) -> Option<$K>"
+  id="sorted_map-find_prev"
+  kind="macro"
+>
+`find_prev_by!` with the built-in integer `<`.
+</APIItem>
+
+<APIItem
+  functionSignature="next_key_by!<$K: copy, $V>(map: &SortedMap<$K, $V>, key: &$K, lt: |&$K, &$K| -> bool) -> Option<$K>"
+  id="sorted_map-next_key_by"
+  kind="macro"
+>
+Returns the smallest key strictly greater than `key`, or `none`. Sugar for `find_next_by!` with `include = false`. `next_key!` of the tail returning `none` is the forward-cursor termination signal.
+</APIItem>
+
+<APIItem
+  functionSignature="next_key!<$K: copy, $V>(map: &SortedMap<$K, $V>, key: &$K) -> Option<$K>"
+  id="sorted_map-next_key"
+  kind="macro"
+>
+`next_key_by!` with the built-in integer `<`.
+</APIItem>
+
+<APIItem
+  functionSignature="prev_key_by!<$K: copy, $V>(map: &SortedMap<$K, $V>, key: &$K, lt: |&$K, &$K| -> bool) -> Option<$K>"
+  id="sorted_map-prev_key_by"
+  kind="macro"
+>
+Returns the largest key strictly less than `key`, or `none`. Sugar for `find_prev_by!` with `include = false`. `prev_key!` of the head returning `none` is the backward-cursor termination signal.
+</APIItem>
+
+<APIItem
+  functionSignature="prev_key!<$K: copy, $V>(map: &SortedMap<$K, $V>, key: &$K) -> Option<$K>"
+  id="sorted_map-prev_key"
+  kind="macro"
+>
+`prev_key_by!` with the built-in integer `<`.
+</APIItem>
+
+<APIItem
+  functionSignature="keys_from_by!<$K: copy, $V>(map: &SortedMap<$K, $V>, from: &$K, include: bool, limit: u64, lt: |&$K, &$K| -> bool) -> vector<$K>"
+  id="sorted_map-keys_from_by"
+  kind="macro"
+>
+Returns up to `limit` keys in strict ascending order: a contiguous run starting at the first key `>= from` (when `include`) or `> from` (strict). Returns at most `limit` keys; fewer if the tail is reached.
+
+Resume a page by passing the last returned key back as `from` with `include == false`: successive pages have no overlap and no gap, so concatenating them reconstructs the tail exactly. `limit == 0`, an empty map, or `from` past the tail all yield the empty vector. There is no descending pagination; use a reverse comparator.
+</APIItem>
+
+<APIItem
+  functionSignature="keys_from!<$K: copy, $V>(map: &SortedMap<$K, $V>, from: &$K, include: bool, limit: u64) -> vector<$K>"
+  id="sorted_map-keys_from"
+  kind="macro"
+>
+`keys_from_by!` with the built-in integer `<`.
+</APIItem>
+
+<APIItem
+  functionSignature="is_well_formed_by!<$K, $V>(map: &SortedMap<$K, $V>, lt: |&$K, &$K| -> bool) -> bool"
+  id="sorted_map-is_well_formed_by"
+  kind="macro"
+>
+Returns `true` iff the map's entries are strictly increasing under `lt`, meaning sorted with no duplicate keys. This is the order check for tests, directly re-verifying the sorted-order property that production code maintains by construction but never re-validates. Call it after a `_by` sequence to catch a comparator mistake. Returns `bool` rather than asserting, so callers compose it into their own assertions.
+
+`#[test_only]`: absent from published bytecode and not callable from production consumer code, but visible to a dependent's test code.
+</APIItem>
+
+<APIItem
+  functionSignature="is_well_formed!<$K, $V>(map: &SortedMap<$K, $V>) -> bool"
+  id="sorted_map-is_well_formed"
+  kind="macro"
+>
+`is_well_formed_by!` with the built-in integer `<`. `#[test_only]`.
+</APIItem>
+
+#### Errors [!toc] [#sorted_map-Errors]
+
+<APIItem
+  functionSignature="EKeyNotFound"
+  id="sorted_map-EKeyNotFound"
+  kind="error"
+>
+A key was not present in the map. Raised by `borrow!`/`borrow_mut!`/`remove!` (and their `_by` forms) on an absent key.
+</APIItem>
+
+<APIItem
+  functionSignature="ENotEmpty"
+  id="sorted_map-ENotEmpty"
+  kind="error"
+>
+`destroy_empty` was called on a non-empty map.
+</APIItem>
+
+<APIItem
+  functionSignature="EEmpty"
+  id="sorted_map-EEmpty"
+  kind="error"
+>
+`pop_front`/`pop_back` was called on an empty map.
+</APIItem>
+
+<APIItem
+  functionSignature="EKeysNotStrictlyIncreasing"
+  id="sorted_map-EKeysNotStrictlyIncreasing"
+  kind="error"
+>
+A bulk constructor (`from_sorted_keys_values!`/`_by`) received keys that are not strictly increasing under the comparator (out of order, or a duplicate).
+</APIItem>
+
+<APIItem
+  functionSignature="EUnequalLengths"
+  id="sorted_map-EUnequalLengths"
+  kind="error"
+>
+A bulk constructor (`from_sorted_keys_values!`/`_by`) received `keys` and `values` of different lengths.
+</APIItem>
+
+<APIItem
+  functionSignature="EKeyAlreadyExists"
+  id="sorted_map-EKeyAlreadyExists"
+  kind="error"
+>
+A key was already present in the map. Raised by `add!`/`add_by!` on a duplicate key.
+</APIItem>
+
+#### Internal helpers [!toc] [#sorted_map-Internals]
+
+<Callout type="warn">
+Move 2024 macro hygiene requires every symbol a macro body references to be `public` at the consumer's expansion site, so the following helpers are `public` but are NOT part of the supported API. In particular, `insert_at`/`remove_at` write at a caller-given index with no ordering check, so calling them directly can silently corrupt sorted order and invalidate every subsequent lookup, insertion, and removal. Use the macro API instead.
+</Callout>
+
+Forced-public internals: `search!`, `entries`, `key`, `value`, `insert_at`, `remove_at`, `value_at`, `value_at_mut`, `assert_key_found`, `assert_key_absent`, `assert_equal_lengths`, `assert_strictly_increasing`.
+
+### `sorted_set` [toc] [#sorted_set]
+
+<APIGithubLinkHeader
+  moduleName="sorted_set"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.5.0/collections/sources/sorted_set.move"
+/>
+
+```move
+use openzeppelin_collections::sorted_set;
+```
+
+A generic, ordered set of unique keys that iterates in comparator order, filling the gap `sui::vec_set` leaves. `SortedSet<K>` is a thin wrapper over `SortedMap<K, Unit>` (a set is a map whose values carry no information, exactly as `BTreeSet<K> = BTreeMap<K, ()>` in Rust). It is a UID-less value with every key inline in one vector; a bare set is not `key`, so embed it in your own `has key` object. Because the value is always the trivial `copy + drop + store` `Unit`, `SortedSet<K>` has exactly the abilities `K` does.
+
+The set stores no comparator. Order is defined per call by a strict less-than lambda `lt` you supply, and it must be the same strict total order on every call for a given set. The library cannot detect a violation. An inconsistent or non-strict comparator desorts the set (wrong membership answers, though no key's bytes are lost and all keys remain recoverable via `keys`); a coarse (non-injective) comparator collapses byte-distinct compare-equal keys into one element, keeping the last-written key's bytes. The bare (non-`_by`) macros use the built-in integer `<` and remove the footgun for integer keys.
+
+`upsert!` returns `bool` and never aborts on a duplicate (diverging from `sui::vec_set::insert`); `add!` is the strict counterpart that aborts on a duplicate, and `remove!` aborts on an absent key, matching `vec_set`. Costs mirror the wrapped map: O(log N) membership, O(N) insert/remove, exactly one stored-object access per operation, and the same ~250 KB object-size ceiling. The module emits no events. A UID-less value has no on-chain identity, so emit events from your own entry functions.
+
+Types
+
+- [`Unit`](#sorted_set-Unit)
+- [`SortedSet<K>`](#sorted_set-SortedSet)
+
+Functions
+
+- [`new()`](#sorted_set-new)
+- [`singleton(key)`](#sorted_set-singleton)
+- [`destroy_empty(set)`](#sorted_set-destroy_empty)
+- [`length(set)`](#sorted_set-length)
+- [`is_empty(set)`](#sorted_set-is_empty)
+- [`head(set)`](#sorted_set-head)
+- [`tail(set)`](#sorted_set-tail)
+- [`pop_front(set)`](#sorted_set-pop_front)
+- [`pop_back(set)`](#sorted_set-pop_back)
+- [`keys(set)`](#sorted_set-keys)
+
+Macros
+
+- [`from_keys_by!(keys, lt)`](#sorted_set-from_keys_by)
+- [`from_keys!(keys)`](#sorted_set-from_keys)
+- [`from_sorted_keys_by!(keys, lt)`](#sorted_set-from_sorted_keys_by)
+- [`from_sorted_keys!(keys)`](#sorted_set-from_sorted_keys)
+- [`contains_by!(set, key, lt)`](#sorted_set-contains_by)
+- [`contains!(set, key)`](#sorted_set-contains)
+- [`add_by!(set, key, lt)`](#sorted_set-add_by)
+- [`add!(set, key)`](#sorted_set-add)
+- [`upsert_by!(set, key, lt)`](#sorted_set-upsert_by)
+- [`upsert!(set, key)`](#sorted_set-upsert)
+- [`remove_by!(set, key, lt)`](#sorted_set-remove_by)
+- [`remove!(set, key)`](#sorted_set-remove)
+- [`find_next_by!(set, key, include, lt)`](#sorted_set-find_next_by)
+- [`find_next!(set, key, include)`](#sorted_set-find_next)
+- [`find_prev_by!(set, key, include, lt)`](#sorted_set-find_prev_by)
+- [`find_prev!(set, key, include)`](#sorted_set-find_prev)
+- [`next_key_by!(set, key, lt)`](#sorted_set-next_key_by)
+- [`next_key!(set, key)`](#sorted_set-next_key)
+- [`prev_key_by!(set, key, lt)`](#sorted_set-prev_key_by)
+- [`prev_key!(set, key)`](#sorted_set-prev_key)
+- [`keys_from_by!(set, from, include, limit, lt)`](#sorted_set-keys_from_by)
+- [`keys_from!(set, from, include, limit)`](#sorted_set-keys_from)
+
+Errors
+
+- [`EEmpty`](#sorted_set-EEmpty)
+- [`EKeysNotSorted`](#sorted_set-EKeysNotSorted)
+- [`ENotEmpty`](#sorted_set-ENotEmpty)
+
+#### Types [!toc] [#sorted_set-Types]
+
+<APIItem
+  functionSignature="struct Unit"
+  id="sorted_set-Unit"
+  kind="struct"
+>
+Internal membership marker so a set can reuse `SortedMap<K, Unit>`. A zero-field empty struct carrying no data; it serializes to 1 BCS byte and has nothing to read or destructure.
+
+Declared `copy, drop, store` so `SortedSet<K>` has exactly the abilities `K` does. It is `public` only because it appears in the forced-public accessors' signatures (macro hygiene); consumers never construct it or read it. Its layout is frozen at first publish and must stay a zero-field empty struct.
+</APIItem>
+
+<APIItem
+  functionSignature="struct SortedSet<K>"
+  id="sorted_set-SortedSet"
+  kind="struct"
+>
+An ordered set of unique keys, backed by one sorted vector via `SortedMap<K, Unit>`.
+
+A pure value with no `UID` or dynamic fields, so it embeds directly in an integrator's object, exactly like `sui::vec_set::VecSet`. Because the value is always the `copy + drop + store` `Unit`, `SortedSet<K>` has exactly the abilities `K` does: with a `copy + drop + store` key it is `copy + drop + store`; with a non-`drop` (e.g. resource) key it is store-only and must be drained then `destroy_empty`'d.
+
+Across every public operation, the keys are strictly increasing under the (consistently supplied) comparator: sorted, no duplicates.
+</APIItem>
+
+#### Functions [!toc] [#sorted_set-Functions]
+
+<APIItem
+  functionSignature="new<K>() -> SortedSet<K>"
+  id="sorted_set-new"
+  kind="public"
+>
+Creates a new, empty set. Takes no `&mut TxContext`: a `SortedSet` is a value, not an object. `length` is 0 and `is_empty` is true.
+</APIItem>
+
+<APIItem
+  functionSignature="singleton<K>(key: K) -> SortedSet<K>"
+  id="sorted_set-singleton"
+  kind="public"
+>
+Returns a set containing exactly the one given key.
+</APIItem>
+
+<APIItem
+  functionSignature="destroy_empty<K>(set: SortedSet<K>)"
+  id="sorted_set-destroy_empty"
+  kind="public"
+>
+Destroys an empty set.
+
+Only needed when `K` lacks `drop` (e.g. a resource key): such a `SortedSet<K>` is itself non-`drop` and cannot fall out of scope, so drain every key via `remove!`/`pop_front`/`pop_back` first, then call this. A set of droppable keys never needs it.
+
+Aborts with `ENotEmpty` if the set still holds keys. The abort fires at this module's location, not the wrapped map's.
+</APIItem>
+
+<APIItem
+  functionSignature="length<K>(set: &SortedSet<K>) -> u64"
+  id="sorted_set-length"
+  kind="public"
+>
+Returns the number of distinct keys.
+</APIItem>
+
+<APIItem
+  functionSignature="is_empty<K>(set: &SortedSet<K>) -> bool"
+  id="sorted_set-is_empty"
+  kind="public"
+>
+Returns `true` iff the set holds no keys.
+</APIItem>
+
+<APIItem
+  functionSignature="head<K: copy>(set: &SortedSet<K>) -> Option<K>"
+  id="sorted_set-head"
+  kind="public"
+>
+Returns the smallest key under the comparator, or `none` if the set is empty. O(1). With a reverse comparator this is the largest numeric key.
+</APIItem>
+
+<APIItem
+  functionSignature="tail<K: copy>(set: &SortedSet<K>) -> Option<K>"
+  id="sorted_set-tail"
+  kind="public"
+>
+Returns the largest key under the comparator, or `none` if the set is empty. O(1).
+</APIItem>
+
+<APIItem
+  functionSignature="pop_front<K>(set: &mut SortedSet<K>) -> K"
+  id="sorted_set-pop_front"
+  kind="public"
+>
+Removes and returns the smallest key. Length decreases by 1. O(N): it shifts every remaining entry (`pop_back` is O(1)), so a front-heavy drain loop is quadratic.
+
+Aborts with `EEmpty` if the set is empty, at this module's location (the wrapped map's `EEmpty` is never reached through here).
+</APIItem>
+
+<APIItem
+  functionSignature="pop_back<K>(set: &mut SortedSet<K>) -> K"
+  id="sorted_set-pop_back"
+  kind="public"
+>
+Removes and returns the largest key. Length decreases by 1. O(1).
+
+Aborts with `EEmpty` if the set is empty, at this module's location (the wrapped map's `EEmpty` is never reached through here).
+</APIItem>
+
+<APIItem
+  functionSignature="keys<K: copy>(set: &SortedSet<K>) -> vector<K>"
+  id="sorted_set-keys"
+  kind="public"
+>
+Returns all keys in strict ascending (comparator) order as an owned, sorted, and duplicate-free `vector<K>`. Not a reference: the set stores `Entry<K, Unit>` internally, so there is no `vector<K>` to borrow (contrast `vec_set::keys`).
+
+O(N) in output size with no limit; this is the one read whose result scales with N. For large or near-ceiling sets, prefer the paged `keys_from!`.
+</APIItem>
+
+#### Macros [!toc] [#sorted_set-Macros]
+
+<APIItem
+  functionSignature="from_keys_by!<$K: drop>($keys: vector<$K>, $lt: |&$K, &$K| -> bool) -> SortedSet<$K>"
+  id="sorted_set-from_keys_by"
+  kind="macro"
+>
+Builds a set from a vector of keys by idempotent insertion, under `$lt`. O(N^2) (one search per key). Duplicates are silently collapsed; the result holds each distinct key once, in comparator order, so the result's `length` is the number of distinct keys, not the input length. This diverges from `sui::vec_set::from_keys`, which aborts on a duplicate; to reject duplicates instead, build then assert `length` equals the input length.
+
+Under a coarse (non-injective) comparator, byte-distinct compare-equal keys collapse to one element keeping the last one's bytes (each re-insert is a last-write-wins upsert).
+</APIItem>
+
+<APIItem
+  functionSignature="from_keys!<$K: drop>($keys: vector<$K>) -> SortedSet<$K>"
+  id="sorted_set-from_keys"
+  kind="macro"
+>
+`from_keys_by!` with the built-in integer `<`. De-duplicates; see [`from_keys_by!`](#sorted_set-from_keys_by). Returns a set of the distinct keys, in ascending order.
+</APIItem>
+
+<APIItem
+  functionSignature="from_sorted_keys_by!<$K: copy + drop>($keys: vector<$K>, $lt: |&$K, &$K| -> bool) -> SortedSet<$K>"
+  id="sorted_set-from_sorted_keys_by"
+  kind="macro"
+>
+Builds a set from keys that are already sorted (non-decreasing) under `$lt`. O(N): one pass validates each adjacent pair and appends at the back without a per-element search, so prefer this over the O(N^2) `from_keys!` when the input is pre-sorted.
+
+De-duplicates exactly like `from_keys!`: a run of compare-equal keys collapses to one element, keeping the last key's bytes (observable only under a coarse, non-injective comparator), matching `upsert!`'s last-write-wins rule. A set has no value to lose, so a duplicate collapses rather than aborts, diverging from the map's `from_sorted_keys_values!`, which aborts on a duplicate to conserve values. The only rejection is genuinely unsorted input; if your keys are not yet ordered, use `from_keys!` or sort them first.
+
+Aborts with `EKeysNotSorted` if `keys` has an adjacent pair not sorted under `lt` (a strictly decreasing pair), at this module's location.
+</APIItem>
+
+<APIItem
+  functionSignature="from_sorted_keys!<$K: copy + drop>($keys: vector<$K>) -> SortedSet<$K>"
+  id="sorted_set-from_sorted_keys"
+  kind="macro"
+>
+`from_sorted_keys_by!` with the built-in integer `<`. De-duplicates; see [`from_sorted_keys_by!`](#sorted_set-from_sorted_keys_by). Returns a set of the distinct keys, in ascending order.
+
+Aborts with `EKeysNotSorted` if `keys` is not ascending.
+</APIItem>
+
+<APIItem
+  functionSignature="contains_by!<$K>($set: &SortedSet<$K>, $key: &$K, $lt: |&$K, &$K| -> bool) -> bool"
+  id="sorted_set-contains_by"
+  kind="macro"
+>
+Returns `true` iff `key` is present, under `$lt`. Pure, total read (never aborts). O(log N).
+</APIItem>
+
+<APIItem
+  functionSignature="contains!<$K>($set: &SortedSet<$K>, $key: &$K) -> bool"
+  id="sorted_set-contains"
+  kind="macro"
+>
+`contains_by!` with the built-in integer `<`. Returns `true` iff `key` is present.
+</APIItem>
+
+<APIItem
+  functionSignature="add_by!<$K>($set: &mut SortedSet<$K>, $key: $K, $lt: |&$K, &$K| -> bool)"
+  id="sorted_set-add_by"
+  kind="macro"
+>
+Inserts `key`, under `$lt`, aborting if it is already present (length + 1; `contains!(key)` flips false to true). Nothing is returned. The strict counterpart to the total `upsert_by!`: this matches `sui::vec_set::insert`, which also aborts on a duplicate, so a duplicate is a caller bug rather than a silent no-op. Use `upsert!`/`upsert_by!` when a duplicate should be absorbed silently (and reported via the returned bool) instead of aborting.
+
+Aborts with `sorted_map::EKeyAlreadyExists` if `key` is already present (delegated: the abort fires at the wrapped map's location).
+</APIItem>
+
+<APIItem
+  functionSignature="add!<$K>($set: &mut SortedSet<$K>, $key: $K)"
+  id="sorted_set-add"
+  kind="macro"
+>
+`add_by!` with the built-in integer `<`.
+
+Aborts with `sorted_map::EKeyAlreadyExists` if `key` is already present.
+</APIItem>
+
+<APIItem
+  functionSignature="upsert_by!<$K: drop>($set: &mut SortedSet<$K>, $key: $K, $lt: |&$K, &$K| -> bool) -> bool"
+  id="sorted_set-upsert_by"
+  kind="macro"
+>
+Inserts `key`, under `$lt`. Idempotent and total (never aborts); `key` is taken by value. On a fresh insert: length + 1 and `contains!(key)` flips false to true. On a duplicate: length unchanged, but the stored key is overwritten with this one (last-write-wins for the key bytes, observable only under a coarse comparator). Returns `true` iff the key was newly added, `false` if it was already present.
+
+Diverges from `vec_set::insert` (which aborts on a duplicate); for that behavior call `add!`, or assert on the returned bool.
+</APIItem>
+
+<APIItem
+  functionSignature="upsert!<$K: drop>($set: &mut SortedSet<$K>, $key: $K) -> bool"
+  id="sorted_set-upsert"
+  kind="macro"
+>
+`upsert_by!` with the built-in integer `<`. Returns `true` iff the key was newly added.
+</APIItem>
+
+<APIItem
+  functionSignature="remove_by!<$K>($set: &mut SortedSet<$K>, $key: &$K, $lt: |&$K, &$K| -> bool) -> $K"
+  id="sorted_set-remove_by"
+  kind="macro"
+>
+Removes `key`, under `$lt`, and returns the removed key. On success: length - 1 and `contains!(key)` flips true to false. Matches `vec_set::remove`, which also aborts when the key is absent.
+
+Aborts with `sorted_map::EKeyNotFound` if `key` is absent (delegated: the abort fires at the wrapped map's location).
+</APIItem>
+
+<APIItem
+  functionSignature="remove!<$K>($set: &mut SortedSet<$K>, $key: &$K) -> $K"
+  id="sorted_set-remove"
+  kind="macro"
+>
+`remove_by!` with the built-in integer `<`. Returns the removed key.
+
+Aborts with `sorted_map::EKeyNotFound` if `key` is absent.
+</APIItem>
+
+<APIItem
+  functionSignature="find_next_by!<$K: copy>($set: &SortedSet<$K>, $key: &$K, $include: bool, $lt: |&$K, &$K| -> bool) -> Option<$K>"
+  id="sorted_set-find_next_by"
+  kind="macro"
+>
+Returns the smallest key `>= key` when `include` is true (the ceiling), else the smallest key `> key` (strict next); `none` if there is no such key. Pure, total read; any returned key satisfies `contains!`.
+</APIItem>
+
+<APIItem
+  functionSignature="find_next!<$K: copy>($set: &SortedSet<$K>, $key: &$K, $include: bool) -> Option<$K>"
+  id="sorted_set-find_next"
+  kind="macro"
+>
+`find_next_by!` with the built-in integer `<`. Returns the ceiling/strict-next key, or `none`.
+</APIItem>
+
+<APIItem
+  functionSignature="find_prev_by!<$K: copy>($set: &SortedSet<$K>, $key: &$K, $include: bool, $lt: |&$K, &$K| -> bool) -> Option<$K>"
+  id="sorted_set-find_prev_by"
+  kind="macro"
+>
+Returns the largest key `<= key` when `include` is true (the floor), else the largest key `< key` (strict prev); `none` if there is no such key. Pure, total read; any returned key satisfies `contains!`.
+</APIItem>
+
+<APIItem
+  functionSignature="find_prev!<$K: copy>($set: &SortedSet<$K>, $key: &$K, $include: bool) -> Option<$K>"
+  id="sorted_set-find_prev"
+  kind="macro"
+>
+`find_prev_by!` with the built-in integer `<`. Returns the floor/strict-prev key, or `none`.
+</APIItem>
+
+<APIItem
+  functionSignature="next_key_by!<$K: copy>($set: &SortedSet<$K>, $key: &$K, $lt: |&$K, &$K| -> bool) -> Option<$K>"
+  id="sorted_set-next_key_by"
+  kind="macro"
+>
+Returns the smallest key strictly greater than `key`, or `none`. Sugar for `find_next_by!` with `include == false`. `next_key!` of the tail returning `none` is the forward-cursor termination signal.
+</APIItem>
+
+<APIItem
+  functionSignature="next_key!<$K: copy>($set: &SortedSet<$K>, $key: &$K) -> Option<$K>"
+  id="sorted_set-next_key"
+  kind="macro"
+>
+`next_key_by!` with the built-in integer `<`. Returns the strict-next key, or `none`.
+</APIItem>
+
+<APIItem
+  functionSignature="prev_key_by!<$K: copy>($set: &SortedSet<$K>, $key: &$K, $lt: |&$K, &$K| -> bool) -> Option<$K>"
+  id="sorted_set-prev_key_by"
+  kind="macro"
+>
+Returns the largest key strictly less than `key`, or `none`. Sugar for `find_prev_by!` with `include == false`. `prev_key!` of the head returning `none` is the backward-cursor termination signal.
+</APIItem>
+
+<APIItem
+  functionSignature="prev_key!<$K: copy>($set: &SortedSet<$K>, $key: &$K) -> Option<$K>"
+  id="sorted_set-prev_key"
+  kind="macro"
+>
+`prev_key_by!` with the built-in integer `<`. Returns the strict-prev key, or `none`.
+</APIItem>
+
+<APIItem
+  functionSignature="keys_from_by!<$K: copy>($set: &SortedSet<$K>, $from: &$K, $include: bool, $limit: u64, $lt: |&$K, &$K| -> bool) -> vector<$K>"
+  id="sorted_set-keys_from_by"
+  kind="macro"
+>
+Returns up to `limit` keys in strict ascending order: a contiguous run starting at the first key `>= from` (when `include`) or `> from` (strict); fewer than `limit` only at the tail. Resume a page by passing the last returned key back as `from` with `include == false`: successive pages have no overlap and no gap. `limit == 0`, an empty set, or `from` past the tail all yield the empty vector.
+</APIItem>
+
+<APIItem
+  functionSignature="keys_from!<$K: copy>($set: &SortedSet<$K>, $from: &$K, $include: bool, $limit: u64) -> vector<$K>"
+  id="sorted_set-keys_from"
+  kind="macro"
+>
+`keys_from_by!` with the built-in integer `<`. Returns up to `limit` keys in ascending order.
+</APIItem>
+
+#### Errors [!toc] [#sorted_set-Errors]
+
+<APIItem
+  functionSignature="EEmpty"
+  id="sorted_set-EEmpty"
+  kind="error"
+>
+Raised when `pop_front`/`pop_back` is called on an empty set. Asserted at this module's location, distinct from the wrapped map's `EEmpty`.
+</APIItem>
+
+<APIItem
+  functionSignature="EKeysNotSorted"
+  id="sorted_set-EKeysNotSorted"
+  kind="error"
+>
+Raised when a sorted constructor (`from_sorted_keys!`/`from_sorted_keys_by!`) receives keys that are not sorted under the comparator, meaning a strictly decreasing adjacent pair. Asserted at this module's location.
+</APIItem>
+
+<APIItem
+  functionSignature="ENotEmpty"
+  id="sorted_set-ENotEmpty"
+  kind="error"
+>
+Raised when `destroy_empty` is called on a set that still holds keys. Asserted at this module's location, distinct from the wrapped map's `ENotEmpty`.
+</APIItem>
+
+#### Internal helpers [!toc] [#sorted_set-Internals]
+
+<Callout type="warn">
+The functions `inner`, `inner_mut`, `unit`, and `assert_sorted` are `public` only because Move 2024 macro hygiene requires every symbol a macro body references to be public at the consumer's expansion site. They are not part of the supported API. In particular, `inner_mut` hands out `&mut SortedMap<K, Unit>`: driving map operations on it directly with an inconsistent comparator (or `insert_at`/`remove_at` at a wrong index) can desort the set and invalidate every subsequent lookup, insertion, and removal. The corruption is order-only and local to that one set; no value is ever lost. Use the macro API instead.
+</Callout>

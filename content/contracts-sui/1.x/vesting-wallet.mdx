@@ -1,0 +1,281 @@
+---
+title: Vesting Wallet
+---
+
+<Callout type="warn">
+The example code snippets used in this guide are experimental and have not been audited. They simply help exemplify usage of the OpenZeppelin Sui Package.
+</Callout>
+
+The `openzeppelin_finance` package locks a `Balance<C>` for a single beneficiary and pays it out on a schedule. It splits into two modules: a curve-agnostic core, `vesting_wallet`, that owns release accounting and conservation of funds but never interprets time, and `vesting_wallet_linear`, the built-in linear-with-cliff curve that most integrators use directly. The curve - linear, stepped, cliff, or a custom shape you write - is a swappable concern layered on top of the core.
+
+Token grants are otherwise reimplemented ad hoc by every protocol that needs them, each re-deriving the same "how much has unlocked by now" arithmetic and the same release bookkeeping. `vesting_wallet` factors that into a reusable primitive: the core guarantees a beneficiary can never be paid more than was deposited and never the same funds twice, while the curve module decides only the shape of the unlock over time.
+
+## Use cases
+
+Use `openzeppelin_finance` when your protocol needs:
+
+- Employee, team, or advisor token grants that unlock in tranches after a cliff.
+- Investor vesting on a linear or stepped release schedule.
+- Payroll or salary streams that accrue continuously over a period.
+- Emission or reward schedules that pay a fixed total out over time.
+- A custom unlock curve (milestone-gated, oracle-gated, backloaded) built on a safe release-accounting core.
+- A protocol that drives vesting wallets generically - a DAO-gated grant, a treasury, a vesting factory - without committing to one schedule.
+
+## Import
+
+```move
+use openzeppelin_finance::vesting_wallet_linear;      // the built-in curve, most integrators
+use openzeppelin_finance::vesting_wallet;             // the curve-agnostic core
+```
+
+## Choosing a module
+
+| Module | Use it when |
+|---|---|
+| `vesting_wallet_linear` | You want standard token-grant vesting: a linear unlock, or `N` equal tranches, with an optional cliff. **Most integrators only need this module.** |
+| `vesting_wallet` | You're authoring a custom curve (milestone unlocks, oracle-gated release, exotic cliff shapes), or building a protocol that drives vesting wallets **curve-agnostically** - wrapping or gating release without committing to a schedule. |
+
+The core never ships a curve of its own. `vesting_wallet_linear` is both the curve most grants use and the reference template a custom curve module copies.
+
+## Quickstart
+
+A `VestingWallet<S, P, C>` has `key + store`, so the constructor returns it by value and you pick the topology. The common path is to build a linear schedule, fund it, and **share** it - a shared wallet lets anyone poke `release`, and the funds always go to the recorded beneficiary regardless of who triggered the payout.
+
+Here a team grant vests over twelve equal monthly tranches after a three-month cliff, funded up front:
+
+```move
+module my_protocol::grant;
+
+use openzeppelin_finance::vesting_wallet_linear::{Self, Linear, Params};
+use openzeppelin_finance::vesting_wallet::VestingWallet;
+use sui::clock::Clock;
+use sui::coin::Coin;
+
+const DAY_MS: u64 = 86_400_000;
+
+/// Twelve monthly tranches (~30 days each) after a 90-day cliff, funded up front and
+/// shared so anyone can poke `release` on the beneficiary's behalf. The teardown cap
+/// goes to the beneficiary so they can reclaim the storage rebate once drained.
+public fun grant<C>(beneficiary: address, start_ms: u64, funds: Coin<C>, ctx: &mut TxContext) {
+    let (mut wallet, cap) = vesting_wallet_linear::new<C>(
+        beneficiary,
+        start_ms,
+        90 * DAY_MS,  // cliff_ms
+        30 * DAY_MS,  // period_ms: one tranche per ~month
+        12,           // steps
+        ctx,
+    );
+    wallet.deposit(funds.into_balance());
+    transfer::public_share_object(wallet);
+    transfer::public_transfer(cap, beneficiary);
+}
+
+/// Permissionless: anyone can trigger a payout; funds always go to the beneficiary
+/// recorded at construction. Idempotent - a no-op if nothing new has vested.
+public fun claim<C>(wallet: &mut VestingWallet<Linear, Params, C>, clock: &Clock) {
+    vesting_wallet_linear::release(wallet, clock);
+}
+
+/// A read-only "what can I claim right now?" query for clients.
+public fun claimable<C>(wallet: &VestingWallet<Linear, Params, C>, clock: &Clock): u64 {
+    vesting_wallet_linear::releasable(wallet, clock)
+}
+```
+
+`release` evaluates the curve at the current `Clock`, computes the not-yet-released portion, and pays it into the beneficiary's address balance with `balance::send_funds` - no payout `Coin<C>` object is minted. Nothing vests before the cliff; at the cliff boundary the curve jumps straight to the value for however many periods have already elapsed, then resumes its monthly cadence.
+
+## The linear curve
+
+`vesting_wallet_linear` vests funds in `steps` equal tranches, one every `period_ms`, after an optional cliff. **Continuous** linear vesting - a straight line rather than a staircase - is the same curve in the `period_ms = 1` limit, exposed as `new_continuous` (and `params_continuous`), which takes a single `duration_ms` instead of `period_ms` and `steps`.
+
+The cumulative vested total, piecewise over time:
+
+| Phase | Condition | Vested |
+|---|---|---|
+| Pre-start | `now < start_ms` | `0` |
+| Pre-cliff | `now < start_ms + cliff_ms` | `0` |
+| Mid-schedule | `k` full periods elapsed (`0 <= k < steps`) | `total * k / steps` (flat within a period, stepping up at each boundary) |
+| Ended | `now >= start_ms + period_ms * steps` | `total` (the full amount) |
+
+Two behaviors worth internalizing:
+
+- **The cliff gates the staircase; it does not shift it.** A cliff longer than one period releases several tranches at once as a catch-up the instant it elapses, then the schedule resumes its regular cadence - the end time is unchanged by the cliff.
+- **`total` is re-derived on every call** from `balance + released`. A deposit made after `start_ms` immediately participates at the current step proportion, so funding is not required up front - you can top up a live grant and the new funds vest against the same schedule.
+
+A continuous one-year payroll stream with a 90-day cliff, shared in a single call:
+
+```move
+public fun stream<C>(beneficiary: address, start_ms: u64, ctx: &mut TxContext) {
+    // create_and_share_continuous builds the wallet and shares it in one call,
+    // returning the shared wallet's ID and its teardown cap.
+    let (_wallet_id, cap) = vesting_wallet_linear::create_and_share_continuous<C>(
+        beneficiary,
+        start_ms,
+        90 * DAY_MS,   // cliff_ms
+        365 * DAY_MS,  // duration_ms
+        ctx,
+    );
+    transfer::public_transfer(cap, beneficiary);
+}
+```
+
+## Lifecycle
+
+1. **Create** - `new` (stepped) or `new_continuous` return the wallet by value plus its `DestroyCap`, so you can fund and choose a topology in the same PTB. `create_and_share` / `create_and_share_continuous` build and share in one call, returning the shared wallet's `ID` and the cap.
+2. **Fund** - `deposit` a `Balance<C>`. Permissionless: anyone may fund, and funds added after the schedule starts participate retroactively.
+3. **Release** - `release` evaluates the curve at the current `Clock` and pays the not-yet-released portion to the beneficiary. Permissionless and idempotent: if nothing new has vested it is a no-op.
+4. **Inspect** - `releasable` returns what `release` would pay right now; `start_ms`, `period_ms`, `steps`, `duration_ms`, `end_ms`, and `cliff_ms` read the schedule.
+5. **Tear down** - once drained (and any settled funds swept), `vesting_wallet::destroy_empty` reclaims the storage rebate and returns a `DestroyReceipt`; hand that, together with the wallet's `DestroyCap`, to `vesting_wallet_linear::destroy`, which requires the schedule to have ended before accepting the teardown.
+
+<Callout type="warn">
+Coins sent to a destroyed wallet are stranded - after teardown the object address has no claim path. Before tearing a wallet down, halt any upstream emissions targeting it, claim any coins already transferred to its address, and sweep settled funds. Teardown authority travels with the `DestroyCap`, not the beneficiary, so route the cap to the party that should own the teardown decision (commonly the beneficiary or its controller); that party bears the strand risk.
+</Callout>
+
+## Topologies: shared vs. owned
+
+Because the constructor returns the wallet by value, you choose how it lives on-chain:
+
+- **Shared** (recommended) - `transfer::public_share_object(wallet)`, or use `create_and_share`. Anyone can poke `release`, and the beneficiary always receives the funds regardless of who triggered it. This avoids any liveness risk: no single holder can withhold payouts.
+- **Owned** (fast path) - `transfer::public_transfer(wallet, holder)`. Only the holder can pass the wallet by `&mut`, so `release`, `deposit`, `receive_and_deposit`, `sweep_settled`, and `destroy_empty` are reachable from the holder's transactions only. Outside parties fund an owned wallet by `public_transfer`-ing a `Coin<C>` to the wallet's object address (the holder claims each with `receive_and_deposit`) or by settling a `Balance<C>` into the address (the holder pulls it in with `sweep_settled`).
+
+<Callout type="warn">
+With an **owned** wallet, a holder who is not the beneficiary and turns uncooperative can withhold every payout - `release` needs `&mut`, which only the holder can produce, and there is no on-chain path for the beneficiary to force one. Prefer the shared topology, whose permissionless `release` sidesteps this.
+</Callout>
+
+The `beneficiary` is fixed at construction. To rotate the recipient, point `beneficiary` at a consumer-owned object and rotate ownership of that object instead (see the beneficiary-as-object pattern in the [examples](#examples)).
+
+## Building on the core
+
+`vesting_wallet` is the curve-agnostic core. It never interprets the schedule - it only enforces release accounting and conservation of funds - so it serves two kinds of integrator: protocols that **drive vesting wallets without committing to a curve**, and authors of a **new curve**.
+
+`VestingWallet<S, P, C>` is parameterized by three types chosen at construction:
+
+- `S` - the **schedule witness**: a `drop`-only struct declared by the curve module. It carries no data; minting a vested attestation or tearing the wallet down requires a value of `S`, so only the declaring module can do either.
+- `P` - the **schedule parameters** (`copy + drop + store`): the curve's stored configuration (start, duration, cliff, ...). Held in the wallet, opaque to it.
+- `C` - the **coin type** being vested.
+
+Because struct fields are module-private in Move, only the module that declares `S` and `P` can build a `VestingWallet<S, P, C>` or advance it. This makes "a wallet without a curve" and "a wallet with the wrong parameters" unrepresentable - the type system, not a runtime check, binds every wallet to exactly its curve.
+
+### Curve-agnostic protocols
+
+A protocol that wraps, gates, or routes vesting - a DAO-gated grant, a treasury, an escrow, a vesting factory - should build on `vesting_wallet` and stay **generic over the curve** (`S`, `P`) rather than depend on any single schedule. One integration then works for every present and future curve.
+
+The core is designed for exactly this. Releasing funds needs only `&VestedAmount<S>` and `&mut wallet` - it does **not** need the witness `S` - so a wrapper can nest a `VestingWallet`, hand out an immutable `&inner` (enough for any curve module to mint an attestation), keep `&mut inner` private, and re-expose `release` behind its own checks:
+
+```move
+module my_protocol::gated_vault;
+
+use openzeppelin_finance::vesting_wallet::{Self, VestingWallet, VestedAmount};
+
+/// Adds protocol gating around any vesting curve - note it stays generic over `S`, `P`.
+public struct GatedVault<phantom S: drop, P: copy + drop + store, phantom C> has key {
+    id: UID,
+    inner: VestingWallet<S, P, C>,
+    // ... protocol state: pause flag, approval gate, ...
+}
+
+/// Hand out a read-only view so any curve module can mint an attestation against it.
+public fun inner<S: drop, P: copy + drop + store, C>(
+    self: &GatedVault<S, P, C>,
+): &VestingWallet<S, P, C> {
+    &self.inner
+}
+
+/// Re-expose release behind protocol checks, then delegate. `&mut inner` never escapes.
+public fun release<S: drop, P: copy + drop + store, C>(
+    self: &mut GatedVault<S, P, C>,
+    vested: &VestedAmount<S>,
+) {
+    // ... enforce protocol invariants (not paused, caller approved, ...) ...
+    self.inner.release(vested);
+}
+```
+
+The caller picks the curve module at the call site; the vault never knows which curve it holds:
+
+```move
+let v = vesting_wallet_linear::vested_amount(vault.inner(), clock);
+vault.release(&v);
+```
+
+To build the inner wallet without depending on a curve's `new`, take a validated `P` from the curve module's `params` constructor and call the core directly - so the protocol owns topology and nesting while the curve module still owns validation:
+
+```move
+let params = vesting_wallet_linear::params(start_ms, cliff_ms, period_ms, steps);
+let (inner, cap) = vesting_wallet::new<Linear, Params, C>(params, beneficiary, ctx);
+// Keep `cap` - it is required to tear the wallet down later.
+```
+
+### Custom schedules
+
+To author a new curve, follow the `vesting_wallet_linear` pattern:
+
+1. Declare a witness `public struct MyCurve has drop {}` and a parameters struct `public struct MyParams has copy, drop, store { /* ... */ }`.
+2. A public `params` constructor that validates and returns `MyParams`, plus a `new` that is sugar over `vesting_wallet::new<MyCurve, MyParams, C>(params(..), beneficiary, ctx)`. Exposing `params` separately lets a curve-agnostic protocol build the wallet itself.
+3. A `vested_amount(&VestingWallet<MyCurve, MyParams, C>, &Clock): VestedAmount<MyCurve>` that evaluates the curve and ends in `wallet.mint_vested_amount(MyCurve {}, amount)`.
+4. A teardown that calls `wallet.destroy_empty(root)` for a `DestroyReceipt`, then `vesting_wallet::consume_receipt(receipt, cap, MyCurve {})` to recover and destructure the parameters. `destroy_empty` is permissionless; the witness-and-cap-gated `consume_receipt` is what lets the curve run teardown logic or veto.
+
+<Callout type="warn">
+A custom curve **must be monotonically non-decreasing in time and bounded above by `balance + released`.** The wallet trusts the witness and never re-derives the curve, so a curve that mints a dishonest amount against its own wallet can over-release up to the wallet's balance. `release` enforces only the fund-threatening failures: a regression *below* `released` aborts `EVestedBelowReleased`, and exceeding `balance + released` aborts `EInsufficientBalance` - both before any state change. An in-range regression does **not** abort; `release` silently pays the smaller increment. Keep the curve monotone so releases only ever move forward.
+</Callout>
+
+### The `VestedAmount` attestation
+
+`vested_amount` mints a `VestedAmount<S>` - a transient record that curve `S` has vested a given cumulative total for a specific wallet. It is **not a hot potato**: it has only `drop`, so it cannot be copied, stored, or held across transactions, and `release` borrows it rather than consuming it. It cannot be used to over-release - `release` pays `attested - released` and reads `released` fresh each call - and its `wallet_id` stamp rejects it against any other wallet. That stamp is what lets a curve-agnostic wrapper safely hand out `&inner`: the worst a holder can do is mint an inert attestation; no funds move without `&mut`, which the wrapper keeps private.
+
+## Key concepts
+
+- **Curve and core are split by type.** The core (`vesting_wallet`) enforces accounting; the curve module (`vesting_wallet_linear` or your own) owns the schedule. The witness `S` and parameters `P` bind a wallet to exactly one curve at the type level.
+
+- **Identity is data, not a capability.** Both `deposit` and `release` are permissionless - anyone can fund a wallet or trigger a release, and funds always go to the `beneficiary` recorded at construction. The shared topology leans on this for liveness.
+
+- **Re-derived total.** The vested amount is always computed from `balance + released`, so post-start deposits participate retroactively at the current curve proportion. Funding up front is optional.
+
+- **Teardown authority is a cap, not an address.** `new` mints a `DestroyCap` bound to the wallet. Teardown is gated on that cap (deliberately decoupled from `beneficiary`, which may be an object address that can never be a transaction sender), plus the curve's own gate - `vesting_wallet_linear::destroy` additionally requires the schedule to have ended.
+
+- **No payout coin is minted.** `release` settles into the beneficiary's address balance via `balance::send_funds`; there is no `Coin<C>` object to route.
+
+## Common mistakes
+
+| Mistake | What happens | How to fix |
+|---|---|---|
+| Assuming a cliff delays the whole schedule | The cliff only gates; the end time is unchanged. A long cliff dumps all elapsed tranches at once when it lifts, then resumes cadence | Size the cliff knowing the staircase keeps its original boundaries; the catch-up at the cliff is expected. |
+| Choosing the **owned** topology for a third-party grant | A non-beneficiary holder can withhold every payout - `release` needs `&mut` | Use the **shared** topology so `release` is permissionless, unless the holder is the beneficiary. |
+| Tearing down while funds are still inbound | Coins sent to a destroyed wallet's address are permanently stranded | Halt upstream emissions, claim transferred coins, `sweep_settled`, let a checkpoint elapse, then `destroy` (which also requires the schedule to have ended). |
+| Gating teardown on `ctx.sender() == beneficiary` | An object-address beneficiary is never a sender, so the check can never pass | Gate teardown on the `DestroyCap`; route the cap to whoever should own the decision. |
+| A custom curve that is not monotone or exceeds `balance + released` | Over-release up to the balance (dishonest amount), or an abort (`EVestedBelowReleased` / `EInsufficientBalance`) | Keep the curve monotonically non-decreasing and bounded by `balance + released`. |
+| Expecting `release` to mint a `Coin<C>` | It pays into the beneficiary's address balance via `send_funds`; no coin object appears | Read the payout from the beneficiary's balance, not from a returned coin. |
+| Wrapping a wallet but only re-exposing `release` | A `Coin<C>` sent to the inner wallet's address can't be claimed while wrapped - `receive_and_deposit` needs the private `&mut inner` | Re-expose `receive_and_deposit` alongside `release` if the wrapper supports address-targeted funding. |
+
+## FAQ
+
+**Do most integrators need the `vesting_wallet` core?**
+No. If you want linear or stepped vesting with an optional cliff, `vesting_wallet_linear` is the whole surface - you never construct a bare wallet or mint a `VestedAmount` by hand. Reach for the core only to author a custom curve or to drive wallets curve-agnostically.
+
+**Can I fund a wallet after it has already started vesting?**
+Yes. `deposit` is permissionless and the vested total is re-derived from `balance + released` on every call, so a later deposit vests against the same schedule at the current proportion.
+
+**How do I change the beneficiary after construction?**
+You can't rotate the `beneficiary` field directly - it is fixed at construction. Point it at a consumer-owned object and rotate ownership of that object instead.
+
+**Does the module emit events?**
+Yes. The core emits `Created`, `Deposited`, `Swept`, `Received`, `Released`, and `Destroyed`, each stamped with the wallet's `ID`. Zero-amount operations emit nothing.
+
+**Can I release into a `Coin<C>` object instead of an address balance?**
+No. `release` uses `balance::send_funds` to settle into the beneficiary's address balance; no payout coin is minted.
+
+## Examples
+
+Complete, runnable integration examples live in the package's [`examples/vesting_wallet/`](https://github.com/OpenZeppelin/contracts-sui/tree/main/contracts/finance/examples/vesting_wallet) directory, one per integration boundary:
+
+- [`vesting_quadratic`](https://github.com/OpenZeppelin/contracts-sui/blob/main/contracts/finance/examples/vesting_wallet/vesting_quadratic.move) - the **custom schedule** pattern: a backloaded `vested = total * (elapsed / duration)^2` curve, the minimal shape of a new curve on top of the core.
+- [`pausable_grant`](https://github.com/OpenZeppelin/contracts-sui/blob/main/contracts/finance/examples/vesting_wallet/pausable_grant.move) - the **curve-agnostic wrapper** pattern: a shared grant that nests a wallet, stays generic over `S`/`P`, and re-exposes `release` behind a cap-toggled pause check.
+- [`splitter`](https://github.com/OpenZeppelin/contracts-sui/blob/main/contracts/finance/examples/vesting_wallet/splitter.move) - the **beneficiary-as-object** pattern: point the wallet's `beneficiary` at a shared object so each release settles into an accumulator anyone can `disperse` to many receivers by fixed weights.
+
+<Callout type="warn">
+These are unaudited illustrations of how the primitive can be integrated, not production-ready code.
+</Callout>
+
+## Learn more
+
+For function-level signatures, parameters, events, and errors, see the [Finance API reference](/contracts-sui/1.x/api/finance).
