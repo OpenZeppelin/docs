@@ -1,0 +1,615 @@
+---
+title: Allowance API Reference
+---
+
+This page documents the public API of `openzeppelin_allowance` for OpenZeppelin Contracts for Sui `v1.x`.
+
+### `spend_vault` [toc] [#spend_vault]
+
+<APIGithubLinkHeader
+  moduleName="spend_vault"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.4.0/contracts/allowance/sources/spend_vault.move"
+/>
+
+```move
+use openzeppelin_allowance::spend_vault;
+```
+
+Cap-keyed, multi-coin allowance primitive. A shared, untyped `Vault` holds funds for any number of coin types and a ledger of per-`(cap, coin)` budgets. The funds are not a struct field: each coin type's pool lives as an object-owned address balance at the vault's id address, deposited permissionlessly and drawn through `spend<T>` (spender) or `withdraw<T>`/`withdraw_all<T>` (owner). The coin dimension of every grant is the `T` supplied at the call site, resolved against a `BudgetKey { cap_id, coin_type }` ledger key.
+
+Because `Vault` has `key` only (no `drop`), the transaction that calls `new` must consume the fresh vault: `share` it as a shared object or `destroy` it, with all same-PTB funding, minting, and granting preceding `share`. A shared vault can still be `destroy`ed later, so the full shape is `new -> destroy` (abandoned at creation) or `new -> share -> ... -> destroy` (shared, then torn down). One `OwnerCap` exists per vault for its whole life (`new` mints it, `destroy` consumes it); transferring it is owner rotation. Budgets are ceilings, not reservations: grants may sum over the pool, and competing spenders are resolved by consensus sequencing.
+
+<Callout type="warn">
+`SpenderCap` is a bearer instrument: `spend<T>` is cap-gated, never sender-gated, so whoever presents the cap draws against every `(cap, coin)` budget it keys; any custody layer must add its own sender gate before borrowing the cap. `destroy` does not drain the pool: it deletes the ledger and both UIDs, and any funds still in the vault's address balances strand permanently. For the full validate-then-sender-gate custody recipe, see the module page's [Integrating into a protocol](/contracts-sui/1.x/spend-vault#integrating-into-a-protocol) section and the [Delegated Spending tutorial](/contracts-sui/1.x/guides/delegated-spending).
+</Callout>
+
+Types
+
+- [`Vault`](#spend_vault-Vault)
+- [`BudgetKey`](#spend_vault-BudgetKey)
+- [`OwnerCap`](#spend_vault-OwnerCap)
+- [`SpenderCap`](#spend_vault-SpenderCap)
+- [`Allowance`](#spend_vault-Allowance)
+
+Functions
+
+- [`new(ctx)`](#spend_vault-new)
+- [`share(v)`](#spend_vault-share)
+- [`destroy(v, cap, ctx)`](#spend_vault-destroy)
+- [`deposit(v, c, ctx)`](#spend_vault-deposit)
+- [`deposit_balance(v, b, ctx)`](#spend_vault-deposit_balance)
+- [`mint_cap(v, cap, ctx)`](#spend_vault-mint_cap)
+- [`set_allowance(v, cap, cap_id, new_amount, new_expires_at_ms, expected, clock, ctx)`](#spend_vault-set_allowance)
+- [`spend(v, cap, amount, clock, ctx)`](#spend_vault-spend)
+- [`revoke(v, cap, cap_id, ctx)`](#spend_vault-revoke)
+- [`revoke_all(v, cap, cap_id, ctx)`](#spend_vault-revoke_all)
+- [`renounce(v, cap, ctx)`](#spend_vault-renounce)
+- [`delete_orphaned_cap(cap)`](#spend_vault-delete_orphaned_cap)
+- [`squash(v, c, ctx)`](#spend_vault-squash)
+- [`withdraw(v, cap, amount, ctx)`](#spend_vault-withdraw)
+- [`withdraw_all(v, cap, root, ctx)`](#spend_vault-withdraw_all)
+- [`allowance(v, cap_id)`](#spend_vault-allowance)
+- [`spendable_now(v, root, cap_id, clock)`](#spend_vault-spendable_now)
+- [`expiry(v, cap_id)`](#spend_vault-expiry)
+- [`contains(v, cap_id)`](#spend_vault-contains)
+- [`balance_value(v, root)`](#spend_vault-balance_value)
+- [`granted_coin_types(v)`](#spend_vault-granted_coin_types)
+- [`owner_cap_vault_id(cap)`](#spend_vault-owner_cap_vault_id)
+- [`spender_cap_vault_id(cap)`](#spend_vault-spender_cap_vault_id)
+
+Events
+
+- [`VaultCreated`](#spend_vault-VaultCreated)
+- [`Deposited`](#spend_vault-Deposited)
+- [`Squashed`](#spend_vault-Squashed)
+- [`SpenderCapMinted`](#spend_vault-SpenderCapMinted)
+- [`AllowanceSet`](#spend_vault-AllowanceSet)
+- [`Spent`](#spend_vault-Spent)
+- [`Revoked`](#spend_vault-Revoked)
+- [`Renounced`](#spend_vault-Renounced)
+- [`Withdrawn`](#spend_vault-Withdrawn)
+- [`VaultDestroyed`](#spend_vault-VaultDestroyed)
+- [`CapDeleted`](#spend_vault-CapDeleted)
+
+Errors
+
+- [`EWrongOwnerCap`](#spend_vault-EWrongOwnerCap)
+- [`EWrongVault`](#spend_vault-EWrongVault)
+- [`ENoAllowance`](#spend_vault-ENoAllowance)
+- [`EAllowanceExpired`](#spend_vault-EAllowanceExpired)
+- [`EAllowanceExceeded`](#spend_vault-EAllowanceExceeded)
+- [`EZeroAmount`](#spend_vault-EZeroAmount)
+- [`EExpiryInPast`](#spend_vault-EExpiryInPast)
+- [`EUnexpectedAllowance`](#spend_vault-EUnexpectedAllowance)
+
+#### Types [!toc] [#spend_vault-Types]
+
+<APIItem
+  functionSignature="struct Vault has key { id: UID, allowances: LinkedTable<BudgetKey, Allowance>, granted_coin_types: VecSet<TypeName> }"
+  id="spend_vault-Vault"
+  kind="struct"
+>
+Shared, untyped escrow plus per-`(cap, coin)` allowance ledger. One vault holds any number of coin types. The creating transaction must consume the fresh vault with `share` or `destroy`, and a shared vault can still be `destroy`ed later at teardown; the `key`-only ability set (no `store`, no `drop`) protects `id` (the spend authority over the address balances) and forces teardown through `destroy`.
+
+The pool is not a struct field: per-coin funds live as object-owned address balances at the vault's id address, readable via [`balance_value`](#spend_vault-balance_value). `allowances` is a `LinkedTable` so drains recover per-entry storage rebates.
+
+`granted_coin_types` is the owner-writable enumeration handle iterated by `revoke_all` and `renounce`. It is written only by a `set_allowance` call that creates an entry (permissionless deposits cannot grow it) and it grows only: `revoke<T>` never prunes `T`. It is not the drain-before-destroy list; enumerate pool coin types off-chain with the GraphQL `balances` query.
+</APIItem>
+
+<APIItem
+  functionSignature="struct BudgetKey has copy, drop, store { cap_id: ID, coin_type: TypeName }"
+  id="spend_vault-BudgetKey"
+  kind="struct"
+>
+Composite ledger key: one entry per `(cap, coin type)`. `coin_type` is always `type_name::with_defining_ids<T>()`.
+</APIItem>
+
+<APIItem
+  functionSignature="struct OwnerCap has key, store { id: UID, vault_id: ID }"
+  id="spend_vault-OwnerCap"
+  kind="struct"
+>
+Owner authority for exactly one vault. Exactly one `OwnerCap` exists per vault for its whole life: `new` mints it, `destroy` consumes it. `vault_id` is set at `new` and never rewritten; transferring the cap is owner rotation. It gates `mint_cap`, `set_allowance`, `revoke`, `revoke_all`, `withdraw`/`withdraw_all` over every coin, and `destroy`.
+</APIItem>
+
+<APIItem
+  functionSignature="struct SpenderCap has key, store { id: UID, vault_id: ID }"
+  id="spend_vault-SpenderCap"
+  kind="struct"
+>
+Spend authority. A bearer instrument: whoever presents `&SpenderCap` to `spend<T>` holds the full authority of every `(cap, coin)` budget it keys, so a leaked cap exposes the sum across coins. Untyped: no phantom type, no coin field; the coin dimension is the `T` at the `spend<T>` call site.
+
+`vault_id` is set at `mint_cap` and never rewritten; the binding survives every transfer, wrap, or table embedding. Protocols accepting a user's cap must validate it via [`spender_cap_vault_id`](#spend_vault-spender_cap_vault_id) before taking custody.
+</APIItem>
+
+<APIItem
+  functionSignature="struct Allowance has drop, store { remaining: u64, expires_at_ms: u64 }"
+  id="spend_vault-Allowance"
+  kind="struct"
+>
+Private ledger entry for one `(cap, coin)` grant, and the single source of truth for its state (the cap carries no budget).
+
+`remaining`: `u64::MAX` is the unlimited sentinel (never decremented); `0` is a live-but-suspended entry; anything else is the raw drawable budget. `expires_at_ms`: `u64::MAX` is the no-expiry sentinel; any finite value must be strictly in the future at `set_allowance` time. Both sentinels are tested by equality only: a deliberate finite grant of exactly `u64::MAX` is unrepresentable, and off-chain volume math must exclude it.
+</APIItem>
+
+#### Functions [!toc] [#spend_vault-Functions]
+
+<APIItem
+  functionSignature="new(ctx: &mut TxContext) -> (Vault, OwnerCap)"
+  id="spend_vault-new"
+  kind="public"
+>
+Creates an untyped multi-coin `Vault` and its sole vault-bound `OwnerCap`, both returned by value so the enclosing PTB decides every destination. `Vault` has no `drop`: the transaction fails unless it is consumed by `share` or `destroy` in the same transaction. One PTB can compose full setup: `new` → `deposit<T>` → `mint_cap` → `set_allowance<T>` → `share` → transfer the owner cap.
+
+Emits `VaultCreated` with the vault id, owner cap id, and `ctx.sender()` as `creator`.
+</APIItem>
+
+<APIItem
+  functionSignature="share(v: Vault)"
+  id="spend_vault-share"
+  kind="public"
+>
+Shares the vault (`transfer::share_object`). Must run in the same transaction as `new`, after every same-PTB funding, minting, and granting step; the vault is only addressable as a shared input in later transactions.
+</APIItem>
+
+<APIItem
+  functionSignature="destroy(v: Vault, cap: OwnerCap, ctx: &mut TxContext)"
+  id="spend_vault-destroy"
+  kind="public"
+>
+Terminal owner exit. Drains every ledger entry (recovering each storage rebate), drops `granted_coin_types`, and deletes both the vault and owner cap UIDs. Unconditional on ledger state: no live, suspended, or unlimited grant can block it, and there is no on-chain guard against destroying a still-funded vault.
+
+Aborts with `EWrongOwnerCap` if `cap.vault_id` does not match the vault.
+
+Emits `VaultDestroyed`.
+
+<Callout type="warn">
+`destroy` does not drain the pool. Funds still sitting in the vault's address balances strand permanently once the UID is deleted. Drain first, in a prior transaction: enumerate coin types off-chain with the GraphQL `balances` query, `squash<T>` any loose coins, `withdraw_all<T>` each type, wait one checkpoint and re-check, then destroy. See the [Spend Vault guide](/contracts-sui/1.x/spend-vault) for the full drain ritual.
+</Callout>
+</APIItem>
+
+<APIItem
+  functionSignature="deposit<T>(v: &Vault, c: Coin<T>, ctx: &mut TxContext)"
+  id="spend_vault-deposit"
+  kind="public"
+>
+Deposits a `Coin<T>` into the vault's `T` pool. Thin wrapper over `deposit_balance` (`c.into_balance()`). Permissionless, and confers no rights: no ledger entry, no claim, no refund path. Note that permissionless deposits can re-arm live allowances after a `withdraw_all`-as-freeze; the durable kill is `revoke_all` or `destroy`.
+
+Aborts with `EZeroAmount` if `c.value() == 0`.
+
+Emits `Deposited`.
+</APIItem>
+
+<APIItem
+  functionSignature="deposit_balance<T>(v: &Vault, b: Balance<T>, ctx: &mut TxContext)"
+  id="spend_vault-deposit_balance"
+  kind="public"
+>
+`Balance<T>`-native ingress, symmetric to the `Balance<T>` egress of `spend`/`withdraw`/`withdraw_all`; sends the balance to the vault's id address. Permissionless and rights-free, like `deposit`.
+
+Aborts with `EZeroAmount` if `b.value() == 0`.
+
+Emits `Deposited` with `ctx.sender()` as `depositor`.
+
+<Callout>
+Anyone can also fund the vault without this module via `sui::balance::send_funds(bal, object::id_address(v))`. Those funds are identically spendable and withdrawable but emit no `Deposited` event; event-only indexers will miss them.
+</Callout>
+</APIItem>
+
+<APIItem
+  functionSignature="mint_cap(v: &Vault, cap: &OwnerCap, ctx: &mut TxContext) -> SpenderCap"
+  id="spend_vault-mint_cap"
+  kind="public"
+>
+Mints a bare, untyped `SpenderCap` bound to this vault, returned by value: no budget, no ledger entry, no coin type. Grant budgets afterwards with `set_allowance<T>` keyed by the cap's object id; the id is stable for the cap's whole life, so protocols can embed the cap and owners can re-budget it without re-registration.
+
+Aborts with `EWrongOwnerCap` if `cap.vault_id` does not match the vault.
+
+Emits `SpenderCapMinted`.
+</APIItem>
+
+<APIItem
+  functionSignature="set_allowance<T>(v: &mut Vault, cap: &OwnerCap, cap_id: ID, new_amount: u64, new_expires_at_ms: u64, expected: Option<u64>, clock: &Clock, ctx: &mut TxContext)"
+  id="spend_vault-set_allowance"
+  kind="public"
+>
+Upserts the `(cap_id, T)` budget: creates the entry if absent (recording `T` in `granted_coin_types`), otherwise overwrites `remaining` and `expires_at_ms` in place; the cap object, its id, and any embeddings are untouched. Re-setting overwrites, never adds; two summing budgets require two caps.
+
+`new_amount == 0` suspends the entry without removing it (never aborts `EZeroAmount`); `u64::MAX` is the unlimited sentinel. `new_expires_at_ms` must be `u64::MAX` (no expiry) or strictly in the future; setting a fresh future expiry on an expired entry revives it in place.
+
+`expected` is an optional compare-and-set guard on the raw `remaining`: `Some(e)` proceeds only if the entry exists and `remaining == e` (`0` and `u64::MAX` are legal match targets); `Some` on an absent entry aborts; `None` is unconditional. Derive `e` from an earlier read (off-chain or a previous transaction) so a spend sequenced after that read aborts this write instead of being clobbered. A read in the same transaction cannot serve as a guard: the shared vault is locked for the whole transaction, so a same-transaction `allowance<T>` value trivially matches and the write always proceeds. The CAS guards `remaining` only; the upsert always overwrites `expires_at_ms` too, so a budget-only update must re-read the current expiry via `expiry<T>` and pass it back, or it silently overwrites it.
+
+Checks run in deterministic order: owner gate → expiry validity → CAS.
+
+Aborts with `EWrongOwnerCap` if `cap.vault_id` does not match the vault.
+
+Aborts with `EExpiryInPast` if `new_expires_at_ms` is finite and `<= clock.timestamp_ms()`.
+
+Aborts with `EUnexpectedAllowance` if `expected` is `Some(e)` and the entry is absent or its raw `remaining != e`.
+
+Emits `AllowanceSet` with `cas_was_provided` and `was_created` flags.
+
+<Callout type="warn">
+`cap_id` is an unvalidated bare `ID`: it is never checked against a live `SpenderCap`. A mistyped id silently creates a phantom budget (`AllowanceSet { was_created: true }`, success-shaped) and permanently adds `T` to `granted_coin_types` if `T` was not already granted. On a known update, confirm `was_created == false` in the event, or preflight with `contains<T>`.
+</Callout>
+</APIItem>
+
+<APIItem
+  functionSignature="spend<T>(v: &mut Vault, cap: &SpenderCap, amount: u64, clock: &Clock, ctx: &mut TxContext) -> Balance<T>"
+  id="spend_vault-spend"
+  kind="public"
+>
+Draws exactly `amount` of `T` against the presented `&SpenderCap`. Cap-gated, never sender-gated: any transaction context spends identically, and `ctx.sender()` feeds only the `Spent.caller` attribution field. Exact-amount-or-abort: on any abort the pool and ledger are bit-identical to the pre-call state. The `u64::MAX` unlimited sentinel is never decremented. Spending a budget down to `0` leaves the entry in place (suspended); removal happens only via `revoke`, `revoke_all`, `renounce`, or `destroy`.
+
+The commit order is: decrement the budget, then withdraw from the vault's address balance and redeem. The pool is deliberately not pre-checked: a pool-short redeem fails at execution (see the callout below) and Move's atomic revert rolls the decrement back.
+
+The module abort order below is deterministic and is an integrator ABI; match on it: `EWrongVault` → `ENoAllowance` → `EAllowanceExpired` → `EZeroAmount` → `EAllowanceExceeded`.
+
+The returned `Balance<T>` has no `drop`; consume it in the same PTB:
+
+```move
+let bal = vault.spend<SUI>(&cap, amount, clock, ctx);
+transfer::public_transfer(bal.into_coin(ctx), ctx.sender());
+```
+
+Aborts with `EWrongVault` if `cap.vault_id` does not match the vault.
+
+Aborts with `ENoAllowance` if no `(cap, T)` ledger entry exists.
+
+Aborts with `EAllowanceExpired` if the entry has a finite expiry and `clock.timestamp_ms() >= expires_at_ms` (closed boundary: a spend in the exact expiry millisecond fails).
+
+Aborts with `EZeroAmount` if `amount == 0`.
+
+Aborts with `EAllowanceExceeded` if `remaining` is finite and `amount > remaining` (including suspended-at-zero entries, for any positive amount).
+
+Emits `Spent` strictly after the redeem succeeds, with `remaining` as the raw post-call value (still `u64::MAX` for unlimited grants).
+
+<Callout>
+Two framework failure modes follow the module aborts: `EObjectFundsWithdrawNotEnabled` (Move abort code 3 in `sui::funds_accumulator`) if the `enable_object_funds_withdraw` protocol feature is off, and the `InsufficientFundsForWithdraw` execution status when the vault's live `T` balance is below `amount` at redeem time. The latter is not a matchable Move abort code; detect it via dry run / effects. The budget decrement is rolled back atomically, and `Spent` is emitted only after the redeem succeeds.
+</Callout>
+</APIItem>
+
+<APIItem
+  functionSignature="revoke<T>(v: &mut Vault, cap: &OwnerCap, cap_id: ID, ctx: &mut TxContext) -> bool"
+  id="spend_vault-revoke"
+  kind="public"
+>
+Owner kill-switch for one coin: removes the `(cap_id, T)` ledger entry. Idempotent and ledger-state-independent: a present entry is removed (recovering its storage rebate), an absent one is a no-op. Also time-blind: it removes suspended, expired, and unlimited entries alike. Returns `was_present`; `false` is the typo'd-`cap_id` / wrong-coin signal, never an abort. Not retroactive: a spend sequenced first still stands. The cap object survives as inert non-authority for this coin, and `granted_coin_types` is untouched (grows-only).
+
+Aborts with `EWrongOwnerCap` if `cap.vault_id` does not match the vault.
+
+Emits `Revoked` on every non-aborting call, no-op included, with the `was_present` flag.
+</APIItem>
+
+<APIItem
+  functionSignature="revoke_all(v: &mut Vault, cap: &OwnerCap, cap_id: ID, ctx: &mut TxContext)"
+  id="spend_vault-revoke_all"
+  kind="public"
+>
+Whole-cap kill: iterates a snapshot of `granted_coin_types` and removes every existing `(cap_id, T)` entry. Cost is O(k) in the distinct coin types ever granted on the vault: owner-bounded and un-griefable, since permissionless deposits and squashes cannot grow the set. Never touches another cap's entries.
+
+Emergency-stop idiom: run `revoke_all` first, in its own transaction, then `withdraw_all<T>` per coin in a later transaction; never bundled, since a pool-short `withdraw_all` would revert the `revoke_all` with it.
+
+Aborts with `EWrongOwnerCap` if `cap.vault_id` does not match the vault.
+
+Emits one `Revoked { was_present: true }` per removed coin; nothing on a whole-cap miss.
+
+<Callout type="warn">
+`cap_id` is unvalidated: a wrong id is a silent whole-cap no-op that emits no event and leaves the intended cap live. Confirm the kill via the emitted `Revoked` events or a `contains<T>` recheck.
+</Callout>
+</APIItem>
+
+<APIItem
+  functionSignature="renounce(v: &mut Vault, cap: SpenderCap, ctx: &mut TxContext)"
+  id="spend_vault-renounce"
+  kind="public"
+>
+Spender self-revoke against a live vault: consumes the cap by value, removes every `(cap_id, T)` entry (iterating a snapshot of `granted_coin_types`; coins the cap never held are harmless probes), and deletes the cap UID. Total on ledger state; storage rebates route to this transaction's gas payer. Uncallable after vault destruction (it needs `&mut Vault`); use `delete_orphaned_cap` instead.
+
+Aborts with `EWrongVault` if `cap.vault_id` does not match the vault.
+
+Emits one coin-agnostic `Renounced` event (not per-coin `Revoked` events).
+</APIItem>
+
+<APIItem
+  functionSignature="delete_orphaned_cap(cap: SpenderCap)"
+  id="spend_vault-delete_orphaned_cap"
+  kind="public"
+>
+Disposal path for a `SpenderCap` whose vault was already destroyed. Total: never aborts, touches no vault state, deletes exactly the cap UID. The lone `ctx`-free disposal path.
+
+Emits `CapDeleted` (no actor field; there is no `ctx` to read).
+
+<Callout type="warn">
+On a live vault, prefer `renounce`. Deleting a live cap strands all its `(cap, T)` ledger entries as inert garbage: unspendable and not live authority, but still visible via `contains<T>` and forfeiting their storage rebates. The owner's cleanup is `revoke_all` with the `cap_id` from the `CapDeleted` event.
+</Callout>
+</APIItem>
+
+<APIItem
+  functionSignature="squash<T>(v: &mut Vault, c: Receiving<Coin<T>>, ctx: &mut TxContext)"
+  id="spend_vault-squash"
+  kind="public"
+>
+Recovers a stray `Coin<T>` that was `public_transfer`'d to the vault address (a loose owned object, not part of the spendable address balance) by receiving it against the vault's UID and sending its balance into the pool. Permissionless and strictly funds-in: worst case is a donation. Writes no type set. This is the vault's only object-receive path, and it is `Coin`-typed: non-`Coin` objects sent to the vault address cannot be recovered.
+
+Aborts with no module error; the framework `transfer::public_receive` can abort on an invalid or stale `Receiving` ticket. There is no zero-amount guard.
+
+Emits `Squashed` (possibly with `amount: 0`).
+</APIItem>
+
+<APIItem
+  functionSignature="withdraw<T>(v: &mut Vault, cap: &OwnerCap, amount: u64, ctx: &mut TxContext) -> Balance<T>"
+  id="spend_vault-withdraw"
+  kind="public"
+>
+Withdraws exactly `amount` of `T` from the pool as a `Balance<T>`. Consults only the `OwnerCap` binding and the pool, never the ledger: no spender state can block it, and it may leave live allowances unbacked (intended: budgets are ceilings, not reservations). The returned `Balance<T>` has no `drop` and must be consumed in the same PTB.
+
+Aborts with `EWrongOwnerCap` if `cap.vault_id` does not match the vault.
+
+Aborts with `EZeroAmount` if `amount == 0`.
+
+Emits `Withdrawn`.
+
+<Callout>
+The same two framework failure modes as `spend` apply: `EObjectFundsWithdrawNotEnabled` if the `enable_object_funds_withdraw` protocol feature is off, and the `InsufficientFundsForWithdraw` execution status (not a matchable Move abort) if the live `T` balance is below `amount` at redeem time.
+</Callout>
+</APIItem>
+
+<APIItem
+  functionSignature="withdraw_all<T>(v: &mut Vault, cap: &OwnerCap, root: &AccumulatorRoot, ctx: &mut TxContext) -> Balance<T>"
+  id="spend_vault-withdraw_all"
+  kind="public"
+>
+Drains the settled `T` pool: reads the start-of-checkpoint balance snapshot from the accumulator root (`0xacc`) and withdraws exactly that. Deliberately takes no caller-supplied amount (a fixed amount would be a stale-amount denial of service). An empty settled pool returns `balance::zero<T>()` without touching the accumulator primitive (the feature-flag abort is unreachable on that path) but still emits `Withdrawn { amount: 0 }`. Never aborts on spender or ledger state. The returned, possibly-zero `Balance<T>` has no `drop`; consume it (`destroy_zero`, join, `into_coin`) in the same PTB.
+
+Settled-vs-live skew: a prior same-checkpoint `spend` or `withdraw` (including an earlier command in the same PTB) lowers the live pool below the snapshot, making the drain over-ask and fail with the `InsufficientFundsForWithdraw` execution status (retry-safe next checkpoint); a same-checkpoint deposit is under-drained (missed). A `withdraw_all`-as-freeze is reversible (deposits are permissionless), so the durable kill is `revoke_all` or `destroy`.
+
+Aborts with `EWrongOwnerCap` if `cap.vault_id` does not match the vault.
+
+Emits `Withdrawn` (amount possibly `0`).
+
+<Callout>
+On a non-empty settled pool the framework failure modes apply: `EObjectFundsWithdrawNotEnabled` if the `enable_object_funds_withdraw` protocol feature is off, and the `InsufficientFundsForWithdraw` execution status on the settled-vs-live skew described above.
+</Callout>
+</APIItem>
+
+<APIItem
+  functionSignature="allowance<T>(v: &Vault, cap_id: ID) -> u64"
+  id="spend_vault-allowance"
+  kind="public"
+>
+Returns the raw `remaining` of the `(cap_id, T)` entry. Total (never aborts) and advisory (stale the moment a later transaction mutates state). Returns `0` if the entry is absent (ambiguous with a suspended entry); disambiguate with `contains<T>`. `u64::MAX` is the unlimited sentinel, not a volume.
+</APIItem>
+
+<APIItem
+  functionSignature="spendable_now<T>(v: &Vault, root: &AccumulatorRoot, cap_id: ID, clock: &Clock) -> u64"
+  id="spend_vault-spendable_now"
+  kind="public"
+>
+Returns what a `spend<T>` could draw right now: `0` if the entry is absent, expired, or suspended, otherwise `min(remaining, settled pool)` (unlimited reduces to the settled pool). Uses the same closed expiry boundary as `spend` (`now >= expires_at_ms` is expired). Total; advisory upper bound only: settled-vs-live skew can still make `spend(spendable_now(...))` fail, and a `0` result fed to `spend` aborts `EZeroAmount`, so guard with `> 0`. Returns a non-zero quote even when the `enable_object_funds_withdraw` feature is off.
+</APIItem>
+
+<APIItem
+  functionSignature="expiry<T>(v: &Vault, cap_id: ID) -> u64"
+  id="spend_vault-expiry"
+  kind="public"
+>
+Returns the raw `expires_at_ms` of the `(cap_id, T)` entry; `0` if absent. A present entry's value is always non-zero: a timestamp (possibly past; expired entries are not pruned) or the `u64::MAX` no-expiry sentinel. Total; never aborts.
+</APIItem>
+
+<APIItem
+  functionSignature="contains<T>(v: &Vault, cap_id: ID) -> bool"
+  id="spend_vault-contains"
+  kind="public"
+>
+Returns whether a `(cap_id, T)` ledger entry exists. The absent-vs-suspended disambiguator: `allowance<T> == 0 && contains<T>` means suspended. Total; never aborts.
+</APIItem>
+
+<APIItem
+  functionSignature="balance_value<T>(v: &Vault, root: &AccumulatorRoot) -> u64"
+  id="spend_vault-balance_value"
+  kind="public"
+>
+Returns the settled `T` pool at the vault's address (start-of-checkpoint snapshot). Total and advisory; independent of the `enable_object_funds_withdraw` feature flag.
+</APIItem>
+
+<APIItem
+  functionSignature="granted_coin_types(v: &Vault) -> vector<TypeName>"
+  id="spend_vault-granted_coin_types"
+  kind="public"
+>
+Returns exactly the coin-type set that `revoke_all` and `renounce` iterate. Grows-only, never pruned, and not the drain-before-destroy list (use the GraphQL `balances` query off-chain for that). Total; never aborts.
+</APIItem>
+
+<APIItem
+  functionSignature="owner_cap_vault_id(cap: &OwnerCap) -> ID"
+  id="spend_vault-owner_cap_vault_id"
+  kind="public"
+>
+Returns the vault id the `OwnerCap` is bound to. Total; never aborts.
+</APIItem>
+
+<APIItem
+  functionSignature="spender_cap_vault_id(cap: &SpenderCap) -> ID"
+  id="spend_vault-spender_cap_vault_id"
+  kind="public"
+>
+Returns the vault id the `SpenderCap` is bound to. Protocols accepting a user's cap must check this against the expected vault before taking custody. Total; never aborts. For the assembled validate-then-sender-gate sequence this check belongs to, see the module page's [Integrating into a protocol](/contracts-sui/1.x/spend-vault#integrating-into-a-protocol) section.
+</APIItem>
+
+#### Events [!toc] [#spend_vault-Events]
+
+<APIItem
+  functionSignature="VaultCreated(vault_id: ID, owner_cap_id: ID, creator: address)"
+  id="spend_vault-VaultCreated"
+  kind="event"
+>
+Emitted by `new`.
+
+- `vault_id`: the new vault.
+- `owner_cap_id`: the sole owner cap, the vault-to-cap discovery anchor.
+- `creator`: `ctx.sender()`; may differ from the eventual owner.
+</APIItem>
+
+<APIItem
+  functionSignature="Deposited(vault_id: ID, coin_type: TypeName, amount: u64, depositor: address)"
+  id="spend_vault-Deposited"
+  kind="event"
+>
+Emitted by `deposit` and `deposit_balance`.
+
+- `vault_id`: the funded vault.
+- `coin_type`: `type_name::with_defining_ids<T>()`.
+- `amount`: the deposited value (never `0`; zero deposits abort).
+- `depositor`: `ctx.sender()`; attribution only, depositing confers no rights.
+
+Raw `send_funds` top-ups to the vault address are identically spendable but emit no `Deposited`; event-only indexers miss them.
+</APIItem>
+
+<APIItem
+  functionSignature="Squashed(vault_id: ID, coin_type: TypeName, amount: u64, by: address)"
+  id="spend_vault-Squashed"
+  kind="event"
+>
+Emitted by `squash`. Distinct from `Deposited` so indexers can separate recovered strays from intentional funding.
+
+- `vault_id`: the vault that received the recovered funds.
+- `coin_type`: the recovered coin's type.
+- `amount`: the recovered value; may be `0` (`squash` has no zero-amount guard).
+- `by`: `ctx.sender()`.
+</APIItem>
+
+<APIItem
+  functionSignature="SpenderCapMinted(vault_id: ID, cap_id: ID, by: address)"
+  id="spend_vault-SpenderCapMinted"
+  kind="event"
+>
+Emitted by `mint_cap`. Bare: no recipient, amount, or expiry; budget data arrives on the subsequent `AllowanceSet { was_created: true }`.
+
+- `vault_id`: the vault the cap is bound to.
+- `cap_id`: the new cap's object id.
+- `by`: `ctx.sender()`.
+</APIItem>
+
+<APIItem
+  functionSignature="AllowanceSet(vault_id: ID, cap_id: ID, coin_type: TypeName, new_amount: u64, new_expires_at_ms: u64, cas_was_provided: bool, was_created: bool, by: address)"
+  id="spend_vault-AllowanceSet"
+  kind="event"
+>
+Emitted by `set_allowance`.
+
+- `vault_id`, `cap_id`, `coin_type`: the `(cap, coin)` entry written.
+- `new_amount`: the written budget; `0` signals suspension, `u64::MAX` unlimited.
+- `new_expires_at_ms`: the written expiry; `u64::MAX` means no expiry.
+- `cas_was_provided`: whether the CAS guard was engaged.
+- `was_created`: `true` on the create branch, `false` on overwrite (the defense against silent phantom-budget creation from a typo'd `cap_id`).
+- `by`: `ctx.sender()`.
+</APIItem>
+
+<APIItem
+  functionSignature="Spent(vault_id: ID, cap_id: ID, coin_type: TypeName, amount: u64, remaining: u64, caller: address)"
+  id="spend_vault-Spent"
+  kind="event"
+>
+Emitted on every successful `spend`, strictly after the funds redeem succeeds; a decremented-then-reverted pool-short spend emits nothing.
+
+- `vault_id`, `cap_id`, `coin_type`: the drawn `(cap, coin)` entry.
+- `amount`: the exact amount drawn.
+- `remaining`: the raw post-call budget; stays `u64::MAX` for unlimited grants.
+- `caller`: `ctx.sender()`; attribution only, never a gate. In a custody flow this is the operator who drove the spend, not the budget's beneficiary.
+</APIItem>
+
+<APIItem
+  functionSignature="Revoked(vault_id: ID, cap_id: ID, coin_type: TypeName, was_present: bool, by: address)"
+  id="spend_vault-Revoked"
+  kind="event"
+>
+Emitted by `revoke` on every non-aborting call (no-op included, with `was_present: false` as the typo'd-`cap_id` signal) and by `revoke_all` once per removed coin (a whole-cap miss emits nothing).
+
+- `vault_id`, `cap_id`, `coin_type`: the targeted `(cap, coin)` entry.
+- `was_present`: whether an entry was actually removed. Indexers must gate state changes on `was_present == true`.
+- `by`: `ctx.sender()`.
+</APIItem>
+
+<APIItem
+  functionSignature="Renounced(vault_id: ID, cap_id: ID, by: address)"
+  id="spend_vault-Renounced"
+  kind="event"
+>
+Emitted by `renounce`. Coin-agnostic and terminal: it closes every `(cap, *)` entry but carries no coin list; indexers rely on previously indexed `AllowanceSet` state.
+
+- `vault_id`: the vault.
+- `cap_id`: the consumed cap.
+- `by`: `ctx.sender()`.
+</APIItem>
+
+<APIItem
+  functionSignature="Withdrawn(vault_id: ID, coin_type: TypeName, amount: u64, by: address)"
+  id="spend_vault-Withdrawn"
+  kind="event"
+>
+Emitted by both `withdraw` and `withdraw_all`, with no discriminant between the two sources.
+
+- `vault_id`: the drained vault.
+- `coin_type`: the withdrawn coin's type.
+- `amount`: the withdrawn value; may be `0` from `withdraw_all` on an empty settled pool.
+- `by`: `ctx.sender()`.
+</APIItem>
+
+<APIItem
+  functionSignature="VaultDestroyed(vault_id: ID, by: address)"
+  id="spend_vault-VaultDestroyed"
+  kind="event"
+>
+Emitted by `destroy`. Coin-agnostic terminal event for every `(vault, *)` entry; carries no refunded amount; the owner drains per coin beforehand.
+
+- `vault_id`: the destroyed vault.
+- `by`: `ctx.sender()`.
+</APIItem>
+
+<APIItem
+  functionSignature="CapDeleted(vault_id: ID, cap_id: ID)"
+  id="spend_vault-CapDeleted"
+  kind="event"
+>
+Emitted by `delete_orphaned_cap`. Intentionally has no actor field: it is the lone `ctx`-free disposal path, so there is no `ctx.sender()` to record.
+
+- `vault_id`: the (typically already destroyed) vault the cap was bound to.
+- `cap_id`: the deleted cap, the id an owner needs for `revoke_all` cleanup if a live cap was deleted.
+</APIItem>
+
+#### Errors [!toc] [#spend_vault-Errors]
+
+Pool shortfall has no module error by design: on the fund-egress paths (`spend`, `withdraw`, non-empty `withdraw_all`) a short pool surfaces as the framework `InsufficientFundsForWithdraw` execution status (not a matchable Move abort) after the `EObjectFundsWithdrawNotEnabled` feature-flag check. See the callouts under [`spend`](#spend_vault-spend).
+
+<APIItem functionSignature="EWrongOwnerCap (code 0)" id="spend_vault-EWrongOwnerCap" kind="error">
+Raised as the first check of every owner-gated function (`destroy`, `mint_cap`, `set_allowance`, `revoke`, `revoke_all`, `withdraw`, `withdraw_all`) when the `OwnerCap`'s `vault_id` does not match the vault.
+</APIItem>
+
+<APIItem functionSignature="EWrongVault (code 1)" id="spend_vault-EWrongVault" kind="error">
+Raised as the first check in `spend` and `renounce` when the `SpenderCap`'s `vault_id` does not match the vault.
+</APIItem>
+
+<APIItem functionSignature="ENoAllowance (code 2)" id="spend_vault-ENoAllowance" kind="error">
+Raised only by `spend` when no `(cap, T)` ledger entry exists (never granted, revoked, renounced, or a different coin type). `set_allowance` is an upsert and never raises it. Distinct from suspended-at-zero, which raises `EAllowanceExceeded`; disambiguate with `contains<T>`.
+</APIItem>
+
+<APIItem functionSignature="EAllowanceExpired (code 3)" id="spend_vault-EAllowanceExpired" kind="error">
+Raised by `spend` when the entry has a finite expiry and `clock.timestamp_ms() >= expires_at_ms` (a closed boundary: a spend in the exact expiry millisecond fails). The `u64::MAX` no-expiry sentinel short-circuits by equality before any clock comparison.
+</APIItem>
+
+<APIItem functionSignature="EAllowanceExceeded (code 4)" id="spend_vault-EAllowanceExceeded" kind="error">
+Raised by `spend` when `remaining` is finite and `amount > remaining`, including suspended entries (`remaining == 0`) for any positive amount. Compare-before-decrement; there is no underflow path.
+</APIItem>
+
+<APIItem functionSignature="EZeroAmount (code 5)" id="spend_vault-EZeroAmount" kind="error">
+Raised by `deposit`/`deposit_balance` on a zero-value deposit, by `spend` when `amount == 0` (checked after expiry, before exceeded), and by `withdraw` when `amount == 0`. Deliberately not raised by `set_allowance` (`0` is the suspension idiom), `withdraw_all` (returns a zero `Balance<T>`), or `squash` (no zero guard).
+</APIItem>
+
+<APIItem functionSignature="EExpiryInPast (code 6)" id="spend_vault-EExpiryInPast" kind="error">
+Raised by `set_allowance` when `new_expires_at_ms` is finite and `<= clock.timestamp_ms()`; a finite expiry must be strictly in the future. Corollary: a fresh future expiry revives an expired entry in place.
+</APIItem>
+
+<APIItem functionSignature="EUnexpectedAllowance (code 7)" id="spend_vault-EUnexpectedAllowance" kind="error">
+Raised by `set_allowance` when `expected` is `Some(e)` and the entry is absent or its raw `remaining != e`. `Some(0)` on an absent entry aborts; absent is not zero.
+</APIItem>
