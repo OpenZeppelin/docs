@@ -2,19 +2,19 @@
 title: Supported Ecosystems
 ---
 
-Each adapter implements the subset of the [13 capability interfaces](/ecosystem-adapters/architecture#capability-tiers) that its blockchain supports. This page summarizes what each production adapter provides.
+Each adapter implements the subset of the [17 capability interfaces](/ecosystem-adapters/architecture#capability-tiers) that its blockchain supports. This page summarizes what each production adapter provides.
 
 | Adapter | Networks | Capabilities | Status |
 | --- | --- | --- | --- |
-| **EVM** | Ethereum, Polygon, Arbitrum, Base, Optimism, ... | 13/13 | Production |
-| **Stellar** | Stellar Public, Stellar Testnet | 13/13 | Production |
-| **Polkadot** | Polkadot Hub, Moonbeam, Moonriver | 13/13 (EVM path) | Production |
-| **Midnight** | Midnight Testnet | 11/13 | Production |
-| **Solana** | Devnet, Testnet, Mainnet Beta | 4/13 (Tier 1 only) | Scaffolding |
+| **EVM** | Ethereum, Polygon, Arbitrum, Base, Optimism, ... | 17/17 | Production |
+| **Stellar** | Stellar Public, Stellar Testnet | 13/17 | Production |
+| **Polkadot** | Polkadot Hub, Moonbeam, Moonriver | 13/17 (EVM path) | Production |
+| **Midnight** | Midnight Testnet | 12/17 | Production |
+| **Solana** | Devnet, Testnet, Mainnet Beta | 4/17 (Tier 1 only) | Scaffolding |
 
 ## EVM (`@openzeppelin/adapter-evm`)
 
-The EVM adapter targets Ethereum and all EVM-compatible chains. It implements the full set of 13 capabilities and supports all 5 profiles.
+The EVM adapter targets Ethereum and all EVM-compatible chains. It implements all 17 capabilities and supports all 5 profiles. Standard `createRuntime` profiles expose 14 capabilities (including `nameResolution`); the three RWA/token-standard capabilities (`erc3643`, `erc4626`, `irs`) are available as dedicated sub-path exports for opt-in composition.
 
 **Supported Networks**: Ethereum Mainnet, Sepolia, Polygon, Polygon Amoy, Arbitrum One, Arbitrum Sepolia, Base, Base Sepolia, Optimism, Optimism Sepolia, and more.
 
@@ -22,11 +22,13 @@ The EVM adapter targets Ethereum and all EVM-compatible chains. It implements th
 
 ### Highlights
 
+- **Name Resolution**: Forward and reverse ENS resolution via viem and the Universal Resolver. Network-scoped, with optional mainnet-L1 miss-fallback for testnets.
 - **Contract Loading**: Fetches ABIs from Etherscan and Sourcify with automatic fallback ordering. Detects proxy contracts and resolves implementation ABIs.
 - **Type Mapping**: Maps all Solidity types (`uint256`, `address`, `bytes32`, tuples, dynamic arrays) to UI-friendly form fields.
 - **Execution Strategies**: Pluggable EOA (direct wallet signing via Wagmi/Viem) and OpenZeppelin Relayer strategies.
 - **Wallet Integration**: Built on Wagmi and RainbowKit with React context providers and hooks.
 - **Access Control**: Full role management including `grantRole`, `revokeRole`, `renounceRole`, ownership transfers, and role enumeration.
+- **RWA / Token Standards** (sub-path exports): `erc3643` (T-REX permissioned tokens), `erc4626` (tokenized vaults), and `irs` (ONCHAINID / Identity Registry Storage) for regulated-asset workflows.
 
 ### Configuration Resolution
 
@@ -53,7 +55,7 @@ The EVM adapter resolves RPC URLs and explorer API keys through a layered priori
 
 ## Stellar (`@openzeppelin/adapter-stellar`)
 
-The Stellar adapter provides a complete Soroban implementation with all 13 capabilities.
+The Stellar adapter provides a complete Soroban implementation with 13 of 17 capabilities (all profile capabilities except `nameResolution` and the EVM-only RWA trio).
 
 **Supported Networks**: Stellar Public, Stellar Testnet
 
@@ -138,6 +140,7 @@ The Operator profile is explicitly unsupported. Calling `createRuntime('operator
 | Explorer | ✅ | ✅ | ✅ | ✅ | ✅ |
 | NetworkCatalog | ✅ | ✅ | ✅ | ✅ | ✅ |
 | UiLabels | ✅ | ✅ | ✅ | ✅ | ✅ |
+| NameResolution | ✅ | - | - | - | - |
 | ContractLoading | ✅ | ✅ | ✅ | ✅ | - |
 | Schema | ✅ | ✅ | ✅ | ✅ | - |
 | TypeMapping | ✅ | ✅ | ✅ | ✅ | - |
@@ -147,3 +150,8 @@ The Operator profile is explicitly unsupported. Calling `createRuntime('operator
 | UiKit | ✅ | ✅ | ✅ | ✅ | - |
 | Relayer | ✅ | ✅ | ✅ | - | - |
 | AccessControl | ✅ | ✅ | ✅ | - | - |
+| ERC3643 | ✅† | - | - | - | - |
+| ERC4626 | ✅† | - | - | - | - |
+| IRS | ✅† | - | - | - | - |
+
+† EVM-only. Available via `@openzeppelin/adapter-evm/erc3643`, `/erc4626`, and `/irs` sub-path exports; not assembled into standard profile runtimes.
