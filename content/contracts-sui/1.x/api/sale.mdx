@@ -10,7 +10,7 @@ The package centers on `prefunded_sale` - the fixed-price sale object and its li
 
 <APIGithubLinkHeader
   moduleName="prefunded_sale"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.5.0/contracts/sale/sources/prefunded_sale.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.5.1/contracts/sale/sources/prefunded_sale.move"
 />
 
 ```move
@@ -35,7 +35,7 @@ Functions
 - [`create_sale(curve_params, hard_cap, soft_cap, opens_at_ms, closes_at_ms, ctx)`](#prefunded_sale-create_sale)
 - [`deposit(sale, inventory)`](#prefunded_sale-deposit)
 - [`set_per_buyer_cap(sale, per_buyer_cap, ctx)`](#prefunded_sale-set_per_buyer_cap)
-- [`set_vesting_schedule_params(sale, params)`](#prefunded_sale-set_vesting_schedule_params)
+- [`set_vesting_schedule(sale, schedule)`](#prefunded_sale-set_vesting_schedule)
 - [`pair_refund_vault(sale, vault, vault_cap)`](#prefunded_sale-pair_refund_vault)
 - [`enable_allowlist(sale, ctx)`](#prefunded_sale-enable_allowlist)
 - [`mint_activation_ticket(sale, w, required_inventory)`](#prefunded_sale-mint_activation_ticket)
@@ -51,8 +51,9 @@ Functions
 - [`withdraw_proceeds(sale, cap)`](#prefunded_sale-withdraw_proceeds)
 - [`withdraw_unsold_inventory(sale, cap)`](#prefunded_sale-withdraw_unsold_inventory)
 - [`refund(sale, vault, receipt, ctx)`](#prefunded_sale-refund)
-- [`mint_quote(sale, w, payment, rate)`](#prefunded_sale-mint_quote)
-- [`phase(sale)`](#prefunded_sale-phase)
+- [`refund_all(sale, vault, receipts, ctx)`](#prefunded_sale-refund_all)
+- [`mint_quote(sale, w, payment, allocation)`](#prefunded_sale-mint_quote)
+- [`mint_quote_unversioned(sale, w, payment, allocation)`](#prefunded_sale-mint_quote_unversioned)
 - [`raised(sale)`](#prefunded_sale-raised)
 - [`curve_params(sale)`](#prefunded_sale-curve_params)
 - [`hard_cap(sale)`](#prefunded_sale-hard_cap)
@@ -60,7 +61,7 @@ Functions
 - [`opens_at_ms(sale)`](#prefunded_sale-opens_at_ms)
 - [`closes_at_ms(sale)`](#prefunded_sale-closes_at_ms)
 - [`requires_allowlist(sale)`](#prefunded_sale-requires_allowlist)
-- [`vesting_schedule_params(sale)`](#prefunded_sale-vesting_schedule_params)
+- [`vesting_schedule(sale)`](#prefunded_sale-vesting_schedule)
 - [`inventory_total(sale)`](#prefunded_sale-inventory_total)
 - [`total_allocated(sale)`](#prefunded_sale-total_allocated)
 - [`inventory_remaining(sale)`](#prefunded_sale-inventory_remaining)
@@ -68,17 +69,23 @@ Functions
 - [`is_open(sale, clock)`](#prefunded_sale-is_open)
 - [`has_reached_soft_cap(sale)`](#prefunded_sale-has_reached_soft_cap)
 - [`has_reached_hard_cap(sale)`](#prefunded_sale-has_reached_hard_cap)
+- [`is_init(sale)`](#prefunded_sale-is_init)
+- [`is_active(sale)`](#prefunded_sale-is_active)
+- [`is_finalized(sale)`](#prefunded_sale-is_finalized)
+- [`is_cancelled(sale)`](#prefunded_sale-is_cancelled)
+- [`refund_vault_id(sale)`](#prefunded_sale-refund_vault_id)
 - [`cap_sale_id(c)`](#prefunded_sale-cap_sale_id)
 - [`sale_id(q)`](#prefunded_sale-sale_id)
 - [`payment(q)`](#prefunded_sale-payment)
 - [`allocation(q)`](#prefunded_sale-allocation)
+- [`max_sale_duration_ms()`](#prefunded_sale-max_sale_duration_ms)
 
 Events
 
 - [`SaleCreated`](#prefunded_sale-SaleCreated)
 - [`InventoryDeposited`](#prefunded_sale-InventoryDeposited)
 - [`PerBuyerCapSet`](#prefunded_sale-PerBuyerCapSet)
-- [`VestingScheduleParamsSet`](#prefunded_sale-VestingScheduleParamsSet)
+- [`VestingScheduleSet`](#prefunded_sale-VestingScheduleSet)
 - [`RefundVaultPaired`](#prefunded_sale-RefundVaultPaired)
 - [`AllowlistEnabled`](#prefunded_sale-AllowlistEnabled)
 - [`SaleActivated`](#prefunded_sale-SaleActivated)
@@ -105,12 +112,10 @@ Errors
 - [`ERaisedOverflow`](#prefunded_sale-ERaisedOverflow)
 - [`EHardCapExceeded`](#prefunded_sale-EHardCapExceeded)
 - [`EInsufficientInventoryAtActivate`](#prefunded_sale-EInsufficientInventoryAtActivate)
-- [`EAllocationOverflow`](#prefunded_sale-EAllocationOverflow)
 - [`EInsufficientInventory`](#prefunded_sale-EInsufficientInventory)
 - [`EPerBuyerCapExceeded`](#prefunded_sale-EPerBuyerCapExceeded)
 - [`EPerEntryCapExceeded`](#prefunded_sale-EPerEntryCapExceeded)
 - [`ESoftCapNotMet`](#prefunded_sale-ESoftCapNotMet)
-- [`ESoftCapMet`](#prefunded_sale-ESoftCapMet)
 - [`ESaleAlreadyComplete`](#prefunded_sale-ESaleAlreadyComplete)
 - [`EAllowlistRequired`](#prefunded_sale-EAllowlistRequired)
 - [`EAllowlistNotRequired`](#prefunded_sale-EAllowlistNotRequired)
@@ -133,6 +138,13 @@ Errors
 - [`ENotFinalized`](#prefunded_sale-ENotFinalized)
 - [`ENotCancelled`](#prefunded_sale-ENotCancelled)
 - [`ENotTerminal`](#prefunded_sale-ENotTerminal)
+- [`ESaleDurationTooLong`](#prefunded_sale-ESaleDurationTooLong)
+- [`EZeroAllocation`](#prefunded_sale-EZeroAllocation)
+- [`EStaleQuote`](#prefunded_sale-EStaleQuote)
+- [`ESoftCapNotSet`](#prefunded_sale-ESoftCapNotSet)
+- [`ESaleNotClosed`](#prefunded_sale-ESaleNotClosed)
+- [`ESoftCapReached`](#prefunded_sale-ESoftCapReached)
+- [`EWrongVaultCap`](#prefunded_sale-EWrongVaultCap)
 
 #### Types [!toc] [#prefunded_sale-Types]
 
@@ -151,7 +163,7 @@ The sale object. Holds the inventory, collected proceeds, caps, window, phase, t
   id="prefunded_sale-Phase"
   kind="struct"
 >
-The lifecycle phase: `Init` (owned, under setup), `Active` (shared, accepting purchases within the window), `Finalized` (successful close), or `Cancelled` (failed close). `Finalized` and `Cancelled` are terminal. Read it with `phase`.
+The lifecycle phase: `Init` (owned, under setup), `Active` (shared, accepting purchases within the window), `Finalized` (successful close), or `Cancelled` (failed close). `Finalized` and `Cancelled` are terminal. Query it with the `is_init` / `is_active` / `is_finalized` / `is_cancelled` predicates.
 </APIItem>
 
 <APIItem
@@ -175,7 +187,7 @@ Witness-gated, single-use carrier for `share_and_activate`. Has no abilities, so
   id="prefunded_sale-Quote"
   kind="struct"
 >
-Hot-potato carrying a curve-priced quote for a single purchase: the buyer's payment `Balance` welded to the curve-computed `allocation`, pinned to a `sale_id`. Has no abilities, so it can only be minted by the sale's curve module (via `mint_quote`) and consumed by `purchase`, in the same PTB. Cannot be stored, copied, replayed, or transferred.
+Hot-potato carrying a curve-priced quote for a single purchase: the buyer's payment `Balance` welded to the curve-computed `allocation`, pinned to a `sale_id`. Has no abilities, so it can only be minted by the sale's curve module (via `mint_quote` or `mint_quote_unversioned`) and consumed by `purchase`, in the same PTB. Cannot be stored, copied, replayed, or transferred. A quote minted via `mint_quote` also carries the sale's state version at mint time, and `purchase` rejects it (`EStaleQuote`) if an intervening same-PTB purchase has advanced that version.
 </APIItem>
 
 <APIItem
@@ -201,6 +213,8 @@ Aborts with `EInvalidCapsOrdering` if `soft_cap > hard_cap`.
 
 Aborts with `EInvalidTimeRange` if `opens_at_ms >= closes_at_ms`.
 
+Aborts with `ESaleDurationTooLong` if `closes_at_ms - opens_at_ms` exceeds `max_sale_duration_ms()`.
+
 Emits `SaleCreated`.
 </APIItem>
 
@@ -209,11 +223,11 @@ Emits `SaleCreated`.
   id="prefunded_sale-deposit"
   kind="public"
 >
-Adds sale tokens to inventory. May be called multiple times during `Init`. Authority is implicit: the sale is owned.
+Adds sale tokens to inventory. May be called multiple times during `Init`. A zero-value deposit is a no-op. Authority is implicit: the sale is owned.
 
 Aborts with `ENotInit` if the sale is not in `Init` phase.
 
-Emits `InventoryDeposited`.
+Emits `InventoryDeposited` (only when the amount is non-zero).
 </APIItem>
 
 <APIItem
@@ -233,17 +247,17 @@ Emits `PerBuyerCapSet`.
 </APIItem>
 
 <APIItem
-  functionSignature="set_vesting_schedule_params(sale: &mut PrefundedSale<..>, params: VestingScheduleParams)"
-  id="prefunded_sale-set_vesting_schedule_params"
+  functionSignature="set_vesting_schedule(sale: &mut PrefundedSale<..>, schedule: VestingSchedule<VestingWitness, VestingScheduleParams>)"
+  id="prefunded_sale-set_vesting_schedule"
   kind="public"
 >
-Attaches an issuer-defined vesting schedule. Once set, plain `claim` aborts and redemption must go through `claim_into_vesting`. The schedule is unbypassable - the wallet is built under the sale's pinned `VestingWitness`. One-shot, `Init`-only.
+Attaches an issuer-defined vesting schedule, supplied as a `VestingSchedule<VestingWitness, VestingScheduleParams>` bundle minted by the curve module that owns `VestingWitness` (for the built-in linear curve, `vesting_wallet_linear::vesting_schedule`). Once set, plain `claim` aborts and redemption must go through `claim_into_vesting`. The schedule is unbypassable - the wallet is built under the sale's pinned `VestingWitness`; because only that module can construct the bundle, the witness and params pinned in the sale's type are guaranteed to form a coherent pair. One-shot, `Init`-only.
 
 Aborts with `ENotInit` if the sale is not in `Init` phase.
 
 Aborts with `EVestingScheduleAlreadySet` if a schedule is already configured.
 
-Emits `VestingScheduleParamsSet`.
+Emits `VestingScheduleSet`.
 </APIItem>
 
 <APIItem
@@ -257,7 +271,7 @@ Aborts with `ENotInit` if the sale is not in `Init` phase.
 
 Aborts with `EVaultAlreadyPaired` if a vault has already been paired.
 
-Aborts with `EWrongVault` if `vault_cap` does not control `vault`.
+Aborts with `EWrongVaultCap` if `vault_cap` does not control `vault`.
 
 Aborts with `EVaultNotActive` if `vault` is not in the `Active` state.
 
@@ -286,6 +300,8 @@ Emits `AllowlistEnabled`.
   kind="public"
 >
 Witness-gated constructor for the `ActivationTicket` that `share_and_activate` consumes. Requires a value of type `Curve`, whose constructor is private to the declaring curve module, so only that module can mint a ticket for its sale. Curve modules wrap it (e.g. `fixed_rate_curve::activation_ticket`).
+
+Aborts with `ENotInit` if the sale is not in `Init` phase.
 </APIItem>
 
 <APIItem
@@ -320,6 +336,8 @@ Buys sale tokens, delivering a `Receipt<SaleCoin>` to `ctx.sender()` and adding 
 Aborts with `ENotActive` if the sale is not in `Active` phase.
 
 Aborts with `EQuoteSaleMismatch` if `quote` was minted for a different sale.
+
+Aborts with `EStaleQuote` if the quote is freshness-enforced and an intervening same-PTB `purchase` advanced the sale's state after the quote was minted.
 
 Aborts with `ESaleWindowClosed` if `now` is outside `[opens_at_ms, closes_at_ms]`.
 
@@ -367,9 +385,11 @@ Closes the sale as a soft-cap miss. **Permissionless.** Drains proceeds into the
 
 Aborts with `ENotActive` if the sale is not in `Active` phase.
 
-Aborts with `ESaleWindowStillOpen` if the window has not yet closed.
+Aborts with `ESaleNotClosed` if the window has not yet closed.
 
-Aborts with `ESoftCapMet` if no soft cap is configured or `raised >= soft_cap`.
+Aborts with `ESoftCapNotSet` if no soft cap is configured.
+
+Aborts with `ESoftCapReached` if the soft cap was reached (`raised >= soft_cap`).
 
 Aborts with `EWrongVault` if `vault` is not the one paired with this sale.
 
@@ -391,7 +411,7 @@ Aborts with `EEmergencyCancelAfterClose` if `now > closes_at_ms`.
 
 Aborts with `ESaleAlreadyComplete` if `raised >= hard_cap`.
 
-Aborts with `ESoftCapMet` if a soft cap is configured and `raised >= soft_cap`.
+Aborts with `ESoftCapReached` if a soft cap is configured and `raised >= soft_cap`.
 
 Aborts with `EWrongVault` if `vault` is not the one paired with this sale.
 
@@ -517,19 +537,45 @@ Emits `Refunded`.
 </APIItem>
 
 <APIItem
-  functionSignature="mint_quote<..>(sale: &PrefundedSale<..>, w: Curve, payment: Balance<PaymentCoin>, rate: u64) -> Quote<PaymentCoin>"
+  functionSignature="refund_all(sale: &mut PrefundedSale<..>, vault: &mut RefundVault<PaymentCoin>, receipts: vector<Receipt<SaleCoin>>, ctx: &mut TxContext) -> Balance<PaymentCoin>"
+  id="prefunded_sale-refund_all"
+  kind="public"
+>
+Batches `refund` over several receipts, summing their payments into one balance. Aborts the whole call (releasing nothing) if any receipt is invalid. **Permissionless** but buyer-bound.
+
+Aborts with `ENotCancelled` if the sale is not in `Cancelled` phase.
+
+Aborts with `EReceiptSaleMismatch` if any receipt was issued by a different sale.
+
+Aborts with `EBuyerOnly` if `ctx.sender()` is not the buyer of any receipt. An empty `receipts` vector never triggers this.
+
+Aborts with `EWrongVault` if `vault` is not the one paired with this sale.
+
+Emits `Refunded` per receipt.
+</APIItem>
+
+<APIItem
+  functionSignature="mint_quote<..>(sale: &PrefundedSale<..>, w: Curve, payment: Balance<PaymentCoin>, allocation: u64) -> Quote<PaymentCoin>"
   id="prefunded_sale-mint_quote"
   kind="public"
 >
-Witness-gated quote constructor. The curve module calls this from its own `quote(..)` after running its pricing math; the `allocation` is `payment.value() * rate`. Requires a `Curve` value, so a caller cannot mint a quote without the declaring curve module.
+Witness-gated, **freshness-enforced** quote constructor. The curve module calls this from its own `quote(..)`, passing the fully-computed `allocation`; the sale applies it verbatim and performs no pricing arithmetic of its own. Requires a `Curve` value, so a caller cannot mint a quote without the declaring curve module. The returned quote stamps the sale's current state version; `purchase` rejects it with `EStaleQuote` if an intervening same-PTB purchase has since advanced that version. A curve pricing from mutable sale state uses this; a rate-immune curve uses `mint_quote_unversioned`.
 
 Aborts with `EZeroPayment` if `payment` has zero value.
 
-Aborts with `EAllocationOverflow` if `payment.value() * rate` would exceed `u64::MAX`.
+Aborts with `EZeroAllocation` if `allocation` is zero.
 </APIItem>
 
-<APIItem functionSignature="phase(sale: &PrefundedSale<..>) -> Phase" id="prefunded_sale-phase" kind="public">
-The sale's current lifecycle phase.
+<APIItem
+  functionSignature="mint_quote_unversioned<..>(sale: &PrefundedSale<..>, w: Curve, payment: Balance<PaymentCoin>, allocation: u64) -> Quote<PaymentCoin>"
+  id="prefunded_sale-mint_quote_unversioned"
+  kind="public"
+>
+Witness-gated quote constructor that **opts out of freshness**. Identical to `mint_quote` except the returned quote carries no state-version stamp, so `purchase` never rejects it as stale - letting several quotes be minted and purchased in one PTB. Use only for a curve whose price does not depend on mutable sale state (e.g. `fixed_rate_curve`); a state-dependent curve must use `mint_quote`.
+
+Aborts with `EZeroPayment` if `payment` has zero value.
+
+Aborts with `EZeroAllocation` if `allocation` is zero.
 </APIItem>
 
 <APIItem functionSignature="raised(sale: &PrefundedSale<..>) -> u64" id="prefunded_sale-raised" kind="public">
@@ -560,8 +606,8 @@ The end of the purchase window (ms).
 Whether purchases require an `AllowEntry` (allowlist mode).
 </APIItem>
 
-<APIItem functionSignature="vesting_schedule_params(sale: &PrefundedSale<..>) -> Option<VestingScheduleParams>" id="prefunded_sale-vesting_schedule_params" kind="public">
-`Some(params)` if a vesting schedule was attached during `Init`, otherwise `None`.
+<APIItem functionSignature="vesting_schedule(sale: &PrefundedSale<..>) -> Option<VestingSchedule<VestingWitness, VestingScheduleParams>>" id="prefunded_sale-vesting_schedule" kind="public">
+`Some(schedule)` if a vesting schedule was attached during `Init`, otherwise `None`. The bundle is the one supplied to `set_vesting_schedule`.
 </APIItem>
 
 <APIItem functionSignature="inventory_total(sale: &PrefundedSale<..>) -> u64" id="prefunded_sale-inventory_total" kind="public">
@@ -592,6 +638,26 @@ Whether `raised >= soft_cap`. Always `true` when no soft cap is configured.
 Whether `raised >= hard_cap` (sold out and able to finalize early).
 </APIItem>
 
+<APIItem functionSignature="is_init(sale: &PrefundedSale<..>) -> bool" id="prefunded_sale-is_init" kind="public">
+Whether the sale is in the `Init` phase (owned, under setup).
+</APIItem>
+
+<APIItem functionSignature="is_active(sale: &PrefundedSale<..>) -> bool" id="prefunded_sale-is_active" kind="public">
+Whether the sale is in the `Active` phase (shared and not yet terminal). Distinct from `is_open`, which additionally requires the current time to be within the purchase window.
+</APIItem>
+
+<APIItem functionSignature="is_finalized(sale: &PrefundedSale<..>) -> bool" id="prefunded_sale-is_finalized" kind="public">
+Whether the sale closed successfully (terminal `Finalized` phase).
+</APIItem>
+
+<APIItem functionSignature="is_cancelled(sale: &PrefundedSale<..>) -> bool" id="prefunded_sale-is_cancelled" kind="public">
+Whether the sale was cancelled (terminal `Cancelled` phase).
+</APIItem>
+
+<APIItem functionSignature="refund_vault_id(sale: &PrefundedSale<..>) -> Option<ID>" id="prefunded_sale-refund_vault_id" kind="public">
+`Some(id)` of the paired refund vault once one has been paired via `pair_refund_vault` (always the case from activation onward), otherwise `None`.
+</APIItem>
+
 <APIItem functionSignature="cap_sale_id(c: &SaleAdminCap<SaleCoin, PaymentCoin>) -> ID" id="prefunded_sale-cap_sale_id" kind="public">
 The id of the sale this admin cap controls.
 </APIItem>
@@ -608,11 +674,15 @@ The payment balance carried by this quote.
 The curve-computed allocation this quote will deliver on purchase.
 </APIItem>
 
+<APIItem functionSignature="max_sale_duration_ms() -> u64" id="prefunded_sale-max_sale_duration_ms" kind="public">
+The maximum permitted sale duration in milliseconds - the `closes_at_ms - opens_at_ms` bound `create_sale` enforces (aborting with `ESaleDurationTooLong`).
+</APIItem>
+
 #### Events [!toc] [#prefunded_sale-Events]
 
 Every event is stamped with `sale_id`. Payloads are phantom-typed on `SaleCoin` and `PaymentCoin` so the event type identifies the coins involved.
 
-<APIItem functionSignature="SaleCreated(sale_id, hard_cap, soft_cap, opens_at_ms, closes_at_ms, curve_params)" id="prefunded_sale-SaleCreated" kind="event">
+<APIItem functionSignature="SaleCreated(sale_id, admin_cap_id, hard_cap, soft_cap, opens_at_ms, closes_at_ms, curve_params)" id="prefunded_sale-SaleCreated" kind="event">
 Emitted by `create_sale`.
 </APIItem>
 
@@ -624,8 +694,8 @@ Emitted by `deposit` when sale tokens are added to inventory.
 Emitted by `set_per_buyer_cap`.
 </APIItem>
 
-<APIItem functionSignature="VestingScheduleParamsSet(sale_id, params)" id="prefunded_sale-VestingScheduleParamsSet" kind="event">
-Emitted by `set_vesting_schedule_params`.
+<APIItem functionSignature="VestingScheduleSet(sale_id, params)" id="prefunded_sale-VestingScheduleSet" kind="event">
+Emitted by `set_vesting_schedule`.
 </APIItem>
 
 <APIItem functionSignature="RefundVaultPaired(sale_id, vault_id)" id="prefunded_sale-RefundVaultPaired" kind="event">
@@ -636,11 +706,11 @@ Emitted by `pair_refund_vault`.
 Emitted by `enable_allowlist`.
 </APIItem>
 
-<APIItem functionSignature="SaleActivated(sale_id, activated_at_ms)" id="prefunded_sale-SaleActivated" kind="event">
+<APIItem functionSignature="SaleActivated(sale_id, required_inventory, activated_at_ms)" id="prefunded_sale-SaleActivated" kind="event">
 Emitted by `share_and_activate` when the sale goes live.
 </APIItem>
 
-<APIItem functionSignature="Purchased(sale_id, buyer, receipt_id, paid, allocation, raised_after, purchased_at_ms)" id="prefunded_sale-Purchased" kind="event">
+<APIItem functionSignature="Purchased(sale_id, buyer, receipt_id, paid, allocation, raised_after, total_allocated_after, purchased_at_ms)" id="prefunded_sale-Purchased" kind="event">
 Emitted by `purchase` for each successful buy.
 </APIItem>
 
@@ -652,11 +722,11 @@ Emitted by `finalize` when the sale closes successfully.
 Emitted by `cancel_after_close` and `cancel_emergency`. `reason` is a `CancelReason`.
 </APIItem>
 
-<APIItem functionSignature="Claimed(sale_id, buyer, receipt_id, amount)" id="prefunded_sale-Claimed" kind="event">
+<APIItem functionSignature="Claimed(sale_id, buyer, receipt_id, amount, total_allocated_after)" id="prefunded_sale-Claimed" kind="event">
 Emitted for each receipt redeemed through `claim` / `claim_all` and the vesting variants.
 </APIItem>
 
-<APIItem functionSignature="Refunded(sale_id, buyer, receipt_id, amount)" id="prefunded_sale-Refunded" kind="event">
+<APIItem functionSignature="Refunded(sale_id, buyer, receipt_id, amount, allocation, total_allocated_after)" id="prefunded_sale-Refunded" kind="event">
 Emitted by `refund` when a buyer recovers their payment.
 </APIItem>
 
@@ -722,10 +792,6 @@ A purchase would push `raised` past `hard_cap`. The cap is all-or-nothing.
 At activation, `inventory` did not cover the backing the curve's `ActivationTicket` requires.
 </APIItem>
 
-<APIItem functionSignature="EAllocationOverflow (code 13)" id="prefunded_sale-EAllocationOverflow" kind="error">
-A quote's `allocation` (`paid * rate`) would exceed `u64::MAX`.
-</APIItem>
-
 <APIItem functionSignature="EInsufficientInventory (code 14)" id="prefunded_sale-EInsufficientInventory" kind="error">
 A purchase's `allocation` exceeded unallocated inventory. Only reachable via a dishonest curve.
 </APIItem>
@@ -740,10 +806,6 @@ A purchase's payment exceeded the consumed `AllowEntry`'s `max_amount`.
 
 <APIItem functionSignature="ESoftCapNotMet (code 17)" id="prefunded_sale-ESoftCapNotMet" kind="error">
 `finalize` was called with `raised < soft_cap`.
-</APIItem>
-
-<APIItem functionSignature="ESoftCapMet (code 18)" id="prefunded_sale-ESoftCapMet" kind="error">
-A cancel was attempted on a sale that has met its goal, or has no soft cap set.
 </APIItem>
 
 <APIItem functionSignature="ESaleAlreadyComplete (code 19)" id="prefunded_sale-ESaleAlreadyComplete" kind="error">
@@ -803,7 +865,7 @@ An activation ticket passed to `share_and_activate` was minted for a different s
 </APIItem>
 
 <APIItem functionSignature="EVestingScheduleAlreadySet (code 33)" id="prefunded_sale-EVestingScheduleAlreadySet" kind="error">
-`set_vesting_schedule_params` was called a second time on the same sale.
+`set_vesting_schedule` was called a second time on the same sale.
 </APIItem>
 
 <APIItem functionSignature="EClaimRequiresVesting (code 34)" id="prefunded_sale-EClaimRequiresVesting" kind="error">
@@ -834,11 +896,39 @@ An operation required the `Cancelled` phase (e.g. a refund before cancel).
 An operation required a terminal phase (`Finalized` or `Cancelled`).
 </APIItem>
 
+<APIItem functionSignature="ESaleDurationTooLong (code 41)" id="prefunded_sale-ESaleDurationTooLong" kind="error">
+`create_sale` was given a window longer than `max_sale_duration_ms()`.
+</APIItem>
+
+<APIItem functionSignature="EZeroAllocation (code 42)" id="prefunded_sale-EZeroAllocation" kind="error">
+A quote was minted with a zero `allocation`; a paying buyer must receive tokens.
+</APIItem>
+
+<APIItem functionSignature="EStaleQuote (code 43)" id="prefunded_sale-EStaleQuote" kind="error">
+A freshness-enforced quote was consumed by `purchase` after an intervening same-PTB purchase advanced the sale's state since the quote was minted.
+</APIItem>
+
+<APIItem functionSignature="ESoftCapNotSet (code 44)" id="prefunded_sale-ESoftCapNotSet" kind="error">
+`cancel_after_close` was called on a sale with no soft cap configured; such a sale can only `finalize`.
+</APIItem>
+
+<APIItem functionSignature="ESaleNotClosed (code 45)" id="prefunded_sale-ESaleNotClosed" kind="error">
+`cancel_after_close` was called while the purchase window was still open.
+</APIItem>
+
+<APIItem functionSignature="ESoftCapReached (code 46)" id="prefunded_sale-ESoftCapReached" kind="error">
+A cancel was attempted on a sale that has reached its soft cap; a goal-reaching sale can only `finalize`.
+</APIItem>
+
+<APIItem functionSignature="EWrongVaultCap (code 47)" id="prefunded_sale-EWrongVaultCap" kind="error">
+The vault cap passed to `pair_refund_vault` does not control the provided vault.
+</APIItem>
+
 ### `fixed_rate_curve` [toc] [#fixed_rate_curve]
 
 <APIGithubLinkHeader
   moduleName="fixed_rate_curve"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.5.0/contracts/sale/sources/fixed_rate_curve.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.5.1/contracts/sale/sources/fixed_rate_curve.move"
 />
 
 ```move
@@ -863,6 +953,7 @@ Errors
 
 - [`ERateZero`](#fixed_rate_curve-ERateZero)
 - [`ERequiredInventoryOverflow`](#fixed_rate_curve-ERequiredInventoryOverflow)
+- [`EAllocationOverflow`](#fixed_rate_curve-EAllocationOverflow)
 
 #### Types [!toc] [#fixed_rate_curve-Types]
 
@@ -883,17 +974,19 @@ Aborts with `ERateZero` if `rate == 0`.
 </APIItem>
 
 <APIItem functionSignature="activation_ticket<..>(sale: &PrefundedSale<FixedRateCurve, Params, ..>) -> ActivationTicket<FixedRateCurve>" id="fixed_rate_curve-activation_ticket" kind="public">
-Mints the `ActivationTicket` that `share_and_activate` consumes, committing the inventory backing this curve requires: `hard_cap * rate`.
+Mints the `ActivationTicket` that `share_and_activate` consumes, committing the inventory backing this curve requires: `hard_cap * rate`. `Init`-only.
 
 Aborts with `ERequiredInventoryOverflow` if `hard_cap * rate` would exceed `u64::MAX`.
+
+Aborts with `prefunded_sale::ENotInit` if the sale is not in `Init` phase.
 </APIItem>
 
 <APIItem functionSignature="quote<..>(sale: &PrefundedSale<FixedRateCurve, Params, ..>, balance: Balance<PaymentCoin>) -> Quote<PaymentCoin>" id="fixed_rate_curve-quote" kind="public">
-Mints a `Quote` for a buyer's payment `balance`, allocating `balance.value() * rate`. The `Quote` carries the balance through to `purchase`, welding pricing and funds together for one PTB.
+Mints a `Quote` for a buyer's payment `balance`, allocating `balance.value() * rate`. Routes through `prefunded_sale::mint_quote_unversioned` - this curve's price is immune to sale-state changes, so several quotes can be minted and purchased in one PTB. The `Quote` carries the balance through to `purchase`, welding pricing and funds together.
+
+Aborts with `EAllocationOverflow` if `balance.value() * rate` would exceed `u64::MAX`.
 
 Aborts with `prefunded_sale::EZeroPayment` if `balance` has zero value.
-
-Aborts with `prefunded_sale::EAllocationOverflow` if `balance.value() * rate` would exceed `u64::MAX`.
 </APIItem>
 
 <APIItem functionSignature="rate<..>(sale: &PrefundedSale<FixedRateCurve, Params, ..>) -> u64" id="fixed_rate_curve-rate" kind="public">
@@ -910,11 +1003,15 @@ The configured fixed rate: sale tokens allocated per 1 payment-coin unit.
 `hard_cap * rate` would exceed `u64::MAX`, so the required inventory backing cannot be represented.
 </APIItem>
 
+<APIItem functionSignature="EAllocationOverflow (code 2)" id="fixed_rate_curve-EAllocationOverflow" kind="error">
+`balance.value() * rate` would exceed `u64::MAX` in `quote`, so the allocation this curve prices cannot be represented.
+</APIItem>
+
 ### `refund_vault` [toc] [#refund_vault]
 
 <APIGithubLinkHeader
   moduleName="refund_vault"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.5.0/contracts/sale/sources/refund_vault.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.5.1/contracts/sale/sources/refund_vault.move"
 />
 
 ```move
@@ -948,9 +1045,9 @@ Functions
 Events
 
 - [`RefundVaultCreated`](#refund_vault-RefundVaultCreated)
-- [`VaultDeposit`](#refund_vault-VaultDeposit)
+- [`VaultDeposited`](#refund_vault-VaultDeposited)
 - [`VaultStateChanged`](#refund_vault-VaultStateChanged)
-- [`VaultRelease`](#refund_vault-VaultRelease)
+- [`VaultReleased`](#refund_vault-VaultReleased)
 
 Errors
 
@@ -959,6 +1056,7 @@ Errors
 - [`ENotClosedState`](#refund_vault-ENotClosedState)
 - [`EWrongVaultCap`](#refund_vault-EWrongVaultCap)
 - [`EInsufficientLocked`](#refund_vault-EInsufficientLocked)
+- [`EZeroRelease`](#refund_vault-EZeroRelease)
 
 #### Types [!toc] [#refund_vault-Types]
 
@@ -993,7 +1091,7 @@ Aborts with `EWrongVaultCap` if `cap` does not control `vault`.
 
 Aborts with `ENotActiveState` if `vault` is not `Active`.
 
-Emits `VaultDeposit` (only when the amount is non-zero).
+Emits `VaultDeposited` (only when the amount is non-zero).
 </APIItem>
 
 <APIItem functionSignature="flip_to_refunding<P>(vault: &mut RefundVault<P>, cap: &RefundVaultCap<P>)" id="refund_vault-flip_to_refunding" kind="public">
@@ -1017,15 +1115,17 @@ Emits `VaultStateChanged`.
 </APIItem>
 
 <APIItem functionSignature="release_balance<P>(vault: &mut RefundVault<P>, cap: &RefundVaultCap<P>, amount: u64) -> Balance<P>" id="refund_vault-release_balance" kind="public">
-Releases a specific `amount` from the locked balance. Vault must be `Refunding`.
+Releases a specific `amount` from the locked balance. Vault must be `Refunding`, and `amount` must be non-zero.
 
 Aborts with `EWrongVaultCap` if `cap` does not control `vault`.
 
 Aborts with `ENotRefundingState` if `vault` is not `Refunding`.
 
+Aborts with `EZeroRelease` if `amount` is zero.
+
 Aborts with `EInsufficientLocked` if `amount` exceeds the locked balance.
 
-Emits `VaultRelease`.
+Emits `VaultReleased`.
 </APIItem>
 
 <APIItem functionSignature="withdraw_all<P>(vault: &mut RefundVault<P>, cap: &RefundVaultCap<P>) -> Balance<P>" id="refund_vault-withdraw_all" kind="public">
@@ -1035,7 +1135,7 @@ Aborts with `EWrongVaultCap` if `cap` does not control `vault`.
 
 Aborts with `ENotClosedState` if `vault` is not `Closed`.
 
-Emits `VaultRelease`.
+Emits `VaultReleased` (only when the amount is non-zero).
 </APIItem>
 
 <APIItem functionSignature="state<P>(vault: &RefundVault<P>) -> VaultState" id="refund_vault-state" kind="public">
@@ -1066,11 +1166,11 @@ True if the vault is `Closed`.
 
 Every event is stamped with `vault_id`.
 
-<APIItem functionSignature="RefundVaultCreated(vault_id)" id="refund_vault-RefundVaultCreated" kind="event">
-Emitted by `new`.
+<APIItem functionSignature="RefundVaultCreated(vault_id, cap_id)" id="refund_vault-RefundVaultCreated" kind="event">
+Emitted by `new`. Carries the `cap_id` of the controller cap minted alongside the vault.
 </APIItem>
 
-<APIItem functionSignature="VaultDeposit(vault_id, amount, locked_after)" id="refund_vault-VaultDeposit" kind="event">
+<APIItem functionSignature="VaultDeposited(vault_id, amount, locked_after)" id="refund_vault-VaultDeposited" kind="event">
 Emitted by `deposit` when funds are added.
 </APIItem>
 
@@ -1078,7 +1178,7 @@ Emitted by `deposit` when funds are added.
 Emitted by `flip_to_refunding` and `flip_to_closed`.
 </APIItem>
 
-<APIItem functionSignature="VaultRelease(vault_id, amount, locked_after)" id="refund_vault-VaultRelease" kind="event">
+<APIItem functionSignature="VaultReleased(vault_id, amount, locked_after)" id="refund_vault-VaultReleased" kind="event">
 Emitted by `release_balance` and `withdraw_all` when funds leave the vault.
 </APIItem>
 
@@ -1104,11 +1204,15 @@ The supplied cap does not control this vault.
 A release requested more than the vault's locked balance.
 </APIItem>
 
+<APIItem functionSignature="EZeroRelease (code 5)" id="refund_vault-EZeroRelease" kind="error">
+`release_balance` was called with a zero `amount`.
+</APIItem>
+
 ### `allowlist` [toc] [#allowlist]
 
 <APIGithubLinkHeader
   moduleName="allowlist"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.5.0/contracts/sale/sources/allowlist.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.5.1/contracts/sale/sources/allowlist.move"
 />
 
 ```move
@@ -1166,7 +1270,7 @@ The consumed `AllowEntry`'s `buyer` does not match the transaction sender.
 
 <APIGithubLinkHeader
   moduleName="receipt"
-  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.5.0/contracts/sale/sources/receipt.move"
+  link="https://github.com/OpenZeppelin/contracts-sui/blob/v1.5.1/contracts/sale/sources/receipt.move"
 />
 
 ```move

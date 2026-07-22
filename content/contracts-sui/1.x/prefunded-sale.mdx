@@ -40,7 +40,7 @@ Most integrators interact with `prefunded_sale` and `fixed_rate_curve`. The rest
 | [`allowlist`](#compliance-with-an-allowlist) | Typed compliance slot; you wire your own KYC scheme against it. |
 | [`receipt`](#receipts) | The non-transferable, buyer-bound claim ticket. |
 
-The lifecycle `Phase` enum (`Init -> Active`, then terminal `Finalized` or `Cancelled`) lives in `prefunded_sale` itself; read it with `phase()`.
+The lifecycle `Phase` enum (`Init -> Active`, then terminal `Finalized` or `Cancelled`) lives in `prefunded_sale` itself; query it with the `is_init` / `is_active` / `is_finalized` / `is_cancelled` predicates.
 
 ## Lifecycle
 
@@ -50,7 +50,7 @@ A sale moves through four phases. During `Init` it is an **owned** value held by
   create_sale ─┐
   deposit      │
   set_per_buyer_cap          │  Init - the sale is an OWNED value;
-  set_vesting_schedule_params├   holding it by &mut is the authority.
+  set_vesting_schedule       |   holding it by &mut is the authority.
   enable_allowlist           │   All setup happens here.
   pair_refund_vault          │
                              │
@@ -180,7 +180,7 @@ sale.cancel_after_close(&mut vault, clock);
 sale.cancel_emergency(&admin_cap, &mut vault, clock);
 ```
 
-`cancel_emergency` is the issuer's only unilateral power over an active sale, and it is deliberately fenced: it aborts once the hard cap is reached (`ESaleAlreadyComplete`) or once a configured soft cap is met (`ESoftCapMet`), and it aborts after the window closes (`EEmergencyCancelAfterClose`, use `cancel_after_close` instead). A successful raise can only `finalize`.
+`cancel_emergency` is the issuer's only unilateral power over an active sale, and it is deliberately fenced: it aborts once the hard cap is reached (`ESaleAlreadyComplete`) or once a configured soft cap is met (`ESoftCapReached`), and it aborts after the window closes (`EEmergencyCancelAfterClose`, use `cancel_after_close` instead). A successful raise can only `finalize`.
 
 ## Redeeming
 
@@ -278,7 +278,7 @@ Losing the `AllowlistAdmin` bricks an allowlist sale: no entries can be minted, 
 
 ## Optional vesting
 
-By default `claim` hands the buyer their tokens immediately. To lock them instead, attach an issuer-defined schedule during `Init` with `set_vesting_schedule_params`. When set, the plain `claim` path aborts and the only redemption route is `claim_into_vesting`, which returns a funded [`VestingWallet`](/contracts-sui/1.x/vesting-wallet) (from [`openzeppelin_finance`](/contracts-sui/1.x/finance)) plus the wallet's `DestroyCap`.
+By default `claim` hands the buyer their tokens immediately. To lock them instead, attach an issuer-defined schedule during `Init` with `set_vesting_schedule`. When set, the plain `claim` path aborts and the only redemption route is `claim_into_vesting`, which returns a funded [`VestingWallet`](/contracts-sui/1.x/vesting-wallet) (from [`openzeppelin_finance`](/contracts-sui/1.x/finance)) plus the wallet's `DestroyCap`.
 
 ```move
 use openzeppelin_finance::vesting_wallet::{VestingWallet, DestroyCap};
@@ -293,7 +293,19 @@ transfer::public_share_object(wallet);        // shared: anyone can poke release
 transfer::public_transfer(cap, ctx.sender()); // hold the cap to reclaim storage once the wallet is drained
 ```
 
-The schedule is **issuer-defined and unbypassable**: the wallet is built with `beneficiary` forced to the buyer and the sale's fixed schedule params, under a vesting witness pinned in the sale's type at `create_sale`. A buyer cannot substitute a permissive witness of their own to release early. To choose the schedule shape, set the `VestingWitness`/`VestingScheduleParams` type arguments (for example `vesting_wallet_linear::{Linear, Params}`) when you call `create_sale`, and attach concrete params with `set_vesting_schedule_params`. For a non-vesting sale the slots are inert - pick any `drop` witness and never attach a schedule.
+The schedule is **issuer-defined and unbypassable**: the wallet is built with `beneficiary` forced to the buyer and the sale's fixed schedule, under a vesting witness pinned in the sale's type at `create_sale`. A buyer cannot substitute a permissive witness of their own to release early. To choose the schedule shape, set the `VestingWitness`/`VestingScheduleParams` type arguments (for example `vesting_wallet_linear::{Linear, Params}`) when you call `create_sale`, then attach a concrete schedule during `Init` with `set_vesting_schedule`:
+
+```move
+use openzeppelin_finance::vesting_wallet_linear;
+
+// Build a Linear schedule bundle and attach it. `vesting_schedule` welds the Linear
+// witness to validated stepped params, producing the `VestingSchedule<Linear, Params>`
+// that `set_vesting_schedule` (and the sale's pinned type) require.
+let schedule = vesting_wallet_linear::vesting_schedule(start_ms, cliff_ms, period_ms, steps);
+sale.set_vesting_schedule(schedule);
+```
+
+`set_vesting_schedule` takes the bundle by value; because only `vesting_wallet_linear` can mint a `VestingSchedule<Linear, ..>`, the witness and params pinned in the sale's type are guaranteed to form a coherent pair. For a non-vesting sale the slots are inert - pick any `drop` witness and never attach a schedule.
 
 ## The refund vault
 
@@ -337,7 +349,7 @@ A buyer with several purchases holds several receipts; `claim_all` batches them 
 | Plain `claim` on a vesting sale, or `claim_into_vesting` on a non-vesting sale | Aborts `EClaimRequiresVesting` / `ENoVestingScheduleAttached` | Match the redemption path to whether a schedule is attached. |
 | Buying then redeeming from a different wallet | Aborts `EBuyerOnly` | Redeem from the purchasing address; receipts are buyer-bound. |
 | Losing the `SaleAdminCap` or `AllowlistAdmin` | Issuer loses withdrawals / the allowlist sale can no longer sell | Hold every cap in a recoverable RBAC / multisig / governance wrapper. |
-| Expecting `cancel_emergency` to stop a successful sale | Aborts `ESaleAlreadyComplete` / `ESoftCapMet` | A goal-reaching sale can only `finalize`; emergency cancel is fenced by design. |
+| Expecting `cancel_emergency` to stop a successful sale | Aborts `ESaleAlreadyComplete` / `ESoftCapReached` | A goal-reaching sale can only `finalize`; emergency cancel is fenced by design. |
 
 ## Security notes
 
@@ -414,7 +426,7 @@ Yes. `create_sale`, `deposit`, cap/vesting/allowlist setup, `share_and_activate`
 
 ## Examples
 
-The full unit-test suite under [`contracts/sale/tests/`](https://github.com/OpenZeppelin/contracts-sui/tree/v1.5.0/contracts/sale/tests) doubles as an executable specification: `test_utils.move` shows the canonical `Init -> Active` setup, and the thematic files exercise every purchase, close, redemption, and failure path.
+The full unit-test suite under [`contracts/sale/tests/`](https://github.com/OpenZeppelin/contracts-sui/tree/v1.5.1/contracts/sale/tests) doubles as an executable specification: `test_utils.move` shows the canonical `Init -> Active` setup, and the thematic files exercise every purchase, close, redemption, and failure path.
 
 <Callout type="warn">
 These are unaudited illustrations of how the primitive is wired up, not production-ready code.
