@@ -2,7 +2,7 @@
 title: Supported Ecosystems
 ---
 
-Each adapter implements the subset of the [17 capability interfaces](/ecosystem-adapters/architecture#capability-tiers) that its blockchain supports. This page summarizes what each production adapter provides.
+Each adapter implements the subset of the [17 capability interfaces](/ecosystem-adapters/architecture#capability-tiers) that its blockchain supports. Summary counts match the [capability matrix](#capability-support-matrix) below: one checkmark per implemented factory in the adapter's `CapabilityFactoryMap`, plus EVM-only RWA capabilities available as sub-path exports.
 
 | Adapter | Networks | Capabilities | Status |
 | --- | --- | --- | --- |
@@ -10,7 +10,7 @@ Each adapter implements the subset of the [17 capability interfaces](/ecosystem-
 | **Stellar** | Stellar Public, Stellar Testnet | 13/17 | Production |
 | **Polkadot** | Polkadot Hub, Moonbeam, Moonriver | 13/17 (EVM path) | Production |
 | **Midnight** | Midnight Testnet | 12/17 | Production |
-| **Solana** | Devnet, Testnet, Mainnet Beta | 4/17 (Tier 1 only) | Scaffolding |
+| **Solana** | Devnet, Testnet, Mainnet Beta | 12/17 (scaffolding) | In Progress |
 
 ## EVM (`@openzeppelin/adapter-evm`)
 
@@ -91,7 +91,7 @@ Non-EVM execution paths (native Substrate) are not yet implemented. Requesting a
 
 ## Midnight (`@openzeppelin/adapter-midnight`)
 
-The Midnight adapter enables browser-based interaction with Midnight contracts using zero-knowledge proof workflows.
+The Midnight adapter enables browser-based interaction with Midnight contracts using zero-knowledge proof workflows. It implements **12 of 17** capabilities: all profile capabilities except `nameResolution`, `accessControl`, and the EVM-only RWA trio (`erc3643`, `erc4626`, `irs`).
 
 **Supported Networks**: Midnight Testnet
 
@@ -124,11 +124,11 @@ const adapterConfigs = await loadOpenZeppelinAdapterViteConfig({
 The Solana adapter is scaffolding only and is not yet production-ready.
 </Callout>
 
-The Solana package defines the package boundaries and network configurations for a future adapter. It currently provides:
+The Solana package defines the package boundaries and network configurations for a future adapter. Its `CapabilityFactoryMap` currently registers **12 of 17** capabilities (Tier 1 through `relayer`); `nameResolution`, `accessControl`, and the EVM-only RWA trio are absent. Tier 2–3 factories exist as scaffolding stubs and are not production-ready.
 
 - Solana network configurations (Devnet, Testnet, Mainnet Beta)
 - Package structure and sub-path export scaffolding
-- Tier 1 capability implementations (Addressing, Explorer, NetworkCatalog, UiLabels)
+- Tier 1 capability implementations (Addressing, Explorer, NetworkCatalog, UiLabels) plus stub Tier 2–3 factories
 
 The Operator profile is explicitly unsupported. Calling `createRuntime('operator', ...)` throws `UnsupportedProfileError` because `accessControl` factories are not yet implemented.
 
@@ -141,17 +141,19 @@ The Operator profile is explicitly unsupported. Calling `createRuntime('operator
 | NetworkCatalog | ✅ | ✅ | ✅ | ✅ | ✅ |
 | UiLabels | ✅ | ✅ | ✅ | ✅ | ✅ |
 | NameResolution | ✅ | - | - | - | - |
-| ContractLoading | ✅ | ✅ | ✅ | ✅ | - |
-| Schema | ✅ | ✅ | ✅ | ✅ | - |
-| TypeMapping | ✅ | ✅ | ✅ | ✅ | - |
-| Query | ✅ | ✅ | ✅ | ✅ | - |
-| Execution | ✅ | ✅ | ✅ (EVM) | ✅ | - |
-| Wallet | ✅ | ✅ | ✅ | ✅ | - |
-| UiKit | ✅ | ✅ | ✅ | ✅ | - |
-| Relayer | ✅ | ✅ | ✅ | - | - |
+| ContractLoading | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Schema | ✅ | ✅ | ✅ | ✅ | ✅ |
+| TypeMapping | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Query | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Execution | ✅ | ✅ | ✅ (EVM) | ✅ | ✅ |
+| Wallet | ✅ | ✅ | ✅ | ✅ | ✅ |
+| UiKit | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Relayer | ✅ | ✅ | ✅ | ✅ | ✅ |
 | AccessControl | ✅ | ✅ | ✅ | - | - |
 | ERC3643 | ✅† | - | - | - | - |
 | ERC4626 | ✅† | - | - | - | - |
 | IRS | ✅† | - | - | - | - |
 
 † EVM-only. Available via `@openzeppelin/adapter-evm/erc3643`, `/erc4626`, and `/irs` sub-path exports; not assembled into standard profile runtimes.
+
+Counts are derived from each adapter's `CapabilityFactoryMap` in `openzeppelin-adapters` (`profiles/shared*.ts`), plus the three EVM RWA sub-path factories. Midnight is missing `nameResolution`, `accessControl`, and the RWA trio (12 ✅). Solana registers stub Tier 2–3 factories but remains scaffolding.
