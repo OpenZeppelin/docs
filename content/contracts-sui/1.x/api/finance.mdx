@@ -28,6 +28,9 @@ Functions
 
 - [`params(start_ms, cliff_ms, period_ms, steps)`](#vesting_wallet_linear-params)
 - [`params_continuous(start_ms, cliff_ms, duration_ms)`](#vesting_wallet_linear-params_continuous)
+- [`vesting_schedule(start_ms, cliff_ms, period_ms, steps)`](#vesting_wallet_linear-vesting_schedule)
+- [`vesting_schedule_continuous(start_ms, cliff_ms, duration_ms)`](#vesting_wallet_linear-vesting_schedule_continuous)
+- [`into_vesting_schedule(params)`](#vesting_wallet_linear-into_vesting_schedule)
 - [`new(beneficiary, start_ms, cliff_ms, period_ms, steps, ctx)`](#vesting_wallet_linear-new)
 - [`new_continuous(beneficiary, start_ms, cliff_ms, duration_ms, ctx)`](#vesting_wallet_linear-new_continuous)
 - [`create_and_share(beneficiary, start_ms, cliff_ms, period_ms, steps, ctx)`](#vesting_wallet_linear-create_and_share)
@@ -99,6 +102,44 @@ Aborts with `EZeroSteps` if `duration_ms == 0`.
 Aborts with `EInvalidCliff` if `cliff_ms > duration_ms`.
 
 Aborts with `EScheduleOverflow` if `start_ms + duration_ms` would overflow `u64`.
+</APIItem>
+
+<APIItem
+  functionSignature="vesting_schedule(start_ms: u64, cliff_ms: u64, period_ms: u64, steps: u64) -> VestingSchedule<Linear, Params>"
+  id="vesting_wallet_linear-vesting_schedule"
+  kind="public"
+>
+Builds a validated stepped `Params` and bundles it with the `Linear` witness into a `VestingSchedule<Linear, Params>` (via `vesting_wallet::new_schedule`). This is the bundle a curve-agnostic consumer that pins both the witness and params types accepts - `openzeppelin_sale::prefunded_sale::set_vesting_schedule` is the reference consumer. Same validation as `params`.
+
+Aborts with `EZeroPeriod` if `period_ms == 0`.
+
+Aborts with `EZeroSteps` if `steps == 0`.
+
+Aborts with `EScheduleOverflow` if `period_ms * steps`, or `start_ms` plus that duration, would overflow `u64`.
+
+Aborts with `EInvalidCliff` if `cliff_ms > period_ms * steps`.
+</APIItem>
+
+<APIItem
+  functionSignature="vesting_schedule_continuous(start_ms: u64, cliff_ms: u64, duration_ms: u64) -> VestingSchedule<Linear, Params>"
+  id="vesting_wallet_linear-vesting_schedule_continuous"
+  kind="public"
+>
+Continuous (`period_ms = 1`) analog of `vesting_schedule`: bundles a validated continuous `Params` with the `Linear` witness. Same validation as `params_continuous`.
+
+Aborts with `EZeroSteps` if `duration_ms == 0`.
+
+Aborts with `EInvalidCliff` if `cliff_ms > duration_ms`.
+
+Aborts with `EScheduleOverflow` if `start_ms + duration_ms` would overflow `u64`.
+</APIItem>
+
+<APIItem
+  functionSignature="into_vesting_schedule(params: Params) -> VestingSchedule<Linear, Params>"
+  id="vesting_wallet_linear-into_vesting_schedule"
+  kind="public"
+>
+Wraps an already-built `Params` into a `VestingSchedule<Linear, Params>` without revalidating (a `Params` can only come from this module's validating constructors, so it is already well-formed). The inverse of the bundle's `vesting_wallet::params` accessor; use it to bundle a `Params` read back from a wallet or produced by `params` / `params_continuous`.
 </APIItem>
 
 <APIItem
@@ -266,10 +307,12 @@ Types
 - [`VestedAmount<S>`](#vesting_wallet-VestedAmount)
 - [`DestroyReceipt<S, P>`](#vesting_wallet-DestroyReceipt)
 - [`DestroyCap`](#vesting_wallet-DestroyCap)
+- [`VestingSchedule<W, P>`](#vesting_wallet-VestingSchedule)
 
 Functions
 
 - [`new(schedule_params, beneficiary, ctx)`](#vesting_wallet-new)
+- [`new_schedule(w, params)`](#vesting_wallet-new_schedule)
 - [`mint_vested_amount(wallet, w, amount)`](#vesting_wallet-mint_vested_amount)
 - [`deposit(wallet, balance)`](#vesting_wallet-deposit)
 - [`sweep_settled(wallet, root)`](#vesting_wallet-sweep_settled)
@@ -280,6 +323,7 @@ Functions
 - [`releasable(wallet, vested)`](#vesting_wallet-releasable)
 - [`amount(vested)`](#vesting_wallet-amount)
 - [`schedule_params(wallet)`](#vesting_wallet-schedule_params)
+- [`params(schedule)`](#vesting_wallet-params)
 - [`beneficiary(wallet)`](#vesting_wallet-beneficiary)
 - [`released(wallet)`](#vesting_wallet-released)
 - [`balance(wallet)`](#vesting_wallet-balance)
@@ -337,6 +381,14 @@ A hot potato carrying a destroyed wallet's id and schedule params back to its cu
 Authority to finalize the teardown of one specific wallet. Minted by `new` alongside the wallet and bound to it by id; consumed by `consume_receipt`, which rejects any cap whose wallet id does not match. Teardown authority travels with the cap, not with the wallet's `beneficiary` - this is what makes teardown reachable for a wallet whose beneficiary is an object address. It has no `drop`, so it is retired only by tearing the wallet down.
 </APIItem>
 
+<APIItem
+  functionSignature="struct VestingSchedule<phantom W: drop, P: copy + drop + store> has copy, drop, store"
+  id="vesting_wallet-VestingSchedule"
+  kind="struct"
+>
+A curve's schedule params bundled with its witness `W`. Because only the module that declares `W` can mint one (via `new_schedule`, which takes `W` by value), a consumer that accepts a `VestingSchedule<W, P>` is guaranteed the witness and params form a coherent pair - a compile-time check a bare `P` cannot provide. The recommended shape for any integration that lets a caller pick the curve; `openzeppelin_sale::prefunded_sale::set_vesting_schedule` is the reference consumer. Read the bundled params back with `params`.
+</APIItem>
+
 #### Functions [!toc] [#vesting_wallet-Functions]
 
 <APIItem
@@ -345,6 +397,14 @@ Authority to finalize the teardown of one specific wallet. Minted by `new` along
   kind="public"
 >
 Builds a new wallet around a schedule and returns it by value, together with the `DestroyCap` that authorizes its eventual teardown. Returning by value lets the caller chain creation, funding, and topology selection in one PTB. Emits `Created`. Taking `P` by value is the authority proof - only the module that declares `P` can produce one.
+</APIItem>
+
+<APIItem
+  functionSignature="new_schedule<W: drop, P: copy + drop + store>(w: W, params: P) -> VestingSchedule<W, P>"
+  id="vesting_wallet-new_schedule"
+  kind="public"
+>
+Bundles a curve's `params` with its witness into a `VestingSchedule<W, P>`. Witness-gated: the caller supplies a value of type `W`, and only the module that declares `W` can construct one, so the bundle can only pair `params` with the witness of the curve that produced it. Curve modules wrap this (e.g. `vesting_wallet_linear::vesting_schedule`).
 </APIItem>
 
 <APIItem
@@ -449,6 +509,14 @@ Reads the cumulative vested total recorded in a `VestedAmount<S>` without consum
   kind="public"
 >
 Reads the wallet's schedule parameters. Ungated - curve parameters are public information.
+</APIItem>
+
+<APIItem
+  functionSignature="params<W: drop, P: copy + drop + store>(schedule: &VestingSchedule<W, P>) -> P"
+  id="vesting_wallet-params"
+  kind="public"
+>
+Reads the parameters `P` carried by a `VestingSchedule<W, P>` bundle. The inverse of `vesting_wallet_linear::into_vesting_schedule`.
 </APIItem>
 
 <APIItem
