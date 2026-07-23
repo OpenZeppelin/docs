@@ -12,6 +12,7 @@ title: Contracts for Sui 1.x
 - `openzeppelin_utils` for embeddable building blocks; its first module, `rate_limiter`, provides multi-strategy rate limiting.
 - `openzeppelin_allowance` for cap-keyed spending allowances; its first module, `spend_vault`, escrows multi-coin funds behind owner-set, expiring budgets.
 - `openzeppelin_timelock` for enforcing a minimum on-chain delay between scheduling and executing privileged operations.
+- `openzeppelin_sale` for fixed-price token sales (presale / IDO): a prefunded inventory sold in a capped window, with refunds, optional compliance gating, and optional vesting.
 
 ## Quickstart
 
@@ -39,7 +40,7 @@ mvr add @openzeppelin-move/utils
 
 You only need the dependencies your app actually uses. Add what you need and drop the others.
 
-Packages not yet on the Move Registry - currently `openzeppelin_allowance` and `openzeppelin_finance` - are added by git revision instead of `mvr add` (see the next step).
+Packages not yet on the Move Registry - currently `openzeppelin_allowance`, `openzeppelin_finance` and `openzeppelin_sale` - are added by git revision instead of `mvr add` (see the next step).
 
 ### 3. Verify `Move.toml`
 
@@ -53,11 +54,12 @@ openzeppelin_fp_math = { r.mvr = "@openzeppelin-move/fixed-point-math" }
 openzeppelin_utils = { r.mvr = "@openzeppelin-move/utils" }
 ```
 
-Since `openzeppelin_allowance` and `openzeppelin_finance` aren't on MVR yet, add them manually, pinned to a git revision:
+Since `openzeppelin_allowance`, `openzeppelin_finance` and `openzeppelin_sale` aren't on MVR yet, add them manually, pinned to a git revision:
 
 ```toml
 openzeppelin_allowance = { git = "https://github.com/OpenZeppelin/contracts-sui.git", subdir = "contracts/allowance", rev = "v1.4.0" }
 openzeppelin_finance = { git = "https://github.com/OpenZeppelin/contracts-sui.git", subdir = "contracts/finance", rev = "v1.4.0" }
+openzeppelin_sale = { git = "https://github.com/OpenZeppelin/contracts-sui.git", subdir = "contracts/sale", rev = "v1.5.1" }
 ```
 
 Alternatively, copy the module sources directly into your package's `sources/` so you fully own the code; see each package guide for the per-package options.
@@ -102,15 +104,17 @@ sui move test
 - Need to enforce a minimum delay before privileged operations execute? Use [Timelock](/contracts-sui/1.x/timelock).
 - Need to throttle withdrawals, meter per-user budgets, gate action reuse, or delay an action? Use [Rate Limiter](/contracts-sui/1.x/rate-limiter).
 - Need to delegate bounded, expiring spending of escrowed coins to a keeper, service, or teammate, without signing each spend? Use [Spend Vault](/contracts-sui/1.x/spend-vault).
+- Need to run a fixed-price token sale or presale with caps, refunds, and optional KYC or vesting? Use [Sale](/contracts-sui/1.x/sale).
 
 The packages compose. A typical protocol module imports `openzeppelin_math` for share math, `openzeppelin_fp_math` for rate and fee math, and `openzeppelin_access` for the admin capability that governs both.
 
 ## Next steps
 
-- Package guides: [Integer Math](/contracts-sui/1.x/math), [Fixed-Point Math](/contracts-sui/1.x/fixed-point), [Access](/contracts-sui/1.x/access), [Collections](/contracts-sui/1.x/collections), [Timelock](/contracts-sui/1.x/timelock), [Utilities](/contracts-sui/1.x/utils), [Allowance](/contracts-sui/1.x/allowance), [Finance](/contracts-sui/1.x/finance).
+- Package guides: [Integer Math](/contracts-sui/1.x/math), [Fixed-Point Math](/contracts-sui/1.x/fixed-point), [Access](/contracts-sui/1.x/access), [Collections](/contracts-sui/1.x/collections), [Timelock](/contracts-sui/1.x/timelock), [Utilities](/contracts-sui/1.x/utils), [Allowance](/contracts-sui/1.x/allowance), [Finance](/contracts-sui/1.x/finance), [Sale](/contracts-sui/1.x/sale).
 - Access modules: [RBAC](/contracts-sui/1.x/access-control), [Two-Step Transfer](/contracts-sui/1.x/two-step-transfer), [Delayed Transfer](/contracts-sui/1.x/delayed-transfer).
 - Utilities modules: [Rate Limiter](/contracts-sui/1.x/rate-limiter).
 - Allowance modules: [Spend Vault](/contracts-sui/1.x/spend-vault).
 - Finance modules: [Vesting Wallet](/contracts-sui/1.x/vesting-wallet).
+- Sale modules: [Prefunded Sale](/contracts-sui/1.x/prefunded-sale).
 - Learn: [Role Based Access Control](/contracts-sui/1.x/guides/access-control), [Delegated Spending](/contracts-sui/1.x/guides/delegated-spending).
-- API reference: [Integer Math](/contracts-sui/1.x/api/math), [Fixed-Point Math](/contracts-sui/1.x/api/fixed-point), [Access](/contracts-sui/1.x/api/access), [Collections](/contracts-sui/1.x/api/collections), [Timelock](/contracts-sui/1.x/api/timelock), [Utilities](/contracts-sui/1.x/api/utils), [Allowance](/contracts-sui/1.x/api/allowance), [Finance](/contracts-sui/1.x/api/finance).
+- API reference: [Integer Math](/contracts-sui/1.x/api/math), [Fixed-Point Math](/contracts-sui/1.x/api/fixed-point), [Access](/contracts-sui/1.x/api/access), [Collections](/contracts-sui/1.x/api/collections), [Timelock](/contracts-sui/1.x/api/timelock), [Utilities](/contracts-sui/1.x/api/utils), [Allowance](/contracts-sui/1.x/api/allowance), [Finance](/contracts-sui/1.x/api/finance), [Sale](/contracts-sui/1.x/api/sale).
