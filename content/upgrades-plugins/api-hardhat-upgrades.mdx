@@ -6,10 +6,10 @@ title: OpenZeppelin Hardhat Upgrades API
 This is the documentation for Hardhat 3. For Hardhat 2, see the [Hardhat Upgrades API docs (Hardhat 2)](/upgrades-plugins/hardhat-2/api-hardhat-upgrades).
 </Callout>
 
-This package works with both ethers and viem. By default it uses the ethers-based API; if you are using viem, import from `@openzeppelin/hardhat-upgrades/viem`. The options and validations documented below apply either way; what differs is how contracts are referenced and returned:
+This package works with both ethers and viem. By default it uses the ethers-based API; if you are using viem, import from `@openzeppelin/hardhat-upgrades/viem`. The options and validations documented below apply to both APIs. The two APIs differ in how contracts are referenced and returned:
 
 * **Ethers (the default):** `deployProxy` and `upgradeProxy` return instances of [ethers.js contracts](https://docs.ethers.org/v6/api/contract/#Contract) and require [ethers.js contract factories](https://docs.ethers.org/v6/api/contract/#ContractFactory) as arguments.
-* **If you are using viem:** the same functions identify contracts by name (a string) and return [viem contract instances](https://viem.sh/docs/contract/getContract); addresses use viem's `Address` type (a `` `0x${string}` `` template-literal type — any string beginning with `0x`).
+* **If you are using viem:** the same functions identify contracts by name (a string) and return [viem contract instances](https://viem.sh/docs/contract/getContract); addresses use viem's `Address` type (a `` `0x${string}` `` template-literal type, i.e. any string beginning with `0x`).
 
 For beacons, `deployBeacon` and `upgradeBeacon` both return an upgradable beacon instance that can be used with a beacon proxy.
 
@@ -85,7 +85,7 @@ The following options are common to some functions.
   * If set to `"onchange"`, the implementation contract is redeployed only if the bytecode has changed from previous deployments.
 * `txOverrides`: (`ethers.Overrides`) An ethers.js [Overrides](https://docs.ethers.org/v6/api/contract/#Overrides) object to override transaction parameters, such as `gasLimit` and `gasPrice`. Applies to all transactions sent by a function with this option, even if the function sends multiple transactions. For OpenZeppelin Defender deployments, only the `gasLimit`, `gasPrice`, `maxFeePerGas`, and `maxPriorityFeePerGas` parameters are supported. This option applies to the default ethers-based API.
   * If you are using viem, `txOverrides` does not apply. Instead, pass the transaction parameters `gas`, `gasPrice`, `maxFeePerGas`, `maxPriorityFeePerGas`, and `value` directly as options, and use the `client` option to select the wallet/public client.
-* `client`: (`KeyedClient`) viem-based API only. The viem public and/or wallet clients to use, following `@nomicfoundation/hardhat-viem` conventions. `KeyedClient` is an object `{ public?: PublicClient; wallet?: WalletClient }` (with at least one of the two provided). The **wallet client** selects the account that signs the plugin's transactions — the viem counterpart of the ethers signer — and must be an account managed by the network connection. Defaults to the first wallet client from `connection.viem.getWalletClients()`. The `admin.*` functions instead take a wallet client as a positional argument, not via this option.
+* `client`: (`KeyedClient`) viem-based API only. The viem public and/or wallet clients to use, following `@nomicfoundation/hardhat-viem` conventions. `KeyedClient` is an object `{ public?: PublicClient; wallet?: WalletClient }` (with at least one of the two provided). The **wallet client** is the viem counterpart of the ethers signer: it selects the account that signs the plugin's transactions, and must be an account managed by the network connection. Defaults to the first wallet client from `connection.viem.getWalletClients()`. The `admin.*` functions instead take a wallet client as a positional argument, not via this option.
 * `useDefenderDeploy`: (`boolean`) Deploy contracts using OpenZeppelin Defender instead of ethers.js. See [Using with OpenZeppelin Defender](/upgrades-plugins/defender-deploy).
 * `verifySourceCode`: (`boolean`) When using OpenZeppelin Defender deployments, whether to verify source code on block explorers. Defaults to `true`.
 * `relayerId`: (`string`) When using OpenZeppelin Defender deployments, the ID of the relayer to use for the deployment. Defaults to the relayer configured for your deployment environment on Defender.
@@ -162,15 +162,15 @@ If you call `deployProxy` several times for the same implementation contract, se
 
 **Parameters:**
 
-* the implementation — an ethers contract factory (`Contract`), or the contract name as a string when using viem (`contractName`).
+* `Contract` (ethers) or `contractName` (viem) - an ethers contract factory or contract name to use as the implementation.
 * `args` - arguments for the initializer function.
 * `opts` - an object with options:
-  * `initializer`: the initializer function to call instead of the default `initialize` — a function name such as `initialize`, or a full signature such as `initialize(uint256)` to disambiguate overloads; or `false` to disable initialization. The accepted formats differ slightly between ethers and viem — see [Differences](/upgrades-plugins/hardhat-upgrades#differences-from-the-ethers-based-api).
+  * `initializer`: the initializer function to call instead of the default `initialize`: a function name such as `initialize`, or a full signature such as `initialize(uint256)` to disambiguate overloads; or `false` to disable initialization. The accepted formats differ slightly between ethers and viem. See [Differences](/upgrades-plugins/hardhat-upgrades#differences-from-the-ethers-based-api).
   * additional options as described in [Common Options](#common-options).
 
 **Returns:**
 
-* a contract instance bound to the proxy address with the implementation interface — an ethers contract, or a viem contract instance when using viem.
+* a contract instance bound to the proxy address with the implementation interface: an ethers contract, or a viem contract instance when using viem.
 
 ## upgradeProxy
 
@@ -226,9 +226,9 @@ Upgrades a UUPS or Transparent proxy at a specified address to a new implementat
 **Parameters:**
 
 * `proxy` - the proxy address or proxy contract instance.
-* the new implementation — an ethers contract factory (`Contract`), or the contract name as a string when using viem (`contractName`).
+* `Contract` (ethers) or `contractName` (viem) - an ethers contract factory or contract name to use as the new implementation.
 * `opts` - an object with options:
-  * `call`: enables the execution of an arbitrary function call during the upgrade process. This call is described using a function name or signature, and optional arguments. It is batched into the upgrade transaction, making it safe to call migration initializing functions. The accepted formats differ slightly between ethers and viem — see [Differences](/upgrades-plugins/hardhat-upgrades#differences-from-the-ethers-based-api).
+  * `call`: enables the execution of an arbitrary function call during the upgrade process. This call is described using a function name or signature, and optional arguments. It is batched into the upgrade transaction, making it safe to call migration initializing functions. The accepted formats differ slightly between ethers and viem. See [Differences](/upgrades-plugins/hardhat-upgrades#differences-from-the-ethers-based-api).
   * additional options as described in [Common Options](#common-options).
 
 **Returns:**
@@ -280,7 +280,7 @@ Creates an [upgradable beacon](/contracts/5.x/api/proxy#UpgradeableBeacon) for t
 
 **Parameters:**
 
-* the implementation — an ethers contract factory (`Contract`), or the contract name as a string when using viem (`contractName`).
+* `Contract` (ethers) or `contractName` (viem) - an ethers contract factory or contract name to use as the implementation.
 * `opts` - an object with options:
   * additional options as described in [Common Options](#common-options).
 
@@ -342,7 +342,7 @@ Upgrades an [upgradable beacon](/contracts/5.x/api/proxy#UpgradeableBeacon) at a
 **Parameters:**
 
 * `beacon` - the beacon address or beacon contract instance.
-* the new implementation — an ethers contract factory (`Contract`), or the contract name as a string when using viem (`contractName`).
+* `Contract` (ethers) or `contractName` (viem) - an ethers contract factory or contract name to use as the new implementation.
 * `opts` - an object with options:
   * additional options as described in [Common Options](#common-options).
 
@@ -397,7 +397,7 @@ Creates a [Beacon proxy](/contracts/5.x/api/proxy#BeaconProxy) given an existing
 **Parameters:**
 
 * `beacon` - the beacon address or beacon contract instance.
-* the beacon's current implementation — an ethers contract factory (`attachTo`), or the contract name as a string when using viem (`contractName`).
+* `attachTo` (ethers) or `contractName` (viem) - an ethers contract factory or contract name corresponding to the beacon's current implementation contract.
 * `args` - arguments for the initializer function.
 * `opts` - an object with options:
   * `initializer`: set a different initializer function to call (a function name, or a signature such as `initialize(uint256)`), or specify `false` to disable initialization. See [Differences](/upgrades-plugins/hardhat-upgrades#differences-from-the-ethers-based-api).
@@ -453,8 +453,8 @@ Use this function to recreate a lost [network file](/upgrades-plugins/network-fi
 
 **Parameters:**
 
-* the address of the proxy, beacon, or implementation to import (the viem API also accepts a contract instance).
-* the current implementation — an ethers contract factory (`deployedImpl`), or the contract name as a string when using viem (`contractName`).
+* `address` (ethers) or `addressOrInstance` (viem) - the address of an existing proxy, beacon or implementation. The viem API also accepts a contract instance.
+* `deployedImpl` (ethers) or `contractName` (viem) - the ethers contract factory or contract name of the current implementation contract.
 * `opts` - an object with options:
   * `kind`: (`"uups" | "transparent" | "beacon"`) forces a proxy to be treated as a UUPS, Transparent, or Beacon proxy. If not provided, the proxy kind will be automatically detected.
 
@@ -501,7 +501,7 @@ Validates an implementation contract without deploying it.
 
 **Parameters:**
 
-* the implementation — an ethers contract factory (`Contract`), or the contract name as a string when using viem.
+* `Contract` (ethers) or `contractName` (viem) - the ethers contract factory or contract name of the implementation contract.
 * `opts` - an object with options:
   * additional options as described in [Common Options](#common-options).
 
@@ -556,7 +556,7 @@ Validates and deploys an implementation contract, and returns its address.
 
 **Parameters:**
 
-* the implementation — an ethers contract factory (`Contract`), or the contract name as a string when using viem.
+* `Contract` (ethers) or `contractName` (viem) - the ethers contract factory or contract name of the implementation contract.
 * `opts` - an object with options:
   * `getTxResponse`: (ethers-based API only) if set to `true`, causes this function to return an ethers transaction response corresponding to the deployment of the new implementation contract instead of its address. Note that if the new implementation contract was originally imported as a result of `forceImport`, only the address will be returned.
   * additional options as described in [Common Options](#common-options).
@@ -610,8 +610,8 @@ Validates a new implementation contract without deploying it and without actuall
 
 **Parameters:**
 
-* the current implementation — a proxy or beacon address that uses it, or the current implementation itself (an address or ethers contract factory, or the contract name as a string when using viem).
-* the new implementation contract — an ethers contract factory, or the contract name as a string when using viem.
+* `referenceAddressOrContract` (ethers) or `referenceAddressOrContractName` (viem) - a proxy or beacon address that uses the current implementation, or an address, ethers contract factory, or contract name corresponding to the current implementation.
+* `newContract` (ethers) or `newContractName` (viem) - the ethers contract factory or contract name of the new implementation contract.
 * `opts` - an object with options:
   * additional options as described in [Common Options](#common-options).
 
@@ -741,8 +741,8 @@ Validates and deploys a new implementation contract, and returns its address. If
 
 **Parameters:**
 
-* the proxy, beacon, or implementation — an address or contract instance.
-* the new implementation contract — an ethers contract factory (`Contract`), or the contract name as a string when using viem (`contractName`).
+* `referenceAddressOrContract` - the proxy or beacon or implementation address or contract instance.
+* `Contract` (ethers) or `contractName` (viem) - the ethers contract factory or contract name of the new implementation contract.
 * `opts` - an object with options:
   * `getTxResponse`: (ethers-based API only) if set to `true`, causes this function to return an ethers transaction response corresponding to the deployment of the new implementation contract instead of its address. Note that if the new implementation contract was originally imported as a result of `forceImport`, only the address will be returned.
   * additional options as described in [Common Options](#common-options).
@@ -923,7 +923,7 @@ This function is not supported with admins or proxies from OpenZeppelin Contract
 
 * `proxyAddress` - the address of the proxy to change.
 * `newAdmin` - the new admin address.
-* The account to send the transaction with — `signer` for ethers, `walletClient` for viem. Optional; defaults to the connection's default account.
+* `signer` (ethers) or `walletClient` (viem) - the account to send the transaction with. Optional; defaults to the connection's default account.
 * `opts` - an object with options:
   * additional options as described in [Common Options](#common-options).
 
@@ -976,7 +976,7 @@ The `proxyAddress` parameter is required since `@openzeppelin/hardhat-upgrades@3
 
 * `proxyAddress` - the address of the proxy whose admin ownership is to be transferred.
 * `newOwner` - the new owner address for the proxy admin contract.
-* The account to send the transaction with — `signer` for ethers, `walletClient` for viem. Optional; defaults to the connection's default account.
+* `signer` (ethers) or `walletClient` (viem) - the account to send the transaction with. Optional; defaults to the connection's default account.
 * `opts` - an object with options:
   * `silent`: if set to `true`, silences console logging about each proxy affected by the admin ownership transfer.
   * additional options as described in [Common Options](#common-options).
