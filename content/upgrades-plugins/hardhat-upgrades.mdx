@@ -6,7 +6,7 @@ title: Using with Hardhat
 This is the documentation for Hardhat 3. For Hardhat 2, see [Using with Hardhat (Hardhat 2)](/upgrades-plugins/hardhat-2/hardhat-upgrades).
 </Callout>
 
-This package adds functions to your Hardhat scripts so you can deploy and upgrade proxies for your contracts. Requires `@nomicfoundation/hardhat-ethers`.
+This package adds functions to your Hardhat scripts so you can deploy and upgrade proxies for your contracts, using either ethers or viem.
 
 <Callout>
 Migrating from Hardhat 2? See the [Migration Guide](/upgrades-plugins/migrate-from-hardhat-2).
@@ -14,16 +14,33 @@ Migrating from Hardhat 2? See the [Migration Guide](/upgrades-plugins/migrate-fr
 
 ## Installation
 
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
+
 ```console
 $ npm install --save-dev @openzeppelin/hardhat-upgrades
-$ npm install --save-dev @nomicfoundation/hardhat-ethers ethers # peer dependencies
+$ npm install --save-dev @nomicfoundation/hardhat-ethers ethers
 ```
 
+</Tab>
+<Tab value="viem">
+
+```console
+$ npm install --save-dev @openzeppelin/hardhat-upgrades
+$ npm install --save-dev @nomicfoundation/hardhat-viem viem
+```
+
+</Tab>
+</Tabs>
+
 <Callout>
-Hardhat 3 supports both ethers and viem. This plugin uses `@nomicfoundation/hardhat-ethers` internally and loads it automatically. If your project uses viem, install `@nomicfoundation/hardhat-viem` and add it to your config alongside this plugin: your own scripts and tests can use viem, while the plugin's functions take ethers contract factories from `connection.ethers` and return ethers contracts.
+Use the **ethers / viem** toggle above depending on which library you use. Your choice also switches the config and every code example on this page. When you install this plugin, you must also install the peer dependencies for your chosen library. See [Using with viem](#using-with-viem) for the behavior differences between the two.
 </Callout>
 
-Register the `@openzeppelin/hardhat-upgrades` plugin in your [`hardhat.config.ts`](https://hardhat.org/config/):
+Register the plugin in your [`hardhat.config.ts`](https://hardhat.org/config/):
+
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
 
 ```typescript
 import { defineConfig } from 'hardhat/config';
@@ -35,6 +52,23 @@ export default defineConfig({
 });
 ```
 
+</Tab>
+<Tab value="viem">
+
+```typescript
+import { defineConfig } from 'hardhat/config';
+import hardhatViem from '@nomicfoundation/hardhat-viem';
+import hardhatUpgrades from '@openzeppelin/hardhat-upgrades/viem';
+
+export default defineConfig({
+  plugins: [hardhatViem, hardhatUpgrades],
+  // ... rest of config
+});
+```
+
+</Tab>
+</Tabs>
+
 If you use the `verify` task, also add `@nomicfoundation/hardhat-verify` to the `plugins` array and configure Hardhat's `verify.etherscan.apiKey` setting.
 
 ## Usage in scripts
@@ -44,6 +78,9 @@ If you use the `verify` task, also add `@nomicfoundation/hardhat-verify` to the 
 ### Proxies
 
 You can use this plugin in a [Hardhat script](https://hardhat.org/docs/guides/writing-scripts) to deploy an upgradeable instance of one of your contracts via the `deployProxy` function:
+
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
 
 ```typescript
 // scripts/create-box.ts
@@ -67,9 +104,37 @@ main().catch(err => {
 });
 ```
 
+</Tab>
+<Tab value="viem">
+
+```typescript
+// scripts/create-box.ts
+import hre from 'hardhat';
+import { upgrades } from '@openzeppelin/hardhat-upgrades/viem';
+
+async function main() {
+  const connection = await hre.network.create();
+  const upgradesApi = await upgrades(hre, connection);
+
+  const box = await upgradesApi.deployProxy('Box', [42]);
+  console.log('Box deployed to:', box.address);
+}
+
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
+```
+
+</Tab>
+</Tabs>
+
 This will automatically check that the `Box` contract is upgrade-safe, deploy an implementation contract for the `Box` contract (unless there is one already from a previous deployment), create a proxy (along with a proxy admin if needed), and initialize it by calling `initialize(42)`.
 
 Then, in another script, you can use the `upgradeProxy` function to upgrade the deployed instance to a new version. The new version can be a different contract (such as `BoxV2`), or you can just modify the existing `Box` contract and recompile it — the plugin will note it changed.
+
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
 
 ```typescript
 // scripts/upgrade-box.ts
@@ -94,6 +159,33 @@ main().catch(err => {
 });
 ```
 
+</Tab>
+<Tab value="viem">
+
+```typescript
+// scripts/upgrade-box.ts
+import hre from 'hardhat';
+import { upgrades } from '@openzeppelin/hardhat-upgrades/viem';
+
+const PROXY_ADDRESS = '0x...'; // Replace with your proxy address
+
+async function main() {
+  const connection = await hre.network.create();
+  const upgradesApi = await upgrades(hre, connection);
+
+  await upgradesApi.upgradeProxy(PROXY_ADDRESS, 'BoxV2');
+  console.log('Box upgraded');
+}
+
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
+```
+
+</Tab>
+</Tabs>
+
 > Note: While this plugin keeps track of all the implementation contracts you have deployed per network, in order to reuse them and validate storage compatibilities, it does _not_ keep track of the proxies you have deployed. This means that you will need to manually keep track of each deployment address, to supply those to the upgrade function when needed.
 
 The plugin will take care of comparing `BoxV2` to the previous one to ensure they are compatible for the upgrade, deploy the new `BoxV2` implementation contract (unless there is one already from a previous deployment), and upgrade the existing proxy to the new implementation.
@@ -101,6 +193,9 @@ The plugin will take care of comparing `BoxV2` to the previous one to ensure the
 ### Beacon proxies
 
 You can also use this plugin to deploy an upgradeable beacon for your contract with the `deployBeacon` function, then deploy one or more beacon proxies that point to it by using the `deployBeaconProxy` function.
+
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
 
 ```typescript
 // scripts/create-box.ts
@@ -129,7 +224,38 @@ main().catch(err => {
 });
 ```
 
+</Tab>
+<Tab value="viem">
+
+```typescript
+// scripts/create-box.ts
+import hre from 'hardhat';
+import { upgrades } from '@openzeppelin/hardhat-upgrades/viem';
+
+async function main() {
+  const connection = await hre.network.create();
+  const upgradesApi = await upgrades(hre, connection);
+
+  const beacon = await upgradesApi.deployBeacon('Box');
+  console.log('Beacon deployed to:', beacon.address);
+
+  const box = await upgradesApi.deployBeaconProxy(beacon, 'Box', [42]);
+  console.log('Box deployed to:', box.address);
+}
+
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
+```
+
+</Tab>
+</Tabs>
+
 Then, in another script, you can use the `upgradeBeacon` function to upgrade the beacon to a new version. When the beacon is upgraded, all of the beacon proxies that point to it will use the new contract implementation.
+
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
 
 ```typescript
 // scripts/upgrade-box.ts
@@ -154,6 +280,33 @@ main().catch(err => {
 });
 ```
 
+</Tab>
+<Tab value="viem">
+
+```typescript
+// scripts/upgrade-box.ts
+import hre from 'hardhat';
+import { upgrades } from '@openzeppelin/hardhat-upgrades/viem';
+
+const BEACON_ADDRESS = '0x...'; // Replace with your beacon address
+
+async function main() {
+  const connection = await hre.network.create();
+  const upgradesApi = await upgrades(hre, connection);
+
+  await upgradesApi.upgradeBeacon(BEACON_ADDRESS, 'BoxV2');
+  console.log('Beacon upgraded');
+}
+
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
+```
+
+</Tab>
+</Tabs>
+
 ## Usage in tests
 
 You can also use the plugin's functions from your Hardhat tests, in case you want to add tests for upgrading your contracts (which you should!). The API is the same as in scripts.
@@ -161,6 +314,9 @@ You can also use the plugin's functions from your Hardhat tests, in case you wan
 **Important:** Share a single connection across all tests in a suite. Create the connection once in a `before` / `beforeAll` hook, or at module scope using ESM top-level `await`.
 
 ### Proxies
+
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
 
 ```typescript
 import { expect } from 'chai';
@@ -190,7 +346,38 @@ describe('Box', function () {
 });
 ```
 
+</Tab>
+<Tab value="viem">
+
+```typescript
+import { expect } from 'chai';
+import hre from 'hardhat';
+import { upgrades } from '@openzeppelin/hardhat-upgrades/viem';
+
+describe('Box', function () {
+  let upgradesApi;
+
+  before(async () => {
+    const connection = await hre.network.create();
+    upgradesApi = await upgrades(hre, connection);
+  });
+
+  it('works', async () => {
+    const instance = await upgradesApi.deployProxy('Box', [42]);
+    const upgraded = await upgradesApi.upgradeProxy(instance.address, 'BoxV2');
+
+    expect(await upgraded.read.value()).to.equal(42n);
+  });
+});
+```
+
+</Tab>
+</Tabs>
+
 ### Beacon proxies
+
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
 
 ```typescript
 import { expect } from 'chai';
@@ -223,6 +410,50 @@ describe('Box', function () {
 });
 ```
 
+</Tab>
+<Tab value="viem">
+
+```typescript
+import { expect } from 'chai';
+import hre from 'hardhat';
+import { upgrades } from '@openzeppelin/hardhat-upgrades/viem';
+
+describe('Box', function () {
+  let upgradesApi;
+  let connection;
+
+  before(async () => {
+    connection = await hre.network.create();
+    upgradesApi = await upgrades(hre, connection);
+  });
+
+  it('works', async () => {
+    const beacon = await upgradesApi.deployBeacon('Box');
+    const instance = await upgradesApi.deployBeaconProxy(beacon, 'Box', [42]);
+
+    await upgradesApi.upgradeBeacon(beacon, 'BoxV2');
+    const upgraded = await connection.viem.getContractAt('BoxV2', instance.address);
+
+    const value = await upgraded.read.value();
+    expect(value).to.equal(42n);
+  });
+});
+```
+
+</Tab>
+</Tabs>
+
+## Using with viem
+
+Every code example on this page has an **ethers / viem** toggle; switch the tab to see the viem version. The viem API imports from `@openzeppelin/hardhat-upgrades/viem`, identifies contracts by name (instead of passing an ethers contract factory), and returns [viem contract instances](https://viem.sh/docs/contract/getContract) with `read` and `write`. Your selected tab is remembered across the page. Addresses use viem's `Address` type, and transactions are signed by the connection's wallet client (or one you pass with the `client` option), so viem local accounts such as `privateKeyToAccount` are supported.
+
+### Differences from the ethers-based API
+
+Both accept the same options and run the same upgrade-safety validations. The following behaviors differ:
+
+- **Overloaded function names.** When you pass a bare function name (no parameter types) for the `initializer` option or an upgrade `call`, and the contract has multiple overloads of that name, viem resolves the overload from the argument types, while ethers requires the full function signature in that case.
+- **Function reference formats.** For the `initializer` option and upgrade `call`, viem accepts a function name or a canonical signature such as `initialize(uint256)`. It does not accept a 4-byte selector or non-canonical signature spellings that ethers tolerates.
+
 ## Solidity tests
 
 Hardhat 3 supports writing tests in Solidity. You can use Solidity to test deployments, upgrades, and upgrade safety via the [`@openzeppelin/foundry-upgrades`](https://github.com/OpenZeppelin/openzeppelin-foundry-upgrades) Solidity library.
@@ -242,6 +473,9 @@ $ npm install --save-dev @openzeppelin/foundry-upgrades "github:foundry-rs/forge
 ```
 
 Configure your Hardhat config to enable Solidity tests and expose the artifacts directory to FFI:
+
+<Tabs groupId="eth-viem" persist items={['ethers', 'viem']}>
+<Tab value="ethers">
 
 ```typescript
 import { defineConfig } from 'hardhat/config';
@@ -267,6 +501,37 @@ export default defineConfig({
   },
 });
 ```
+
+</Tab>
+<Tab value="viem">
+
+```typescript
+import { defineConfig } from 'hardhat/config';
+import hardhatUpgrades, { proxyFilesToBuild } from '@openzeppelin/hardhat-upgrades/viem';
+
+if (!process.env.FOUNDRY_OUT) {
+  process.env.FOUNDRY_OUT = 'artifacts/contracts';
+}
+
+export default defineConfig({
+  plugins: [hardhatUpgrades],
+  solidity: {
+    version: '0.8.28',
+    npmFilesToBuild: [...proxyFilesToBuild()],
+  },
+  test: {
+    solidity: {
+      ffi: true,
+      fsPermissions: {
+        readDirectory: ['artifacts/contracts'],
+      },
+    },
+  },
+});
+```
+
+</Tab>
+</Tabs>
 
 Add a `remappings.txt` at your project root so the library's imports resolve to the npm package's source:
 
