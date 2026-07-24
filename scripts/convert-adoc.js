@@ -125,8 +125,11 @@ async function convertAdocFiles(directory, apiRoute = "contracts/5.x/api") {
 			// after the steps above. Map them to absolute site paths per module.
 			// Drop trailing /index for index pages so the URL resolves to the
 			// section root rather than the literal /index slug.
+			// Keep in sync with docgen/templates-md/helpers.js. `learn` is
+			// version-independent and lives at a fixed path; `contracts` follows
+			// the per-version guide route derived from apiRoute.
 			const moduleBases = {
-				contracts: "/contracts/5.x",
+				contracts: `/${guideRoute}`,
 				"community-contracts": "/community-contracts",
 				"confidential-contracts": "/confidential-contracts",
 				"upgrades-plugins": "/upgrades-plugins",
