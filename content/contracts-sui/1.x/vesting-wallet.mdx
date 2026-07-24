@@ -206,6 +206,17 @@ let (inner, cap) = vesting_wallet::new<Linear, Params, C>(params, beneficiary, c
 // Keep `cap` - it is required to tear the wallet down later.
 ```
 
+### Bundling a schedule for a consumer
+
+A protocol that **stores** a schedule to apply later - rather than building a wallet immediately - can accept a `VestingSchedule<W, P>` instead of a bare `P`. The bundle welds a curve's `params` to its witness `W`; because only the curve module can mint one (`new_schedule` takes `W` by value), a consumer that accepts the bundle gets a compile-time guarantee that `W` and `P` form a coherent pair - something a bare `P` cannot provide. Build one from the linear curve with `vesting_schedule` (stepped) or `vesting_schedule_continuous`, or wrap a `Params` you already hold with `into_vesting_schedule`:
+
+```move
+// A coherent (Linear, Params) bundle, ready to hand to a consumer that pins both types.
+let schedule = vesting_wallet_linear::vesting_schedule(start_ms, cliff_ms, period_ms, steps);
+```
+
+`openzeppelin_sale::prefunded_sale` is the reference consumer: its `set_vesting_schedule` takes a `VestingSchedule<VestingWitness, VestingScheduleParams>`, so the schedule attached to a sale is guaranteed to match the witness and params pinned in the sale's own type - an issuer cannot misconfigure a sale into one whose tokens can never be released. Read the bundled params back with `vesting_wallet::params`.
+
 ### Custom schedules
 
 To author a new curve, follow the `vesting_wallet_linear` pattern:

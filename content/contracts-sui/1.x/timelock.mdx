@@ -1,0 +1,120 @@
+---
+title: Timelock
+---
+
+The `openzeppelin_timelock` package is a Sui-native take on OpenZeppelin's `TimelockController`: it enforces a minimum on-chain delay between scheduling a privileged operation and executing it, giving users a window to react before the change takes effect.
+
+Because Move has no `target.call(data)`, the timelock stores each operation's typed parameters on-chain and, at execution time, hands them back through a no-ability `ExecutionTicket<Action, Params>` hot potato that the consumer redeems in the same transaction. The consumer dispatches to itself. An integration binds to a specific `Timelock` through a stored `OperationCap`, so the canonical-timelock check is enforced by the library rather than by hand-written asserts. Roles (proposer, executor, canceller, admin) come from a hard dependency on `openzeppelin_access::access_control`.
+
+<Callout type="warn">
+Prefer the `OperationCap`-bound entries (`schedule_with`, `execute_with`, `cancel_with`). The raw `schedule` / `execute` / `cancel` entries do not bind the timelock id: if you use them you must assert `object::id(timelock)` against your canonical timelock in every wrapper, and forgetting it silently disables the delay. Also, `ExecutionTicket` has no abilities. Always follow `execute` with `consume` in the same PTB, or the transaction aborts.
+</Callout>
+
+## Usage
+
+The package is not yet published to the Move Registry (MVR), so install it as a git dependency pinned to the release tag in `Move.toml`:
+
+```toml
+[dependencies]
+openzeppelin_timelock = { git = "https://github.com/OpenZeppelin/contracts-sui.git", subdir = "contracts/timelock", rev = "v1.5.1" }
+openzeppelin_access = { git = "https://github.com/OpenZeppelin/contracts-sui.git", subdir = "contracts/access", rev = "v1.5.1" }
+```
+
+The `openzeppelin_access` dependency is needed whenever your module names its types directly (e.g. `Auth`), as the example below does.
+
+Import the module:
+
+```move
+use openzeppelin_timelock::timelock::{Self, Timelock, OperationCap};
+```
+
+## Examples
+
+A single `Timelock` gating an AMM fee change. The `OperationCap` lives on the `Pool`, so the canonical-timelock binding is structural and call sites carry zero explicit type arguments:
+
+```move
+module my_protocol::amm;
+
+use openzeppelin_access::access_control::{Self, Auth};
+use openzeppelin_timelock::timelock::{Self, Timelock, OperationCap};
+use sui::clock::Clock;
+
+public struct AMM has drop {}
+
+public struct ProposerRole {}
+public struct ExecutorRole {}
+public struct CancellerRole {}
+public struct TimelockAdminRole {}
+
+// Drop-only witness: construction never leaves this module.
+public struct FeeChangeAction has drop {}
+
+public struct Pool has key {
+    id: UID,
+    fee_bps: u16,
+    // Binds fee-change operations to the canonical timelock.
+    fee_cap: OperationCap<FeeChangeAction, u16>,
+}
+
+fun init(otw: AMM, ctx: &mut TxContext) {
+    // Roles default to root-role (`AMM`) administration: the default admin
+    // grants ProposerRole / ExecutorRole / CancellerRole memberships
+    // post-publish via `grant_role`.
+    let ac = access_control::new(otw, 7 * 86_400_000, ctx);
+
+    // `new` + `share` so the cap can be minted before the timelock is shared.
+    let tl = timelock::new<ProposerRole, ExecutorRole, CancellerRole, TimelockAdminRole>(
+        86_400_000, // 24h minimum delay
+        604_800_000, // 7d grace period
+        ctx,
+    );
+    let fee_cap = tl.new_operation_cap<FeeChangeAction, u16>();
+    tl.share();
+    transfer::share_object(Pool { id: object::new(ctx), fee_bps: 30, fee_cap });
+    transfer::public_share_object(ac);
+}
+
+// A proposer schedules; the OperationCap binds the call to the canonical timelock.
+public fun schedule_fee_change(
+    tl: &mut Timelock,
+    pool: &Pool,
+    proposer: &Auth<ProposerRole>,
+    new_fee_bps: u16,
+    salt: vector<u8>,
+    delay_ms: u64,
+    clock: &Clock,
+    ctx: &mut TxContext,
+): vector<u8> {
+    // Empty predecessor: this operation depends on no other.
+    tl.schedule_with(&pool.fee_cap, proposer, new_fee_bps, vector[], salt, delay_ms, clock, ctx)
+}
+
+// An executor cranks the ready operation; `consume` hands back the typed params.
+public fun execute_fee_change(
+    tl: &mut Timelock,
+    pool: &mut Pool,
+    executor: &Auth<ExecutorRole>,
+    id: vector<u8>,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    let ticket = tl.execute_with(&pool.fee_cap, executor, id, clock, ctx);
+    // The ticket MUST be consumed in the same PTB.
+    let (_op_id, new_fee_bps) = tl.consume(ticket, FeeChangeAction {});
+    pool.fee_bps = new_fee_bps;
+}
+```
+
+More complete integrations (an AMM with self-administered config, dual governance with two timelocks, and a timelocked package `UpgradeCap`) live in [`examples/timelock`](https://github.com/OpenZeppelin/contracts-sui/tree/v1.5.1/contracts/timelock/examples/timelock) on GitHub.
+
+## Key concepts
+
+- `Timelock` (shared object): the per-protocol registry holding each operation's state machine and typed params. Operation ids are deterministic keccak256 hashes, reproducible off-chain and isolated per instance.
+- `OperationCap<Action, Params>` (stored): binds one operation kind to one `Timelock`. Minted at `init` and stored in the object you protect; carries no authority on its own.
+- `ExecutionTicket<Action, Params>` (hot potato): minted by `execute` / `execute_with`, carries the typed params, and must be redeemed with `consume` (witness-gated) in the same PTB.
+- Roles: every gated entry takes `&Auth<Role>` from `openzeppelin_access` and checks it against the proposer / executor / canceller / admin role type bound at creation. Optional open-executor mode makes execution permissionless.
+- Delay and expiry: an operation is executable in the half-open window `[ready_at_ms, expires_at_ms)`, locked at schedule time. Later config changes never move an in-flight op, and `Done` is sticky, so operations are non-replayable. `min_delay_ms`, `grace_period_ms`, and `open_executor` are self-administered: every change is itself timelocked.
+
+## API Reference
+
+Use the full function-level reference here: [Timelock API](/contracts-sui/1.x/api/timelock).
