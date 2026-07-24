@@ -25,6 +25,7 @@ import {
 	StellarIcon,
 	SuiIcon,
 	TransactionProposalIcon,
+	TronIcon,
 	UniswapIcon,
 	ZamaIcon,
 } from "@/components/icons";
@@ -113,7 +114,7 @@ export default function HomePage() {
 										<ZamaIcon color className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
 									</div>
 									<div className="w-6 h-6 sm:w-8 sm:h-8 bg-muted/50 rounded-lg flex items-center justify-center text-xs text-muted-foreground transition-all duration-300 group-hover:bg-muted/70">
-										+4
+										+5
 									</div>
 								</div>
 								<div className="text-xs sm:text-sm text-muted-foreground transition-colors duration-300 group-hover:text-foreground/80">
@@ -220,6 +221,14 @@ export default function HomePage() {
 							title="Sui"
 							description="Build Move smart contracts on Sui with secure and efficient primitives"
 							glowColor="sui"
+						/>
+
+						<EcosystemCard
+							href="/tron-contracts"
+							icon={<TronIcon className="w-6 h-6" />}
+							title="Tron"
+							description="Build secure Solidity smart contracts on Tron's TVM with the TRC token standards"
+							glowColor="tron"
 						/>
 
 						<EcosystemCard
