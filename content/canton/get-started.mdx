@@ -1,0 +1,97 @@
+---
+title: Get Started
+---
+
+This guide covers the prerequisites and the basic project wiring for building on Canton with OpenZeppelin's Daml packages.
+
+<Callout type="info">
+  These packages target the Canton 3.4.x baseline and are under active
+  development. Pin exact versions from the package manifests in
+  [`OpenZeppelin/canton-contracts`](https://github.com/OpenZeppelin/canton-contracts)
+  rather than copying version numbers from this page.
+</Callout>
+
+## Prerequisites
+
+*   **JDK 21**: the Daml toolchain runs on Java. Install a recent OpenJDK 21 build and make sure `JAVA_HOME` points at it.
+*   **DPM (Daml Package Manager)**: Digital Asset's package manager and SDK installer. Install it, then use it to provision the Daml SDK / Canton baseline:
+
+```bash
+curl https://get.digitalasset.com/install/install.sh | sh
+dpm install 3.4.11   # or the baseline pinned in your project's daml.yaml
+```
+
+*   **A Daml project**: a directory with a `daml.yaml` (single package) or a `multi-package.yaml` (workspace of packages). New to Daml? Start with the [Daml documentation](https://docs.digitalasset.com/) and the [Canton Network overview](https://www.canton.network/).
+
+## Add OpenZeppelin packages
+
+OpenZeppelin's Canton library is distributed as Daml packages — each primitive is its own DAR, so you add only the ones you need.
+
+**1. Get the DARs.** Clone [`OpenZeppelin/canton-contracts`](https://github.com/OpenZeppelin/canton-contracts) and build the library packages:
+
+```bash
+git clone https://github.com/OpenZeppelin/canton-contracts.git
+cd canton-contracts
+dpm build --all
+```
+
+Each package's DAR lands in its own `.daml/dist/` directory (for example `pausable/.daml/dist/oz-pausable-0.1.0.dar`).
+
+**2. Declare them as data-dependencies.** In your project's `daml.yaml`, reference the built DARs under `data-dependencies` (not `dependencies`, which is for the SDK's own libraries):
+
+```yaml
+sdk-version: 3.4.11
+name: my-app
+source: daml
+version: 0.1.0
+dependencies:
+  - daml-prim
+  - daml-stdlib
+data-dependencies:
+  - ../canton-contracts/access-control/.daml/dist/oz-access-control-0.1.0.dar
+  - ../canton-contracts/ownable/.daml/dist/oz-ownable-0.1.0.dar
+  - ../canton-contracts/pausable/.daml/dist/oz-pausable-0.1.0.dar
+build-options:
+  - --target=2.1
+```
+
+Adjust the paths to wherever you cloned the repo, and pin the exact versions from its package manifests. If you only need one primitive, list only that DAR.
+
+**3. Import and build.** Import the modules you declared and build your project:
+
+```daml
+import OpenZeppelin.Pausable
+```
+
+```bash
+# from your project root, with DPM on PATH
+dpm build
+```
+
+Refer to each component's page for the module path to import and the templates and interfaces it exposes:
+
+*   [Access Control](/canton/library/access-control)
+*   [Ownable](/canton/library/ownable)
+*   [Pausable](/canton/library/pausable)
+
+## Test against a local Canton ledger
+
+Daml Script tests run in-memory by default, but you can point the same scripts at a real local Canton ledger over gRPC — useful for validating time semantics, party visibility, and DAR uploads before targeting a shared network:
+
+```bash
+# start a local sandbox with your DAR uploaded
+dpm sandbox --dar .daml/dist/<your-package>.dar
+
+# run a script against it over the Ledger API
+dpm script --dar .daml/dist/<your-package>.dar \
+  --script-name My.Module:myScript \
+  --ledger-host localhost --ledger-port 6865
+```
+
+If your scripts control ledger time with `setTime`, start the sandbox with `--static-time` and pass `--static-time` to `dpm script` as well — both default to wall-clock time, and ledger time only moves forward.
+
+## Explore further
+
+*   The **[Settlement (CIP-112)](/canton/settlement)** primitive shows how to compose the library into an atomic, value-moving settlement flow.
+*   The **[Reference Implementations](/canton/reference-implementations)** walk through complete application blueprints built on these pieces.
+*   The [Canton Improvement Proposals (CIPs)](https://github.com/canton-foundation/cips) repository holds the ecosystem standards these packages align with.

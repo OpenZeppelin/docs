@@ -1,0 +1,38 @@
+---
+title: Library
+---
+
+The OpenZeppelin library for Canton is a set of foundational Daml modules that other packages and applications compose on top of. It brings the patterns developers know from OpenZeppelin's Solidity contracts — role-based access control, ownership, emergency stop — to Daml, adapted to Canton's authorization and privacy model rather than translated literally.
+
+<Callout type="warn">
+  Version 0.x, unstable, not yet public API. Interfaces may change before a 1.0
+  release. Source: [`OpenZeppelin/canton-contracts`](https://github.com/OpenZeppelin/canton-contracts).
+</Callout>
+
+## Packages
+
+Each primitive ships as its **own independent Daml package** — its own DAR, with no dependency on the others — so a consumer imports only what it needs:
+
+*   **[Access Control](/canton/library/access-control)**: role-based authorization, the `AccessControl.sol` analogue. An admin grants named roles as bearer credentials; gated choices verify the presented grant.
+*   **[Ownable](/canton/library/ownable)**: single-owner authorization for privileged actions, the `Ownable2Step.sol` analogue. Ownership transfer is a two-step handshake, because in Daml a new owner is a signatory and cannot be bound unilaterally.
+*   **[Pausable](/canton/library/pausable)**: an emergency stop, the `Pausable.sol` analogue. An authorized party halts and resumes sensitive choices; pause is origination control on a keyless ledger.
+
+## Design philosophy
+
+**Independence at the package boundary.** Daml has no inheritance, and its unit of reuse is the DAR. The library therefore delivers OpenZeppelin's decoupled-module promise at the package level: three packages, three DARs, zero cross-dependencies. A project that only needs pausing imports only `oz-pausable`.
+
+**Adapted, not transliterated.** Where Daml's model differs from the EVM — monomorphic templates, no global state lookups, signatory-based authority — each primitive adopts the idiomatic Daml shape and documents the divergence on its page.
+
+**Script-free libraries.** The shipped packages carry no `daml-script` dependency; tests and example consumers live in a separate test package. Your production DAR stays lean.
+
+## Using the library
+
+Add the package(s) you need as data-dependencies of your Daml project and import the module:
+
+```daml
+import OpenZeppelin.AccessControl
+import OpenZeppelin.Ownable
+import OpenZeppelin.Pausable
+```
+
+See [Get Started](/canton/get-started) for toolchain setup, and each package page for its templates, choices, and usage patterns.
