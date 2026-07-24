@@ -7,7 +7,7 @@ This directory includes primitives for on-chain governance.
 
 ## Governor
 
-This modular system of Governor contracts allows the deployment on-chain voting protocols similar to [Compound’s Governor Alpha & Bravo](https://compound.finance/docs/governance) and beyond, through the ability to easily customize multiple aspects of the protocol.
+This modular system of Governor contracts allows the deployment of on-chain voting protocols similar to [Compound’s Governor Alpha & Bravo](https://docs.compound.xyz/v2/governance/) and beyond, through the ability to easily customize multiple aspects of the protocol.
 
 <Callout>
 For a guided experience, set up your Governor contract using [Contracts Wizard](https://wizard.openzeppelin.com/#governor).
@@ -37,12 +37,14 @@ Timelock extensions add a delay for governance decisions to be executed. The wor
 
 Other extensions can customize the behavior or interface in multiple ways.
 
-* [`GovernorStorage`](#GovernorStorage): Stores the proposal details onchain and provides enumerability of the proposals. This can be useful for some L2 chains where storage is cheap compared to calldata.
-* [`GovernorSettings`](#GovernorSettings): Manages some of the settings (voting delay, voting period duration, and proposal threshold) in a way that can be updated through a governance proposal, without requiring an upgrade.
+* [`GovernorCrosschain`](#GovernorCrosschain): Helps with the execution of crosschain operation using `CrosschainRemoteExector` and ERC-7786 gateways.
+* [`GovernorNoncesKeyed`](#GovernorNoncesKeyed): An extension of [`Governor`](#Governor) with support for keyed nonces in addition to traditional nonces when voting by signature.
 * [`GovernorPreventLateQuorum`](#GovernorPreventLateQuorum): Ensures there is a minimum voting period after quorum is reached as a security protection against large voters.
 * [`GovernorProposalGuardian`](#GovernorProposalGuardian): Adds a proposal guardian that can cancel proposals at any stage in their lifecycle--this permission is passed on to the proposers if the guardian is not set.
+* [`GovernorSettings`](#GovernorSettings): Manages some of the settings (voting delay, voting period duration, and proposal threshold) in a way that can be updated through a governance proposal, without requiring an upgrade.
+* [`GovernorStorage`](#GovernorStorage): Stores the proposal details onchain and provides enumerability of the proposals. This can be useful for some L2 chains where storage is cheap compared to calldata.
 * [`GovernorSuperQuorum`](#GovernorSuperQuorum): Extension of [`Governor`](#Governor) with a super quorum. Proposals that meet the super quorum (and have a majority of for votes) advance to the `Succeeded` state before the proposal deadline.
-* [`GovernorNoncesKeyed`](#GovernorNoncesKeyed): An extension of [`Governor`](#Governor) with support for keyed nonces in addition to traditional nonces when voting by signature.
+* [`GovernorSequentialProposalId`](#GovernorSequentialProposalId): An extension of [`Governor`](#Governor) that changes the numbering of proposal ids from the default hash-based approach to sequential ids.
 
 In addition to modules and extensions, the core contract requires a few virtual functions to be implemented to your particular specifications:
 
@@ -82,19 +84,25 @@ Functions of the `Governor` contract do not include access control. If you want 
 
 [`GovernorTimelockCompound`](#GovernorTimelockCompound)
 
-[`GovernorSettings`](#GovernorSettings)
-
-[`GovernorPreventLateQuorum`](#GovernorPreventLateQuorum)
-
-[`GovernorStorage`](#GovernorStorage)
-
-[`GovernorProposalGuardian`](#GovernorProposalGuardian)
-
-[`GovernorSuperQuorum`](#GovernorSuperQuorum)
+[`GovernorCrosschain`](#GovernorCrosschain)
 
 [`GovernorNoncesKeyed`](#GovernorNoncesKeyed)
 
+[`GovernorPreventLateQuorum`](#GovernorPreventLateQuorum)
+
+[`GovernorProposalGuardian`](#GovernorProposalGuardian)
+
+[`GovernorSettings`](#GovernorSettings)
+
+[`GovernorStorage`](#GovernorStorage)
+
+[`GovernorSuperQuorum`](#GovernorSuperQuorum)
+
+[`GovernorSequentialProposalId`](#GovernorSequentialProposalId)
+
 ## Utils
+
+[`IVotes`](#IVotes)
 
 [`Votes`](#Votes)
 
@@ -189,7 +197,7 @@ A live contract without at least one proposer and one executor is locked. Make s
 
 ## `Governor` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/Governor.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/Governor.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -341,8 +349,8 @@ This contract is abstract and requires several functions to be implemented in va
 - [GovernorRestrictedProposer(proposer)](#IGovernor-GovernorRestrictedProposer-address-)
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
-- [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
+- [GovernorProposalQueueingNotRequired(proposalId)](#IGovernor-GovernorProposalQueueingNotRequired-uint256-)
+- [GovernorProposalQueueingFailed(proposalId)](#IGovernor-GovernorProposalQueueingFailed-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
@@ -1485,7 +1493,7 @@ quorum depending on values such as the totalSupply of a token at this timepoint 
 
 ## `IGovernor` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/IGovernor.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/IGovernor.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1574,8 +1582,8 @@ Making event parameters `indexed` affects how events are decoded, potentially br
 - [GovernorRestrictedProposer(proposer)](#IGovernor-GovernorRestrictedProposer-address-)
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
-- [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
+- [GovernorProposalQueueingNotRequired(proposalId)](#IGovernor-GovernorProposalQueueingNotRequired-uint256-)
+- [GovernorProposalQueueingFailed(proposalId)](#IGovernor-GovernorProposalQueueingFailed-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
@@ -2440,36 +2448,36 @@ The provided params buffer is not supported by the counting module.
 </div>
 </div>
 
-<a id="IGovernor-GovernorQueueNotImplemented--"></a>
+<a id="IGovernor-GovernorProposalQueueingNotRequired-uint256-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">GovernorQueueNotImplemented()</p>
+<p className="font-bold text-sm font-mono">GovernorProposalQueueingNotRequired(uint256 proposalId)</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">error</p>
-<a className="peer" data-card href="#IGovernor-GovernorQueueNotImplemented--">#</a>
+<a className="peer" data-card href="#IGovernor-GovernorProposalQueueingNotRequired-uint256-">#</a>
 </div>
 </div>
 <div className="px-4">
 
-Queue operation is not implemented for this governor. Execute should be called directly.
+This operation doesn't require queuing and should be executed directly.
 
 </div>
 </div>
 
-<a id="IGovernor-GovernorNotQueuedProposal-uint256-"></a>
+<a id="IGovernor-GovernorProposalQueueingFailed-uint256-"></a>
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">GovernorNotQueuedProposal(uint256 proposalId)</p>
+<p className="font-bold text-sm font-mono">GovernorProposalQueueingFailed(uint256 proposalId)</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">error</p>
-<a className="peer" data-card href="#IGovernor-GovernorNotQueuedProposal-uint256-">#</a>
+<a className="peer" data-card href="#IGovernor-GovernorProposalQueueingFailed-uint256-">#</a>
 </div>
 </div>
 <div className="px-4">
 
-The proposal hasn't been queued yet.
+Indicates a misconfigured timelock module. (e.g. [`Governor._queueOperations`](#Governor-_queueOperations-uint256-address---uint256---bytes---bytes32-) returned a zero ETA)
 
 </div>
 </div>
@@ -2532,7 +2540,7 @@ The given `account` is unable to cancel the proposal with given `proposalId`.
 
 ## `TimelockController` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/TimelockController.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/TimelockController.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3309,7 +3317,7 @@ The caller account is not authorized.
 
 ## `GovernorCountingFractional` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorCountingFractional.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/extensions/GovernorCountingFractional.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3471,8 +3479,8 @@ _Available since v5.1._
 - [GovernorRestrictedProposer(proposer)](#IGovernor-GovernorRestrictedProposer-address-)
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
-- [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
+- [GovernorProposalQueueingNotRequired(proposalId)](#IGovernor-GovernorProposalQueueingNotRequired-uint256-)
+- [GovernorProposalQueueingFailed(proposalId)](#IGovernor-GovernorProposalQueueingFailed-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
@@ -3678,7 +3686,7 @@ A fractional vote params uses more votes than are available for that user.
 
 ## `GovernorCountingOverridable` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorCountingOverridable.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/extensions/GovernorCountingOverridable.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -3833,8 +3841,8 @@ token that inherits [`VotesExtended`](#VotesExtended).
 - [GovernorRestrictedProposer(proposer)](#IGovernor-GovernorRestrictedProposer-address-)
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
-- [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
+- [GovernorProposalQueueingNotRequired(proposalId)](#IGovernor-GovernorProposalQueueingNotRequired-uint256-)
+- [GovernorProposalQueueingFailed(proposalId)](#IGovernor-GovernorProposalQueueingFailed-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
@@ -4143,7 +4151,7 @@ A delegated vote on `proposalId` was overridden by `weight`
 
 ## `GovernorCountingSimple` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorCountingSimple.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/extensions/GovernorCountingSimple.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -4282,8 +4290,8 @@ Extension of [`Governor`](#Governor) for simple, 3 options, vote counting.
 - [GovernorRestrictedProposer(proposer)](#IGovernor-GovernorRestrictedProposer-address-)
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
-- [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
+- [GovernorProposalQueueingNotRequired(proposalId)](#IGovernor-GovernorProposalQueueingNotRequired-uint256-)
+- [GovernorProposalQueueingFailed(proposalId)](#IGovernor-GovernorProposalQueueingFailed-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
@@ -4420,13 +4428,214 @@ See [`Governor._countVote`](#Governor-_countVote-uint256-address-uint8-uint256-b
 </div>
 </div>
 
+<a id="GovernorCrosschain"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `GovernorCrosschain` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/extensions/GovernorCrosschain.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/contracts/governance/extensions/GovernorCrosschain.sol";
+```
+
+Extension of [`Governor`](#Governor) for cross-chain governance through ERC-7786 gateways and [`CrosschainRemoteExecutor`](/contracts/5.x/api/crosschain#CrosschainRemoteExecutor).
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [relayCrosschain(gateway, executor, mode, executionCalldata)](#GovernorCrosschain-relayCrosschain-address-bytes-Mode-bytes-)
+- [_crosschainExecute(gateway, executor, mode, executionCalldata)](#GovernorCrosschain-_crosschainExecute-address-bytes-Mode-bytes-)
+<details>
+<summary>Governor</summary>
+
+- [receive()](#Governor-receive--)
+- [supportsInterface(interfaceId)](#Governor-supportsInterface-bytes4-)
+- [name()](#Governor-name--)
+- [version()](#Governor-version--)
+- [hashProposal(targets, values, calldatas, descriptionHash)](#Governor-hashProposal-address---uint256---bytes---bytes32-)
+- [getProposalId(targets, values, calldatas, descriptionHash)](#Governor-getProposalId-address---uint256---bytes---bytes32-)
+- [state(proposalId)](#Governor-state-uint256-)
+- [proposalThreshold()](#Governor-proposalThreshold--)
+- [proposalSnapshot(proposalId)](#Governor-proposalSnapshot-uint256-)
+- [proposalDeadline(proposalId)](#Governor-proposalDeadline-uint256-)
+- [proposalProposer(proposalId)](#Governor-proposalProposer-uint256-)
+- [proposalEta(proposalId)](#Governor-proposalEta-uint256-)
+- [proposalNeedsQueuing()](#Governor-proposalNeedsQueuing-uint256-)
+- [_checkGovernance()](#Governor-_checkGovernance--)
+- [_quorumReached(proposalId)](#Governor-_quorumReached-uint256-)
+- [_voteSucceeded(proposalId)](#Governor-_voteSucceeded-uint256-)
+- [_getVotes(account, timepoint, params)](#Governor-_getVotes-address-uint256-bytes-)
+- [_countVote(proposalId, account, support, totalWeight, params)](#Governor-_countVote-uint256-address-uint8-uint256-bytes-)
+- [_tallyUpdated(proposalId)](#Governor-_tallyUpdated-uint256-)
+- [_defaultParams()](#Governor-_defaultParams--)
+- [propose(targets, values, calldatas, description)](#Governor-propose-address---uint256---bytes---string-)
+- [_propose(targets, values, calldatas, description, proposer)](#Governor-_propose-address---uint256---bytes---string-address-)
+- [queue(targets, values, calldatas, descriptionHash)](#Governor-queue-address---uint256---bytes---bytes32-)
+- [_queueOperations(, , , , )](#Governor-_queueOperations-uint256-address---uint256---bytes---bytes32-)
+- [execute(targets, values, calldatas, descriptionHash)](#Governor-execute-address---uint256---bytes---bytes32-)
+- [_executeOperations(, targets, values, calldatas, )](#Governor-_executeOperations-uint256-address---uint256---bytes---bytes32-)
+- [cancel(targets, values, calldatas, descriptionHash)](#Governor-cancel-address---uint256---bytes---bytes32-)
+- [_cancel(targets, values, calldatas, descriptionHash)](#Governor-_cancel-address---uint256---bytes---bytes32-)
+- [getVotes(account, timepoint)](#Governor-getVotes-address-uint256-)
+- [getVotesWithParams(account, timepoint, params)](#Governor-getVotesWithParams-address-uint256-bytes-)
+- [castVote(proposalId, support)](#Governor-castVote-uint256-uint8-)
+- [castVoteWithReason(proposalId, support, reason)](#Governor-castVoteWithReason-uint256-uint8-string-)
+- [castVoteWithReasonAndParams(proposalId, support, reason, params)](#Governor-castVoteWithReasonAndParams-uint256-uint8-string-bytes-)
+- [castVoteBySig(proposalId, support, voter, signature)](#Governor-castVoteBySig-uint256-uint8-address-bytes-)
+- [castVoteWithReasonAndParamsBySig(proposalId, support, voter, reason, params, signature)](#Governor-castVoteWithReasonAndParamsBySig-uint256-uint8-address-string-bytes-bytes-)
+- [_validateVoteSig(proposalId, support, voter, signature)](#Governor-_validateVoteSig-uint256-uint8-address-bytes-)
+- [_validateExtendedVoteSig(proposalId, support, voter, reason, params, signature)](#Governor-_validateExtendedVoteSig-uint256-uint8-address-string-bytes-bytes-)
+- [_castVote(proposalId, account, support, reason)](#Governor-_castVote-uint256-address-uint8-string-)
+- [_castVote(proposalId, account, support, reason, params)](#Governor-_castVote-uint256-address-uint8-string-bytes-)
+- [relay(target, value, data)](#Governor-relay-address-uint256-bytes-)
+- [_executor()](#Governor-_executor--)
+- [onERC721Received(, , , )](#Governor-onERC721Received-address-address-uint256-bytes-)
+- [onERC1155Received(, , , , )](#Governor-onERC1155Received-address-address-uint256-uint256-bytes-)
+- [onERC1155BatchReceived(, , , , )](#Governor-onERC1155BatchReceived-address-address-uint256---uint256---bytes-)
+- [_encodeStateBitmap(proposalState)](#Governor-_encodeStateBitmap-enum-IGovernor-ProposalState-)
+- [_validateStateBitmap(proposalId, allowedStates)](#Governor-_validateStateBitmap-uint256-bytes32-)
+- [_isValidDescriptionForProposer(proposer, description)](#Governor-_isValidDescriptionForProposer-address-string-)
+- [_validateCancel(proposalId, caller)](#Governor-_validateCancel-uint256-address-)
+- [clock()](#Governor-clock--)
+- [CLOCK_MODE()](#Governor-CLOCK_MODE--)
+- [votingDelay()](#Governor-votingDelay--)
+- [votingPeriod()](#Governor-votingPeriod--)
+- [quorum(timepoint)](#Governor-quorum-uint256-)
+- [BALLOT_TYPEHASH()](#Governor-BALLOT_TYPEHASH-bytes32)
+- [EXTENDED_BALLOT_TYPEHASH()](#Governor-EXTENDED_BALLOT_TYPEHASH-bytes32)
+
+</details>
+<details>
+<summary>IGovernor</summary>
+
+- [COUNTING_MODE()](#IGovernor-COUNTING_MODE--)
+- [hasVoted(proposalId, account)](#IGovernor-hasVoted-uint256-address-)
+
+</details>
+<details>
+<summary>Nonces</summary>
+
+- [nonces(owner)](#Nonces-nonces-address-)
+- [_useNonce(owner)](#Nonces-_useNonce-address-)
+- [_useCheckedNonce(owner, nonce)](#Nonces-_useCheckedNonce-address-uint256-)
+
+</details>
+<details>
+<summary>EIP712</summary>
+
+- [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
+- [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
+- [eip712Domain()](#EIP712-eip712Domain--)
+- [_EIP712Name()](#EIP712-_EIP712Name--)
+- [_EIP712Version()](#EIP712-_EIP712Version--)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+<details>
+<summary>IGovernor</summary>
+
+- [ProposalCreated(proposalId, proposer, targets, values, signatures, calldatas, voteStart, voteEnd, description)](#IGovernor-ProposalCreated-uint256-address-address---uint256---string---bytes---uint256-uint256-string-)
+- [ProposalQueued(proposalId, etaSeconds)](#IGovernor-ProposalQueued-uint256-uint256-)
+- [ProposalExecuted(proposalId)](#IGovernor-ProposalExecuted-uint256-)
+- [ProposalCanceled(proposalId)](#IGovernor-ProposalCanceled-uint256-)
+- [VoteCast(voter, proposalId, support, weight, reason)](#IGovernor-VoteCast-address-uint256-uint8-uint256-string-)
+- [VoteCastWithParams(voter, proposalId, support, weight, reason, params)](#IGovernor-VoteCastWithParams-address-uint256-uint8-uint256-string-bytes-)
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
+- [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+<details>
+<summary>IGovernor</summary>
+
+- [GovernorInvalidProposalLength(targets, calldatas, values)](#IGovernor-GovernorInvalidProposalLength-uint256-uint256-uint256-)
+- [GovernorAlreadyCastVote(voter)](#IGovernor-GovernorAlreadyCastVote-address-)
+- [GovernorDisabledDeposit()](#IGovernor-GovernorDisabledDeposit--)
+- [GovernorOnlyExecutor(account)](#IGovernor-GovernorOnlyExecutor-address-)
+- [GovernorNonexistentProposal(proposalId)](#IGovernor-GovernorNonexistentProposal-uint256-)
+- [GovernorUnexpectedProposalState(proposalId, current, expectedStates)](#IGovernor-GovernorUnexpectedProposalState-uint256-enum-IGovernor-ProposalState-bytes32-)
+- [GovernorInvalidVotingPeriod(votingPeriod)](#IGovernor-GovernorInvalidVotingPeriod-uint256-)
+- [GovernorInsufficientProposerVotes(proposer, votes, threshold)](#IGovernor-GovernorInsufficientProposerVotes-address-uint256-uint256-)
+- [GovernorRestrictedProposer(proposer)](#IGovernor-GovernorRestrictedProposer-address-)
+- [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
+- [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
+- [GovernorProposalQueueingNotRequired(proposalId)](#IGovernor-GovernorProposalQueueingNotRequired-uint256-)
+- [GovernorProposalQueueingFailed(proposalId)](#IGovernor-GovernorProposalQueueingFailed-uint256-)
+- [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
+- [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
+- [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
+
+</details>
+<details>
+<summary>Nonces</summary>
+
+- [InvalidAccountNonce(account, currentNonce)](#Nonces-InvalidAccountNonce-address-uint256-)
+
+</details>
+</div>
+</div>
+
+<a id="GovernorCrosschain-relayCrosschain-address-bytes-Mode-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">relayCrosschain(address gateway, bytes executor, Mode mode, bytes executionCalldata)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#GovernorCrosschain-relayCrosschain-address-bytes-Mode-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Send crosschain instruction to an arbitrary remote executor via an arbitrary ERC-7786 gateway.
+
+</div>
+</div>
+
+<a id="GovernorCrosschain-_crosschainExecute-address-bytes-Mode-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_crosschainExecute(address gateway, bytes executor, Mode mode, bytes executionCalldata)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#GovernorCrosschain-_crosschainExecute-address-bytes-Mode-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Send crosschain instruction to an arbitrary remote executor via an arbitrary ERC-7786 gateway.
+
+</div>
+</div>
+
 <a id="GovernorNoncesKeyed"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
 ## `GovernorNoncesKeyed` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorNoncesKeyed.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/extensions/GovernorNoncesKeyed.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -4582,8 +4791,8 @@ Traditional (un-keyed) nonces are still supported and can continue to be used as
 - [GovernorRestrictedProposer(proposer)](#IGovernor-GovernorRestrictedProposer-address-)
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
-- [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
+- [GovernorProposalQueueingNotRequired(proposalId)](#IGovernor-GovernorProposalQueueingNotRequired-uint256-)
+- [GovernorProposalQueueingFailed(proposalId)](#IGovernor-GovernorProposalQueueingFailed-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
@@ -4663,7 +4872,7 @@ Side effects may be skipped depending on the linearization of the function.
 
 ## `GovernorPreventLateQuorum` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorPreventLateQuorum.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/extensions/GovernorPreventLateQuorum.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -4818,8 +5027,8 @@ proposal.
 - [GovernorRestrictedProposer(proposer)](#IGovernor-GovernorRestrictedProposer-address-)
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
-- [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
+- [GovernorProposalQueueingNotRequired(proposalId)](#IGovernor-GovernorProposalQueueingNotRequired-uint256-)
+- [GovernorProposalQueueingFailed(proposalId)](#IGovernor-GovernorProposalQueueingFailed-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
@@ -4989,7 +5198,7 @@ Emitted when the [`GovernorPreventLateQuorum.lateQuorumVoteExtension`](#Governor
 
 ## `GovernorProposalGuardian` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorProposalGuardian.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/extensions/GovernorProposalGuardian.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -5140,8 +5349,8 @@ if the proposal guardian is not configured, then proposers take this role for th
 - [GovernorRestrictedProposer(proposer)](#IGovernor-GovernorRestrictedProposer-address-)
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
-- [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
+- [GovernorProposalQueueingNotRequired(proposalId)](#IGovernor-GovernorProposalQueueingNotRequired-uint256-)
+- [GovernorProposalQueueingFailed(proposalId)](#IGovernor-GovernorProposalQueueingFailed-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
@@ -5254,7 +5463,7 @@ Override [`Governor._validateCancel`](#Governor-_validateCancel-uint256-address-
 
 ## `GovernorSequentialProposalId` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorSequentialProposalId.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/extensions/GovernorSequentialProposalId.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -5401,8 +5610,8 @@ sequential ids.
 - [GovernorRestrictedProposer(proposer)](#IGovernor-GovernorRestrictedProposer-address-)
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
-- [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
+- [GovernorProposalQueueingNotRequired(proposalId)](#IGovernor-GovernorProposalQueueingNotRequired-uint256-)
+- [GovernorProposalQueueingFailed(proposalId)](#IGovernor-GovernorProposalQueueingFailed-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
@@ -5511,7 +5720,7 @@ The [`GovernorSequentialProposalId.latestProposalId`](#GovernorSequentialProposa
 
 ## `GovernorSettings` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorSettings.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/extensions/GovernorSettings.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -5664,8 +5873,8 @@ Extension of [`Governor`](#Governor) for settings updatable through governance.
 - [GovernorRestrictedProposer(proposer)](#IGovernor-GovernorRestrictedProposer-address-)
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
-- [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
+- [GovernorProposalQueueingNotRequired(proposalId)](#IGovernor-GovernorProposalQueueingNotRequired-uint256-)
+- [GovernorProposalQueueingFailed(proposalId)](#IGovernor-GovernorProposalQueueingFailed-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
@@ -5910,7 +6119,7 @@ Emits a [`GovernorSettings.ProposalThresholdSet`](#GovernorSettings-ProposalThre
 
 ## `GovernorStorage` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorStorage.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/extensions/GovernorStorage.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -6065,8 +6274,8 @@ Use cases for this module include:
 - [GovernorRestrictedProposer(proposer)](#IGovernor-GovernorRestrictedProposer-address-)
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
-- [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
+- [GovernorProposalQueueingNotRequired(proposalId)](#IGovernor-GovernorProposalQueueingNotRequired-uint256-)
+- [GovernorProposalQueueingFailed(proposalId)](#IGovernor-GovernorProposalQueueingFailed-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
@@ -6206,7 +6415,7 @@ Returns the details (including the proposalId) of a proposal given its sequentia
 
 ## `GovernorSuperQuorum` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorSuperQuorum.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/extensions/GovernorSuperQuorum.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -6353,8 +6562,8 @@ extension must implement [`GovernorCountingFractional.proposalVotes`](#GovernorC
 - [GovernorRestrictedProposer(proposer)](#IGovernor-GovernorRestrictedProposer-address-)
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
-- [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
+- [GovernorProposalQueueingNotRequired(proposalId)](#IGovernor-GovernorProposalQueueingNotRequired-uint256-)
+- [GovernorProposalQueueingFailed(proposalId)](#IGovernor-GovernorProposalQueueingFailed-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
@@ -6449,7 +6658,7 @@ types of scenarios.
 
 ## `GovernorTimelockAccess` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorTimelockAccess.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/extensions/GovernorTimelockAccess.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -6633,8 +6842,8 @@ the same time. See [`AccessManager.schedule`](/contracts/5.x/api/access#AccessMa
 - [GovernorRestrictedProposer(proposer)](#IGovernor-GovernorRestrictedProposer-address-)
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
-- [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
+- [GovernorProposalQueueingNotRequired(proposalId)](#IGovernor-GovernorProposalQueueingNotRequired-uint256-)
+- [GovernorProposalQueueingFailed(proposalId)](#IGovernor-GovernorProposalQueueingFailed-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
@@ -6986,7 +7195,7 @@ Emits a [`IGovernor.ProposalCanceled`](#IGovernor-ProposalCanceled-uint256-) eve
 
 ## `GovernorTimelockCompound` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorTimelockCompound.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/extensions/GovernorTimelockCompound.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -7001,8 +7210,8 @@ the external timelock to all successful proposals (in addition to the voting dur
 the admin of the timelock for any operation to be performed. A public, unrestricted,
 [`GovernorTimelockCompound.__acceptAdmin`](#GovernorTimelockCompound-__acceptAdmin--) is available to accept ownership of the timelock.
 
-Using this model means the proposal will be operated by the [`TimelockController`](#TimelockController) and not by the [`Governor`](#Governor). Thus,
-the assets and permissions must be attached to the [`TimelockController`](#TimelockController). Any asset sent to the [`Governor`](#Governor) will be
+Using this model means the proposal will be operated by the `ICompoundTimelock` and not by the [`Governor`](#Governor). Thus,
+the assets and permissions must be attached to the `ICompoundTimelock`. Any asset sent to the [`Governor`](#Governor) will be
 inaccessible from a proposal, unless executed via [`Governor.relay`](#Governor-relay-address-uint256-bytes-).
 
 <div className="bg-secondary p-4 rounded-md mb-6">
@@ -7141,8 +7350,8 @@ inaccessible from a proposal, unless executed via [`Governor.relay`](#Governor-r
 - [GovernorRestrictedProposer(proposer)](#IGovernor-GovernorRestrictedProposer-address-)
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
-- [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
+- [GovernorProposalQueueingNotRequired(proposalId)](#IGovernor-GovernorProposalQueueingNotRequired-uint256-)
+- [GovernorProposalQueueingFailed(proposalId)](#IGovernor-GovernorProposalQueueingFailed-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
@@ -7352,7 +7561,7 @@ It is not recommended to change the timelock while there are other queued govern
 
 <div className="px-4">
 
-Emitted when the timelock controller used for proposal execution is modified.
+Emitted when the timelock used for proposal execution is modified.
 
 </div>
 </div>
@@ -7363,7 +7572,7 @@ Emitted when the timelock controller used for proposal execution is modified.
 
 ## `GovernorTimelockControl` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorTimelockControl.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/extensions/GovernorTimelockControl.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -7523,8 +7732,8 @@ proposals that have been approved by the voters, effectively executing a Denial 
 - [GovernorRestrictedProposer(proposer)](#IGovernor-GovernorRestrictedProposer-address-)
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
-- [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
+- [GovernorProposalQueueingNotRequired(proposalId)](#IGovernor-GovernorProposalQueueingNotRequired-uint256-)
+- [GovernorProposalQueueingFailed(proposalId)](#IGovernor-GovernorProposalQueueingFailed-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
@@ -7721,7 +7930,7 @@ Emitted when the timelock controller used for proposal execution is modified.
 
 ## `GovernorVotes` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorVotes.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/extensions/GovernorVotes.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -7867,8 +8076,8 @@ token.
 - [GovernorRestrictedProposer(proposer)](#IGovernor-GovernorRestrictedProposer-address-)
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
-- [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
+- [GovernorProposalQueueingNotRequired(proposalId)](#IGovernor-GovernorProposalQueueingNotRequired-uint256-)
+- [GovernorProposalQueueingFailed(proposalId)](#IGovernor-GovernorProposalQueueingFailed-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
@@ -7971,7 +8180,7 @@ Machine-readable description of the clock as specified in ERC-6372.
 
 ## `GovernorVotesQuorumFraction` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorVotesQuorumFraction.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/extensions/GovernorVotesQuorumFraction.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -8130,8 +8339,8 @@ fraction of the total supply.
 - [GovernorRestrictedProposer(proposer)](#IGovernor-GovernorRestrictedProposer-address-)
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
-- [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
+- [GovernorProposalQueueingNotRequired(proposalId)](#IGovernor-GovernorProposalQueueingNotRequired-uint256-)
+- [GovernorProposalQueueingFailed(proposalId)](#IGovernor-GovernorProposalQueueingFailed-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
@@ -8338,7 +8547,7 @@ The quorum set is not a valid fraction.
 
 ## `GovernorVotesSuperQuorumFraction` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/extensions/GovernorVotesSuperQuorumFraction.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/extensions/GovernorVotesSuperQuorumFraction.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -8528,8 +8737,8 @@ the `Succeeded` state before the proposal deadline.
 - [GovernorRestrictedProposer(proposer)](#IGovernor-GovernorRestrictedProposer-address-)
 - [GovernorInvalidVoteType()](#IGovernor-GovernorInvalidVoteType--)
 - [GovernorInvalidVoteParams()](#IGovernor-GovernorInvalidVoteParams--)
-- [GovernorQueueNotImplemented()](#IGovernor-GovernorQueueNotImplemented--)
-- [GovernorNotQueuedProposal(proposalId)](#IGovernor-GovernorNotQueuedProposal-uint256-)
+- [GovernorProposalQueueingNotRequired(proposalId)](#IGovernor-GovernorProposalQueueingNotRequired-uint256-)
+- [GovernorProposalQueueingFailed(proposalId)](#IGovernor-GovernorProposalQueueingFailed-uint256-)
 - [GovernorAlreadyQueuedProposal(proposalId)](#IGovernor-GovernorAlreadyQueuedProposal-uint256-)
 - [GovernorInvalidSignature(voter)](#IGovernor-GovernorInvalidSignature-address-)
 - [GovernorUnableToCancel(proposalId, account)](#IGovernor-GovernorUnableToCancel-uint256-address-)
@@ -8559,7 +8768,7 @@ the `Succeeded` state before the proposal deadline.
 Initialize super quorum as a fraction of the token's total supply.
 
 The super quorum is specified as a fraction of the token's total supply and has to
-be greater than the quorum.
+be greater than or equal to the quorum.
 
 </div>
 </div>
@@ -8755,7 +8964,7 @@ The super quorum set is not valid as it exceeds the quorum denominator.
 </div>
 <div className="px-4">
 
-The super quorum set is not valid as it is smaller or equal to the quorum.
+The super quorum set is not valid as it is smaller than the quorum.
 
 </div>
 </div>
@@ -8783,7 +8992,7 @@ The quorum set is not valid as it exceeds the super quorum.
 
 ## `IVotes` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/utils/IVotes.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/utils/IVotes.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -8990,7 +9199,7 @@ The signature used has expired.
 
 ## `Votes` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/utils/Votes.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/utils/Votes.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -9034,7 +9243,7 @@ previous example, it would be included in [`ERC721._update`](/contracts/5.x/api/
 - [_transferVotingUnits(from, to, amount)](#Votes-_transferVotingUnits-address-address-uint256-)
 - [_moveDelegateVotes(from, to, amount)](#Votes-_moveDelegateVotes-address-address-uint256-)
 - [_numCheckpoints(account)](#Votes-_numCheckpoints-address-)
-- [_checkpoints(account, pos)](#Votes-_checkpoints-address-uint32-)
+- [_checkpoints(account, index)](#Votes-_checkpoints-address-uint32-)
 - [_getVotingUnits()](#Votes-_getVotingUnits-address-)
 <details>
 <summary>Nonces</summary>
@@ -9079,7 +9288,6 @@ previous example, it would be included in [`ERC721._update`](/contracts/5.x/api/
 <div className="bg-secondary p-4 rounded-md mb-6">
 <h3 style={{ marginTop: "0"}}>Errors</h3>
 <div className="font-mono">
-- [ERC6372InconsistentClock()](#Votes-ERC6372InconsistentClock--)
 - [ERC5805FutureLookup(timepoint, clock)](#Votes-ERC5805FutureLookup-uint256-uint48-)
 <details>
 <summary>IVotes</summary>
@@ -9358,7 +9566,7 @@ Get number of checkpoints for `account`.
 
 <div className="border rounded-md mb-4">
 <div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">_checkpoints(address account, uint32 pos) → struct Checkpoints.Checkpoint208</p>
+<p className="font-bold text-sm font-mono">_checkpoints(address account, uint32 index) → struct Checkpoints.Checkpoint208</p>
 <div className="flex flex-row items-center gap-2">
 <p className="font-light text-sm">internal</p>
 <a className="peer" data-card href="#Votes-_checkpoints-address-uint32-">#</a>
@@ -9388,23 +9596,6 @@ Must return the voting units held by an account.
 </div>
 </div>
 
-<a id="Votes-ERC6372InconsistentClock--"></a>
-
-<div className="border rounded-md mb-4">
-<div className="bg-secondary flex w-full justify-between px-4">
-<p className="font-bold text-sm font-mono">ERC6372InconsistentClock()</p>
-<div className="flex flex-row items-center gap-2">
-<p className="font-light text-sm">error</p>
-<a className="peer" data-card href="#Votes-ERC6372InconsistentClock--">#</a>
-</div>
-</div>
-<div className="px-4">
-
-The clock was incorrectly modified.
-
-</div>
-</div>
-
 <a id="Votes-ERC5805FutureLookup-uint256-uint48-"></a>
 
 <div className="border rounded-md mb-4">
@@ -9428,7 +9619,7 @@ Lookup to future votes is not available.
 
 ## `VotesExtended` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/utils/VotesExtended.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/governance/utils/VotesExtended.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -9486,7 +9677,7 @@ contract VotingToken is Token, VotesExtended {
 - [delegateBySig(delegatee, nonce, expiry, v, r, s)](#Votes-delegateBySig-address-uint256-uint256-uint8-bytes32-bytes32-)
 - [_moveDelegateVotes(from, to, amount)](#Votes-_moveDelegateVotes-address-address-uint256-)
 - [_numCheckpoints(account)](#Votes-_numCheckpoints-address-)
-- [_checkpoints(account, pos)](#Votes-_checkpoints-address-uint32-)
+- [_checkpoints(account, index)](#Votes-_checkpoints-address-uint32-)
 - [_getVotingUnits()](#Votes-_getVotingUnits-address-)
 
 </details>
@@ -9536,7 +9727,6 @@ contract VotingToken is Token, VotesExtended {
 <details>
 <summary>Votes</summary>
 
-- [ERC6372InconsistentClock()](#Votes-ERC6372InconsistentClock--)
 - [ERC5805FutureLookup(timepoint, clock)](#Votes-ERC5805FutureLookup-uint256-uint48-)
 
 </details>

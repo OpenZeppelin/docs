@@ -11,6 +11,11 @@ This directory includes contracts to build accounts for ERC-4337. These include:
 * [`ERC7821`](#ERC7821): Minimal batch executor implementation contracts. Useful to enable easy batch execution for smart contracts.
 * [`ERC4337Utils`](#ERC4337Utils): Utility functions for working with ERC-4337 user operations.
 * [`ERC7579Utils`](#ERC7579Utils): Utility functions for working with ERC-7579 modules and account modularity.
+* [`Paymaster`](#Paymaster): An ERC-4337 paymaster implementation that includes the core logic to validate and pay for user operations.
+* [`PaymasterERC20`](#PaymasterERC20): A paymaster that allows users to pay for user operations using ERC-20 tokens.
+* [`PaymasterERC20Guarantor`](#PaymasterERC20Guarantor): A paymaster that enables third parties to guarantee user operations by pre-funding gas costs, with the option for users to repay or for guarantors to absorb the cost.
+* [`PaymasterERC721Owner`](#PaymasterERC721Owner): A paymaster that sponsors user operations for ERC-721 token holders, covering gas costs based on NFT ownership.
+* [`PaymasterSigner`](#PaymasterSigner): A paymaster that sponsors user operations authorized by a signature.
 
 ## Core
 
@@ -24,6 +29,18 @@ This directory includes contracts to build accounts for ERC-4337. These include:
 
 [`ERC7821`](#ERC7821)
 
+## Paymasters
+
+[`Paymaster`](#Paymaster)
+
+[`PaymasterERC20`](#PaymasterERC20)
+
+[`PaymasterERC20Guarantor`](#PaymasterERC20Guarantor)
+
+[`PaymasterERC721Owner`](#PaymasterERC721Owner)
+
+[`PaymasterSigner`](#PaymasterSigner)
+
 ## Utilities
 
 [`ERC4337Utils`](#ERC4337Utils)
@@ -36,7 +53,7 @@ This directory includes contracts to build accounts for ERC-4337. These include:
 
 ## `Account` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/account/Account.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/Account.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -53,7 +70,7 @@ Developers must implement the [`AbstractSigner._rawSignatureValidation`](/contra
 
 <Callout>
 This core account doesn't include any mechanism for performing arbitrary external calls. This is an essential
-feature that all Account should have. We leave it up to the developers to implement the mechanism of their choice.
+feature that all Accounts should have. We leave it up to the developers to implement the mechanism of their choice.
 Common choices include ERC-6900, ERC-7579 and ERC-7821 (among others).
 </Callout>
 
@@ -258,7 +275,7 @@ userOp will result in undefined behavior.
 </div>
 <div className="px-4">
 
-Virtual function that returns the signable hash for a user operations. Since v0.8.0 of the entrypoint,
+Virtual function that returns the signable hash for a user operation. Since v0.8.0 of the entrypoint,
 `userOpHash` is an EIP-712 hash that can be signed directly.
 
 </div>
@@ -356,7 +373,7 @@ Unauthorized call to the account.
 
 ## `AccountERC7579` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/account/extensions/draft-AccountERC7579.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/extensions/draft-AccountERC7579.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -981,7 +998,7 @@ The provided initData/deInitData for a fallback module is too short to extract a
 
 ## `AccountERC7579Hooked` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/account/extensions/draft-AccountERC7579Hooked.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/extensions/draft-AccountERC7579Hooked.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1269,7 +1286,7 @@ A hook module is already present. This contract only supports one hook module.
 
 ## `ERC7821` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/account/extensions/draft-ERC7821.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/extensions/draft-ERC7821.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1391,13 +1408,1246 @@ function _erc7821AuthorizedExecutor(
 </div>
 </div>
 
+<a id="Paymaster"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `Paymaster` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/paymaster/Paymaster.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/contracts/account/paymaster/Paymaster.sol";
+```
+
+A simple ERC4337 paymaster implementation. This base implementation only includes the minimal logic to validate
+and pay for user operations.
+
+Developers must implement the [`Paymaster._validatePaymasterUserOp`](#Paymaster-_validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-) function to define the paymaster's validation
+and payment logic, and [`Paymaster._postOp`](#Paymaster-_postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-) function to define the post-operation logic. The `context` parameter
+is used to pass data between the validation and post execution phases.
+
+The paymaster includes support to call the [`IEntryPointStake`](/contracts/5.x/api/interfaces#IEntryPointStake) interface to manage the paymaster's deposits and stakes
+through the internal functions [`Paymaster._deposit`](#Paymaster-_deposit-uint256-), [`Paymaster._withdraw`](#Paymaster-_withdraw-address-payable-uint256-), [`Paymaster._addStake`](#Paymaster-_addStake-uint256-uint32-), [`Paymaster._unlockStake`](#Paymaster-_unlockStake--) and [`Paymaster._withdrawStake`](#Paymaster-_withdrawStake-address-payable-).
+
+* Deposits are used to pay for user operations.
+* Stakes are used to guarantee the paymaster's reputation and obtain more flexibility in accessing storage.
+
+<Callout type="warn">
+The deposit and stake functions are `internal` so that developers can expose them under the public interface and
+authorization mechanism of their choice. Public versions of [`Paymaster._withdraw`](#Paymaster-_withdraw-address-payable-uint256-), [`Paymaster._unlockStake`](#Paymaster-_unlockStake--) and [`Paymaster._withdrawStake`](#Paymaster-_withdrawStake-address-payable-) MUST
+be exposed and properly authorized, otherwise the deposit and stake will be permanently locked.
+
+Example implementation exposing the deposit and stake functions using [`AccessControl`](/contracts/5.x/api/access#AccessControl):
+
+```solidity
+contract MyPaymaster is Paymaster, AccessControl {
+    bytes32 private constant WITHDRAWER_ROLE = keccak256("WITHDRAWER_ROLE");
+    bytes32 private constant UNSTAKER_ROLE = keccak256("UNSTAKER_ROLE");
+
+    constructor() {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    }
+
+    function deposit() public payable virtual {
+        _deposit(msg.value);
+    }
+
+    function withdraw(address payable to, uint256 value) public virtual onlyRole(WITHDRAWER_ROLE) {
+        _withdraw(to, value);
+    }
+
+    function addStake(uint32 unstakeDelaySec) public payable virtual {
+        _addStake(msg.value, unstakeDelaySec);
+    }
+
+    function unlockStake() public virtual onlyRole(UNSTAKER_ROLE) {
+        _unlockStake();
+    }
+
+    function withdrawStake(address payable to) public virtual onlyRole(UNSTAKER_ROLE) {
+        _withdrawStake(to);
+    }
+
+    function _validatePaymasterUserOp(
+        PackedUserOperation calldata userOp,
+        bytes32 userOpHash,
+        uint256 requiredPreFund
+    ) internal virtual override returns (bytes memory context, uint256 validationData) {
+        // validation logic
+    }
+}
+```
+</Callout>
+<Callout>
+See [Paymaster's unstaked reputation rules](https://eips.ethereum.org/EIPS/eip-7562#unstaked-paymasters-reputation-rules)
+ for more details on the paymaster's storage access limitations.
+</Callout>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Modifiers</h3>
+<div className="font-mono">
+- [onlyEntryPoint()](#Paymaster-onlyEntryPoint--)
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [entryPoint()](#Paymaster-entryPoint--)
+- [validatePaymasterUserOp(userOp, userOpHash, maxCost)](#Paymaster-validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-)
+- [postOp(mode, context, actualGasCost, actualUserOpFeePerGas)](#Paymaster-postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-)
+- [_validatePaymasterUserOp(userOp, userOpHash, requiredPreFund)](#Paymaster-_validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-)
+- [_postOp(, , , )](#Paymaster-_postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-)
+- [_checkEntryPoint()](#Paymaster-_checkEntryPoint--)
+- [_deposit(value)](#Paymaster-_deposit-uint256-)
+- [_withdraw(to, value)](#Paymaster-_withdraw-address-payable-uint256-)
+- [_addStake(value, unstakeDelaySec)](#Paymaster-_addStake-uint256-uint32-)
+- [_unlockStake()](#Paymaster-_unlockStake--)
+- [_withdrawStake(to)](#Paymaster-_withdrawStake-address-payable-)
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [PaymasterUnauthorized(sender)](#Paymaster-PaymasterUnauthorized-address-)
+</div>
+</div>
+
+<a id="Paymaster-onlyEntryPoint--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">onlyEntryPoint()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#Paymaster-onlyEntryPoint--">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Revert if the caller is not the entry point.
+
+</div>
+</div>
+
+<a id="Paymaster-entryPoint--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">entryPoint() → contract IEntryPoint</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#Paymaster-entryPoint--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Canonical entry point for the account that forwards and validates user operations.
+
+</div>
+</div>
+
+<a id="Paymaster-validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">validatePaymasterUserOp(struct PackedUserOperation userOp, bytes32 userOpHash, uint256 maxCost) → bytes context, uint256 validationData</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#Paymaster-validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Validates whether the paymaster is willing to pay for the user operation. See
+[`IAccount.validateUserOp`](/contracts/5.x/api/interfaces#IAccount-validateUserOp-struct-PackedUserOperation-bytes32-uint256-) for additional information on the return value.
+
+<Callout>
+Bundlers will reject this method if it modifies the state, unless it's whitelisted.
+</Callout>
+
+</div>
+</div>
+
+<a id="Paymaster-postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">postOp(enum IPaymaster.PostOpMode mode, bytes context, uint256 actualGasCost, uint256 actualUserOpFeePerGas)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#Paymaster-postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Verifies the sender is the entrypoint.
+
+</div>
+</div>
+
+<a id="Paymaster-_validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_validatePaymasterUserOp(struct PackedUserOperation userOp, bytes32 userOpHash, uint256 requiredPreFund) → bytes context, uint256 validationData</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#Paymaster-_validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal validation of whether the paymaster is willing to pay for the user operation.
+Returns the context to be passed to postOp and the validation data.
+
+The `requiredPreFund` is the amount the paymaster has to pay (in native tokens). It's calculated
+as `requiredGas * userOp.maxFeePerGas`, where `required` gas can be calculated from the user operation
+as `verificationGasLimit + callGasLimit + paymasterVerificationGasLimit + paymasterPostOpGasLimit + preVerificationGas`
+
+</div>
+</div>
+
+<a id="Paymaster-_postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_postOp(enum IPaymaster.PostOpMode, bytes, uint256, uint256)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#Paymaster-_postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Handles post user operation execution logic. The caller must be the entry point.
+
+It receives the `context` returned by `_validatePaymasterUserOp`. Function is not called if no context
+is returned by [`Paymaster.validatePaymasterUserOp`](#Paymaster-validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-).
+
+<Callout>
+The `actualUserOpFeePerGas` is not `tx.gasprice`. A user operation can be bundled with other transactions
+making the gas price of the user operation to differ.
+</Callout>
+
+</div>
+</div>
+
+<a id="Paymaster-_checkEntryPoint--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_checkEntryPoint()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#Paymaster-_checkEntryPoint--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Ensures the caller is the `entrypoint`.
+
+</div>
+</div>
+
+<a id="Paymaster-_deposit-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_deposit(uint256 value)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#Paymaster-_deposit-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Calls [`IEntryPointStake.depositTo`](/contracts/5.x/api/interfaces#IEntryPointStake-depositTo-address-).
+
+</div>
+</div>
+
+<a id="Paymaster-_withdraw-address-payable-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_withdraw(address payable to, uint256 value)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#Paymaster-_withdraw-address-payable-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Calls [`IEntryPointStake.withdrawTo`](/contracts/5.x/api/interfaces#IEntryPointStake-withdrawTo-address-payable-uint256-).
+
+</div>
+</div>
+
+<a id="Paymaster-_addStake-uint256-uint32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_addStake(uint256 value, uint32 unstakeDelaySec)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#Paymaster-_addStake-uint256-uint32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Calls [`IEntryPointStake.addStake`](/contracts/5.x/api/interfaces#IEntryPointStake-addStake-uint32-).
+
+</div>
+</div>
+
+<a id="Paymaster-_unlockStake--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_unlockStake()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#Paymaster-_unlockStake--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Calls [`IEntryPointStake.unlockStake`](/contracts/5.x/api/interfaces#IEntryPointStake-unlockStake--).
+
+</div>
+</div>
+
+<a id="Paymaster-_withdrawStake-address-payable-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_withdrawStake(address payable to)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#Paymaster-_withdrawStake-address-payable-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Calls [`IEntryPointStake.withdrawStake`](/contracts/5.x/api/interfaces#IEntryPointStake-withdrawStake-address-payable-).
+
+</div>
+</div>
+
+<a id="Paymaster-PaymasterUnauthorized-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">PaymasterUnauthorized(address sender)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#Paymaster-PaymasterUnauthorized-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Unauthorized call to the paymaster.
+
+</div>
+</div>
+
+<a id="PaymasterERC20"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `PaymasterERC20` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/paymaster/extensions/PaymasterERC20.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/contracts/account/paymaster/extensions/PaymasterERC20.sol";
+```
+
+Extension of [`Paymaster`](#Paymaster) that enables users to pay gas with ERC-20 tokens.
+
+To enable this feature, developers must implement the [`PaymasterERC20._fetchDetails`](#PaymasterERC20-_fetchDetails-struct-PackedUserOperation-bytes32-) function:
+
+```solidity
+function _fetchDetails(
+    PackedUserOperation calldata userOp,
+    bytes32 userOpHash
+) internal view override returns (uint256 validationData, IERC20 token, uint256 tokenPerNative) {
+    // Implement logic to fetch the token, and token price from the userOp
+}
+```
+
+The contract follows a pre-charge and refund model:
+1. During validation, it pre-charges the maximum possible gas cost
+2. After execution, it refunds any unused gas back to the user
+
+<Callout>
+[`PaymasterERC20._prefund`](#PaymasterERC20-_prefund-struct-PackedUserOperation-bytes32-contract-IERC20-uint256-address-uint256-) performs a `transferFrom` during the validation phase, writing to the token contract's storage.
+ERC-7562 restricts unstaked paymasters from such accesses, and public mempool bundlers will reject these operations.
+Stake the paymaster (see [`Paymaster._addStake`](#Paymaster-_addStake-uint256-uint32-)) when deploying against a public mempool.
+</Callout>
+
+<Callout type="warn">
+The [`PaymasterERC20._withdrawTokens`](#PaymasterERC20-_withdrawTokens-contract-IERC20-address-uint256-) function is `internal` so that developers can expose it under the public interface and
+authorization mechanism of their choice. Public versions of [`PaymasterERC20._withdrawTokens`](#PaymasterERC20-_withdrawTokens-contract-IERC20-address-uint256-) MUST be exposed and properly authorized,
+otherwise the tokens will be permanently stuck in the paymaster.
+
+Example implementation exposing the [`PaymasterERC20._withdrawTokens`](#PaymasterERC20-_withdrawTokens-contract-IERC20-address-uint256-) function using [`AccessControl`](/contracts/5.x/api/access#AccessControl):
+
+```solidity
+contract MyPaymaster is Paymaster, AccessControl {
+    bytes32 private constant WITHDRAWER_ROLE = keccak256("WITHDRAWER_ROLE");
+
+    constructor() {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    }
+
+    function withdrawTokens(IERC20 token, address recipient, uint256 amount) public virtual onlyRole(WITHDRAWER_ROLE) {
+        _withdrawTokens(token, recipient, amount);
+    }
+
+    ...
+}
+```
+</Callout>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [_validatePaymasterUserOp(userOp, userOpHash, maxCost)](#PaymasterERC20-_validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-)
+- [_prefund(, , token, , prefunder_, prefundAmount_)](#PaymasterERC20-_prefund-struct-PackedUserOperation-bytes32-contract-IERC20-uint256-address-uint256-)
+- [_postOp(, context, actualGasCost, actualUserOpFeePerGas)](#PaymasterERC20-_postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-)
+- [_refund(token, , actualAmount_, , prefunder, prefundAmount, )](#PaymasterERC20-_refund-contract-IERC20-uint256-uint256-uint256-address-uint256-bytes-)
+- [_fetchDetails(userOp, userOpHash)](#PaymasterERC20-_fetchDetails-struct-PackedUserOperation-bytes32-)
+- [_postOpCost()](#PaymasterERC20-_postOpCost--)
+- [_tokenPerNativeDenominator()](#PaymasterERC20-_tokenPerNativeDenominator--)
+- [_minTokensPerNative()](#PaymasterERC20-_minTokensPerNative--)
+- [_erc20Cost(nativeCost, tokenPerNative)](#PaymasterERC20-_erc20Cost-uint256-uint256-)
+- [_withdrawTokens(token, recipient, amount)](#PaymasterERC20-_withdrawTokens-contract-IERC20-address-uint256-)
+<details>
+<summary>Paymaster</summary>
+
+- [entryPoint()](#Paymaster-entryPoint--)
+- [validatePaymasterUserOp(userOp, userOpHash, maxCost)](#Paymaster-validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-)
+- [postOp(mode, context, actualGasCost, actualUserOpFeePerGas)](#Paymaster-postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-)
+- [_checkEntryPoint()](#Paymaster-_checkEntryPoint--)
+- [_deposit(value)](#Paymaster-_deposit-uint256-)
+- [_withdraw(to, value)](#Paymaster-_withdraw-address-payable-uint256-)
+- [_addStake(value, unstakeDelaySec)](#Paymaster-_addStake-uint256-uint32-)
+- [_unlockStake()](#Paymaster-_unlockStake--)
+- [_withdrawStake(to)](#Paymaster-_withdrawStake-address-payable-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+- [UserOperationSponsored(userOpHash, token, tokenAmount, tokenPerNative)](#PaymasterERC20-UserOperationSponsored-bytes32-address-uint256-uint256-)
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [PaymasterERC20FailedRefund(token, prefundAmount, actualAmount, prefundContext)](#PaymasterERC20-PaymasterERC20FailedRefund-contract-IERC20-uint256-uint256-bytes-)
+<details>
+<summary>Paymaster</summary>
+
+- [PaymasterUnauthorized(sender)](#Paymaster-PaymasterUnauthorized-address-)
+
+</details>
+</div>
+</div>
+
+<a id="PaymasterERC20-_validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_validatePaymasterUserOp(struct PackedUserOperation userOp, bytes32 userOpHash, uint256 maxCost) → bytes context, uint256 validationData</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#PaymasterERC20-_validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+See [`Paymaster._validatePaymasterUserOp`](#Paymaster-_validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-).
+
+Attempts to retrieve the `token` and `tokenPerNative` from the user operation (see [`PaymasterERC20._fetchDetails`](#PaymasterERC20-_fetchDetails-struct-PackedUserOperation-bytes32-))
+and prefund the user operation using these values and the `maxCost` argument (see [`PaymasterERC20._prefund`](#PaymasterERC20-_prefund-struct-PackedUserOperation-bytes32-contract-IERC20-uint256-address-uint256-)).
+
+Returns `abi.encodePacked(userOpHash, token, tokenPerNative, prefundAmount, prefunder, prefundContext)` in
+`context` if the prefund is successful. Otherwise, it returns empty bytes.
+
+</div>
+</div>
+
+<a id="PaymasterERC20-_prefund-struct-PackedUserOperation-bytes32-contract-IERC20-uint256-address-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_prefund(struct PackedUserOperation, bytes32, contract IERC20 token, uint256, address prefunder_, uint256 prefundAmount_) → bool success, address prefunder, uint256 prefundAmount, bytes prefundContext</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#PaymasterERC20-_prefund-struct-PackedUserOperation-bytes32-contract-IERC20-uint256-address-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Charges `prefundAmount` of `token` from `prefunder_` and returns the effective prefund actually pulled.
+
+The base implementation pulls exactly the requested `prefundAmount`. Extensions may inflate the amount
+(e.g. a guarantor adds the cost of the extra postOp work it performs) and must return the effective value.
+
+Returns `(success, prefunder, effectivePrefundAmount, prefundContext)`. `prefundContext` is forwarded to
+[`Paymaster._postOp`](#Paymaster-_postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-) through its `context` argument and may be used by overrides to carry data into [`PaymasterERC20._refund`](#PaymasterERC20-_refund-contract-IERC20-uint256-uint256-uint256-address-uint256-bytes-).
+
+<Callout>
+Consider not reverting if the prefund fails when overriding this function. This is to avoid reverting
+during the validation phase of the user operation, which may penalize the paymaster's reputation according
+to ERC-7562 validation rules.
+</Callout>
+
+</div>
+</div>
+
+<a id="PaymasterERC20-_postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_postOp(enum IPaymaster.PostOpMode, bytes context, uint256 actualGasCost, uint256 actualUserOpFeePerGas)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#PaymasterERC20-_postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Attempts to refund the user operation after execution. See [`PaymasterERC20._refund`](#PaymasterERC20-_refund-contract-IERC20-uint256-uint256-uint256-address-uint256-bytes-).
+
+Reverts with [`PaymasterERC20.PaymasterERC20FailedRefund`](#PaymasterERC20-PaymasterERC20FailedRefund-contract-IERC20-uint256-uint256-bytes-) if the refund fails.
+
+<Callout type="warn">
+This function may revert after the user operation has been executed without
+reverting the user operation itself. Consider implementing a mechanism to handle
+this case gracefully.
+</Callout>
+
+</div>
+</div>
+
+<a id="PaymasterERC20-_refund-contract-IERC20-uint256-uint256-uint256-address-uint256-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_refund(contract IERC20 token, uint256, uint256 actualAmount_, uint256, address prefunder, uint256 prefundAmount, bytes) → bool success, uint256 actualAmount</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#PaymasterERC20-_refund-contract-IERC20-uint256-uint256-uint256-address-uint256-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Refunds `prefundAmount - actualAmount` of `token` back to `prefunder` and returns the
+`actualAmount` actually charged.
+
+`actualAmount` is pre-computed by [`Paymaster._postOp`](#Paymaster-_postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-) via [`PaymasterERC20._erc20Cost`](#PaymasterERC20-_erc20Cost-uint256-uint256-). Extensions may change it (e.g. a
+guarantor adds its extra postOp cost or zeroes it out after pulling from the user) and must
+return the value that was effectively charged.
+
+Requirements:
+
+- `actualAmount <= prefundAmount`.
+
+</div>
+</div>
+
+<a id="PaymasterERC20-_fetchDetails-struct-PackedUserOperation-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_fetchDetails(struct PackedUserOperation userOp, bytes32 userOpHash) → uint256 validationData, contract IERC20 token, uint256 tokenPerNative</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#PaymasterERC20-_fetchDetails-struct-PackedUserOperation-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Retrieves payment details for a user operation.
+
+The values returned by this internal function are:
+
+* `validationData`: ERC-4337 validation data, indicating success/failure and optional time validity (`validAfter`, `validUntil`).
+* `token`: Address of the ERC-20 token used for payment to the paymaster.
+* `tokenPerNative`: Token units charged per unit of native currency. This is scaled by `_tokenPerNativeDenominator()`
+   which defaults to 1e18 (wei per eth), making it effectively a number of token units per eth, and not per wei.
+
+#### Calculating the token price
+
+`tokenPerNative` is the multiplier [`PaymasterERC20._erc20Cost`](#PaymasterERC20-_erc20Cost-uint256-uint256-) applies to a native-currency gas cost to produce a token amount:
+`tokenAmount = (nativeCost * tokenPerNative) / _tokenPerNativeDenominator()`. Each elements is denominated as follows:
+
+* `tokenAmount`: token units.
+* `nativeCost`: wei.
+* `tokenPerNative`: token units per eth.
+* `_tokenPerNativeDenominator()`: wei per native coin (1e18 on EVM chains).
+
+For a token priced from USD oracles, derive `tokenPerNative` from the inverse exchange rate:
+
+`tokenPerNative = (<Native token price in $> / 1e18) / (<ERC-20 token price in $> / 10**<ERC-20 decimals>) * _tokenPerNativeDenominator()`
+
+For example, suppose the token is USDC ($1 with 6 decimals) and the native currency is ETH ($2524.86 with 18 decimals).
+Then 1 wei of gas costs `(2524.86 / 1e18) / (1 / 1e6) = 2.52486e-9` USDC units, so with
+`_tokenPerNativeDenominator() = 1e18` we have `tokenPerNative = 2_524_860_000` (i.e. `2.52486e-9 * 1e18`). Charging
+`actualGasCost` wei yields `actualGasCost * 2_524_860_000 / 1e18` USDC units.
+
+</div>
+</div>
+
+<a id="PaymasterERC20-_postOpCost--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_postOpCost() → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#PaymasterERC20-_postOpCost--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Over-estimates the cost of the post-operation logic.
+
+</div>
+</div>
+
+<a id="PaymasterERC20-_tokenPerNativeDenominator--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_tokenPerNativeDenominator() → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#PaymasterERC20-_tokenPerNativeDenominator--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Denominator used for interpreting the `tokenPerNative` returned by [`PaymasterERC20._fetchDetails`](#PaymasterERC20-_fetchDetails-struct-PackedUserOperation-bytes32-) as "fixed point" in [`PaymasterERC20._erc20Cost`](#PaymasterERC20-_erc20Cost-uint256-uint256-).
+
+</div>
+</div>
+
+<a id="PaymasterERC20-_minTokensPerNative--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_minTokensPerNative() → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#PaymasterERC20-_minTokensPerNative--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Lower bound on `tokenPerNative` (see [`PaymasterERC20._fetchDetails`](#PaymasterERC20-_fetchDetails-struct-PackedUserOperation-bytes32-) for units). Operations whose `tokenPerNative`
+is strictly below this value are rejected with `SIG_VALIDATION_FAILED` before [`PaymasterERC20._prefund`](#PaymasterERC20-_prefund-struct-PackedUserOperation-bytes32-contract-IERC20-uint256-address-uint256-) runs.
+
+To pick a value, decide:
+
+* `minCharge`: smallest token amount you want to bill per op (e.g. `0.01 USDC = 10_000` units).
+* `minGasCost`: smallest `actualGasCost + _postOpCost() * actualUserOpFeePerGas` you expect, in wei
+  (= `minGas * minFeePerGas`; `minFeePerGas` can be as low as 1 wei on some L2s).
+
+Then set `_minTokensPerNative() >= minCharge * _tokenPerNativeDenominator() / minGasCost`.
+
+Example: a USDC (6 decimals) paymaster on a chain with `minFeePerGas = 1 gwei`, sponsoring
+ops of at least 100_000 gas and charging at least 0.01 USDC per op:
+
+```solidity
+function _minTokensPerNative() internal view override returns (uint256) {
+    return 100e6; // = 1e4 (0.01 USDC) * 1e18 / 1e14 (100_000 gas * 1 gwei) = 100 USDC/ETH
+}
+```
+
+<Callout type="warn">
+Setting `_minTokensPerNative()` below `minCharge * _tokenPerNativeDenominator() / minGasCost`
+lets [`PaymasterERC20._erc20Cost`](#PaymasterERC20-_erc20Cost-uint256-uint256-) round to zero or to dust for the cheapest ops the paymaster accepts,
+sponsoring them at a low (or zero) price.
+</Callout>
+
+</div>
+</div>
+
+<a id="PaymasterERC20-_erc20Cost-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_erc20Cost(uint256 nativeCost, uint256 tokenPerNative) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#PaymasterERC20-_erc20Cost-uint256-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Calculates native currency cost to ERC-20 token cost.
+
+Returns `type(uint256).max` if computation overflows.
+
+</div>
+</div>
+
+<a id="PaymasterERC20-_withdrawTokens-contract-IERC20-address-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_withdrawTokens(contract IERC20 token, address recipient, uint256 amount)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#PaymasterERC20-_withdrawTokens-contract-IERC20-address-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal function that allows the withdrawer to extract ERC-20 tokens resulting from gas payments.
+
+</div>
+</div>
+
+<a id="PaymasterERC20-UserOperationSponsored-bytes32-address-uint256-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">UserOperationSponsored(bytes32 indexed userOpHash, address indexed token, uint256 tokenAmount, uint256 tokenPerNative)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="#PaymasterERC20-UserOperationSponsored-bytes32-address-uint256-uint256-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when a user operation identified by `userOpHash` is sponsored by this paymaster
+using the specified ERC-20 `token`. The `tokenAmount` is the amount charged for the operation,
+and `tokenPerNative` is the valuation of the token in units of token per native currency (e.g., ETH).
+
+</div>
+</div>
+
+<a id="PaymasterERC20-PaymasterERC20FailedRefund-contract-IERC20-uint256-uint256-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">PaymasterERC20FailedRefund(contract IERC20 token, uint256 prefundAmount, uint256 actualAmount, bytes prefundContext)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#PaymasterERC20-PaymasterERC20FailedRefund-contract-IERC20-uint256-uint256-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Thrown when the paymaster fails to refund the difference between the `prefundAmount`
+and the `actualAmount` of `token`.
+
+</div>
+</div>
+
+<a id="PaymasterERC20Guarantor"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `PaymasterERC20Guarantor` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/paymaster/extensions/PaymasterERC20Guarantor.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/contracts/account/paymaster/extensions/PaymasterERC20Guarantor.sol";
+```
+
+Extension of [`PaymasterERC20`](#PaymasterERC20) that enables third parties to guarantee user operations.
+
+This contract allows a guarantor to pre-fund user operations on behalf of users. The guarantor
+pays the maximum possible gas cost upfront, and after execution:
+1. If the user repays the guarantor, the guarantor gets their funds back
+2. If the user fails to repay, the guarantor absorbs the cost
+
+A common use case is for guarantors to pay for the operations of users claiming airdrops. In this scenario:
+
+* The guarantor pays the gas fees upfront
+* The user claims their airdrop tokens
+* The user repays the guarantor from the claimed tokens
+* If the user fails to repay, the guarantor absorbs the cost
+
+The guarantor is identified through the [`PaymasterERC20Guarantor._fetchGuarantor`](#PaymasterERC20Guarantor-_fetchGuarantor-struct-PackedUserOperation-) function, which must be implemented
+by developers to determine who can guarantee operations. This allows for flexible guarantor selection
+logic based on the specific requirements of the application.
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [_prefund(userOp, userOpHash, token, tokenPrice, prefunder_, prefundAmount_)](#PaymasterERC20Guarantor-_prefund-struct-PackedUserOperation-bytes32-contract-IERC20-uint256-address-uint256-)
+- [_refund(token, tokenPrice, actualAmount, actualUserOpFeePerGas, prefunder, prefundAmount, prefundContext)](#PaymasterERC20Guarantor-_refund-contract-IERC20-uint256-uint256-uint256-address-uint256-bytes-)
+- [_fetchGuarantor(userOp)](#PaymasterERC20Guarantor-_fetchGuarantor-struct-PackedUserOperation-)
+- [_guaranteedPostOpCost()](#PaymasterERC20Guarantor-_guaranteedPostOpCost--)
+<details>
+<summary>PaymasterERC20</summary>
+
+- [_validatePaymasterUserOp(userOp, userOpHash, maxCost)](#PaymasterERC20-_validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-)
+- [_postOp(, context, actualGasCost, actualUserOpFeePerGas)](#PaymasterERC20-_postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-)
+- [_fetchDetails(userOp, userOpHash)](#PaymasterERC20-_fetchDetails-struct-PackedUserOperation-bytes32-)
+- [_postOpCost()](#PaymasterERC20-_postOpCost--)
+- [_tokenPerNativeDenominator()](#PaymasterERC20-_tokenPerNativeDenominator--)
+- [_minTokensPerNative()](#PaymasterERC20-_minTokensPerNative--)
+- [_erc20Cost(nativeCost, tokenPerNative)](#PaymasterERC20-_erc20Cost-uint256-uint256-)
+- [_withdrawTokens(token, recipient, amount)](#PaymasterERC20-_withdrawTokens-contract-IERC20-address-uint256-)
+
+</details>
+<details>
+<summary>Paymaster</summary>
+
+- [entryPoint()](#Paymaster-entryPoint--)
+- [validatePaymasterUserOp(userOp, userOpHash, maxCost)](#Paymaster-validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-)
+- [postOp(mode, context, actualGasCost, actualUserOpFeePerGas)](#Paymaster-postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-)
+- [_checkEntryPoint()](#Paymaster-_checkEntryPoint--)
+- [_deposit(value)](#Paymaster-_deposit-uint256-)
+- [_withdraw(to, value)](#Paymaster-_withdraw-address-payable-uint256-)
+- [_addStake(value, unstakeDelaySec)](#Paymaster-_addStake-uint256-uint32-)
+- [_unlockStake()](#Paymaster-_unlockStake--)
+- [_withdrawStake(to)](#Paymaster-_withdrawStake-address-payable-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+- [UserOperationGuaranteed(userOpHash, guarantor, prefundAmount)](#PaymasterERC20Guarantor-UserOperationGuaranteed-bytes32-address-uint256-)
+<details>
+<summary>PaymasterERC20</summary>
+
+- [UserOperationSponsored(userOpHash, token, tokenAmount, tokenPerNative)](#PaymasterERC20-UserOperationSponsored-bytes32-address-uint256-uint256-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+<details>
+<summary>PaymasterERC20</summary>
+
+- [PaymasterERC20FailedRefund(token, prefundAmount, actualAmount, prefundContext)](#PaymasterERC20-PaymasterERC20FailedRefund-contract-IERC20-uint256-uint256-bytes-)
+
+</details>
+<details>
+<summary>Paymaster</summary>
+
+- [PaymasterUnauthorized(sender)](#Paymaster-PaymasterUnauthorized-address-)
+
+</details>
+</div>
+</div>
+
+<a id="PaymasterERC20Guarantor-_prefund-struct-PackedUserOperation-bytes32-contract-IERC20-uint256-address-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_prefund(struct PackedUserOperation userOp, bytes32 userOpHash, contract IERC20 token, uint256 tokenPrice, address prefunder_, uint256 prefundAmount_) → bool success, address prefunder, uint256 prefundAmount, bytes prefundContext</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#PaymasterERC20Guarantor-_prefund-struct-PackedUserOperation-bytes32-contract-IERC20-uint256-address-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Prefunds the user operation using either the guarantor or the default prefunder, and
+appends `userOp.sender` to the tail of `prefundContext` so the refund process can identify
+the user operation sender.
+
+For guaranteed ops, `prefundAmount` is inflated by [`PaymasterERC20Guarantor._guaranteedPostOpCost`](#PaymasterERC20Guarantor-_guaranteedPostOpCost--) worth of tokens
+so the prefund pulled from the guarantor covers the extra postOp work done in [`PaymasterERC20._refund`](#PaymasterERC20-_refund-contract-IERC20-uint256-uint256-uint256-address-uint256-bytes-)
+([`SafeERC20.trySafeTransferFrom`](/contracts/5.x/api/token/ERC20#SafeERC20-trySafeTransferFrom-contract-IERC20-address-address-uint256-) from the user + [`SafeERC20.trySafeTransfer`](/contracts/5.x/api/token/ERC20#SafeERC20-trySafeTransfer-contract-IERC20-address-uint256-) to the guarantor).
+
+</div>
+</div>
+
+<a id="PaymasterERC20Guarantor-_refund-contract-IERC20-uint256-uint256-uint256-address-uint256-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_refund(contract IERC20 token, uint256 tokenPrice, uint256 actualAmount, uint256 actualUserOpFeePerGas, address prefunder, uint256 prefundAmount, bytes prefundContext) → bool refunded, uint256 effectiveAmount</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#PaymasterERC20Guarantor-_refund-contract-IERC20-uint256-uint256-uint256-address-uint256-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Handles the refund process for guaranteed operations.
+
+* **Non-guaranteed** (`prefunder == userOp.sender`): pass the base `actualAmount` through to
+  [`PaymasterERC20._refund`](#PaymasterERC20-_refund-contract-IERC20-uint256-uint256-uint256-address-uint256-bytes-).
+* **Guaranteed**: augment `actualAmount` by [`PaymasterERC20Guarantor._guaranteedPostOpCost`](#PaymasterERC20Guarantor-_guaranteedPostOpCost--) * `actualUserOpFeePerGas`
+  (priced in tokens), pull it from `userOp.sender`, and call [`PaymasterERC20._refund`](#PaymasterERC20-_refund-contract-IERC20-uint256-uint256-uint256-address-uint256-bytes-) with
+  `actualAmount = 0` so the guarantor gets the full `prefundAmount` back. If the user fails to pay,
+  the guarantor absorbs the GUARANTEED cost (not the base cost).
+
+</div>
+</div>
+
+<a id="PaymasterERC20Guarantor-_fetchGuarantor-struct-PackedUserOperation-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_fetchGuarantor(struct PackedUserOperation userOp) → address guarantor</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#PaymasterERC20Guarantor-_fetchGuarantor-struct-PackedUserOperation-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Fetches the guarantor address and validation data from the user operation.
+
+<Callout>
+Return `address(0)` to disable the guarantor feature. If supported, ensure
+explicit consent (e.g., signature verification) to prevent unauthorized use.
+</Callout>
+
+</div>
+</div>
+
+<a id="PaymasterERC20Guarantor-_guaranteedPostOpCost--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_guaranteedPostOpCost() → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#PaymasterERC20Guarantor-_guaranteedPostOpCost--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Over-estimates the cost of the post-operation logic. Added on top of [`PaymasterERC20._postOpCost`](#PaymasterERC20-_postOpCost--) for guaranteed userOps.
+
+</div>
+</div>
+
+<a id="PaymasterERC20Guarantor-UserOperationGuaranteed-bytes32-address-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">UserOperationGuaranteed(bytes32 indexed userOpHash, address indexed guarantor, uint256 prefundAmount)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="#PaymasterERC20Guarantor-UserOperationGuaranteed-bytes32-address-uint256-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when a user operation identified by `userOpHash` is guaranteed by a `guarantor` for `prefundAmount`.
+
+</div>
+</div>
+
+<a id="PaymasterERC721Owner"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `PaymasterERC721Owner` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/paymaster/extensions/PaymasterERC721Owner.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/contracts/account/paymaster/extensions/PaymasterERC721Owner.sol";
+```
+
+Extension of [`Paymaster`](#Paymaster) that supports account based on ownership of an ERC-721 token.
+
+This paymaster will sponsor user operations if the user has at least 1 token of the token specified
+during construction.
+
+<Callout>
+[`Paymaster._validatePaymasterUserOp`](#Paymaster-_validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-) reads `token.balanceOf` during the validation phase, accessing storage in
+an external contract. ERC-7562 restricts unstaked paymasters from such accesses, and public mempool bundlers
+will reject these operations when the token contract is proxied or upgradeable. Stake the paymaster
+(see [`Paymaster._addStake`](#Paymaster-_addStake-uint256-uint32-)) when deploying against a public mempool.
+</Callout>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [constructor(token_)](#PaymasterERC721Owner-constructor-contract-IERC721-)
+- [token()](#PaymasterERC721Owner-token--)
+- [_validatePaymasterUserOp(userOp, , )](#PaymasterERC721Owner-_validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-)
+<details>
+<summary>Paymaster</summary>
+
+- [entryPoint()](#Paymaster-entryPoint--)
+- [validatePaymasterUserOp(userOp, userOpHash, maxCost)](#Paymaster-validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-)
+- [postOp(mode, context, actualGasCost, actualUserOpFeePerGas)](#Paymaster-postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-)
+- [_postOp(, , , )](#Paymaster-_postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-)
+- [_checkEntryPoint()](#Paymaster-_checkEntryPoint--)
+- [_deposit(value)](#Paymaster-_deposit-uint256-)
+- [_withdraw(to, value)](#Paymaster-_withdraw-address-payable-uint256-)
+- [_addStake(value, unstakeDelaySec)](#Paymaster-_addStake-uint256-uint32-)
+- [_unlockStake()](#Paymaster-_unlockStake--)
+- [_withdrawStake(to)](#Paymaster-_withdrawStake-address-payable-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+<details>
+<summary>Paymaster</summary>
+
+- [PaymasterUnauthorized(sender)](#Paymaster-PaymasterUnauthorized-address-)
+
+</details>
+</div>
+</div>
+
+<a id="PaymasterERC721Owner-constructor-contract-IERC721-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">constructor(contract IERC721 token_)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#PaymasterERC721Owner-constructor-contract-IERC721-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="PaymasterERC721Owner-token--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">token() → contract IERC721</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#PaymasterERC721Owner-token--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+ERC-721 token used to validate the user operation.
+
+</div>
+</div>
+
+<a id="PaymasterERC721Owner-_validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_validatePaymasterUserOp(struct PackedUserOperation userOp, bytes32, uint256) → bytes context, uint256 validationData</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#PaymasterERC721Owner-_validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal validation of whether the paymaster is willing to pay for the user operation.
+Returns the context to be passed to postOp and the validation data.
+
+<Callout>
+The default `context` is `bytes(0)`. Developers that add a context when overriding this function MUST
+also override [`Paymaster._postOp`](#Paymaster-_postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-) to process the context passed along.
+</Callout>
+
+</div>
+</div>
+
+<a id="PaymasterSigner"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `PaymasterSigner` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/paymaster/extensions/PaymasterSigner.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin/contracts/account/paymaster/extensions/PaymasterSigner.sol";
+```
+
+Extension of [`Paymaster`](#Paymaster) that adds signature validation. See [`SignerECDSA`](/contracts/5.x/api/utils/cryptography#SignerECDSA), [`SignerP256`](/contracts/5.x/api/utils/cryptography#SignerP256) or [`SignerRSA`](/contracts/5.x/api/utils/cryptography#SignerRSA).
+
+Example of usage:
+
+```solidity
+contract MyPaymasterECDSASigner is PaymasterSigner, SignerECDSA {
+    constructor(address signerAddr) EIP712("MyPaymasterECDSASigner", "1") SignerECDSA(signerAddr) {}
+}
+```
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [_signableUserOpHash(userOp, validAfter, validUntil)](#PaymasterSigner-_signableUserOpHash-struct-PackedUserOperation-uint48-uint48-)
+- [_validatePaymasterUserOp(userOp, , )](#PaymasterSigner-_validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-)
+- [_decodePaymasterUserOp(userOp)](#PaymasterSigner-_decodePaymasterUserOp-struct-PackedUserOperation-)
+<details>
+<summary>Paymaster</summary>
+
+- [entryPoint()](#Paymaster-entryPoint--)
+- [validatePaymasterUserOp(userOp, userOpHash, maxCost)](#Paymaster-validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-)
+- [postOp(mode, context, actualGasCost, actualUserOpFeePerGas)](#Paymaster-postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-)
+- [_postOp(, , , )](#Paymaster-_postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-)
+- [_checkEntryPoint()](#Paymaster-_checkEntryPoint--)
+- [_deposit(value)](#Paymaster-_deposit-uint256-)
+- [_withdraw(to, value)](#Paymaster-_withdraw-address-payable-uint256-)
+- [_addStake(value, unstakeDelaySec)](#Paymaster-_addStake-uint256-uint32-)
+- [_unlockStake()](#Paymaster-_unlockStake--)
+- [_withdrawStake(to)](#Paymaster-_withdrawStake-address-payable-)
+
+</details>
+<details>
+<summary>EIP712</summary>
+
+- [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
+- [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
+- [eip712Domain()](#EIP712-eip712Domain--)
+- [_EIP712Name()](#EIP712-_EIP712Name--)
+- [_EIP712Version()](#EIP712-_EIP712Version--)
+
+</details>
+<details>
+<summary>AbstractSigner</summary>
+
+- [_rawSignatureValidation(hash, signature)](#AbstractSigner-_rawSignatureValidation-bytes32-bytes-)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+<details>
+<summary>IERC5267</summary>
+
+- [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+<details>
+<summary>Paymaster</summary>
+
+- [PaymasterUnauthorized(sender)](#Paymaster-PaymasterUnauthorized-address-)
+
+</details>
+</div>
+</div>
+
+<a id="PaymasterSigner-_signableUserOpHash-struct-PackedUserOperation-uint48-uint48-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_signableUserOpHash(struct PackedUserOperation userOp, uint48 validAfter, uint48 validUntil) → bytes32</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#PaymasterSigner-_signableUserOpHash-struct-PackedUserOperation-uint48-uint48-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Virtual function that returns the signable hash for a user operations. Given the `userOpHash`
+contains the `paymasterAndData` itself, it's not possible to sign that value directly. Instead,
+this function must be used to provide a custom mechanism to authorize an user operation.
+
+</div>
+</div>
+
+<a id="PaymasterSigner-_validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_validatePaymasterUserOp(struct PackedUserOperation userOp, bytes32, uint256) → bytes context, uint256 validationData</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#PaymasterSigner-_validatePaymasterUserOp-struct-PackedUserOperation-bytes32-uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal validation of whether the paymaster is willing to pay for the user operation.
+Returns the context to be passed to postOp and the validation data.
+
+<Callout>
+The `context` returned is `bytes(0)`. Developers overriding this function MUST
+override [`Paymaster._postOp`](#Paymaster-_postOp-enum-IPaymaster-PostOpMode-bytes-uint256-uint256-) to process the context passed along.
+</Callout>
+
+</div>
+</div>
+
+<a id="PaymasterSigner-_decodePaymasterUserOp-struct-PackedUserOperation-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_decodePaymasterUserOp(struct PackedUserOperation userOp) → uint48 validAfter, uint48 validUntil, bytes signature</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#PaymasterSigner-_decodePaymasterUserOp-struct-PackedUserOperation-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Decodes the user operation's data from `paymasterAndData`.
+
+</div>
+</div>
+
 <a id="EIP7702Utils"></a>
 
 <div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
 
 ## `EIP7702Utils` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/account/utils/EIP7702Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/utils/EIP7702Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1441,14 +2691,14 @@ Returns the address of the delegate if `account` has an EIP-7702 delegation setu
 
 ## `IEntryPointExtra` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/account/utils/draft-ERC4337Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/utils/ERC4337Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
 </div>
 
 ```solidity
-import "@openzeppelin/contracts/account/utils/draft-ERC4337Utils.sol";
+import "@openzeppelin/contracts/account/utils/ERC4337Utils.sol";
 ```
 
 This is available on all entrypoint since v0.4.0, but is not formally part of the ERC.
@@ -1481,14 +2731,14 @@ This is available on all entrypoint since v0.4.0, but is not formally part of th
 
 ## `ERC4337Utils` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/account/utils/draft-ERC4337Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/utils/ERC4337Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
 </div>
 
 ```solidity
-import "@openzeppelin/contracts/account/utils/draft-ERC4337Utils.sol";
+import "@openzeppelin/contracts/account/utils/ERC4337Utils.sol";
 ```
 
 Library with common ERC-4337 utility functions.
@@ -1879,7 +3129,7 @@ Returns empty bytes if no paymaster signature is present.
 
 ## `Mode` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/account/utils/draft-ERC7579Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/utils/draft-ERC7579Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1895,7 +3145,7 @@ import "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 
 ## `CallType` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/account/utils/draft-ERC7579Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/utils/draft-ERC7579Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1911,7 +3161,7 @@ import "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 
 ## `ExecType` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/account/utils/draft-ERC7579Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/utils/draft-ERC7579Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1927,7 +3177,7 @@ import "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 
 ## `ModeSelector` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/account/utils/draft-ERC7579Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/utils/draft-ERC7579Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1943,7 +3193,7 @@ import "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 
 ## `ModePayload` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/account/utils/draft-ERC7579Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/utils/draft-ERC7579Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -1959,7 +3209,7 @@ import "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 
 ## `ERC7579Utils` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/account/utils/draft-ERC7579Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/utils/draft-ERC7579Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2344,7 +3594,7 @@ Input calldata not properly formatted and possibly malicious.
 
 ## `eqCallType` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/account/utils/draft-ERC7579Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/utils/draft-ERC7579Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2379,7 +3629,7 @@ Compares two `CallType` values for equality.
 
 ## `eqExecType` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/account/utils/draft-ERC7579Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/utils/draft-ERC7579Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2414,7 +3664,7 @@ Compares two `ExecType` values for equality.
 
 ## `eqModeSelector` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/account/utils/draft-ERC7579Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/utils/draft-ERC7579Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
@@ -2449,7 +3699,7 @@ Compares two `ModeSelector` values for equality.
 
 ## `eqModePayload` 
 
-<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/account/utils/draft-ERC7579Utils.sol">
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.7.0-rc.0/contracts/account/utils/draft-ERC7579Utils.sol">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
 </a>
 
