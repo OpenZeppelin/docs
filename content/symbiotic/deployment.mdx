@@ -6,7 +6,7 @@ Deploying and operating the stack beyond local development.
 
 <Callout type="warn">
 
-Testnet supports both providers: `layerzero` (`config/environments/testnet.json`, `ENV=testnet`) and `chainlink_ccv` (`config/environments/testnet-ccv.json`, `ENV=testnet-ccv`). The workflow below uses `ENV=testnet` (LayerZero); for the CCV path substitute `ENV=testnet-ccv`. Mainnet CCV is not yet supported.
+Testnet supports both providers: `layerzero` (`config/environments/testnet.json`, `ENV=testnet`) and `chainlink_ccv` (`config/environments/testnet-ccv.json`, `ENV=testnet-ccv`). The workflow below uses `ENV=testnet` (LayerZero); for the CCV path substitute `ENV=testnet-ccv`, but note the `make e2e` step is LayerZero-only (it drives the starter `ExampleOApp`) — CCV runs are confirmed with `make watch` instead (see [Chainlink CCV](/symbiotic/chainlink-ccv#configuration)). Mainnet CCV is not yet supported.
 
 </Callout>
 
@@ -63,11 +63,58 @@ KEYSTORE_PASSPHRASE=<relayer keystore passphrase>   # used by OZ Relayer at runt
 
 Operator and deployer passphrases are resolved by `xtask` via the `signers` config. `KEYSTORE_PASSPHRASE` is read directly by the OZ Relayer container to decrypt relayer keystores at runtime.
 
+CCV environments (`ENV=testnet-ccv`) additionally need the reserved factory-deployer key:
+
+```bash
+cargo xtask --env testnet-ccv generate-signer --name ccv-factory-deployer
+```
+
+```bash
+CCV_FACTORY_DEPLOYER_PASSPHRASE=<ccv-factory-deployer keystore passphrase>
+CCV_STORAGE_LOCATION_URIS=<comma-separated attestation API base URLs>
+```
+
+The factory-deployer key must be freshly generated and stay at nonce 0 on every target chain until the deploy — it anchors the resolver's CREATE2 address parity. Fund it just enough for one factory deploy per chain.
+
 ## Operational Notes
 
 - Local uses `make chains && make deploy && make start`; testnet uses `make deploy ENV=testnet` plus `make start ENV=testnet`.
 - Testnet uses `docker-compose.yml` only, not the local overlay.
 - Canonical deployment addresses always live in `deployments/<env>.json`.
+
+## CCV Deterministic Deployment (CREATE2)
+
+The CCV resolver must have the **same address on every chain** — the CCIP indexer registers that one address, and identical addresses give automatic discovery when you add a chain. The deployment flow that guarantees this:
+
+1. **Deploy Chainlink's `CREATE2Factory` once per chain from a reserved key at nonce 0.** CREATE addresses depend only on (deployer, nonce), so a dedicated key that has never transacted produces the same factory address everywhere. Locally this is the `ccv-factory-deployer` signer (Anvil account 9); on testnet/production, generate a dedicated key, use it for nothing else, and fund it just enough for one deploy per chain. The factory constructor takes an allowlist of addresses permitted to claim CREATE2 addresses through it.
+2. **Deploy the resolver through the factory**: `deployResolver` loads Chainlink's *published* resolver creation bytecode from the npm package, calls `factory.createAndTransferOwnership(code, salt, owner)`, asserts the result matches `factory.computeAddress`, and completes ownership with `acceptOwnership()` from the owner. A deploy without the accept step is not finished — the resolver would still have a pending owner.
+3. Deploy the `SymbioticVerifier` (plain CREATE — its address doesn't need parity), register it on the resolver, and configure lanes.
+
+Non-local CCV deployments also require the real RMN contract per chain: set `chainlinkCcip.rmn` in the environment config (`RMNRemote` on CCIP staging — discoverable from `OnRamp.getStaticConfig()`). The verifier's constructor requires it, and fork tests (`make test-fork`) read it from `SOURCE_CCIP_RMN_ADDRESS` / `DEST_CCIP_RMN_ADDRESS` in `.env.testnet`.
+
+### Address-affecting inputs
+
+The resolver address is a pure function of these — pin them and never change them casually:
+
+| Input | Where pinned | Notes |
+|-------|--------------|-------|
+| Factory deployer key + nonce 0 | `ccv-factory-deployer` signer per environment | Determines the factory address |
+| Resolver salt | `RESOLVER_SALT` in `contracts/script/chainlink/DeployCCV.s.sol` (`keccak256("symbiotic.ccv.versioned-verifier-resolver.v1")`) | |
+| Resolver creation bytecode | `@chainlink/contracts-ccip@2.0.0` published artifact (`bytecode/v2_0_0/versioned_verifier_resolver.bin`) | Using the published artifact makes the address independent of local compiler settings |
+
+The resolver **owner** is *not* address-affecting (the stock resolver has no constructor arguments), so ownership can differ per chain without breaking parity.
+
+Validate determinism any time with `make validate-resolver-address` — it deploys the full flow on two throwaway Anvil chains and asserts identical addresses and correct ownership.
+
+### Attestation storage locations
+
+`CCV_STORAGE_LOCATION_URIS` (comma-separated) is a **required** deploy input for the verifier: it becomes the on-chain `getStorageLocations()` answer that executors use to fetch attestations. There is no placeholder fallback — an empty value fails the deploy. Point it at the operator attestation API (each operator serves `GET /verifications`; put a load balancer or an HA node in front for production — see [Architecture](/symbiotic/architecture#production-topology)). Rotate later with the owner-gated `updateStorageLocations`.
+
+### CCIP indexer onboarding
+
+Each new protocol deployment is a per-deployment onboarding with Chainlink: the CCIP indexer must learn (a) your resolver address and (b) your attestation API endpoint before messages get automated execution. Messages verify without this step — but nobody executes them. Coordinate with your Chainlink contact (or Symbiotic/OpenZeppelin on your behalf) when standing up a new deployment, and again only when adding chains if you skipped deterministic addresses.
+
+Onboarding is **per protocol deployment, not per validator set**. Operator registration and deregistration rotate the active validator set inside the same `Settlement` and verifier contracts at epoch boundaries — the contracts, the resolver address, and the attestation API endpoint all stay the same as the set evolves. The indexer never needs re-onboarding for validator churn; keeping the advertised endpoint reachable across it is your responsibility (see [Production Topology](/symbiotic/architecture#production-topology)).
 
 ## Sidecar Image Compatibility
 

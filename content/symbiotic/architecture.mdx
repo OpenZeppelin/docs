@@ -75,6 +75,32 @@ Symbiotic provides the shared security layer:
 | Storage | `operator/src/storage/` | redb key-value store for messages, Merkle trees, and submissions |
 | Crypto | `operator/src/crypto/` | Merkle tree construction, leaf hashing, signing message encoding |
 
+## Production Topology
+
+The starter kit runs everything on one machine; production needs a distributed layout. The parts that matter:
+
+### Attestation API availability
+
+For the Chainlink CCV path, executors fetch attestations from the URLs the verifier advertises on-chain (`getStorageLocations()`). **A single attestation node is a single point of failure that stalls the lane**: messages keep verifying, but executors cannot fetch attestations, so nothing executes until the node returns.
+
+Every operator node serves the same attestation data (`GET /verifications`) — all of them hold the messages and the aggregated quorum signatures. Production options, in order of preference:
+
+1. **Load balancer over multiple operator nodes** — advertise one stable URL, health-check `/healthz`, route to any live operator.
+2. **Multiple URLs on-chain** — `getStorageLocations()` returns a list; advertise several operators directly and let executors fail over.
+3. **One designated HA node** — acceptable only with real redundancy behind that name (failover, monitoring).
+
+The advertised URL is on-chain state, not config: rotate it with the owner-gated `updateStorageLocations` and treat DNS you can repoint as more operable than raw hosts.
+
+### Where aggregation happens
+
+Individual operators do not serve partial signatures. Each operator signs the Merkle root through its Symbiotic relay sidecar; the relay network aggregates BLS signatures across operators, and every operator then stores the same aggregated result. That is why any single operator can answer attestation queries — availability of the *API* is your concern; signature aggregation already tolerates individual signer downtime as long as quorum voting power signs.
+
+### Availability assumptions to engineer for
+
+- The CCIP indexer polls your attestation API — sustained unavailability means unexecuted (not lost) messages, recoverable once service returns.
+- Operators must reach source-chain RPC (event ingestion + finality gating) and the relay sidecars; run operators across failure domains.
+- The OZ Monitor→operator webhook path is at-least-once, not exactly-once; operators de-duplicate. Monitor outages are recovered by block backfill on restart — bound your `max_past_blocks` accordingly.
+
 ## Adding a New Provider
 
 1. Implement the `Provider` trait in `operator/src/provider/<provider>.rs`.

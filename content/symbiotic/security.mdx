@@ -15,6 +15,46 @@ Security architecture and trust assumptions for the Symbiotic template.
 
 Webhook ingress between OZ Monitor, OZ Relayer, and operators uses HMAC-SHA256 shared secrets. See [CLI & API Reference](/symbiotic/cli#http-api) for the header format.
 
+## Key Protection
+
+Each operator holds three distinct key roles. They are never shared or reused across roles:
+
+| Key | Held by | Used for |
+|-----|---------|----------|
+| Operator key | Relay sidecar | BLS attestations, P2P identity, on-chain registration |
+| Relayer signer | OZ Relayer | Signing on-chain submission transactions |
+| Deployer key | Deploy workstation | Contract deployment and funding |
+
+The operator binary itself never sees the operator key: it delegates all signing to the relay sidecar over gRPC, so a compromised operator process cannot exfiltrate key material directly.
+
+### Operator (BLS) keys
+
+A leaked operator key lets an attacker sign attestations as that operator until it is deregistered, so this is the key to protect hardest.
+
+This template's sidecar launcher (`scripts/symbiotic-relay/start-sidecar.sh`) currently injects raw keys via the `--secret-keys` flag from environment variables — acceptable for local and test environments, not for production. The relay sidecar also supports an encrypted JKS keystore mode (`--keystore.path` + `--keystore.password`, keys managed with `relay_utils keys add/list/remove`), where raw keys never appear in container environments or process arguments and the passphrase is the only runtime secret. **Adopting it requires adapting the launcher script and verifying keystore-mode startup against your pinned relay image** — the shipped launcher does not wire it up, and sidecar images are still in release-candidate phase (see [Sidecar Image Compatibility](/symbiotic/deployment#sidecar-image-compatibility)).
+
+Either way: store the keystore file (or key material) and its passphrase as separate secrets, and restrict them to the sidecar container. HSM- or cloud-KMS-backed signing is **not supported by the relay sidecar** as of relay `1.0.1-rc4` — an encrypted keystore with a well-protected passphrase is the strongest supported posture on that version.
+
+### Relayer signer keys
+
+The OZ Relayer supports production signer backends beyond the local encrypted keystore, configured per signer via `signers[].type` in `config/oz-relayer/config.json`:
+
+| Backend | Type | Key location |
+|---------|------|--------------|
+| Local keystore | `local` | Encrypted JSON file (development/testing) |
+| AWS KMS | `aws_kms` | AWS-managed key |
+| Google Cloud KMS | `google_cloud_kms` | GCP-managed key |
+| HashiCorp Vault KV2 | `vault` | Key stored in Vault secret |
+| HashiCorp Vault Transit | `vault_transit` | Key never exported; Vault signs server-side |
+| Turnkey | `turnkey` | Turnkey-managed key |
+| Coinbase CDP | `cdp` | Coinbase-managed wallet |
+
+Sensitive config values reference environment variables (`{ "type": "env", "value": "..." }`) rather than being hardcoded in the JSON.
+
+### Deployer key
+
+Needed only when deploying or upgrading contracts; keep it offline between uses. For the CCV factory deployer key (CREATE2 address parity across chains), see [Production Ownership](#production-ownership-recommended).
+
 ## Runtime API Security
 
 Operator runtime behavior that is easy to miss:
@@ -52,16 +92,35 @@ The LayerZero provider trusts `SendUln302` as the only valid source-chain caller
 
 ## Chainlink CCV Security
 
+The CCV is two contracts: the stock `VersionedVerifierResolver` (stable identity, registry of implementations) and `SymbioticVerifier` (verification logic, inherits Chainlink's `BaseVerifier`). Ramp authorization is resolved from the CCIP Router at call time — a CCIP ramp rotation needs no reconfiguration here — and both verification paths check RMN curse status first, so a cursed lane halts immediately.
+
 ### Access Control
 
-| Function | Caller | Purpose |
-|----------|--------|---------|
-| `forwardToVerifier` | OnRamp | Register a message for CCV verification |
-| `verifyMessage` | OffRamp | Verify the message on the destination path |
-| `getFee` | Anyone | Quote verification fee |
+| Contract | Function | Caller | Purpose |
+|----------|----------|--------|---------|
+| Verifier | `forwardToVerifier` | OnRamp (resolved via Router) | Register a message; returns the version tag |
+| Verifier | `verifyMessage` | OffRamp (resolved via Router) | Verify BLS quorum on the destination path |
+| Verifier | `getFee` | Anyone | Quote fee; rejects unsupported finality configs at quote time |
+| Verifier | `applyRemoteChainConfigUpdates` / `applyAllowlistUpdates` / `setAllowedFinalityConfig` / `updateStorageLocations` | Owner | Lane, allowlist, finality, and attestation-endpoint administration |
+| Resolver | `getInbound/OutboundImplementation` | Anyone | Route by version prefix / lane |
+| Resolver | `applyInbound/OutboundImplementationUpdates` | Owner | Register, activate, retire verifier implementations |
+| Factory | `createAndCall` / `createAndTransferOwnership` | Allowlisted deployers | Claim deterministic addresses on new chains |
+
+All owned contracts use **two-step ownership** (`transferOwnership` + `acceptOwnership`): a mistyped transfer target cannot seize control, and the current owner keeps administering until the new owner accepts.
 
 ### Invariants
 
 1. Verification requires a valid BLS quorum signature from Settlement.
-2. The derived message ID must match the message payload being verified.
-3. Settlement epoch data must be fresh, or verification reverts with `EpochTooStale`.
+2. Signers commit to `keccak256(versionTag ‖ messageId)` — a signature is bound to both the message and the verifier implementation version, so results cannot be replayed across implementations or messages.
+3. The resolver routes strictly by the 4-byte version prefix; an unknown prefix resolves to nothing rather than to a default implementation.
+4. Settlement epoch data must be fresh, or verification reverts with `EpochTooStale`.
+5. A cursed lane (RMN) refuses both quoting-side forwarding and destination verification until the curse lifts.
+
+### Production Ownership (Recommended)
+
+The quick-start kit deploys with a single EOA owner. For production, put owner roles behind real governance before value flows:
+
+- **Owner of resolver + verifier**: a multisig (e.g. Safe) with an appropriate threshold, ideally behind a **timelock** so implementation registrations and lane changes are publicly visible before they execute. Registering a malicious verifier implementation is equivalent to full compromise — treat the resolver owner as your root of trust.
+- **Factory allowlist + owner**: same multisig, or a narrower deploy-ops key. The allowlist only gates who can claim CREATE2 addresses on new chains; it cannot touch existing deployments.
+- **Factory deployer key** (address-parity key, nonce 0): needed only when adding a chain. Keep it offline between deployments; it holds no ongoing authority.
+- If your protocol already has on-chain governance, point ownership at it — these contracts only need an `owner`; they impose no governance system of their own.
