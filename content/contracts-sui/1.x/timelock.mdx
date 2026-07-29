@@ -2,9 +2,9 @@
 title: Timelock
 ---
 
-The `openzeppelin_timelock` package is a Sui-native take on OpenZeppelin's `TimelockController`: it enforces a minimum on-chain delay between scheduling a privileged operation and executing it, giving users a window to react before the change takes effect.
+The `openzeppelin_timelock` package is a Sui-native take on OpenZeppelin's `TimelockController`: it enforces a minimum onchain delay between scheduling a privileged operation and executing it, giving users a window to react before the change takes effect.
 
-Because Move has no `target.call(data)`, the timelock stores each operation's typed parameters on-chain and, at execution time, hands them back through a no-ability `ExecutionTicket<Action, Params>` hot potato that the consumer redeems in the same transaction. The consumer dispatches to itself. An integration binds to a specific `Timelock` through a stored `OperationCap`, so the canonical-timelock check is enforced by the library rather than by hand-written asserts. Roles (proposer, executor, canceller, admin) come from a hard dependency on `openzeppelin_access::access_control`.
+Because Move has no `target.call(data)`, the timelock stores each operation's typed parameters onchain and, at execution time, hands them back through a no-ability `ExecutionTicket<Action, Params>` hot potato that the consumer redeems in the same transaction. The consumer dispatches to itself. An integration binds to a specific `Timelock` through a stored `OperationCap`, so the canonical-timelock check is enforced by the library rather than by hand-written asserts. Roles (proposer, executor, canceller, admin) come from a hard dependency on `openzeppelin_access::access_control`.
 
 <Callout type="warn">
 Prefer the `OperationCap`-bound entries (`schedule_with`, `execute_with`, `cancel_with`). The raw `schedule` / `execute` / `cancel` entries do not bind the timelock id: if you use them you must assert `object::id(timelock)` against your canonical timelock in every wrapper, and forgetting it silently disables the delay. Also, `ExecutionTicket` has no abilities. Always follow `execute` with `consume` in the same PTB, or the transaction aborts.

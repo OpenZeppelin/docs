@@ -15,7 +15,7 @@ This page documents the public API of `openzeppelin_timelock` for OpenZeppelin C
 use openzeppelin_timelock::timelock;
 ```
 
-Hash-keyed operation timelock with typed, on-chain operation parameters and a typed hot-potato execution ticket. It is a Sui-native take on OpenZeppelin's [`TimelockController`](https://docs.openzeppelin.com/contracts/5.x/api/governance#TimelockController). A proposer schedules an operation with its typed params stored on-chain under a deterministic, off-chain reproducible id. After the per-op delay elapses and before the grace window closes (the ready window is half-open, `[ready_at_ms, expires_at_ms)`, and both bounds are locked at schedule time), an executor executes it, minting an `ExecutionTicket<Action, Params>`, a no-ability hot potato that must be consumed by `consume` in the same PTB. `Done` is sticky, so operations are non-replayable.
+Hash-keyed operation timelock with typed, onchain operation parameters and a typed hot-potato execution ticket. It is a Sui-native take on OpenZeppelin's [`TimelockController`](https://docs.openzeppelin.com/contracts/5.x/api/governance#TimelockController). A proposer schedules an operation with its typed params stored onchain under a deterministic, off-chain reproducible id. After the per-op delay elapses and before the grace window closes (the ready window is half-open, `[ready_at_ms, expires_at_ms)`, and both bounds are locked at schedule time), an executor executes it, minting an `ExecutionTicket<Action, Params>`, a no-ability hot potato that must be consumed by `consume` in the same PTB. `Done` is sticky, so operations are non-replayable.
 
 Authorization comes from a hard dependency on `openzeppelin_access`: every gated entry takes `&Auth<Role>` and asserts `Role` matches one of the four role types bound into the `Timelock` at creation (`proposer_role` / `executor_role` / `canceller_role` / `admin_role`). Role types are immutable; membership is managed in the consumer's `AccessControl`. Configuration (`min_delay_ms`, `grace_period_ms`, `open_executor`) is mutated only through the admin-gated `schedule_* / execute_*` pairs, so every configuration change is itself timelocked.
 
@@ -246,7 +246,7 @@ Cross-check any off-chain implementation against this function before relying on
   id="timelock-schedule"
   kind="public"
 >
-Schedules an operation, storing its typed `params` on-chain. Caller must hold the proposer role. `predecessor` is the id of an op that must be `Done` before this one (or empty for none); `salt` disambiguates otherwise-identical operations; `delay_ms` must be at least `min_delay_ms`. Returns the operation id (pass to `execute` / `cancel`). This raw entry does not bind the `Timelock` id. Prefer `schedule_with`.
+Schedules an operation, storing its typed `params` onchain. Caller must hold the proposer role. `predecessor` is the id of an op that must be `Done` before this one (or empty for none); `salt` disambiguates otherwise-identical operations; `delay_ms` must be at least `min_delay_ms`. Returns the operation id (pass to `execute` / `cancel`). This raw entry does not bind the `Timelock` id. Prefer `schedule_with`.
 
 Aborts with `EWrongRole` if `Role` is not the bound `proposer_role`.
 
