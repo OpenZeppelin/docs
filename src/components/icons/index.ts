@@ -1,5 +1,6 @@
 export { AnnotationDotsIcon } from "./annotation-dots-icon";
 export { ArbitrumIcon } from "./arbitrum-icon";
+export { CantonHomeIcon, CantonIcon } from "./canton-icon";
 export { ContractsLibraryIcon } from "./contracts-library-icon";
 export { ContractsMcpIcon } from "./contracts-mcp-icon";
 export { ContractsUpgradesIcon } from "./contracts-upgrades-icon";

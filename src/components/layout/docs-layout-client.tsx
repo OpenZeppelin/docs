@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { baseOptions } from "@/app/layout.config";
 import {
 	ArbitrumIcon,
+	CantonIcon,
 	EthereumIcon,
 	MidnightIcon,
 	PolkadotIcon,
@@ -181,6 +182,11 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 				url: "/confidential-contracts",
 				icon: <ZamaIcon className="w-5 h-5" />,
 				urls: zamaUrls,
+			},
+			{
+				title: "Canton",
+				url: "/canton",
+				icon: <CantonIcon className="w-5 h-5" />,
 			},
 		];
 	}, [pathname, lastEcosystem]);

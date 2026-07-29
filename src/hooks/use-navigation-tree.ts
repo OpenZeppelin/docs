@@ -6,6 +6,7 @@ import { getEcosystemFromPath } from "@/lib/ecosystem-detection";
 import { withVersionedRustBook } from "@/lib/relayer-rust-book";
 import {
 	arbitrumStylusTree,
+	cantonTree,
 	ethereumEvmTree,
 	impactTree,
 	midnightTree,
@@ -32,6 +33,8 @@ export function useNavigationTree() {
 
 		if (pathname.startsWith("/stellar-contracts")) {
 			sessionStorage.setItem("lastEcosystem", "stellar");
+		} else if (pathname.startsWith("/canton")) {
+			sessionStorage.setItem("lastEcosystem", "canton");
 		} else if (pathname.startsWith("/substrate-runtimes")) {
 			sessionStorage.setItem("lastEcosystem", "polkadot");
 		} else if (pathname.startsWith("/contracts-sui")) {
@@ -78,6 +81,8 @@ export function useNavigationTree() {
 			return suiTree;
 		} else if (pathname.startsWith("/stellar-contracts")) {
 			return stellarTree;
+		} else if (pathname.startsWith("/canton")) {
+			return cantonTree;
 		} else if (pathname.startsWith("/contracts-compact")) {
 			return midnightTree;
 		} else if (pathname.startsWith("/confidential-contracts")) {

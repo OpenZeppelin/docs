@@ -1,5 +1,6 @@
 import {
 	arbitrumStylusTree,
+	cantonTree,
 	ethereumEvmTree,
 	midnightTree,
 	type NavigationNode,
@@ -27,7 +28,8 @@ export type EcosystemKey =
 	| "midnight"
 	| "sui"
 	| "starknet"
-	| "uniswap";
+	| "uniswap"
+	| "canton";
 
 const TREES: Array<{ key: EcosystemKey; tree: NavigationTree }> = [
 	{ key: "ethereum", tree: ethereumEvmTree },
@@ -39,6 +41,7 @@ const TREES: Array<{ key: EcosystemKey; tree: NavigationTree }> = [
 	{ key: "sui", tree: suiTree },
 	{ key: "starknet", tree: starknetTree },
 	{ key: "uniswap", tree: uniswapTree },
+	{ key: "canton", tree: cantonTree },
 ];
 
 /**

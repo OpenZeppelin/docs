@@ -1,4 +1,5 @@
 import arbitrumStylusData from "./arbitrum-stylus.json";
+import cantonData from "./canton.json";
 import ethereumEvmData from "./ethereum-evm.json";
 import impactData from "./impact.json";
 import { mergeDeveloperLibraries } from "./merge-developer-libraries";
@@ -26,6 +27,7 @@ const sui = suiData as NavigationNode[];
 const polkadot = mergeDeveloperLibraries(polkadotData as NavigationNode[]);
 const zama = mergeDeveloperLibraries(zamaData as NavigationNode[]);
 const uniswap = uniswapData as NavigationNode[];
+const canton = cantonData as NavigationNode[];
 const impact = impactData as NavigationNode[];
 
 // Create separate navigation trees for each blockchain
@@ -72,6 +74,11 @@ export const uniswapTree: NavigationTree = {
 export const polkadotTree: NavigationTree = {
 	name: "Polkadot",
 	children: polkadot,
+};
+
+export const cantonTree: NavigationTree = {
+	name: "Canton",
+	children: canton,
 };
 
 export const impactTree: NavigationTree = {
