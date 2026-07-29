@@ -15,7 +15,7 @@ The package is independent: it has no dependency on [Ownable](/canton/library/ow
 import OpenZeppelin.AccessControl
 ```
 
-## The Daml model
+## The Daml Model
 
 Two design choices differ from Solidity, and both are deliberate.
 
@@ -37,14 +37,14 @@ A role granted by `admin` to `account`. Possession is authorization.
 
 Signatory `admin`, observer `account`.
 
-*   **`RoleGrant_Renounce`**: the grantee gives up its own role, archiving the grant (the `renounceRole` analogue). Self-only by construction, since `account` is the controller.
+- **`RoleGrant_Renounce`**: the grantee gives up its own role, archiving the grant (the `renounceRole` analogue). Self-only by construction, since `account` is the controller.
 
 ### `RoleAdmin`
 
 The role-administration authority that mints and revokes grants. Two paths coexist:
 
-*   The root path, controlled by `admin`, where the `DEFAULT_ADMIN_ROLE` holder manages any role directly.
-*   The role-admin path, controlled by an arbitrary `caller` (the `getRoleAdmin` analogue), where a delegate presents a grant for a caller-supplied `adminRole` and may then grant or revoke the target role. The new grant is still `admin`-signed because the choice runs with the contract's authority, so a delegate administers roles without holding the admin key.
+- The root path, controlled by `admin`, where the `DEFAULT_ADMIN_ROLE` holder manages any role directly.
+- The role-admin path, controlled by an arbitrary `caller` (the `getRoleAdmin` analogue), where a delegate presents a grant for a caller-supplied `adminRole` and may then grant or revoke the target role. The new grant is still `admin`-signed because the choice runs with the contract's authority, so a delegate administers roles without holding the admin key.
 
 | Choice | Controller | Result | Description |
 | --- | --- | --- | --- |
@@ -60,16 +60,16 @@ The library hard-codes no role-to-admin graph. `adminRole` is a caller-supplied 
 
 A pending, timelocked transfer of a role to `newAdmin`, the `AccessControlDefaultAdminRules` analogue. It is an offer / accept handshake plus a ledger-time gate: `newAdmin` cannot accept before `effectiveTime`, and `admin` can cancel within the window. Pass the `DEFAULT_ADMIN_ROLE` id as `role` for a default-admin handoff.
 
-*   **`DefaultAdminTransferOffer_Accept`** (controller `newAdmin`): accept once the timelock has elapsed; grants `role` by creating a `RoleGrant` for `newAdmin`.
-*   **`DefaultAdminTransferOffer_Cancel`** (controller `admin`): cancel the pending handoff (the `cancelDefaultAdminTransfer` analogue).
+- **`DefaultAdminTransferOffer_Accept`** (controller `newAdmin`): accept once the timelock has elapsed; grants `role` by creating a `RoleGrant` for `newAdmin`.
+- **`DefaultAdminTransferOffer_Cancel`** (controller `admin`): cancel the pending handoff (the `cancelDefaultAdminTransfer` analogue).
 
-## Helper functions
+## Helper Functions
 
-*   **`requireRole : Party -> Text -> Party -> RoleGrant -> Update ()`**: the `requireRole` modifier analogue. Call it at the top of a gated choice. It asserts the grant is issued by the expected `admin`, names the `caller` (anti-impersonation), and carries the required `role`.
-*   **`hasRole : Party -> Text -> Party -> RoleGrant -> Bool`**: the pure predicate form, for callers that already hold the fetched grant.
-*   **`requireTimelockElapsed : Time -> Update ()`**: asserts the current ledger time has reached a given effective time. Shared by `DefaultAdminTransferOffer` and reusable by consumers running their own timelocked handoff.
+- **`requireRole : Party -> Text -> Party -> RoleGrant -> Update ()`**: the `requireRole` modifier analogue. Call it at the top of a gated choice. It asserts the grant is issued by the expected `admin`, names the `caller` (anti-impersonation), and carries the required `role`.
+- **`hasRole : Party -> Text -> Party -> RoleGrant -> Bool`**: the pure predicate form, for callers that already hold the fetched grant.
+- **`requireTimelockElapsed : Time -> Update ()`**: asserts the current ledger time has reached a given effective time. Shared by `DefaultAdminTransferOffer` and reusable by consumers running their own timelocked handoff.
 
-## Gating an operation
+## Gating an Operation
 
 A consumer's privileged choice fetches the grant the caller presents and validates it before doing work:
 
@@ -98,5 +98,5 @@ nonconsuming choice Mint : ContractId Token
 
 ## Related
 
-*   [Ownable](/canton/library/ownable), for the single-owner case.
-*   [Pausable](/canton/library/pausable), for an emergency stop.
+- [Ownable](/canton/library/ownable), for the single-owner case.
+- [Pausable](/canton/library/pausable), for an emergency stop.

@@ -15,7 +15,7 @@ The package is independent: it carries no role type and depends on no other Open
 import OpenZeppelin.Pausable
 ```
 
-## What "paused" means on a UTXO ledger
+## What "Paused" Means on a UTXO Ledger
 
 Solidity stores `_paused` in contract storage and reads it through a modifier. Daml-LF 2.1 has no contract keys, so there is no global "is the resource paused?" lookup. Instead the live `PauseState` is a contract that gated operations read by `ContractId` (disclosed to them by the pauser) and check via `whenNotPaused`.
 
@@ -34,15 +34,15 @@ The current pause state of a resource, administered by `pauser`.
 
 Signatory `pauser` (the contract is pauser-signed and so unforgeable). Observers are granted read access by explicit disclosure, keeping the privacy surface minimal.
 
-*   **`PauseState_Set`** (returns `ContractId PauseState`): flip the flag, archiving the current state and creating its successor. Rejects a redundant change (setting the flag to its current value) so on-ledger history records only real transitions.
-*   **`PauseState_Get`** (nonconsuming, returns `Bool`): read the current flag without archiving the contract.
+- **`PauseState_Set`** (returns `ContractId PauseState`): flip the flag, archiving the current state and creating its successor. Rejects a redundant change (setting the flag to its current value) so on-ledger history records only real transitions.
+- **`PauseState_Get`** (nonconsuming, returns `Bool`): read the current flag without archiving the contract.
 
-## Helper functions
+## Helper Functions
 
-*   **`whenNotPaused : PauseState -> Update ()`**: the `whenNotPaused` modifier analogue. A gated operation fetches the disclosed `PauseState` and calls this before doing origination work; it fails the transaction when paused.
-*   **`isPaused : PauseState -> Bool`**: the pure predicate form, for callers that already hold the flag.
+- **`whenNotPaused : PauseState -> Update ()`**: the `whenNotPaused` modifier analogue. A gated operation fetches the disclosed `PauseState` and calls this before doing origination work; it fails the transaction when paused.
+- **`isPaused : PauseState -> Bool`**: the pure predicate form, for callers that already hold the flag.
 
-## Guarding an operation
+## Guarding an Operation
 
 ```daml
 nonconsuming choice Transfer : ContractId Token
@@ -66,4 +66,4 @@ nonconsuming choice Transfer : ContractId Token
 
 ## Related
 
-*   [Access Control](/canton/library/access-control) or [Ownable](/canton/library/ownable), to decide who is allowed to pause and resume.
+- [Access Control](/canton/library/access-control) or [Ownable](/canton/library/ownable), to decide who is allowed to pause and resume.
