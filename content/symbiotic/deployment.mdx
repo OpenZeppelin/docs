@@ -118,15 +118,19 @@ Onboarding is **per protocol deployment, not per validator set**. Operator regis
 
 ## Sidecar Image Compatibility
 
-The Symbiotic relay sidecar (`symbioticfi/relay`) is still in release-candidate phase. The pinned version in `docker-compose.yml` and the `RELAY_IMAGE` default in `xtask/src/genesis.rs` must stay in sync. Known states observed during integration:
+The pinned `symbioticfi/relay` version in `docker-compose.yml` (all three sidecar services) and the `RELAY_IMAGE` default in `xtask/src/genesis.rs` must stay in sync. The current pin is **`1.1.1`** (the latest GA release). If you bump the tag, run a full testnet e2e first and verify proofs are aggregated end-to-end.
 
-| Tag | Status | Notes |
-| --- | --- | --- |
-| `1.0.1-rc4` | works | Current pin. First image where aggregation produces proofs against real mainnet. |
-| `1.0.1-rc3.0.20260507060511-...` | broken | Starts cleanly but the aggregator never produces proofs even with full quorum signing. |
-| `1.0.1-20260326074346-da0bce8ba949` | broken on non-local | Panics at config init with an `errors.As` target-type bug when multiple chains are configured. Local works because the codepath differs. |
+### Storage backend (upgrading from 1.0.x)
 
-If you bump the tag, run a full testnet e2e first and verify proofs are aggregated end-to-end. The `1.0.1` GA tag has not yet shipped from Symbiotic — track upstream releases before promoting any tag past `rc4`.
+Relay `1.1.x` defaults the sidecar `storage-type` to **bbolt**; `1.0.x` used **BadgerDB**. A sidecar started against a `/storage` volume (the `./data/sidecar-*` bind mounts) that still contains BadgerDB files fails to boot:
+
+```
+storage directory "/storage" contains BadgerDB files but storage type is "bbolt";
+either remove the BadgerDB files or set storage-type: "badger" explicitly in config
+```
+
+- **Fresh deploys** are unaffected — an empty `/storage` initializes as bbolt.
+- **Upgrading a running deployment** with existing 1.0.x state: either wipe the sidecar storage (`data/sidecar-*`; the relays re-backfill from chain) or pin `storage-type: badger` in the sidecar config. Wiping is the clean path — after the backfill, mind the `EpochTooStale` verification window until the committer catches up.
 
 ## Common Deployment Failures
 
