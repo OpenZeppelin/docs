@@ -16,7 +16,14 @@ Send one test message through the active provider.
 make send
 make send MSG="test message"
 make send ENV=testnet MSG="hello"
+make send ENV=local-ccv EXECUTOR=0x... FINALITY=safe
 ```
+
+| Variable | Description |
+|----------|-------------|
+| `MSG` | Message payload (default: "hello") |
+| `EXECUTOR` | Executor address encoded into the message (CCV local mock send only). Operators self-execute only when this matches their configured executor address. |
+| `FINALITY` | Source-finality requirement encoded into the message (CCV local mock send only): `finalized` (default), `safe`, or a block count `N`. |
 
 ### `make watch`
 
@@ -44,12 +51,15 @@ Send a message, then watch it to completion.
 make e2e
 make e2e MSG="custom message"
 make e2e ENV=testnet MSG="hello" TIMEOUT=180
+make e2e ENV=local-ccv EXECUTOR=0x... TIMEOUT=180
 ```
+
+`EXECUTOR` and `FINALITY` pass through exactly as in `make send`.
 
 LayerZero starter OApp addresses are published under:
 
 ```text
-deployments/<env>.json -> layerzero.oapp.{source,destination}
+deployments/<env>.json -> {source,destination}.layerzero.exampleApp
 ```
 
 ## Direct xtask Usage
@@ -133,6 +143,16 @@ LayerZero operators also expose:
 |----------|---------|
 | `POST /api/v1/layerzero/proof` | Return Merkle proofs for processed messages |
 | `POST /api/v1/layerzero/verify` | Verify a Merkle proof in test workflows |
+
+### Chainlink CCV Verification Endpoint
+
+CCV operators expose the attestation API advertised on-chain via `getStorageLocations()` (host ports 3001-3003):
+
+```bash
+curl "http://localhost:3001/verifications?messageID=0x..."
+```
+
+`messageID` is repeatable (up to 20 per request). Responses carry Chainlink-CCV-shaped verifier results whose `ccv_data` is prefixed with the verifier version tag. Requests with no `messageID`, more than 20, or a malformed id return HTTP 400.
 
 ## Webhook Template Requirements
 
