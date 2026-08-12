@@ -2,13 +2,14 @@
 title: Settlement (CIP-112)
 ---
 
-The settlement primitive is an interface-shaped engine for atomic, value-moving delivery-versus-payment (DvP) on Canton, aligned with the Canton Token Standard and the CIP-112 settlement design.
+The settlement primitive is an interface-shaped engine for atomic, value-moving delivery-versus-payment (DvP) on Canton, built on the Token Standard V2 (CIP-112) interfaces. The current implementation is the [`openzeppelin-tokenCIP112-v1`](https://github.com/OpenZeppelin/canton-contracts/tree/main/experiments/token/tokenCIP112-v1) package in `OpenZeppelin/canton-contracts`.
 
 <Callout type="warn">
-  Experimental. The settlement engine is a preview surface built against
-  stand-in token interfaces while the upstream Canton Token Standard packages
-  stabilize. It is not audited and not intended for production use. Interfaces
-  and behavior may change.
+  Experimental. The implementation builds against the upstream Token Standard
+  V2 interfaces, which are devnet-stage: the vendored interface DARs are local
+  builds from a pinned splice commit, and every package ID changes when
+  upstream cuts a release. It is not audited and not intended for production
+  use. Interfaces and behavior may change.
 </Callout>
 
 ## What It Does
@@ -19,14 +20,17 @@ At a high level the primitive covers:
 
 - **Atomic multi-leg settlement**: settle a batch of legs as a single all-or-nothing operation.
 - **Value-moving settlement**: on settlement, receiver legs are credited, rather than only recording a receipt.
+- **Holdings and transfer instructions**: asset holdings with optional locks, and the standard transfer-instruction flow.
 - **Allocation lifecycle**: a request, instruction, and allocation flow, with cancel and withdraw paths.
 - **Compliance hooks**: fail-closed reference hooks for node-level attestation, and a controlled seizure path for lawful process, gated behind explicit authority.
 
 ## Status
 
-This primitive builds and is exercised two ways: an in-memory test suite against mock token interfaces, and a set of interoperability exemplars (an ERC-20-style facade, a wallet-driven settlement lifecycle, and app-provider activity attribution) that run against a local Canton ledger over the Ledger API. Importing the real Canton Token Standard packages and promoting the primitive into the general library are tracked as follow-on work. See [`OpenZeppelin/canton-specs`](https://github.com/OpenZeppelin/canton-specs) for the current engine, its threat model, and the interop exemplars.
+The [`openzeppelin-tokenCIP112-v1`](https://github.com/OpenZeppelin/canton-contracts/tree/main/experiments/token/tokenCIP112-v1) package in [`OpenZeppelin/canton-contracts`](https://github.com/OpenZeppelin/canton-contracts) implements this surface against the real Token Standard V2 interfaces, vendored as pinned DARs with recorded provenance. It is exercised three ways: in-memory Daml Script suites with a full coverage gate, a sandbox gate that runs token creation, transfer, and querying against a live ledger over the Ledger API, and interoperability exemplars (an ERC-20-style facade, a wallet-driven settlement lifecycle, and app-provider activity attribution) that run against a local Canton ledger.
+
+The research behind the primitive lives in [`OpenZeppelin/canton-specs`](https://github.com/OpenZeppelin/canton-specs), the research and incubation workspace: the [settlement experiments](https://github.com/OpenZeppelin/canton-specs/tree/main/experiments/settlement) hold the architecture, the threat model, and a regulated-settlement exemplar, while the [interoperability experiments](https://github.com/OpenZeppelin/canton-specs/tree/main/experiments/interoperability) hold the live-ledger evidence.
 
 ## Related
 
 - [Reference Implementations](/canton/reference-implementations), which compose settlement into complete applications.
-- [Library](/canton), the access-control, ownable, and pausable primitives settlement builds on.
+- [Library](/canton/library), the access-control, ownable, and pausable primitives that applications compose with settlement.
