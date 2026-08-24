@@ -204,7 +204,7 @@ The `TimelockController` is a proxy that is governed by proposers and executors.
 
 ### Using `TimelockController`
 
-By default, the address that deployed the `TimelockController` gets administration privileges over the timelock. This role grants the right to assign proposers, executors, and other administrators.
+By default, the `TimelockController` administers itself: the admin role is granted to the timelock contract, and optionally to an additional `admin` account passed at construction. The deployer receives no privileges automatically. The admin role grants the right to assign proposers, executors, and other administrators, through the timelock's own governance process.
 
 The first step in configuring the `TimelockController` is to assign at least one proposer and one executor. These can be assigned during construction or later by anyone with the administrator role. These roles are not exclusive, meaning an account can have both roles.
 
@@ -354,7 +354,7 @@ An important aspect of the AccessControl contract is that roles aren't granted n
 
 In the case of the `AccessManager`, the same rule applies and only the role's admins are able to call grant and revoke functions. Note that calling these functions will be subject to the execution delay that the executing role admin has.
 
-Additionally, the `AccessManager` stores a _guardian_ as an extra protection for each role. This guardian has the ability to cancel operations that have been scheduled by any role member with an execution delay. Consider that a role will have its initial admin and guardian default to the `ADMIN_ROLE` (`0`).
+Additionally, the `AccessManager` stores a _guardian_ as an extra protection for each role. This guardian has the ability to cancel operations that have been scheduled by any role member with an execution delay. An operation can also be canceled by the account that scheduled it, by members of `ADMIN_ROLE`, and, for admin-restricted operations on the manager itself (such as scheduled `grantRole` and `revokeRole` calls), by members of that role's admin role. Consider that a role will have its initial admin and guardian default to the `ADMIN_ROLE` (`0`).
 
 <Callout>
 Be careful with the members of `ADMIN_ROLE`, since it acts as the default admin and guardian for every role. A misbehaved guardian can cancel operations at will, affecting the AccessManager's operation.

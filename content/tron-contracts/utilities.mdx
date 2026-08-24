@@ -52,22 +52,7 @@ function _verify(
 }
 ```
 
-By default, the `verify` function will try calling the [RIP-7212](https://github.com/ethereum/RIPs/blob/master/RIPS/rip-7212.md) precompile at address `0x100` and will fallback to an implementation in Solidity if not available. We encourage you to use `verifyNative` if you know the precompile is available on the chain you're working on and on any other chain on which you intend to use the same bytecode in the future. In case of any doubts regarding the implementation roadmap of the native precompile `P256` of potential future target chains, please consider using `verifySolidity`.
-
-```solidity
-using P256 for bytes32;
-
-function _verify(
-    bytes32 data,
-    bytes32 r,
-    bytes32 s,
-    bytes32 qx,
-    bytes32 qy
-) internal view returns (bool) {
-    // Will only call the precompile at address(0x100)
-    return data.verifyNative(r, s, qx, qy);
-}
-```
+On TRON, the `verify` function performs the verification entirely in Solidity (it is equivalent to `verifySolidity`). Unlike the upstream OpenZeppelin implementation, it does not attempt the [RIP-7212](https://github.com/ethereum/RIPs/blob/master/RIPS/rip-7212.md) precompile: the native secp256r1 precompile specified for the TVM by [TIP-7951](https://github.com/tronprotocol/tips/blob/master/tip-7951.md) (at address `0x100`) is not assumed to be enabled. This removes any dependency on precompile availability at the cost of higher Energy consumption per verification.
 
 <Callout>
 The P256 library only allows for `s` values in the lower order of the curve (i.e. `s <= N/2`) to prevent malleability. In case your tooling produces signatures in both sides of the curve, consider flipping the `s` value to keep compatibility.
@@ -130,7 +115,7 @@ For smart contract wallets that implement ERC-1271, you can explicitly use:
 
 ```solidity
 function _verifyContractSignature(address signer, bytes32 hash, bytes memory signature) internal view returns (bool) {
-    return SignatureChecker.isValidERC1271SignatureNow(signer, hash, signature);
+    return SignatureChecker.isValidTRC1271SignatureNow(signer, hash, signature);
 }
 ```
 
@@ -190,16 +175,16 @@ For an on-chain Merkle Tree, see the `MerkleTree` library.
 
 In Solidity, it's frequently helpful to know whether or not a contract supports an interface you'd like to use. ERC-165 is a standard that enables runtime interface detection. Contracts provide helpers both for implementing ERC-165 in your contracts and querying other contracts:
 
-- `IERC165` — this is the ERC-165 interface that defines `supportsInterface`. When implementing ERC-165, you'll conform to this interface.
-- `ERC165` — inherit this contract if you'd like to support interface detection using a lookup table in contract storage. You can register interfaces using `_registerInterface(bytes4)`: check out example usage as part of the TRC-721 implementation.
-- `ERC165Checker` — ERC165Checker simplifies the process of checking whether or not a contract supports an interface you care about.
-- include with `using ERC165Checker for address;`
-- `myAddress._supportsInterface(bytes4)`
-- `myAddress._supportsAllInterfaces(bytes4[])`
+- `ITRC165` — this is the ERC-165 interface that defines `supportsInterface`. When implementing ERC-165, you'll conform to this interface.
+- `TRC165` — inherit this contract to declare support for an interface: override `supportsInterface` to return `true` for the interface ids your contract implements. Check out example usage as part of the TRC-721 implementation.
+- `TRC165Checker` — TRC165Checker simplifies the process of checking whether or not a contract supports an interface you care about.
+- include with `using TRC165Checker for address;`
+- `myAddress.supportsInterface(bytes4)`
+- `myAddress.supportsAllInterfaces(bytes4[])`
 
 ```solidity
 contract MyContract {
-    using ERC165Checker for address;
+    using TRC165Checker for address;
 
     bytes4 private InterfaceId_TRC721 = 0x80ac58cd;
 
@@ -413,7 +398,7 @@ using SlotDerivation for bytes32;
 string private constant _NAMESPACE = "<namespace>" // eg. example.main
 
 function erc7201Pointer() internal view returns (bytes32) {
-    return _NAMESPACE.erc7201Slot();
+    return _NAMESPACE.trc7201Slot();
 }
 ```
 
@@ -569,7 +554,7 @@ Only use these functions after carefully confirming they're necessary. By defaul
 
 `Blockhash` provides access to historical block hashes through the native `BLOCKHASH` opcode, which exposes the hashes of the most recent 256 blocks.
 
-The library is a thin wrapper around the opcode. It handles edge cases gracefully by returning zero for the current block, future blocks, or blocks older than 256, matching the VM's native behavior. Note that TVM does not implement [EIP-2935](https://eips.ethereum.org/EIPS/eip-2935) history storage, so access cannot be extended beyond the 256-block window.
+The library is a thin wrapper around the opcode. It handles edge cases gracefully by returning zero for the current block, future blocks, or blocks older than 256, matching the VM's native behavior. Note that the extended [EIP-2935](https://eips.ethereum.org/EIPS/eip-2935) history storage — specified for the TVM by [TIP-2935](https://github.com/tronprotocol/tips/blob/master/tip-2935.md) at the same canonical address — is not yet active on TRON mainnet, so access cannot currently be extended beyond the 256-block window.
 
 ```solidity
 contract L1Inbox {
