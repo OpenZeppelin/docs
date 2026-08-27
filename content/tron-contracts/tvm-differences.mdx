@@ -1,0 +1,45 @@
+---
+title: "TVM Differences"
+---
+
+The TRON Virtual Machine (TVM) is EVM-compatible, but it is **not identical**. A handful of differences are silent footguns: code that compiles and looks correct on Ethereum can produce the wrong address, accept unintended assets, or misvalue amounts on TRON. This page highlights the divergences that matter when building with OpenZeppelin Contracts for TRON and how the library handles each one. It is a summary — each adaptation is documented in detail in the affected contract's NatSpec.
+
+<Callout>
+Most standards are also **renamed** to their TRON identifiers (`ERC20` → `TRC20`, `ERC165` → `TRC165`, `EIP712` → `TIP712`, and so on). See the [Overview](/tron-contracts) for the full TRON ↔ Ethereum mapping.
+</Callout>
+
+## Summary
+
+| Area | TVM behaviour | What this library does |
+| --- | --- | --- |
+| `CREATE2` address derivation | Preimage uses a `0x41` prefix (TIP-26), not `0xff` | `Create2` and `Clones` predict addresses with the TRON prefix so predict-then-deploy flows resolve to the real address. |
+| P256 secp256r1 precompile | Specified for the TVM by [TIP-7951](https://github.com/tronprotocol/tips/blob/master/tip-7951.md) at address `0x100`, but not yet active on mainnet | `P256.verify` performs the verification entirely in Solidity and does not depend on the precompile. |
+| EIP-7702 | Delegation is not supported on the TVM | Only the `SignerEIP7702` signer helper is ported; there is no working delegation flow. |
+| ERC-4337 | TRON has no native bundler / EntryPoint | The ERC-4337 account-abstraction contracts are not included. |
+| TRX decimals | TRX has **6** decimals, not 18 — so a `1 ether` literal evaluates to 10¹² TRX | Guidance and examples use SUN-denominated literals; avoid `ether` / `gwei` literals. |
+| USDT-TRON `transfer` | Returns `false` even on a successful transfer | `SafeTRC20.safeTransferChecked` verifies the caller's balance delta (the sender's debit) instead of trusting the return value, and the library uses it by default. |
+| TIP-712 / address format | Addresses are 21-byte, `0x41`-prefixed; off-chain SDKs sign over the 21-byte form | NatSpec advisories on the contracts whose typed-data or address handling crosses the signing boundary. |
+| Divergent precompiles | `0x09` and `0x0A` host TRON-specific signature precompiles instead of their Ethereum counterparts (`batchvalidatesign`, TIP-43; `validatemultisign`, TIP-60). `0x03` runs TRON's own RIPEMD-160; the Ethereum-compatible variant sits at `0x20003` | The library never hard-codes calls to these addresses. |
+| Native TRC-10 assets | A TRON account can hold TRC-10 tokens alongside TRX; moving them needs the token-aware `CALLTOKEN` call | Out of scope for the library; see [Native TRC-10 assets](#native-trc-10-assets) below. |
+| Resource model | Execution is metered in **energy + bandwidth**, not gas; `tx.gasprice` returns the committee-set energy price | No change required — the library does not depend on EVM gas-forwarding rules. |
+| `SELFDESTRUCT` (TIP-6780) | Matches EIP-6780 semantics, which strengthens `_disableInitializers` on the TVM | Documented via NatSpec; no behaviour is weakened. |
+| Block cadence | ~3 second blocks, versus Ethereum's ~12 seconds | Prefer timestamp-based (TRC-6372) mode for time-bounded `Governor` windows rather than block counts. |
+
+<Callout>
+OpenZeppelin Contracts reads `block.chainid` dynamically, so TIP-712 domain separators are automatically correct for whichever TRON network you deploy to.
+</Callout>
+
+## Native TRC-10 assets
+
+This library works with contract-based tokens: TRC-20, TRC-721, TRC-1155 and the other TRC standards. Native TRC-10 assets, which a TRON account can hold alongside TRX, are outside its scope. Moving a TRC-10 requires the TVM's token-aware call — `address.transferToken(amount, id)`, compiling to `CALLTOKEN`. Every value-bearing path here uses an ordinary `call`, which carries TRX only. A TRC-10 credited to a contract built on this library therefore stays with that contract, and no supplied path forwards or withdraws it. This includes the governance executors: `Governor.relay`, `Governor.execute` and `TimelockController.execute`/`executeBatch` accept TRX through `value`, and their proposal and operation hashes bind targets, TRX values and calldata, with no field for a token identifier or amount. Hold assets that contracts need to move as TRC-20 — either natively or by wrapping the TRC-10.
+
+## Addresses inside `bytes` payloads
+
+<Callout type='warn'>
+**Addresses embedded inside `bytes` payloads MUST use the 20-byte EVM form.** During execution the TVM represents every address as the low 20 bytes, so `msg.sender`, `address(this)`, and `address`-typed arguments are identical to the EVM. The 21-byte `0x41`-prefixed and Base58Check (`T…`) forms that TRON tooling (TronWeb, node APIs) works with are off-chain encodings only — they never appear on-chain. When an address is carried inside a `bytes` argument — a TRC-7930 interoperable address, a crosschain bridge message, a TRC-7913 signer (`verifier || key`), or any packed calldata — it must be the raw 20-byte value. The 21-byte form is rejected where the format is self-describing (`InteroperableAddress.parseEvmV1` and `BridgeFungible` revert on a non-20-byte address) and would otherwise be silently mis-parsed into the wrong address. Strip the `0x41` prefix at the encoding boundary (e.g. in your TronWeb integration) before placing an address in a `bytes` payload.
+</Callout>
+
+## Learn more
+
+- [Backwards Compatibility](/tron-contracts/backwards-compatibility) — versioning and storage-layout guarantees.
+- [Using with Upgrades](/tron-contracts/upgradeable) — proxy patterns and upgrade safety on the TVM.

@@ -9,6 +9,7 @@ import {
 	starknetTree,
 	stellarTree,
 	suiTree,
+	tronTree,
 	uniswapTree,
 	zamaTree,
 } from "@/navigation";
@@ -28,6 +29,7 @@ export type EcosystemKey =
 	| "midnight"
 	| "sui"
 	| "starknet"
+	| "tron"
 	| "uniswap"
 	| "canton";
 
@@ -40,6 +42,7 @@ const TREES: Array<{ key: EcosystemKey; tree: NavigationTree }> = [
 	{ key: "midnight", tree: midnightTree },
 	{ key: "sui", tree: suiTree },
 	{ key: "starknet", tree: starknetTree },
+	{ key: "tron", tree: tronTree },
 	{ key: "uniswap", tree: uniswapTree },
 	{ key: "canton", tree: cantonTree },
 ];
