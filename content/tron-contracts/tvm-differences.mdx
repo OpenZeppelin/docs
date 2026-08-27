@@ -23,7 +23,7 @@ Most standards are also **renamed** to their TRON identifiers (`ERC20` → `TRC2
 | Native TRC-10 assets | A TRON account can hold TRC-10 tokens alongside TRX; moving them needs the token-aware `CALLTOKEN` call | Out of scope for the library; see [Native TRC-10 assets](#native-trc-10-assets) below. |
 | Resource model | Execution is metered in **energy + bandwidth**, not gas; `tx.gasprice` returns the committee-set energy price | No change required — the library does not depend on EVM gas-forwarding rules. |
 | `SELFDESTRUCT` (TIP-6780) | Matches EIP-6780 semantics, which strengthens `_disableInitializers` on the TVM | Documented via NatSpec; no behaviour is weakened. |
-| Block cadence | ~3 second blocks, versus Ethereum's ~12 seconds | Prefer timestamp-based (EIP-6372) mode for time-bounded `Governor` windows rather than block counts. |
+| Block cadence | ~3 second blocks, versus Ethereum's ~12 seconds | Prefer timestamp-based (TRC-6372) mode for time-bounded `Governor` windows rather than block counts. |
 
 <Callout>
 OpenZeppelin Contracts reads `block.chainid` dynamically, so TIP-712 domain separators are automatically correct for whichever TRON network you deploy to.
@@ -36,7 +36,7 @@ This library works with contract-based tokens: TRC-20, TRC-721, TRC-1155 and the
 ## Addresses inside `bytes` payloads
 
 <Callout type='warn'>
-**Addresses embedded inside `bytes` payloads MUST use the 20-byte EVM form.** During execution the TVM represents every address as the low 20 bytes, so `msg.sender`, `address(this)`, and `address`-typed arguments are identical to the EVM. The 21-byte `0x41`-prefixed and Base58Check (`T…`) forms that TRON tooling (TronWeb, node APIs) works with are off-chain encodings only — they never appear on-chain. When an address is carried inside a `bytes` argument — an ERC-7930 interoperable address, a crosschain bridge message, an ERC-7913 signer (`verifier || key`), or any packed calldata — it must be the raw 20-byte value. The 21-byte form is rejected where the format is self-describing (`InteroperableAddress.parseEvmV1` and `BridgeFungible` revert on a non-20-byte address) and would otherwise be silently mis-parsed into the wrong address. Strip the `0x41` prefix at the encoding boundary (e.g. in your TronWeb integration) before placing an address in a `bytes` payload.
+**Addresses embedded inside `bytes` payloads MUST use the 20-byte EVM form.** During execution the TVM represents every address as the low 20 bytes, so `msg.sender`, `address(this)`, and `address`-typed arguments are identical to the EVM. The 21-byte `0x41`-prefixed and Base58Check (`T…`) forms that TRON tooling (TronWeb, node APIs) works with are off-chain encodings only — they never appear on-chain. When an address is carried inside a `bytes` argument — a TRC-7930 interoperable address, a crosschain bridge message, a TRC-7913 signer (`verifier || key`), or any packed calldata — it must be the raw 20-byte value. The 21-byte form is rejected where the format is self-describing (`InteroperableAddress.parseEvmV1` and `BridgeFungible` revert on a non-20-byte address) and would otherwise be silently mis-parsed into the wrong address. Strip the `0x41` prefix at the encoding boundary (e.g. in your TronWeb integration) before placing an address in a `bytes` payload.
 </Callout>
 
 ## Learn more

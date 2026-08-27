@@ -90,14 +90,14 @@ Always use keys of at least 2048 bits. Additionally, be aware that PKCS#1 v1.5 a
 The `SignatureChecker` library provides a unified interface for verifying signatures from different sources. It seamlessly supports:
 
 - ECDSA signatures from externally owned accounts (EOAs)
-- ERC-1271 signatures from smart contract wallets like Argent and Safe Wallet
-- ERC-7913 signatures from keys that don't have their own Ethereum address
+- TRC-1271 signatures from smart contract wallets
+- TRC-7913 signatures from keys that don't have their own TRON address
 
 This allows developers to write signature verification code once and have it work across all these different signature types.
 
 #### Basic Signature Verification
 
-For standard signature verification that supports both EOAs and ERC-1271 contracts:
+For standard signature verification that supports both EOAs and TRC-1271 contracts:
 
 ```solidity
 using SignatureChecker for address;
@@ -109,9 +109,9 @@ function _verifySignature(address signer, bytes32 hash, bytes memory signature) 
 
 The library automatically detects whether the signer is an EOA or a contract and uses the appropriate verification method.
 
-#### ERC-1271 Contract Signatures
+#### TRC-1271 Contract Signatures
 
-For smart contract wallets that implement ERC-1271, you can explicitly use:
+For smart contract wallets that implement TRC-1271, you can explicitly use:
 
 ```solidity
 function _verifyContractSignature(address signer, bytes32 hash, bytes memory signature) internal view returns (bool) {
@@ -119,9 +119,9 @@ function _verifyContractSignature(address signer, bytes32 hash, bytes memory sig
 }
 ```
 
-#### ERC-7913 Extended Signatures
+#### TRC-7913 Extended Signatures
 
-ERC-7913 extends signature verification to support keys that don't have their own Ethereum address. This is useful for integrating non-Ethereum cryptographic curves, hardware devices, or other identity systems.
+TRC-7913 extends signature verification to support keys that don't have their own TRON address. This is useful for integrating non-Ethereum cryptographic curves, hardware devices, or other identity systems.
 
 A signer is represented as a `bytes` object that concatenates a verifier address and a key: `verifier || key`.
 
@@ -135,11 +135,11 @@ The verification process works as follows:
 
 - If `signer.length < 20`: verification fails
 - If `signer.length == 20`: verification is done using standard signature checking
-- Otherwise: verification is done using an ERC-7913 verifier
+- Otherwise: verification is done using an TRC-7913 verifier
 
 #### Batch Verification
 
-For verifying multiple ERC-7913 signatures at once:
+For verifying multiple TRC-7913 signatures at once:
 
 ```solidity
 function _verifyMultipleSignatures(
@@ -173,9 +173,9 @@ For an on-chain Merkle Tree, see the `MerkleTree` library.
 
 ## Introspection
 
-In Solidity, it's frequently helpful to know whether or not a contract supports an interface you'd like to use. ERC-165 is a standard that enables runtime interface detection. Contracts provide helpers both for implementing ERC-165 in your contracts and querying other contracts:
+In Solidity, it's frequently helpful to know whether or not a contract supports an interface you'd like to use. TRC-165 is a standard that enables runtime interface detection. Contracts provide helpers both for implementing TRC-165 in your contracts and querying other contracts:
 
-- `ITRC165` — this is the ERC-165 interface that defines `supportsInterface`. When implementing ERC-165, you'll conform to this interface.
+- `ITRC165` — this is the TRC-165 interface that defines `supportsInterface`. When implementing TRC-165, you'll conform to this interface.
 - `TRC165` — inherit this contract to declare support for an interface: override `supportsInterface` to return `true` for the interface ids your contract implements. Check out example usage as part of the TRC-721 implementation.
 - `TRC165Checker` — TRC165Checker simplifies the process of checking whether or not a contract supports an interface you care about.
 - include with `using TRC165Checker for address;`
@@ -326,7 +326,7 @@ function replace(Uint256Heap storage self, uint256 newValue) internal returns (u
 
 ### Packing
 
-The storage in the EVM is shaped in chunks of 32 bytes, each of these chunks is known as a _slot_, and can hold multiple values together as long as these values don't exceed 32 bytes. This property allows for a technique known as _packing_--placing values together in a single storage slot to reduce the costs associated with reading and writing these values.
+The storage in the TVM is shaped in chunks of 32 bytes, each of these chunks is known as a _slot_, and can hold multiple values together as long as these values don't exceed 32 bytes. This property allows for a technique known as _packing_--placing values together in a single storage slot to reduce the costs associated with reading and writing these values.
 
 Commonly, developers pack values using structs that place values together so they fit better in storage. However, this approach requires loading such struct from either calldata or memory. Although sometimes necessary, it may be useful to pack values in a single slot and treat it as a packed value without involving calldata or memory.
 
