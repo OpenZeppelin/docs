@@ -1,0 +1,36 @@
+---
+title: Macros
+---
+
+This crate provides a collection of macros that streamline and simplify development with the library.
+To use them, you need to add the `openzeppelin_macros` crate as a dependency in your `Scarb.toml` file:
+
+```toml
+openzeppelin_macros = "{{umbrella_version}}"
+```
+
+## Attribute macros
+
+* [with_components](./macros/with_components)
+* [type_hash](./macros/type_hash)
+
+## Inline macros
+
+### `generate_event_spy_helpers`
+
+`generate_event_spy_helpers!` generates Starknet Foundry `EventSpy` assertion methods from compact event declarations. Fields marked with `#[key]` become expected event keys, while all other fields become event data. Every declaration generates an `assert_event_<event_name>` method; adding `#[only]` also generates `assert_only_event_<event_name>`.
+
+```rust
+generate_event_spy_helpers! {
+    impl TreasurySpyHelpers {
+        #[only]
+        event FundsReleased(
+            #[key]
+            recipient: ContractAddress,
+            amount: u256
+        );
+    }
+};
+```
+
+The generated implementation uses `EventSpy`, `ExpectedEvent`, and their assertion extensions, so bring the corresponding `openzeppelin_testing` types and traits into scope in the test module.

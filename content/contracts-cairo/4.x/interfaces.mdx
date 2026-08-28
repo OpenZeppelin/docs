@@ -1,0 +1,82 @@
+---
+title: Interfaces
+---
+
+OpenZeppelin Contracts for Cairo defines its public interfaces in the dedicated `openzeppelin_interfaces` package. Applications can use this package independently of the component implementations.
+
+## Focused dependencies
+
+A project that only needs to interact with an ERC20 contract can depend on the interfaces package without pulling in the component implementation.
+
+```javascript
+[dependencies]
+openzeppelin_interfaces = "{{openzeppelin_interfaces_version}}"
+```
+
+<Callout type='warn'>
+The version of the interfaces package is independent from the version of the implementation packages.
+The current umbrella version is `v{{umbrella_version}}`, and it depends on the `openzeppelin_interfaces` package `v{{openzeppelin_interfaces_version}}`.
+</Callout>
+
+## Stable Versioning
+
+The interfaces package follows its own versioning scheme, independent from the implementation packages. Since interfaces are meant to be stable and rarely change, the major version of the interfaces package won’t be updated as frequently as the implementation packages.
+
+This stability means that:
+
+* Dependencies can remain compatible for longer periods
+* Breaking changes in implementations won’t force interface updates
+* Projects depending only on interfaces are less likely to face version conflicts
+
+## Token extension interfaces
+
+The package includes interfaces for the token extensions available in Contracts for Cairo 4.x:
+
+* `IERC3156FlashLender` and `IERC3156FlashBorrower` for ERC-3156 flash loans
+* `IERC6909`, `IERC6909Metadata`, `IERC6909TokenSupply`, and `IERC6909ContentUri` for ERC-6909 multi-token contracts
+* `IERC6909MetadataAdmin` and `IERC6909ContentUriAdmin` for controlled ERC-6909 metadata updates
+* `IERC20Wrapper` and `IERC721Wrapper` for token wrappers
+* `IERC1155Supply` for ERC1155 supply queries
+
+They can be imported independently of the implementations:
+
+```rust
+use openzeppelin_interfaces::erc3156::{IERC3156FlashBorrower, IERC3156FlashLender};
+use openzeppelin_interfaces::erc6909::{IERC6909, IERC6909Metadata};
+use openzeppelin_interfaces::erc20::IERC20Wrapper;
+use openzeppelin_interfaces::erc721::IERC721Wrapper;
+use openzeppelin_interfaces::erc1155::IERC1155Supply;
+```
+
+## Usage
+
+The interfaces package provides three main types of traits that can be imported directly from their respective modules:
+
+### Interface Traits
+
+Standard interface traits that define the contract’s functions:
+
+```rust
+use openzeppelin_interfaces::erc20::IERC20;
+use openzeppelin_interfaces::erc721::IERC721;
+```
+
+### Dispatchers
+
+Contract dispatchers for interacting with deployed contracts:
+
+```rust
+use openzeppelin_interfaces::erc20::IERC20Dispatcher;
+use openzeppelin_interfaces::erc721::IERC721Dispatcher;
+```
+
+### ABI Traits
+
+Complete external ABI definition of a given component/contract:
+
+```rust
+use openzeppelin_interfaces::erc20::ERC20ABI;
+use openzeppelin_interfaces::erc721::ERC721ABI;
+```
+
+This modular approach provides a cleaner and more maintainable way to work with OpenZeppelin contracts, especially in larger projects with multiple dependencies.
