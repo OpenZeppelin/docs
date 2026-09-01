@@ -1,3 +1,4 @@
+import { latestStable as cairoLatestStable } from "content/contracts-cairo/latest-versions";
 import type { DocumentRecord } from "fumadocs-core/search/algolia";
 import type { Page } from "fumadocs-core/source";
 import { source } from "@/lib/source";
@@ -20,6 +21,8 @@ export async function exportSearchIndexes() {
 		.filter(
 			(page: Page) =>
 				page.url.startsWith("/contracts-sui/") ||
+				page.url === `/contracts-cairo/${cairoLatestStable}` ||
+				page.url.startsWith(`/contracts-cairo/${cairoLatestStable}/`) ||
 				!excludedVersions.some((excluded) => page.url.includes(excluded)),
 		);
 

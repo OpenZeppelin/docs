@@ -1,0 +1,1233 @@
+---
+title: ERC6909
+---
+
+import { API_SOURCE_VERSION } from "../utils/constants.js";
+
+This module provides interfaces and components for ERC6909 contracts.
+
+For an overview of ERC6909, read the [ERC6909 guide](../erc6909).
+
+## Interfaces
+
+<Callout type='info'>
+The interfaces documented here are provided by the `openzeppelin_interfaces` package version `{{openzeppelin_interfaces_version}}`.
+</Callout>
+
+### `IERC6909` [toc] [#IERC6909]
+
+<APIGithubLinkHeader
+  moduleName="IERC6909"
+  link={`https://github.com/OpenZeppelin/cairo-contracts/blob/${API_SOURCE_VERSION}/packages/interfaces/src/token/erc6909.cairo`}
+/>
+
+```rust
+use openzeppelin_interfaces::erc6909::IERC6909;
+```
+
+Interface of the minimal multi-token standard defined in [EIP-6909](https://eips.ethereum.org/EIPS/eip-6909).
+
+[SRC5 ID](./introspection#ISRC5)
+
+```text
+0xd5aa138060489fd9c4592f77a16011cc5615ce4d292ee1f7873ae65c43b6bb
+```
+
+Functions
+
+- [`balance_of(owner, id)`](#IERC6909-balance_of)
+- [`allowance(owner, spender, id)`](#IERC6909-allowance)
+- [`is_operator(owner, spender)`](#IERC6909-is_operator)
+- [`transfer(receiver, id, amount)`](#IERC6909-transfer)
+- [`transfer_from(sender, receiver, id, amount)`](#IERC6909-transfer_from)
+- [`approve(spender, id, amount)`](#IERC6909-approve)
+- [`set_operator(spender, approved)`](#IERC6909-set_operator)
+
+Events
+
+- [`Transfer(caller, sender, receiver, id, amount)`](#IERC6909-Transfer)
+- [`Approval(owner, spender, id, amount)`](#IERC6909-Approval)
+- [`OperatorSet(owner, spender, approved)`](#IERC6909-OperatorSet)
+
+#### Functions [!toc] [#IERC6909-Functions]
+
+<APIItem
+  functionSignature="balance_of(owner: ContractAddress, id: u256) → u256"
+  id="IERC6909-balance_of"
+  kind="external"
+>
+Returns the amount of `id` tokens owned by `owner`.
+</APIItem>
+
+<APIItem
+  functionSignature="allowance(owner: ContractAddress, spender: ContractAddress, id: u256) → u256"
+  id="IERC6909-allowance"
+  kind="external"
+>
+Returns the number of `id` tokens that `spender` can transfer on behalf of `owner`.
+</APIItem>
+
+<APIItem
+  functionSignature="is_operator(owner: ContractAddress, spender: ContractAddress) → bool"
+  id="IERC6909-is_operator"
+  kind="external"
+>
+Returns whether `spender` is approved as an operator for every token ID owned by `owner`.
+</APIItem>
+
+<APIItem
+  functionSignature="transfer(receiver: ContractAddress, id: u256, amount: u256) → bool"
+  id="IERC6909-transfer"
+  kind="external"
+>
+Transfers `amount` of token `id` from the caller to `receiver`.
+
+Emits a [Transfer](#IERC6909-Transfer) event.
+</APIItem>
+
+<APIItem
+  functionSignature="transfer_from(sender: ContractAddress, receiver: ContractAddress, id: u256, amount: u256) → bool"
+  id="IERC6909-transfer_from"
+  kind="external"
+>
+Transfers `amount` of token `id` from `sender` to `receiver`, using the caller's allowance when the caller is neither `sender` nor an operator for `sender`.
+
+Emits a [Transfer](#IERC6909-Transfer) event.
+</APIItem>
+
+<APIItem
+  functionSignature="approve(spender: ContractAddress, id: u256, amount: u256) → bool"
+  id="IERC6909-approve"
+  kind="external"
+>
+Sets `amount` as `spender`'s allowance for the caller's token `id`.
+
+Emits an [Approval](#IERC6909-Approval) event.
+</APIItem>
+
+<APIItem
+  functionSignature="set_operator(spender: ContractAddress, approved: bool) → bool"
+  id="IERC6909-set_operator"
+  kind="external"
+>
+Grants or revokes `spender`'s permission to transfer every token ID owned by the caller.
+
+Emits an [OperatorSet](#IERC6909-OperatorSet) event.
+</APIItem>
+
+#### Events [!toc] [#IERC6909-Events]
+
+<APIItem
+  functionSignature="Transfer(caller: ContractAddress, sender: ContractAddress, receiver: ContractAddress, id: u256, amount: u256)"
+  id="IERC6909-Transfer"
+  kind="event"
+>
+Emitted when `caller` moves `amount` of token `id` from `sender` to `receiver`.
+</APIItem>
+
+<APIItem
+  functionSignature="Approval(owner: ContractAddress, spender: ContractAddress, id: u256, amount: u256)"
+  id="IERC6909-Approval"
+  kind="event"
+>
+Emitted when `owner` sets `spender`'s allowance for token `id` to `amount`.
+</APIItem>
+
+<APIItem
+  functionSignature="OperatorSet(owner: ContractAddress, spender: ContractAddress, approved: bool)"
+  id="IERC6909-OperatorSet"
+  kind="event"
+>
+Emitted when `owner` grants or revokes `spender`'s operator approval.
+</APIItem>
+
+## Core
+
+### `ERC6909Component` [toc] [#ERC6909Component]
+
+<APIGithubLinkHeader
+  moduleName="ERC6909Component"
+  link={`https://github.com/OpenZeppelin/cairo-contracts/blob/${API_SOURCE_VERSION}/packages/token/src/erc6909/erc6909.cairo`}
+/>
+
+```rust
+use openzeppelin_token::erc6909::ERC6909Component;
+```
+
+ERC6909 component implementing [IERC6909](#IERC6909).
+
+Implementing [SRC5Component](./introspection#SRC5Component) is required by this component.
+
+See [Hooks](#ERC6909Component-Hooks) for the extension points invoked by token updates.
+
+Hooks
+
+ERC6909HooksTrait
+
+- [`before_update(self, from, recipient, id, amount)`](#ERC6909Component-before_update)
+- [`after_update(self, from, recipient, id, amount)`](#ERC6909Component-after_update)
+
+Embeddable Implementations
+
+ERC6909Impl
+
+- [`balance_of(self, owner, id)`](#ERC6909Component-balance_of)
+- [`allowance(self, owner, spender, id)`](#ERC6909Component-allowance)
+- [`is_operator(self, owner, spender)`](#ERC6909Component-is_operator)
+- [`transfer(self, receiver, id, amount)`](#ERC6909Component-transfer)
+- [`transfer_from(self, sender, receiver, id, amount)`](#ERC6909Component-transfer_from)
+- [`approve(self, spender, id, amount)`](#ERC6909Component-approve)
+- [`set_operator(self, spender, approved)`](#ERC6909Component-set_operator)
+
+Internal functions
+
+InternalImpl
+
+- [`initializer(self)`](#ERC6909Component-initializer)
+- [`mint(self, receiver, id, amount)`](#ERC6909Component-mint)
+- [`burn(self, account, id, amount)`](#ERC6909Component-burn)
+- [`update(self, sender, receiver, id, amount)`](#ERC6909Component-update)
+- [`_set_operator(self, owner, spender, approved)`](#ERC6909Component-_set_operator)
+- [`_spend_allowance(self, owner, spender, id, amount)`](#ERC6909Component-_spend_allowance)
+- [`_approve(self, owner, spender, id, amount)`](#ERC6909Component-_approve)
+- [`_transfer(self, sender, receiver, id, amount)`](#ERC6909Component-_transfer)
+
+Events
+
+- [`Transfer(caller, sender, receiver, id, amount)`](#ERC6909Component-Transfer)
+- [`Approval(owner, spender, id, amount)`](#ERC6909Component-Approval)
+- [`OperatorSet(owner, spender, approved)`](#ERC6909Component-OperatorSet)
+
+#### Hooks [!toc] [#ERC6909Component-Hooks]
+
+Every contract using `ERC6909Component` must implement `ERC6909HooksTrait`. Import `openzeppelin_token::erc6909::ERC6909HooksEmptyImpl` when the contract does not need custom hook logic.
+
+<APIItem
+  functionSignature="before_update(ref self: ContractState, from: ContractAddress, recipient: ContractAddress, id: u256, amount: u256)"
+  id="ERC6909Component-before_update"
+  kind="hook"
+>
+Runs at the beginning of [update](#ERC6909Component-update), before balances change.
+</APIItem>
+
+<APIItem
+  functionSignature="after_update(ref self: ContractState, from: ContractAddress, recipient: ContractAddress, id: u256, amount: u256)"
+  id="ERC6909Component-after_update"
+  kind="hook"
+>
+Runs at the end of [update](#ERC6909Component-update), after balances change and the `Transfer` event is emitted.
+</APIItem>
+
+#### Embeddable functions [!toc] [#ERC6909Component-Embeddable-Functions]
+
+<APIItem
+  functionSignature="balance_of(self: @ContractState, owner: ContractAddress, id: u256) → u256"
+  id="ERC6909Component-balance_of"
+  kind="external"
+>
+Returns the amount of `id` tokens owned by `owner`.
+</APIItem>
+
+<APIItem
+  functionSignature="allowance(self: @ContractState, owner: ContractAddress, spender: ContractAddress, id: u256) → u256"
+  id="ERC6909Component-allowance"
+  kind="external"
+>
+Returns the number of `id` tokens that `spender` can transfer on behalf of `owner`.
+</APIItem>
+
+<APIItem
+  functionSignature="is_operator(self: @ContractState, owner: ContractAddress, spender: ContractAddress) → bool"
+  id="ERC6909Component-is_operator"
+  kind="external"
+>
+Returns whether `spender` is approved as an operator for every token ID owned by `owner`.
+</APIItem>
+
+<APIItem
+  functionSignature="transfer(ref self: ContractState, receiver: ContractAddress, id: u256, amount: u256) → bool"
+  id="ERC6909Component-transfer"
+  kind="external"
+>
+Transfers `amount` of token `id` from the caller to `receiver`.
+
+Requirements:
+
+- `receiver` is not the zero address.
+- The caller has a balance of at least `amount` for token `id`.
+
+Emits a [Transfer](#ERC6909Component-Transfer) event.
+</APIItem>
+
+<APIItem
+  functionSignature="transfer_from(ref self: ContractState, sender: ContractAddress, receiver: ContractAddress, id: u256, amount: u256) → bool"
+  id="ERC6909Component-transfer_from"
+  kind="external"
+>
+Transfers `amount` of token `id` from `sender` to `receiver`. The caller's per-token allowance is spent unless the caller is `sender` or an operator for `sender`.
+
+Requirements:
+
+- `sender` and `receiver` are not the zero address.
+- `sender` has a balance of at least `amount` for token `id`.
+- The caller is `sender`, is an operator for `sender`, or has an allowance of at least `amount`.
+
+Emits a [Transfer](#ERC6909Component-Transfer) event.
+</APIItem>
+
+<APIItem
+  functionSignature="approve(ref self: ContractState, spender: ContractAddress, id: u256, amount: u256) → bool"
+  id="ERC6909Component-approve"
+  kind="external"
+>
+Sets `amount` as `spender`'s allowance for the caller's token `id`.
+
+Requirements:
+
+- `spender` is not the zero address.
+
+Emits an [Approval](#ERC6909Component-Approval) event.
+</APIItem>
+
+<APIItem
+  functionSignature="set_operator(ref self: ContractState, spender: ContractAddress, approved: bool) → bool"
+  id="ERC6909Component-set_operator"
+  kind="external"
+>
+Grants or revokes `spender`'s permission to transfer every token ID owned by the caller.
+
+Requirements:
+
+- `spender` is not the zero address.
+
+Emits an [OperatorSet](#ERC6909Component-OperatorSet) event.
+</APIItem>
+
+#### Internal functions [!toc] [#ERC6909Component-Internal-Functions]
+
+<APIItem
+  functionSignature="initializer(ref self: ContractState)"
+  id="ERC6909Component-initializer"
+  kind="internal"
+>
+Registers the `IERC6909` interface ID through SRC5. Call this function from the contract's constructor.
+</APIItem>
+
+<APIItem
+  functionSignature="mint(ref self: ContractState, receiver: ContractAddress, id: u256, amount: u256)"
+  id="ERC6909Component-mint"
+  kind="internal"
+>
+Mints `amount` of token `id` to `receiver`.
+
+Requirements:
+
+- `receiver` is not the zero address.
+
+Emits a [Transfer](#ERC6909Component-Transfer) event with `sender` set to the zero address.
+</APIItem>
+
+<APIItem
+  functionSignature="burn(ref self: ContractState, account: ContractAddress, id: u256, amount: u256)"
+  id="ERC6909Component-burn"
+  kind="internal"
+>
+Burns `amount` of token `id` from `account`.
+
+Requirements:
+
+- `account` is not the zero address.
+- `account` has a balance of at least `amount` for token `id`.
+
+Emits a [Transfer](#ERC6909Component-Transfer) event with `receiver` set to the zero address.
+</APIItem>
+
+<APIItem
+  functionSignature="update(ref self: ContractState, sender: ContractAddress, receiver: ContractAddress, id: u256, amount: u256)"
+  id="ERC6909Component-update"
+  kind="internal"
+>
+Moves `amount` of token `id` from `sender` to `receiver`. A zero `sender` represents a mint, and a zero `receiver` represents a burn.
+
+Invokes [before_update](#ERC6909Component-before_update) before balances change and [after_update](#ERC6909Component-after_update) after the `Transfer` event is emitted. Total supply tracking is provided by [ERC6909TokenSupplyComponent](#ERC6909TokenSupplyComponent).
+
+Emits a [Transfer](#ERC6909Component-Transfer) event.
+</APIItem>
+
+<APIItem
+  functionSignature="_set_operator(ref self: ContractState, owner: ContractAddress, spender: ContractAddress, approved: bool)"
+  id="ERC6909Component-_set_operator"
+  kind="internal"
+>
+Grants or revokes `spender`'s operator approval for `owner`.
+
+Requirements:
+
+- `owner` and `spender` are not the zero address.
+
+Emits an [OperatorSet](#ERC6909Component-OperatorSet) event.
+</APIItem>
+
+<APIItem
+  functionSignature="_spend_allowance(ref self: ContractState, owner: ContractAddress, spender: ContractAddress, id: u256, amount: u256)"
+  id="ERC6909Component-_spend_allowance"
+  kind="internal"
+>
+Reduces `spender`'s allowance for `owner` and token `id` by `amount`.
+
+An allowance equal to the maximum `u256` value is treated as infinite and is not reduced. This function does not emit an `Approval` event.
+
+Requirements:
+
+- A finite allowance is at least `amount`.
+</APIItem>
+
+<APIItem
+  functionSignature="_approve(ref self: ContractState, owner: ContractAddress, spender: ContractAddress, id: u256, amount: u256)"
+  id="ERC6909Component-_approve"
+  kind="internal"
+>
+Sets `amount` as `spender`'s allowance for `owner` and token `id`.
+
+Requirements:
+
+- `owner` and `spender` are not the zero address.
+
+Emits an [Approval](#ERC6909Component-Approval) event.
+</APIItem>
+
+<APIItem
+  functionSignature="_transfer(ref self: ContractState, sender: ContractAddress, receiver: ContractAddress, id: u256, amount: u256)"
+  id="ERC6909Component-_transfer"
+  kind="internal"
+>
+Moves `amount` of token `id` from `sender` to `receiver` through [update](#ERC6909Component-update).
+
+Requirements:
+
+- `sender` and `receiver` are not the zero address.
+- `sender` has a balance of at least `amount` for token `id`.
+
+Emits a [Transfer](#ERC6909Component-Transfer) event.
+</APIItem>
+
+#### Events [!toc] [#ERC6909Component-Events]
+
+<APIItem
+  functionSignature="Transfer(caller: ContractAddress, sender: ContractAddress, receiver: ContractAddress, id: u256, amount: u256)"
+  id="ERC6909Component-Transfer"
+  kind="event"
+>
+See [IERC6909::Transfer](#IERC6909-Transfer).
+</APIItem>
+
+<APIItem
+  functionSignature="Approval(owner: ContractAddress, spender: ContractAddress, id: u256, amount: u256)"
+  id="ERC6909Component-Approval"
+  kind="event"
+>
+See [IERC6909::Approval](#IERC6909-Approval).
+</APIItem>
+
+<APIItem
+  functionSignature="OperatorSet(owner: ContractAddress, spender: ContractAddress, approved: bool)"
+  id="ERC6909Component-OperatorSet"
+  kind="event"
+>
+See [IERC6909::OperatorSet](#IERC6909-OperatorSet).
+</APIItem>
+
+## Extension interfaces
+
+### `IERC6909ContentUri` [toc] [#IERC6909ContentUri]
+
+<APIGithubLinkHeader
+  moduleName="IERC6909ContentUri"
+  link={`https://github.com/OpenZeppelin/cairo-contracts/blob/${API_SOURCE_VERSION}/packages/interfaces/src/token/erc6909.cairo`}
+/>
+
+```rust
+use openzeppelin_interfaces::erc6909::IERC6909ContentUri;
+```
+
+Interface for contract-level and token-level content URIs.
+
+[SRC5 ID](./introspection#ISRC5)
+
+```text
+0x356efd8b40a01c1525c7d0ecafbe3b82a47df564fdd496727effe6336526f05
+```
+
+Functions
+
+- [`contract_uri()`](#IERC6909ContentUri-contract_uri)
+- [`token_uri(id)`](#IERC6909ContentUri-token_uri)
+
+#### Functions [!toc] [#IERC6909ContentUri-Functions]
+
+<APIItem
+  functionSignature="contract_uri() → ByteArray"
+  id="IERC6909ContentUri-contract_uri"
+  kind="external"
+>
+Returns the contract-level URI.
+</APIItem>
+
+<APIItem
+  functionSignature="token_uri(id: u256) → ByteArray"
+  id="IERC6909ContentUri-token_uri"
+  kind="external"
+>
+Returns the URI associated with token `id`.
+</APIItem>
+
+### `IERC6909ContentUriAdmin` [toc] [#IERC6909ContentUriAdmin]
+
+<APIGithubLinkHeader
+  moduleName="IERC6909ContentUriAdmin"
+  link={`https://github.com/OpenZeppelin/cairo-contracts/blob/${API_SOURCE_VERSION}/packages/interfaces/src/token/erc6909.cairo`}
+/>
+
+```rust
+use openzeppelin_interfaces::erc6909::IERC6909ContentUriAdmin;
+```
+
+Interface for managing ERC6909 content URIs. Implementations restrict these functions through Ownable, AccessControl, or AccessControlDefaultAdminRules.
+
+Functions
+
+- [`set_contract_uri(contract_uri)`](#IERC6909ContentUriAdmin-set_contract_uri)
+- [`set_token_uri(id, token_uri)`](#IERC6909ContentUriAdmin-set_token_uri)
+
+#### Functions [!toc] [#IERC6909ContentUriAdmin-Functions]
+
+<APIItem
+  functionSignature="set_contract_uri(contract_uri: ByteArray)"
+  id="IERC6909ContentUriAdmin-set_contract_uri"
+  kind="external"
+>
+Sets the contract-level URI.
+</APIItem>
+
+<APIItem
+  functionSignature="set_token_uri(id: u256, token_uri: ByteArray)"
+  id="IERC6909ContentUriAdmin-set_token_uri"
+  kind="external"
+>
+Sets the URI associated with token `id`.
+</APIItem>
+
+### `IERC6909Metadata` [toc] [#IERC6909Metadata]
+
+<APIGithubLinkHeader
+  moduleName="IERC6909Metadata"
+  link={`https://github.com/OpenZeppelin/cairo-contracts/blob/${API_SOURCE_VERSION}/packages/interfaces/src/token/erc6909.cairo`}
+/>
+
+```rust
+use openzeppelin_interfaces::erc6909::IERC6909Metadata;
+```
+
+Interface for per-token metadata.
+
+[SRC5 ID](./introspection#ISRC5)
+
+```text
+0x19aa0b778d120d5294054319458ee8886514766411c50dceddd9463712d6011
+```
+
+Functions
+
+- [`name(id)`](#IERC6909Metadata-name)
+- [`symbol(id)`](#IERC6909Metadata-symbol)
+- [`decimals(id)`](#IERC6909Metadata-decimals)
+
+#### Functions [!toc] [#IERC6909Metadata-Functions]
+
+<APIItem
+  functionSignature="name(id: u256) → ByteArray"
+  id="IERC6909Metadata-name"
+  kind="external"
+>
+Returns the name of token `id`.
+</APIItem>
+
+<APIItem
+  functionSignature="symbol(id: u256) → ByteArray"
+  id="IERC6909Metadata-symbol"
+  kind="external"
+>
+Returns the symbol of token `id`.
+</APIItem>
+
+<APIItem
+  functionSignature="decimals(id: u256) → u8"
+  id="IERC6909Metadata-decimals"
+  kind="external"
+>
+Returns the number of decimals used to display token `id`.
+</APIItem>
+
+### `IERC6909MetadataAdmin` [toc] [#IERC6909MetadataAdmin]
+
+<APIGithubLinkHeader
+  moduleName="IERC6909MetadataAdmin"
+  link={`https://github.com/OpenZeppelin/cairo-contracts/blob/${API_SOURCE_VERSION}/packages/interfaces/src/token/erc6909.cairo`}
+/>
+
+```rust
+use openzeppelin_interfaces::erc6909::IERC6909MetadataAdmin;
+```
+
+Interface for managing ERC6909 token metadata. Implementations restrict these functions through Ownable, AccessControl, or AccessControlDefaultAdminRules.
+
+Functions
+
+- [`set_token_name(id, name)`](#IERC6909MetadataAdmin-set_token_name)
+- [`set_token_symbol(id, symbol)`](#IERC6909MetadataAdmin-set_token_symbol)
+- [`set_token_decimals(id, decimals)`](#IERC6909MetadataAdmin-set_token_decimals)
+
+#### Functions [!toc] [#IERC6909MetadataAdmin-Functions]
+
+<APIItem
+  functionSignature="set_token_name(id: u256, name: ByteArray)"
+  id="IERC6909MetadataAdmin-set_token_name"
+  kind="external"
+>
+Sets the name of token `id`.
+</APIItem>
+
+<APIItem
+  functionSignature="set_token_symbol(id: u256, symbol: ByteArray)"
+  id="IERC6909MetadataAdmin-set_token_symbol"
+  kind="external"
+>
+Sets the symbol of token `id`.
+</APIItem>
+
+<APIItem
+  functionSignature="set_token_decimals(id: u256, decimals: u8)"
+  id="IERC6909MetadataAdmin-set_token_decimals"
+  kind="external"
+>
+Sets the number of decimals used to display token `id`.
+</APIItem>
+
+### `IERC6909TokenSupply` [toc] [#IERC6909TokenSupply]
+
+<APIGithubLinkHeader
+  moduleName="IERC6909TokenSupply"
+  link={`https://github.com/OpenZeppelin/cairo-contracts/blob/${API_SOURCE_VERSION}/packages/interfaces/src/token/erc6909.cairo`}
+/>
+
+```rust
+use openzeppelin_interfaces::erc6909::IERC6909TokenSupply;
+```
+
+Interface for querying per-token total supply.
+
+[SRC5 ID](./introspection#ISRC5)
+
+```text
+0x3a632c15cb93b574eb9166de70521abbeab5c2eb4fdab9930729bba8658c41
+```
+
+Functions
+
+- [`total_supply(id)`](#IERC6909TokenSupply-total_supply)
+
+#### Functions [!toc] [#IERC6909TokenSupply-Functions]
+
+<APIItem
+  functionSignature="total_supply(id: u256) → u256"
+  id="IERC6909TokenSupply-total_supply"
+  kind="external"
+>
+Returns the total supply of token `id`.
+</APIItem>
+
+## Extensions
+
+### `ERC6909ContentURIComponent` [toc] [#ERC6909ContentURIComponent]
+
+<APIGithubLinkHeader
+  moduleName="ERC6909ContentURIComponent"
+  link={`https://github.com/OpenZeppelin/cairo-contracts/blob/${API_SOURCE_VERSION}/packages/token/src/erc6909/extensions/erc6909_content_uri.cairo`}
+/>
+
+```rust
+use openzeppelin_token::erc6909::extensions::ERC6909ContentURIComponent;
+```
+
+Component implementing [IERC6909ContentUri](#IERC6909ContentUri) and the access-controlled variants of [IERC6909ContentUriAdmin](#IERC6909ContentUriAdmin).
+
+Implementing [ERC6909Component](#ERC6909Component) and [SRC5Component](./introspection#SRC5Component) is required by this component.
+
+Constants
+
+- [`CONTENT_URI_ADMIN_ROLE`](#ERC6909ContentURIComponent-CONTENT_URI_ADMIN_ROLE)
+
+Embeddable Implementations
+
+ERC6909ContentURIImpl
+
+- [`contract_uri(self)`](#ERC6909ContentURIComponent-contract_uri)
+- [`token_uri(self, id)`](#ERC6909ContentURIComponent-token_uri)
+
+ERC6909ContentURIAdminOwnableImpl
+
+- [`set_contract_uri(self, contract_uri)`](#ERC6909ContentURIAdminOwnableImpl-set_contract_uri)
+- [`set_token_uri(self, id, token_uri)`](#ERC6909ContentURIAdminOwnableImpl-set_token_uri)
+
+ERC6909ContentURIAdminAccessControlImpl
+
+- [`set_contract_uri(self, contract_uri)`](#ERC6909ContentURIAdminAccessControlImpl-set_contract_uri)
+- [`set_token_uri(self, id, token_uri)`](#ERC6909ContentURIAdminAccessControlImpl-set_token_uri)
+
+ERC6909ContentURIAdminAccessControlDefaultAdminRulesImpl
+
+- [`set_contract_uri(self, contract_uri)`](#ERC6909ContentURIAdminAccessControlDefaultAdminRulesImpl-set_contract_uri)
+- [`set_token_uri(self, id, token_uri)`](#ERC6909ContentURIAdminAccessControlDefaultAdminRulesImpl-set_token_uri)
+
+Internal functions
+
+InternalImpl
+
+- [`initializer(self)`](#ERC6909ContentURIComponent-initializer)
+- [`_set_contract_uri(self, contract_uri)`](#ERC6909ContentURIComponent-_set_contract_uri)
+- [`_set_token_uri(self, id, token_uri)`](#ERC6909ContentURIComponent-_set_token_uri)
+
+Events
+
+- [`ContractURIUpdated()`](#ERC6909ContentURIComponent-ContractURIUpdated)
+- [`URI(value, id)`](#ERC6909ContentURIComponent-URI)
+
+#### Constants [!toc] [#ERC6909ContentURIComponent-Constants]
+
+<APIItem
+  functionSignature="CONTENT_URI_ADMIN_ROLE: felt252"
+  id="ERC6909ContentURIComponent-CONTENT_URI_ADMIN_ROLE"
+  kind="constant"
+>
+Role required by the AccessControl and AccessControlDefaultAdminRules implementations to manage contract and token URIs.
+</APIItem>
+
+#### Embeddable functions [!toc] [#ERC6909ContentURIComponent-Embeddable-Functions]
+
+<APIItem
+  functionSignature="contract_uri(self: @ContractState) → ByteArray"
+  id="ERC6909ContentURIComponent-contract_uri"
+  kind="external"
+>
+Returns the contract-level URI.
+</APIItem>
+
+<APIItem
+  functionSignature="token_uri(self: @ContractState, id: u256) → ByteArray"
+  id="ERC6909ContentURIComponent-token_uri"
+  kind="external"
+>
+Returns the URI associated with token `id`. Returns an empty `ByteArray` when no URI has been set for that token.
+</APIItem>
+
+#### ERC6909ContentURIAdminOwnableImpl [!toc] [#ERC6909ContentURIComponent-ERC6909ContentURIAdminOwnableImpl]
+
+Provides content URI management restricted to the contract owner. Requires [OwnableComponent](./access#OwnableComponent).
+
+<APIItem
+  functionSignature="set_contract_uri(ref self: ContractState, contract_uri: ByteArray)"
+  id="ERC6909ContentURIAdminOwnableImpl-set_contract_uri"
+  kind="external"
+>
+Sets the contract-level URI.
+
+Requirements:
+
+- The caller is the contract owner.
+
+Emits a [ContractURIUpdated](#ERC6909ContentURIComponent-ContractURIUpdated) event.
+</APIItem>
+
+<APIItem
+  functionSignature="set_token_uri(ref self: ContractState, id: u256, token_uri: ByteArray)"
+  id="ERC6909ContentURIAdminOwnableImpl-set_token_uri"
+  kind="external"
+>
+Sets the URI associated with token `id`.
+
+Requirements:
+
+- The caller is the contract owner.
+
+Emits a [URI](#ERC6909ContentURIComponent-URI) event.
+</APIItem>
+
+#### ERC6909ContentURIAdminAccessControlImpl [!toc] [#ERC6909ContentURIComponent-ERC6909ContentURIAdminAccessControlImpl]
+
+Provides content URI management restricted by `CONTENT_URI_ADMIN_ROLE`. Requires [AccessControlComponent](./access#AccessControlComponent).
+
+<APIItem
+  functionSignature="set_contract_uri(ref self: ContractState, contract_uri: ByteArray)"
+  id="ERC6909ContentURIAdminAccessControlImpl-set_contract_uri"
+  kind="external"
+>
+Sets the contract-level URI.
+
+Requirements:
+
+- The caller has `CONTENT_URI_ADMIN_ROLE`.
+
+Emits a [ContractURIUpdated](#ERC6909ContentURIComponent-ContractURIUpdated) event.
+</APIItem>
+
+<APIItem
+  functionSignature="set_token_uri(ref self: ContractState, id: u256, token_uri: ByteArray)"
+  id="ERC6909ContentURIAdminAccessControlImpl-set_token_uri"
+  kind="external"
+>
+Sets the URI associated with token `id`.
+
+Requirements:
+
+- The caller has `CONTENT_URI_ADMIN_ROLE`.
+
+Emits a [URI](#ERC6909ContentURIComponent-URI) event.
+</APIItem>
+
+#### ERC6909ContentURIAdminAccessControlDefaultAdminRulesImpl [!toc] [#ERC6909ContentURIComponent-ERC6909ContentURIAdminAccessControlDefaultAdminRulesImpl]
+
+Provides content URI management restricted by `CONTENT_URI_ADMIN_ROLE`. Requires [AccessControlDefaultAdminRulesComponent](./access#AccessControlDefaultAdminRulesComponent).
+
+<APIItem
+  functionSignature="set_contract_uri(ref self: ContractState, contract_uri: ByteArray)"
+  id="ERC6909ContentURIAdminAccessControlDefaultAdminRulesImpl-set_contract_uri"
+  kind="external"
+>
+Sets the contract-level URI.
+
+Requirements:
+
+- The caller has `CONTENT_URI_ADMIN_ROLE`.
+
+Emits a [ContractURIUpdated](#ERC6909ContentURIComponent-ContractURIUpdated) event.
+</APIItem>
+
+<APIItem
+  functionSignature="set_token_uri(ref self: ContractState, id: u256, token_uri: ByteArray)"
+  id="ERC6909ContentURIAdminAccessControlDefaultAdminRulesImpl-set_token_uri"
+  kind="external"
+>
+Sets the URI associated with token `id`.
+
+Requirements:
+
+- The caller has `CONTENT_URI_ADMIN_ROLE`.
+
+Emits a [URI](#ERC6909ContentURIComponent-URI) event.
+</APIItem>
+
+#### Internal functions [!toc] [#ERC6909ContentURIComponent-Internal-Functions]
+
+<APIItem
+  functionSignature="initializer(ref self: ContractState)"
+  id="ERC6909ContentURIComponent-initializer"
+  kind="internal"
+>
+Registers the `IERC6909ContentUri` interface ID through SRC5. Call this function from the contract's constructor.
+</APIItem>
+
+<APIItem
+  functionSignature="_set_contract_uri(ref self: ContractState, contract_uri: ByteArray)"
+  id="ERC6909ContentURIComponent-_set_contract_uri"
+  kind="internal"
+>
+Sets the contract-level URI.
+
+Emits a [ContractURIUpdated](#ERC6909ContentURIComponent-ContractURIUpdated) event.
+</APIItem>
+
+<APIItem
+  functionSignature="_set_token_uri(ref self: ContractState, id: u256, token_uri: ByteArray)"
+  id="ERC6909ContentURIComponent-_set_token_uri"
+  kind="internal"
+>
+Sets the URI associated with token `id`.
+
+Emits a [URI](#ERC6909ContentURIComponent-URI) event.
+</APIItem>
+
+#### Events [!toc] [#ERC6909ContentURIComponent-Events]
+
+<APIItem
+  functionSignature="ContractURIUpdated()"
+  id="ERC6909ContentURIComponent-ContractURIUpdated"
+  kind="event"
+>
+Emitted when the contract-level URI changes. See [ERC-7572](https://eips.ethereum.org/EIPS/eip-7572).
+</APIItem>
+
+<APIItem
+  functionSignature="URI(value: ByteArray, id: u256)"
+  id="ERC6909ContentURIComponent-URI"
+  kind="event"
+>
+Emitted when the URI associated with token `id` changes to `value`.
+</APIItem>
+
+### `ERC6909MetadataComponent` [toc] [#ERC6909MetadataComponent]
+
+<APIGithubLinkHeader
+  moduleName="ERC6909MetadataComponent"
+  link={`https://github.com/OpenZeppelin/cairo-contracts/blob/${API_SOURCE_VERSION}/packages/token/src/erc6909/extensions/erc6909_metadata.cairo`}
+/>
+
+```rust
+use openzeppelin_token::erc6909::extensions::ERC6909MetadataComponent;
+```
+
+Component implementing [IERC6909Metadata](#IERC6909Metadata) and the access-controlled variants of [IERC6909MetadataAdmin](#IERC6909MetadataAdmin).
+
+Implementing [ERC6909Component](#ERC6909Component) and [SRC5Component](./introspection#SRC5Component) is required by this component.
+
+Constants
+
+- [`METADATA_ADMIN_ROLE`](#ERC6909MetadataComponent-METADATA_ADMIN_ROLE)
+
+Embeddable Implementations
+
+ERC6909MetadataImpl
+
+- [`name(self, id)`](#ERC6909MetadataComponent-name)
+- [`symbol(self, id)`](#ERC6909MetadataComponent-symbol)
+- [`decimals(self, id)`](#ERC6909MetadataComponent-decimals)
+
+ERC6909MetadataAdminOwnableImpl
+
+- [`set_token_name(self, id, name)`](#ERC6909MetadataAdminOwnableImpl-set_token_name)
+- [`set_token_symbol(self, id, symbol)`](#ERC6909MetadataAdminOwnableImpl-set_token_symbol)
+- [`set_token_decimals(self, id, decimals)`](#ERC6909MetadataAdminOwnableImpl-set_token_decimals)
+
+ERC6909MetadataAdminAccessControlImpl
+
+- [`set_token_name(self, id, name)`](#ERC6909MetadataAdminAccessControlImpl-set_token_name)
+- [`set_token_symbol(self, id, symbol)`](#ERC6909MetadataAdminAccessControlImpl-set_token_symbol)
+- [`set_token_decimals(self, id, decimals)`](#ERC6909MetadataAdminAccessControlImpl-set_token_decimals)
+
+ERC6909MetadataAdminAccessControlDefaultAdminRulesImpl
+
+- [`set_token_name(self, id, name)`](#ERC6909MetadataAdminAccessControlDefaultAdminRulesImpl-set_token_name)
+- [`set_token_symbol(self, id, symbol)`](#ERC6909MetadataAdminAccessControlDefaultAdminRulesImpl-set_token_symbol)
+- [`set_token_decimals(self, id, decimals)`](#ERC6909MetadataAdminAccessControlDefaultAdminRulesImpl-set_token_decimals)
+
+Internal functions
+
+InternalImpl
+
+- [`initializer(self)`](#ERC6909MetadataComponent-initializer)
+- [`_set_token_name(self, id, name)`](#ERC6909MetadataComponent-_set_token_name)
+- [`_set_token_symbol(self, id, symbol)`](#ERC6909MetadataComponent-_set_token_symbol)
+- [`_set_token_decimals(self, id, decimals)`](#ERC6909MetadataComponent-_set_token_decimals)
+
+Events
+
+- [`ERC6909NameUpdated(id, new_name)`](#ERC6909MetadataComponent-ERC6909NameUpdated)
+- [`ERC6909SymbolUpdated(id, new_symbol)`](#ERC6909MetadataComponent-ERC6909SymbolUpdated)
+- [`ERC6909DecimalsUpdated(id, new_decimals)`](#ERC6909MetadataComponent-ERC6909DecimalsUpdated)
+
+#### Constants [!toc] [#ERC6909MetadataComponent-Constants]
+
+<APIItem
+  functionSignature="METADATA_ADMIN_ROLE: felt252"
+  id="ERC6909MetadataComponent-METADATA_ADMIN_ROLE"
+  kind="constant"
+>
+Role required by the AccessControl and AccessControlDefaultAdminRules implementations to manage token metadata.
+</APIItem>
+
+#### Embeddable functions [!toc] [#ERC6909MetadataComponent-Embeddable-Functions]
+
+<APIItem
+  functionSignature="name(self: @ContractState, id: u256) → ByteArray"
+  id="ERC6909MetadataComponent-name"
+  kind="external"
+>
+Returns the name of token `id`.
+</APIItem>
+
+<APIItem
+  functionSignature="symbol(self: @ContractState, id: u256) → ByteArray"
+  id="ERC6909MetadataComponent-symbol"
+  kind="external"
+>
+Returns the symbol of token `id`.
+</APIItem>
+
+<APIItem
+  functionSignature="decimals(self: @ContractState, id: u256) → u8"
+  id="ERC6909MetadataComponent-decimals"
+  kind="external"
+>
+Returns the number of decimals used to display token `id`.
+</APIItem>
+
+#### ERC6909MetadataAdminOwnableImpl [!toc] [#ERC6909MetadataComponent-ERC6909MetadataAdminOwnableImpl]
+
+Provides metadata management restricted to the contract owner. Requires [OwnableComponent](./access#OwnableComponent).
+
+<APIItem
+  functionSignature="set_token_name(ref self: ContractState, id: u256, name: ByteArray)"
+  id="ERC6909MetadataAdminOwnableImpl-set_token_name"
+  kind="external"
+>
+Sets the name of token `id`.
+
+Requirements:
+
+- The caller is the contract owner.
+
+Emits an [ERC6909NameUpdated](#ERC6909MetadataComponent-ERC6909NameUpdated) event.
+</APIItem>
+
+<APIItem
+  functionSignature="set_token_symbol(ref self: ContractState, id: u256, symbol: ByteArray)"
+  id="ERC6909MetadataAdminOwnableImpl-set_token_symbol"
+  kind="external"
+>
+Sets the symbol of token `id`.
+
+Requirements:
+
+- The caller is the contract owner.
+
+Emits an [ERC6909SymbolUpdated](#ERC6909MetadataComponent-ERC6909SymbolUpdated) event.
+</APIItem>
+
+<APIItem
+  functionSignature="set_token_decimals(ref self: ContractState, id: u256, decimals: u8)"
+  id="ERC6909MetadataAdminOwnableImpl-set_token_decimals"
+  kind="external"
+>
+Sets the number of decimals used to display token `id`.
+
+Requirements:
+
+- The caller is the contract owner.
+
+Emits an [ERC6909DecimalsUpdated](#ERC6909MetadataComponent-ERC6909DecimalsUpdated) event.
+</APIItem>
+
+#### ERC6909MetadataAdminAccessControlImpl [!toc] [#ERC6909MetadataComponent-ERC6909MetadataAdminAccessControlImpl]
+
+Provides metadata management restricted by `METADATA_ADMIN_ROLE`. Requires [AccessControlComponent](./access#AccessControlComponent).
+
+<APIItem
+  functionSignature="set_token_name(ref self: ContractState, id: u256, name: ByteArray)"
+  id="ERC6909MetadataAdminAccessControlImpl-set_token_name"
+  kind="external"
+>
+Sets the name of token `id`.
+
+Requirements:
+
+- The caller has `METADATA_ADMIN_ROLE`.
+
+Emits an [ERC6909NameUpdated](#ERC6909MetadataComponent-ERC6909NameUpdated) event.
+</APIItem>
+
+<APIItem
+  functionSignature="set_token_symbol(ref self: ContractState, id: u256, symbol: ByteArray)"
+  id="ERC6909MetadataAdminAccessControlImpl-set_token_symbol"
+  kind="external"
+>
+Sets the symbol of token `id`.
+
+Requirements:
+
+- The caller has `METADATA_ADMIN_ROLE`.
+
+Emits an [ERC6909SymbolUpdated](#ERC6909MetadataComponent-ERC6909SymbolUpdated) event.
+</APIItem>
+
+<APIItem
+  functionSignature="set_token_decimals(ref self: ContractState, id: u256, decimals: u8)"
+  id="ERC6909MetadataAdminAccessControlImpl-set_token_decimals"
+  kind="external"
+>
+Sets the number of decimals used to display token `id`.
+
+Requirements:
+
+- The caller has `METADATA_ADMIN_ROLE`.
+
+Emits an [ERC6909DecimalsUpdated](#ERC6909MetadataComponent-ERC6909DecimalsUpdated) event.
+</APIItem>
+
+#### ERC6909MetadataAdminAccessControlDefaultAdminRulesImpl [!toc] [#ERC6909MetadataComponent-ERC6909MetadataAdminAccessControlDefaultAdminRulesImpl]
+
+Provides metadata management restricted by `METADATA_ADMIN_ROLE`. Requires [AccessControlDefaultAdminRulesComponent](./access#AccessControlDefaultAdminRulesComponent).
+
+<APIItem
+  functionSignature="set_token_name(ref self: ContractState, id: u256, name: ByteArray)"
+  id="ERC6909MetadataAdminAccessControlDefaultAdminRulesImpl-set_token_name"
+  kind="external"
+>
+Sets the name of token `id`.
+
+Requirements:
+
+- The caller has `METADATA_ADMIN_ROLE`.
+
+Emits an [ERC6909NameUpdated](#ERC6909MetadataComponent-ERC6909NameUpdated) event.
+</APIItem>
+
+<APIItem
+  functionSignature="set_token_symbol(ref self: ContractState, id: u256, symbol: ByteArray)"
+  id="ERC6909MetadataAdminAccessControlDefaultAdminRulesImpl-set_token_symbol"
+  kind="external"
+>
+Sets the symbol of token `id`.
+
+Requirements:
+
+- The caller has `METADATA_ADMIN_ROLE`.
+
+Emits an [ERC6909SymbolUpdated](#ERC6909MetadataComponent-ERC6909SymbolUpdated) event.
+</APIItem>
+
+<APIItem
+  functionSignature="set_token_decimals(ref self: ContractState, id: u256, decimals: u8)"
+  id="ERC6909MetadataAdminAccessControlDefaultAdminRulesImpl-set_token_decimals"
+  kind="external"
+>
+Sets the number of decimals used to display token `id`.
+
+Requirements:
+
+- The caller has `METADATA_ADMIN_ROLE`.
+
+Emits an [ERC6909DecimalsUpdated](#ERC6909MetadataComponent-ERC6909DecimalsUpdated) event.
+</APIItem>
+
+#### Internal functions [!toc] [#ERC6909MetadataComponent-Internal-Functions]
+
+<APIItem
+  functionSignature="initializer(ref self: ContractState)"
+  id="ERC6909MetadataComponent-initializer"
+  kind="internal"
+>
+Registers the `IERC6909Metadata` interface ID through SRC5. Call this parameterless function from the contract's constructor.
+</APIItem>
+
+<APIItem
+  functionSignature="_set_token_name(ref self: ContractState, id: u256, name: ByteArray)"
+  id="ERC6909MetadataComponent-_set_token_name"
+  kind="internal"
+>
+Sets the name of token `id`.
+
+Emits an [ERC6909NameUpdated](#ERC6909MetadataComponent-ERC6909NameUpdated) event.
+</APIItem>
+
+<APIItem
+  functionSignature="_set_token_symbol(ref self: ContractState, id: u256, symbol: ByteArray)"
+  id="ERC6909MetadataComponent-_set_token_symbol"
+  kind="internal"
+>
+Sets the symbol of token `id`.
+
+Emits an [ERC6909SymbolUpdated](#ERC6909MetadataComponent-ERC6909SymbolUpdated) event.
+</APIItem>
+
+<APIItem
+  functionSignature="_set_token_decimals(ref self: ContractState, id: u256, decimals: u8)"
+  id="ERC6909MetadataComponent-_set_token_decimals"
+  kind="internal"
+>
+Sets the number of decimals used to display token `id`.
+
+Emits an [ERC6909DecimalsUpdated](#ERC6909MetadataComponent-ERC6909DecimalsUpdated) event.
+</APIItem>
+
+#### Events [!toc] [#ERC6909MetadataComponent-Events]
+
+<APIItem
+  functionSignature="ERC6909NameUpdated(id: u256, new_name: ByteArray)"
+  id="ERC6909MetadataComponent-ERC6909NameUpdated"
+  kind="event"
+>
+Emitted when the name of token `id` changes to `new_name`.
+</APIItem>
+
+<APIItem
+  functionSignature="ERC6909SymbolUpdated(id: u256, new_symbol: ByteArray)"
+  id="ERC6909MetadataComponent-ERC6909SymbolUpdated"
+  kind="event"
+>
+Emitted when the symbol of token `id` changes to `new_symbol`.
+</APIItem>
+
+<APIItem
+  functionSignature="ERC6909DecimalsUpdated(id: u256, new_decimals: u8)"
+  id="ERC6909MetadataComponent-ERC6909DecimalsUpdated"
+  kind="event"
+>
+Emitted when the display decimals of token `id` changes to `new_decimals`.
+</APIItem>
+
+### `ERC6909TokenSupplyComponent` [toc] [#ERC6909TokenSupplyComponent]
+
+<APIGithubLinkHeader
+  moduleName="ERC6909TokenSupplyComponent"
+  link={`https://github.com/OpenZeppelin/cairo-contracts/blob/${API_SOURCE_VERSION}/packages/token/src/erc6909/extensions/erc6909_token_supply.cairo`}
+/>
+
+```rust
+use openzeppelin_token::erc6909::extensions::ERC6909TokenSupplyComponent;
+```
+
+Component implementing [IERC6909TokenSupply](#IERC6909TokenSupply) and tracking total supply separately for each token ID.
+
+Implementing [ERC6909Component](#ERC6909Component), its hooks trait, and [SRC5Component](./introspection#SRC5Component) is required by this component. Call [update_token_supply](#ERC6909TokenSupplyComponent-update_token_supply) from `before_update` to keep supply synchronized with mints and burns.
+
+Embeddable Implementations
+
+ERC6909TokenSupplyImpl
+
+- [`total_supply(self, id)`](#ERC6909TokenSupplyComponent-total_supply)
+
+Internal functions
+
+InternalImpl
+
+- [`initializer(self)`](#ERC6909TokenSupplyComponent-initializer)
+- [`update_token_supply(self, sender, receiver, id, amount)`](#ERC6909TokenSupplyComponent-update_token_supply)
+
+#### Embeddable functions [!toc] [#ERC6909TokenSupplyComponent-Embeddable-Functions]
+
+<APIItem
+  functionSignature="total_supply(self: @ContractState, id: u256) → u256"
+  id="ERC6909TokenSupplyComponent-total_supply"
+  kind="external"
+>
+Returns the total supply of token `id`.
+</APIItem>
+
+#### Internal functions [!toc] [#ERC6909TokenSupplyComponent-Internal-Functions]
+
+<APIItem
+  functionSignature="initializer(ref self: ContractState)"
+  id="ERC6909TokenSupplyComponent-initializer"
+  kind="internal"
+>
+Registers the `IERC6909TokenSupply` interface ID through SRC5. Call this function from the contract's constructor.
+</APIItem>
+
+<APIItem
+  functionSignature="update_token_supply(ref self: ContractState, sender: ContractAddress, receiver: ContractAddress, id: u256, amount: u256)"
+  id="ERC6909TokenSupplyComponent-update_token_supply"
+  kind="internal"
+>
+Updates the total supply of token `id`. A zero `sender` increases supply by `amount`, and a zero `receiver` decreases supply by `amount`. Ordinary transfers do not change supply.
+
+Call this function from [before_update](#ERC6909Component-before_update) so supply changes are applied before core balances change.
+</APIItem>

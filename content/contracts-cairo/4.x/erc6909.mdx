@@ -1,0 +1,308 @@
+---
+title: ERC6909
+---
+
+The ERC6909 minimal multi-token standard is a specification for [fungibility-agnostic](https://docs.openzeppelin.com/contracts/5.x/tokens#different-kinds-of-tokens) token contracts that manage multiple token IDs in a single contract. Compared with ERC1155, ERC6909 omits batch operations and transfer callbacks and provides both per-token allowances and operator approvals.
+
+The ERC6909 library implements an approximation of [EIP-6909](https://eips.ethereum.org/EIPS/eip-6909) in Cairo for Starknet.
+
+## Usage
+
+Constructing an ERC6909 contract requires integrating both `ERC6909Component` and `SRC5Component`. The constructor initializes interface support and can optionally mint initial balances.
+
+```rust
+#[starknet::contract]
+mod MyERC6909 {
+    use openzeppelin_introspection::src5::SRC5Component;
+    use openzeppelin_token::erc6909::{ERC6909Component, ERC6909HooksEmptyImpl};
+    use starknet::ContractAddress;
+
+    component!(path: ERC6909Component, storage: erc6909, event: ERC6909Event);
+    component!(path: SRC5Component, storage: src5, event: SRC5Event);
+
+    #[abi(embed_v0)]
+    impl ERC6909Impl = ERC6909Component::ERC6909Impl<ContractState>;
+    #[abi(embed_v0)]
+    impl SRC5Impl = SRC5Component::SRC5Impl<ContractState>;
+    impl ERC6909InternalImpl = ERC6909Component::InternalImpl<ContractState>;
+
+    #[storage]
+    struct Storage {
+        #[substorage(v0)]
+        erc6909: ERC6909Component::Storage,
+        #[substorage(v0)]
+        src5: SRC5Component::Storage,
+    }
+
+    #[event]
+    #[derive(Drop, starknet::Event)]
+    enum Event {
+        #[flat]
+        ERC6909Event: ERC6909Component::Event,
+        #[flat]
+        SRC5Event: SRC5Component::Event,
+    }
+
+    #[constructor]
+    fn constructor(
+        ref self: ContractState,
+        recipient: ContractAddress,
+        id: u256,
+        amount: u256,
+    ) {
+        self.erc6909.initializer();
+        self.erc6909.mint(recipient, id, amount);
+    }
+}
+```
+
+The contract exposes [`transfer`](/contracts-cairo/4.x/api/erc6909#IERC6909-transfer), [`transfer_from`](/contracts-cairo/4.x/api/erc6909#IERC6909-transfer_from), [`approve`](/contracts-cairo/4.x/api/erc6909#IERC6909-approve), and [`set_operator`](/contracts-cairo/4.x/api/erc6909#IERC6909-set_operator). Allowances apply to a single token ID, while an operator can transfer every token ID owned by an account.
+
+## Interface
+
+`ERC6909ABI` groups the core ERC6909 interface, SRC5 introspection, and the optional metadata, supply, and content URI interfaces. The admin methods are available only when the contract embeds one of the access-controlled implementations described in [Extensions](#extensions).
+
+```rust
+#[starknet::interface]
+pub trait ERC6909ABI<TState> {
+    // IERC6909
+    fn balance_of(self: @TState, owner: ContractAddress, id: u256) -> u256;
+    fn allowance(
+        self: @TState,
+        owner: ContractAddress,
+        spender: ContractAddress,
+        id: u256,
+    ) -> u256;
+    fn is_operator(
+        self: @TState, owner: ContractAddress, spender: ContractAddress,
+    ) -> bool;
+    fn transfer(
+        ref self: TState, receiver: ContractAddress, id: u256, amount: u256,
+    ) -> bool;
+    fn transfer_from(
+        ref self: TState,
+        sender: ContractAddress,
+        receiver: ContractAddress,
+        id: u256,
+        amount: u256,
+    ) -> bool;
+    fn approve(
+        ref self: TState, spender: ContractAddress, id: u256, amount: u256,
+    ) -> bool;
+    fn set_operator(
+        ref self: TState, spender: ContractAddress, approved: bool,
+    ) -> bool;
+
+    // ISRC5
+    fn supports_interface(self: @TState, interface_id: felt252) -> bool;
+
+    // IERC6909Metadata
+    fn name(self: @TState, id: u256) -> ByteArray;
+    fn symbol(self: @TState, id: u256) -> ByteArray;
+    fn decimals(self: @TState, id: u256) -> u8;
+
+    // IERC6909MetadataAdmin
+    fn set_token_name(ref self: TState, id: u256, name: ByteArray);
+    fn set_token_symbol(ref self: TState, id: u256, symbol: ByteArray);
+    fn set_token_decimals(ref self: TState, id: u256, decimals: u8);
+
+    // IERC6909TokenSupply
+    fn total_supply(self: @TState, id: u256) -> u256;
+
+    // IERC6909ContentUri
+    fn contract_uri(self: @TState) -> ByteArray;
+    fn token_uri(self: @TState, id: u256) -> ByteArray;
+
+    // IERC6909ContentUriAdmin
+    fn set_contract_uri(ref self: TState, contract_uri: ByteArray);
+    fn set_token_uri(ref self: TState, id: u256, token_uri: ByteArray);
+}
+```
+
+Contracts can expose any subset of the optional extension interfaces.
+
+## ERC6909 compatibility
+
+The implementation follows ERC6909 semantics while adapting the standard to Starknet:
+
+- Interface detection uses [SRC5 introspection](./introspection#src5). Each component registers its interface ID through `SRC5Component`.
+- Strings and URIs use Cairo's `ByteArray` type.
+- Setting an allowance to the maximum `u256` value creates an infinite allowance that is not reduced by `transfer_from`.
+- An approved operator bypasses per-token allowance accounting and remains subject to the owner's balance.
+
+## Hooks
+
+[`ERC6909HooksTrait`](/contracts-cairo/4.x/api/erc6909#ERC6909Component-Hooks) extends the core component without modifying its transfer logic. Every contract using `ERC6909Component` must provide a hooks implementation. Basic contracts can import `ERC6909HooksEmptyImpl`.
+
+The internal [`update`](/contracts-cairo/4.x/api/erc6909#ERC6909Component-update) function invokes:
+
+- [`before_update`](/contracts-cairo/4.x/api/erc6909#ERC6909Component-before_update) before balances change.
+- [`after_update`](/contracts-cairo/4.x/api/erc6909#ERC6909Component-after_update) after balances change and the transfer event is emitted.
+
+Extensions such as `ERC6909TokenSupplyComponent` use these hooks to keep their state synchronized with mints and burns.
+
+## Extensions
+
+### Content URI
+
+[`ERC6909ContentURIComponent`](/contracts-cairo/4.x/api/erc6909#ERC6909ContentURIComponent) stores independent contract-level and per-token URIs. Its read-only implementation exposes [`contract_uri`](/contracts-cairo/4.x/api/erc6909#ERC6909ContentURIComponent-contract_uri) and [`token_uri`](/contracts-cairo/4.x/api/erc6909#ERC6909ContentURIComponent-token_uri).
+
+URI updates can be exposed through one of three implementations of [`IERC6909ContentUriAdmin`](/contracts-cairo/4.x/api/erc6909#IERC6909ContentUriAdmin):
+
+- `ERC6909ContentURIAdminOwnableImpl` restricts updates to the contract owner.
+- `ERC6909ContentURIAdminAccessControlImpl` requires `CONTENT_URI_ADMIN_ROLE` through `AccessControlComponent`.
+- `ERC6909ContentURIAdminAccessControlDefaultAdminRulesImpl` requires the same role through `AccessControlDefaultAdminRulesComponent`.
+
+The following example uses ownership to protect URI updates:
+
+```rust
+#[starknet::contract]
+mod MyERC6909WithURI {
+    use openzeppelin_access::ownable::OwnableComponent;
+    use openzeppelin_introspection::src5::SRC5Component;
+    use openzeppelin_token::erc6909::{ERC6909Component, ERC6909HooksEmptyImpl};
+    use openzeppelin_token::erc6909::extensions::ERC6909ContentURIComponent;
+    use starknet::ContractAddress;
+
+    component!(path: ERC6909Component, storage: erc6909, event: ERC6909Event);
+    component!(
+        path: ERC6909ContentURIComponent,
+        storage: erc6909_content_uri,
+        event: ERC6909ContentURIEvent,
+    );
+    component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
+    component!(path: SRC5Component, storage: src5, event: SRC5Event);
+
+    #[abi(embed_v0)]
+    impl ERC6909Impl = ERC6909Component::ERC6909Impl<ContractState>;
+    #[abi(embed_v0)]
+    impl ERC6909ContentURIImpl =
+        ERC6909ContentURIComponent::ERC6909ContentURIImpl<ContractState>;
+    #[abi(embed_v0)]
+    impl ERC6909ContentURIAdminOwnableImpl =
+        ERC6909ContentURIComponent::ERC6909ContentURIAdminOwnableImpl<ContractState>;
+    #[abi(embed_v0)]
+    impl OwnableImpl = OwnableComponent::OwnableImpl<ContractState>;
+    #[abi(embed_v0)]
+    impl SRC5Impl = SRC5Component::SRC5Impl<ContractState>;
+
+    impl ERC6909InternalImpl = ERC6909Component::InternalImpl<ContractState>;
+    impl ERC6909ContentURIInternalImpl =
+        ERC6909ContentURIComponent::InternalImpl<ContractState>;
+    impl OwnableInternalImpl = OwnableComponent::InternalImpl<ContractState>;
+
+    #[storage]
+    struct Storage {
+        #[substorage(v0)]
+        erc6909: ERC6909Component::Storage,
+        #[substorage(v0)]
+        erc6909_content_uri: ERC6909ContentURIComponent::Storage,
+        #[substorage(v0)]
+        ownable: OwnableComponent::Storage,
+        #[substorage(v0)]
+        src5: SRC5Component::Storage,
+    }
+
+    #[event]
+    #[derive(Drop, starknet::Event)]
+    enum Event {
+        #[flat]
+        ERC6909Event: ERC6909Component::Event,
+        #[flat]
+        ERC6909ContentURIEvent: ERC6909ContentURIComponent::Event,
+        #[flat]
+        OwnableEvent: OwnableComponent::Event,
+        #[flat]
+        SRC5Event: SRC5Component::Event,
+    }
+
+    #[constructor]
+    fn constructor(
+        ref self: ContractState,
+        owner: ContractAddress,
+        contract_uri: ByteArray,
+        recipient: ContractAddress,
+        id: u256,
+        amount: u256,
+    ) {
+        self.erc6909.initializer();
+        self.erc6909_content_uri.initializer();
+        self.ownable.initializer(owner);
+        self.erc6909_content_uri._set_contract_uri(contract_uri);
+        self.erc6909.mint(recipient, id, amount);
+    }
+}
+```
+
+The constructor uses the internal [`_set_contract_uri`](/contracts-cairo/4.x/api/erc6909#ERC6909ContentURIComponent-_set_contract_uri) function. After deployment, the embedded Ownable admin implementation exposes [`set_contract_uri`](/contracts-cairo/4.x/api/erc6909#ERC6909ContentURIAdminOwnableImpl-set_contract_uri) and [`set_token_uri`](/contracts-cairo/4.x/api/erc6909#ERC6909ContentURIAdminOwnableImpl-set_token_uri) to the owner.
+
+### Metadata
+
+[`ERC6909MetadataComponent`](/contracts-cairo/4.x/api/erc6909#ERC6909MetadataComponent) associates a name, symbol, and decimals value with each token ID. Call its parameterless [`initializer`](/contracts-cairo/4.x/api/erc6909#ERC6909MetadataComponent-initializer) in the constructor to register `IERC6909Metadata` through SRC5.
+
+Initial metadata can be configured from the constructor with the internal [`_set_token_name`](/contracts-cairo/4.x/api/erc6909#ERC6909MetadataComponent-_set_token_name), [`_set_token_symbol`](/contracts-cairo/4.x/api/erc6909#ERC6909MetadataComponent-_set_token_symbol), and [`_set_token_decimals`](/contracts-cairo/4.x/api/erc6909#ERC6909MetadataComponent-_set_token_decimals) functions.
+
+To support metadata updates after deployment, embed one implementation of [`IERC6909MetadataAdmin`](/contracts-cairo/4.x/api/erc6909#IERC6909MetadataAdmin):
+
+- `ERC6909MetadataAdminOwnableImpl` restricts updates to the contract owner.
+- `ERC6909MetadataAdminAccessControlImpl` requires `METADATA_ADMIN_ROLE` through `AccessControlComponent`.
+- `ERC6909MetadataAdminAccessControlDefaultAdminRulesImpl` requires the same role through `AccessControlDefaultAdminRulesComponent`.
+
+For example, an Ownable integration embeds the read and admin implementations and initializes both components:
+
+```rust
+use openzeppelin_access::ownable::OwnableComponent;
+use openzeppelin_token::erc6909::extensions::ERC6909MetadataComponent;
+
+component!(
+    path: ERC6909MetadataComponent,
+    storage: erc6909_metadata,
+    event: ERC6909MetadataEvent,
+);
+component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
+
+#[abi(embed_v0)]
+impl ERC6909MetadataImpl =
+    ERC6909MetadataComponent::ERC6909MetadataImpl<ContractState>;
+#[abi(embed_v0)]
+impl ERC6909MetadataAdminOwnableImpl =
+    ERC6909MetadataComponent::ERC6909MetadataAdminOwnableImpl<ContractState>;
+#[abi(embed_v0)]
+impl OwnableImpl = OwnableComponent::OwnableImpl<ContractState>;
+impl ERC6909MetadataInternalImpl = ERC6909MetadataComponent::InternalImpl<ContractState>;
+impl OwnableInternalImpl = OwnableComponent::InternalImpl<ContractState>;
+
+// In the constructor, after initializing ERC6909 and SRC5:
+self.erc6909_metadata.initializer();
+self.ownable.initializer(owner);
+self.erc6909_metadata._set_token_name(id, name);
+self.erc6909_metadata._set_token_symbol(id, symbol);
+self.erc6909_metadata._set_token_decimals(id, decimals);
+```
+
+### Token supply
+
+[`ERC6909TokenSupplyComponent`](/contracts-cairo/4.x/api/erc6909#ERC6909TokenSupplyComponent) tracks total supply independently for each token ID. Initialize the component in the constructor, then call [`update_token_supply`](/contracts-cairo/4.x/api/erc6909#ERC6909TokenSupplyComponent-update_token_supply) from `before_update` so every mint and burn updates supply.
+
+```rust
+use openzeppelin_token::erc6909::ERC6909Component;
+use openzeppelin_token::erc6909::extensions::ERC6909TokenSupplyComponent;
+use starknet::ContractAddress;
+
+impl ERC6909HooksImpl of ERC6909Component::ERC6909HooksTrait<ContractState> {
+    fn before_update(
+        ref self: ERC6909Component::ComponentState<ContractState>,
+        sender: ContractAddress,
+        receiver: ContractAddress,
+        id: u256,
+        amount: u256,
+    ) {
+        let mut contract_state = self.get_contract_mut();
+        contract_state
+            .erc6909_token_supply
+            .update_token_supply(sender, receiver, id, amount);
+    }
+}
+```
+
+The helper increases supply when `sender` is the zero address and decreases supply when `receiver` is the zero address. Ordinary transfers leave supply unchanged.

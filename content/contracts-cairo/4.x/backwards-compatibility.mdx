@@ -1,0 +1,72 @@
+---
+title: Backwards Compatibility
+---
+
+OpenZeppelin Contracts uses semantic versioning to communicate backwards compatibility of its API and storage layout. Patch and minor updates will generally be backwards compatible, with rare exceptions as detailed below. Major updates should be assumed incompatible with previous releases. On this page, we provide details about these guarantees.
+
+## Migrating from 3.x
+
+Contracts for Cairo 4.x requires Cairo and Scarb 2.18.0. Update the toolchain and package versions together before addressing compiler errors in application code.
+
+### ERC721 integration traits
+
+`ERC721Component` now delegates ownership resolution to `ERC721TokenOwnerTrait` and metadata resolution to `ERC721TokenURITrait`. A basic ERC721 contract that uses `ERC721MixinImpl` should import the default implementations:
+
+```rust
+use openzeppelin_token::erc721::{
+    ERC721OwnerOfDefaultImpl, ERC721TokenURIDefaultImpl,
+};
+```
+
+Use `ConsecutiveERC721TokenOwnerImpl` with `ERC721ConsecutiveComponent`, or provide a custom ownership implementation when an extension stores ownership outside the core ERC721 map. Custom ownership must preserve the invariant that `balance_of(account)` equals the number of tokens resolved to that account; use `increase_balance` when introducing ownership that is not tracked by the core update path.
+
+<Callout type='warn'>
+Do not make external calls from a custom `ERC721TokenOwnerTrait` implementation. Ownership checks occur throughout ERC721 operations, and yielding execution from them can introduce reentrancy vulnerabilities.
+</Callout>
+
+### ERC20 transfer failures
+
+The self-managed ERC4626 implementation and `VestingComponent::release` now use `SafeERC20DispatcherTrait`. The following constants were removed:
+
+* `ERC4626Component::Errors::TOKEN_TRANSFER_FAILED`
+* `VestingComponent::Errors::TOKEN_TRANSFER_FAILED`
+
+When an underlying ERC20 call returns `false`, these operations now fail with `'SafeERC20: failed operation'`. Remove imports of the old constants and update tests that assert the previous panic data.
+
+### Migrating from a 4.0 prerelease
+
+<Callout>
+These changes affect only users of a 4.0 alpha or release candidate; ERC6909 and ERC20Wrapper were not part of the stable 3.x release.
+</Callout>
+
+* `ERC20WrapperComponent::Errors::TRANSFER_FAILED` was removed; failed transfers use `'SafeERC20: failed operation'`.
+* `ERC6909MetadataComponent::initializer` now only registers its SRC5 interface. Set token metadata separately with `_set_token_name`, `_set_token_symbol`, and `_set_token_decimals`.
+* `ERC6909ContentURIComponent` setters are named `_set_contract_uri` and `_set_token_uri`.
+
+## API
+
+In backwards compatible releases, all changes should be either additions or modifications to internal implementation details. Most code should continue to compile and behave as expected. The exceptions to this rule are listed below.
+
+### Security
+
+Infrequently, a patch or minor update will remove or change an API in a breaking way but only if the previous API is considered insecure. These breaking changes will be noted in the changelog and release notes, and published along with a security advisory.
+
+### Errors
+
+The specific error format and data that is included with reverts should not be assumed stable unless otherwise specified.
+
+### Major releases
+
+Major releases should be assumed incompatible. Nevertheless, the external interfaces of contracts will remain compatible if they are standardized, or if the maintainers judge that changing them would cause significant strain on the ecosystem.
+
+An important aspect that major releases may break is "upgrade compatibility", in particular storage layout compatibility. It will never be safe for a live contract to upgrade from one major release to another.
+
+In the case of breaking "upgrade compatibility", an entry to the changelog will be added listing those breaking changes.
+
+## Storage layout
+
+Patch updates will always preserve storage layout compatibility, and after `1.0.0` minors will too. This means that a live contract can be upgraded from one minor to another without corrupting the storage layout. In some cases it may be necessary to initialize new state variables when upgrading, although we expect this to be infrequent.
+
+## Cairo version
+
+The minimum Cairo version required to compile the contracts will remain unchanged for patch updates, but it may change for minors.

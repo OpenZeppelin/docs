@@ -21,7 +21,10 @@ export function VersionBanner() {
 	// Define current versions for each ecosystem
 	const currentVersions: Record<string, { version: string; path: string }> = {
 		contracts: { version: "5.x", path: "/contracts/5.x" },
-		"cairo-contracts": { version: latestStable, path: "/cairo-contracts" },
+		"contracts-cairo": {
+			version: latestStable,
+			path: `/contracts-cairo/${latestStable}`,
+		},
 		"contracts-sui": {
 			version: suiLatestStable,
 			path: `/contracts-sui/${suiLatestStable}`,
