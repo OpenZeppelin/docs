@@ -5,6 +5,7 @@ import {
 	OPENZEPPELIN_INTERFACES_VERSION,
 	OPENZEPPELIN_TESTING_VERSION,
 	OPENZEPPELIN_UTILS_VERSION,
+	UDC_ADDRESS,
 	UMBRELLA_VERSION,
 } from "./constants";
 
@@ -17,6 +18,7 @@ export const REPLACEMENTS = {
 		openzeppelin_utils_version: OPENZEPPELIN_UTILS_VERSION,
 		openzeppelin_testing_version: OPENZEPPELIN_TESTING_VERSION,
 		class_hash_scarb_version: CLASS_HASH_SCARB_VERSION,
+		udc_address: UDC_ADDRESS,
 		...CLASS_HASHES,
 	},
 };

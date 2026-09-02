@@ -5,6 +5,9 @@ export const UMBRELLA_VERSION = "4.0.1";
 export const API_SOURCE_VERSION = "v4.0.1";
 export const CLASS_HASH_SCARB_VERSION = "2.18.0";
 
+export const UDC_ADDRESS =
+	"0x02ceed65a4bd731034c01113685c831b01c15d7d432f71afb1cf1634b53a2125";
+
 export const CLASS_HASHES = {
 	AccountUpgradeableClassHash:
 		"0x03013bf2edcf93ac575367eee41cd07bb50e809c78925817b61878db29826144",
