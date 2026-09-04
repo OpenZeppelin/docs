@@ -36,6 +36,21 @@ async function convertAdocFiles(directory, apiRoute = "contracts/5.x/api") {
 				"<include cwd lang='solidity'>./examples/$1</include>",
 			);
 
+			// Convert remaining markdown-style fenced blocks to AsciiDoc
+			// `[source,lang]\n----\n...\n----` form BEFORE downdoc runs.
+			// downdoc mangles the contents of triple-backtick blocks inside
+			// .adoc sources (strips `//` comment lines, de-indents nested
+			// braces, drops closing `}`), because it doesn't recognise them
+			// as verbatim. `----` blocks are treated as literal, so this
+			// preprocess step preserves indentation and comments exactly.
+			content = content.replace(
+				/```([a-zA-Z0-9_-]+)?\s*\n([\s\S]*?)\n```/g,
+				(_match, lang, body) => {
+					const source = lang ? `[source,${lang}]\n` : "";
+					return `${source}----\n${body}\n----`;
+				},
+			);
+
 			// Replace TIP: and NOTE: callouts with <Callout> tags
 			content = content.replace(
 				/^(TIP|NOTE):\s*(.+)$/gm,
@@ -167,7 +182,7 @@ async function convertAdocFiles(directory, apiRoute = "contracts/5.x/api") {
 			// Fix HTML-style callouts <dl><dt><strong>📌 NOTE</strong></dt><dd> ... </dd></dl>
 			// Handle multi-line callouts by using a more permissive pattern
 			mdContent = mdContent.replace(
-				/<dl><dt><strong>[📌🔔ℹ️]\s*(NOTE|TIP|INFO)<\/strong><\/dt><dd>([\s\S]*?)<\/dd><\/dl>/gu,
+				/<dl><dt><strong>[📌🔔ℹ️💡]\s*(NOTE|TIP|INFO)<\/strong><\/dt><dd>([\s\S]*?)<\/dd><\/dl>/gu,
 				"<Callout>\n$2\n</Callout>",
 			);
 
@@ -178,7 +193,7 @@ async function convertAdocFiles(directory, apiRoute = "contracts/5.x/api") {
 
 			// Handle cases where </dd></dl> might be missing or malformed
 			mdContent = mdContent.replace(
-				/<dl><dt><strong>[📌🔔ℹ️]\s*(NOTE|TIP|INFO)<\/strong><\/dt><dd>([\s\S]*?)(?=\n\n|<dl>|$)/gu,
+				/<dl><dt><strong>[📌🔔ℹ️💡]\s*(NOTE|TIP|INFO)<\/strong><\/dt><dd>([\s\S]*?)(?=\n\n|<dl>|$)/gu,
 				"<Callout>\n$2\n</Callout>",
 			);
 
@@ -199,7 +214,7 @@ async function convertAdocFiles(directory, apiRoute = "contracts/5.x/api") {
 			// Clean up orphaned HTML tags from malformed callouts
 			// Handle orphaned <dl><dt><strong>EMOJI TYPE</strong></dt><dd> without closing tags
 			mdContent = mdContent.replace(
-				/<dl><dt><strong>[📌🔔ℹ️]\s*(NOTE|TIP|INFO)<\/strong><\/dt><dd>\s*\n([\s\S]*?)(?=\n\n|<dl>|$)/gu,
+				/<dl><dt><strong>[📌🔔ℹ️💡]\s*(NOTE|TIP|INFO)<\/strong><\/dt><dd>\s*\n([\s\S]*?)(?=\n\n|<dl>|$)/gu,
 				"<Callout>\n$2\n</Callout>",
 			);
 
