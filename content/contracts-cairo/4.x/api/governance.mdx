@@ -6,7 +6,7 @@ import { API_SOURCE_VERSION } from "../utils/constants.js";
 
 This crate includes primitives for on-chain governance.
 
-## [](#interfaces)Interfaces
+## Interfaces [#interfaces]
 
 <Callout type='info'>
 The interfaces documented here are provided by the `openzeppelin_interfaces` package version `{{openzeppelin_interfaces_version}}`.
@@ -53,12 +53,12 @@ Functions
 - [`propose(calls, description)`](#IGovernor-propose)
 - [`queue(calls, description_hash)`](#IGovernor-queue)
 - [`execute(calls, description_hash)`](#IGovernor-execute)
-- [`cancel(proposal_id, description_hash)`](#IGovernor-cancel)
+- [`cancel(calls, description_hash)`](#IGovernor-cancel)
 - [`cast_vote(proposal_id, support)`](#IGovernor-cast_vote)
 - [`cast_vote_with_reason(proposal_id, support, reason)`](#IGovernor-cast_vote_with_reason)
 - [`cast_vote_with_reason_and_params(proposal_id, support, reason, params)`](#IGovernor-cast_vote_with_reason_and_params)
-- [`cast_vote_by_sig(proposal_id, support, reason, signature)`](#IGovernor-cast_vote_by_sig)
-- [`cast_vote_with_reason_and_params_by_sig(proposal_id, support, reason, params, signature)`](#IGovernor-cast_vote_with_reason_and_params_by_sig)
+- [`cast_vote_by_sig(proposal_id, support, voter, signature)`](#IGovernor-cast_vote_by_sig)
+- [`cast_vote_with_reason_and_params_by_sig(proposal_id, support, voter, reason, params, signature)`](#IGovernor-cast_vote_with_reason_and_params_by_sig)
 - [`nonces(voter)`](#IGovernor-nonces)
 - [`relay(call)`](#IGovernor-relay)
 
@@ -1117,7 +1117,7 @@ Requirements:
 </APIItem>
 
 <APIItem
-  functionSignature="CLOCK_MODE() → u64"
+  functionSignature="CLOCK_MODE() → ByteArray"
   id="IVotes-CLOCK_MODE"
   kind="external"
 >
@@ -1128,7 +1128,7 @@ Requirements:
 - The output MUST be formatted like a URL query string, decodable in standard JavaScript.
 </APIItem>
 
-## [](#governor)Governor
+## Governor [#governor]
 
 This modular system of Governor components allows the deployment of easily customizable on-chain voting protocols.
 
@@ -1210,12 +1210,12 @@ Embeddable Implementations
 - [`propose(self, calls, description)`](#GovernorComponent-propose)
 - [`queue(self, calls, description_hash)`](#GovernorComponent-queue)
 - [`execute(self, calls, description_hash)`](#GovernorComponent-execute)
-- [`cancel(self, proposal_id, description_hash)`](#GovernorComponent-cancel)
+- [`cancel(self, calls, description_hash)`](#GovernorComponent-cancel)
 - [`cast_vote(self, proposal_id, support)`](#GovernorComponent-cast_vote)
 - [`cast_vote_with_reason(self, proposal_id, support, reason)`](#GovernorComponent-cast_vote_with_reason)
 - [`cast_vote_with_reason_and_params(self, proposal_id, support, reason, params)`](#GovernorComponent-cast_vote_with_reason_and_params)
-- [`cast_vote_by_sig(self, proposal_id, support, reason, signature)`](#GovernorComponent-cast_vote_by_sig)
-- [`cast_vote_with_reason_and_params_by_sig(self, proposal_id, support, reason, params, signature)`](#GovernorComponent-cast_vote_with_reason_and_params_by_sig)
+- [`cast_vote_by_sig(self, proposal_id, support, voter, signature)`](#GovernorComponent-cast_vote_by_sig)
+- [`cast_vote_with_reason_and_params_by_sig(self, proposal_id, support, voter, reason, params, signature)`](#GovernorComponent-cast_vote_with_reason_and_params_by_sig)
 - [`nonces(self, voter)`](#GovernorComponent-nonces)
 - [`relay(self, call)`](#GovernorComponent-relay)
 
@@ -1248,7 +1248,7 @@ Internal Implementations
 Events
 
 - [`ProposalCreated(proposal_id, proposer, calls, signatures, vote_start, vote_end, description)`](#GovernorComponent-ProposalCreated)
-- [`ProposalQueued(proposal_id)`](#GovernorComponent-ProposalQueued)
+- [`ProposalQueued(proposal_id, eta_seconds)`](#GovernorComponent-ProposalQueued)
 - [`ProposalExecuted(proposal_id)`](#GovernorComponent-ProposalExecuted)
 - [`ProposalCanceled(proposal_id)`](#GovernorComponent-ProposalCanceled)
 - [`VoteCast(voter, proposal_id, support, weight, reason)`](#GovernorComponent-VoteCast)
@@ -1393,7 +1393,7 @@ When the executor is not the governor itself (i.e. a timelock), it can call func
 </APIItem>
 
 <APIItem
-  functionSignature="execute_operations(ref self: ContractState, proposal_id: felt252, calls: Span<Call>)"
+  functionSignature="execute_operations(ref self: ContractState, proposal_id: felt252, calls: Span<Call>, description_hash: felt252)"
   id="GovernorComponent-GovernorExecutionTrait-execute_operations"
   kind="internal"
 >
@@ -1402,7 +1402,7 @@ Execution mechanism. Can be used to modify the way operations are executed (for 
 </APIItem>
 
 <APIItem
-  functionSignature="queue_operations(ref self: ContractState, proposal_id: felt252, calls: Span<Call>)"
+  functionSignature="queue_operations(ref self: ContractState, proposal_id: felt252, calls: Span<Call>, description_hash: felt252) → u64"
   id="GovernorComponent-GovernorExecutionTrait-queue_operations"
   kind="internal"
 >
@@ -1414,7 +1414,7 @@ Requirements:
 </APIItem>
 
 <APIItem
-  functionSignature="proposal_needs_queuing(self: @ContractState) → bool"
+  functionSignature="proposal_needs_queuing(self: @ContractState, proposal_id: felt252) → bool"
   id="GovernorComponent-GovernorExecutionTrait-proposal_needs_queuing"
   kind="internal"
 >
@@ -1422,7 +1422,7 @@ Must return whether proposals need to be queued before execution. This usually i
 </APIItem>
 
 <APIItem
-  functionSignature="cancel_operations(ref self: ContractState, proposal_id: felt252, calls: Span<Call>)"
+  functionSignature="cancel_operations(ref self: ContractState, proposal_id: felt252, description_hash: felt252)"
   id="GovernorComponent-GovernorExecutionTrait-cancel_operations"
   kind="internal"
 >
@@ -1868,7 +1868,7 @@ When the executor is not the governor itself (i.e. a timelock), it can call func
 </APIItem>
 
 <APIItem
-  functionSignature="validate_state(self: @ContractState, proposal_id: felt252, state: ProposalState)"
+  functionSignature="validate_state(self: @ContractState, proposal_id: felt252, allowed_states: Span<ProposalState>)"
   id="GovernorComponent-validate_state"
   kind="internal"
 >
@@ -1876,7 +1876,7 @@ Validates that a proposal is in the expected state. Otherwise it panics.
 </APIItem>
 
 <APIItem
-  functionSignature="use_nonce(ref self: ContractState) → felt252"
+  functionSignature="use_nonce(ref self: ContractState, voter: ContractAddress) → felt252"
   id="GovernorComponent-use_nonce"
   kind="internal"
 >
@@ -1912,7 +1912,7 @@ Requirements:
 </APIItem>
 
 <APIItem
-  functionSignature="_propose(ref self: ContractState, calls: Span<Call>, description_hash: felt252) → felt252"
+  functionSignature="_propose(ref self: ContractState, calls: Span<Call>, description: @ByteArray, proposer: ContractAddress) → felt252"
   id="GovernorComponent-_propose"
   kind="internal"
 >
@@ -1926,7 +1926,7 @@ Emits a [ProposalCreated](#GovernorComponent-ProposalCreated) event.
 </APIItem>
 
 <APIItem
-  functionSignature="_cancel(ref self: ContractState, proposal_id: felt252)"
+  functionSignature="_cancel(ref self: ContractState, proposal_id: felt252, description_hash: felt252)"
   id="GovernorComponent-_cancel"
   kind="internal"
 >
@@ -2010,9 +2010,9 @@ Emitted when a vote is cast.
 Emitted when a vote is cast with params.
 </APIItem>
 
-## [](#governor_extensions)Governor extensions
+## Governor extensions [#governor_extensions]
 
-The Governor component can (and must) be extended by implementing the [extensions traits](#GovernorComponent-Extensions-Traits-Traits) to add the desired functionality. This can be achieved by directly implementing the traits on your contract, or by using a set of ready-to-use extensions provided by the library, which are presented below.
+The Governor component can (and must) be extended by implementing the [extensions traits](#GovernorComponent-Extensions-Traits) to add the desired functionality. This can be achieved by directly implementing the traits on your contract, or by using a set of ready-to-use extensions provided by the library, which are presented below.
 
 ### `GovernorCoreExecutionComponent` [toc] [#GovernorCoreExecutionComponent]
 
@@ -2759,7 +2759,7 @@ Returns the timelock controller address.
 </APIItem>
 
 <APIItem
-  functionSignature="get_timelock_id(self: @ContractState) → felt252"
+  functionSignature="get_timelock_id(self: @ContractState, proposal_id: felt252) → felt252"
   id="GovernorTimelockExecutionComponent-get_timelock_id"
   kind="external"
 >
@@ -2840,7 +2840,7 @@ Emits a [TimelockUpdated](#GovernorTimelockExecutionComponent-TimelockUpdated) e
 Emitted when the timelock controller is updated.
 </APIItem>
 
-## [](#multisig)Multisig
+## Multisig [#multisig]
 
 A Multisig module enhances security and decentralization by requiring multiple signers to approve and execute transactions. Features include configurable quorum, signer management, and self-administration, ensuring collective decision-making and transparency for critical operations.
 
@@ -3369,7 +3369,7 @@ Emitted when a transaction is executed.
 Emitted when a new transaction is submitted with non-zero salt.
 </APIItem>
 
-## [](#timelock)Timelock
+## Timelock [#timelock]
 
 In a governance system, `TimelockControllerComponent` is in charge of introducing a delay between a proposal and its execution.
 
@@ -3390,10 +3390,10 @@ Component that implements [ITimelock](#ITimelock) and enables the implementing c
 
 #### TimelockMixinImpl [!toc] [#TimelockControllerComponent-TimelockMixinImpl]
 
-- [`TimelockImpl`](#TimelockControllerComponent-Embeddable-Impls-TimelockImpl)
-- [`SRC5Impl`](./introspection#SRC5Component-Embeddable-Impls)
-- [`AccessControlImpl`](./access#AccessControlComponent-Embeddable-Impls)
-- [`AccessControlCamelImpl`](./access#AccessControlComponent-Embeddable-Impls)
+- [`TimelockImpl`](#TimelockControllerComponent-TimelockImpl)
+- [`SRC5Impl`](#TimelockControllerComponent-SRC5Impl)
+- [`AccessControlImpl`](#TimelockControllerComponent-AccessControlImpl)
+- [`AccessControlCamelImpl`](#TimelockControllerComponent-AccessControlCamelImpl)
 
 Embeddable Implementations
 
@@ -3429,11 +3429,11 @@ Embeddable Implementations
 
 #### AccessControlCamelImpl [!toc] [#TimelockControllerComponent-AccessControlCamelImpl]
 
-- [`hasRole(self, role, account)`](./access#IAccessControl-hasRole)
-- [`getRoleAdmin(self, role)`](./access#IAccessControl-getRoleAdmin)
-- [`grantRole(self, role, account)`](./access#IAccessControl-grantRole)
-- [`revokeRole(self, role, account)`](./access#IAccessControl-revokeRole)
-- [`renounceRole(self, role, account)`](./access#IAccessControl-renounceRole)
+- [`hasRole(self, role, account)`](./access#AccessControlComponent-hasRole)
+- [`getRoleAdmin(self, role)`](./access#AccessControlComponent-getRoleAdmin)
+- [`grantRole(self, role, account)`](./access#AccessControlComponent-grantRole)
+- [`revokeRole(self, role, account)`](./access#AccessControlComponent-revokeRole)
+- [`renounceRole(self, role, account)`](./access#AccessControlComponent-renounceRole)
 
 Internal Implementations
 
@@ -3639,7 +3639,7 @@ Emits a [MinDelayChanged](#TimelockControllerComponent-MinDelayChanged) event.
 #### Internal functions [!toc] [#TimelockControllerComponent-InternalFunctions]
 
 <APIItem
-  functionSignature="initializer(ref self: ContractState, min_delay: u64, proposers: Span<ContractAddress>, executors: Span<ContractState>, admin: ContractAddress)"
+  functionSignature="initializer(ref self: ContractState, min_delay: u64, proposers: Span<ContractAddress>, executors: Span<ContractAddress>, admin: ContractAddress)"
   id="TimelockControllerComponent-initializer"
   kind="internal"
 >
@@ -3770,7 +3770,7 @@ Emitted when operation `id` is cancelled.
 Emitted when the minimum delay for future operations is modified.
 </APIItem>
 
-## [](#votes)Votes
+## Votes [#votes]
 
 The `VotesComponent` provides a flexible system for tracking and delegating voting power. This system allows users to delegate their voting power to other addresses, enabling more active participation in governance.
 
@@ -3946,7 +3946,7 @@ Requirements:
 </APIItem>
 
 <APIItem
-  functionSignature="CLOCK_MODE(self: @ContractState) → u64"
+  functionSignature="CLOCK_MODE(self: @ContractState) → ByteArray"
   id="VotesComponent-CLOCK_MODE"
   kind="external"
 >
