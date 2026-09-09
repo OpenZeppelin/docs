@@ -6,14 +6,14 @@ This guide walks through implementing a new ecosystem adapter from scratch. By t
 
 ## How Much Do You Need to Implement?
 
-Adapters are **incrementally adoptable**. You don't need to implement all 13 capabilities to ship a useful adapter. Start small and add capabilities as your ecosystem's support matures.
+Adapters are **incrementally adoptable**. You don't need to implement all 17 capabilities to ship a useful adapter. Start small and add capabilities as your ecosystem's support matures.
 
 ```mermaid
 flowchart TD
     Start["Start Here"] --> T1["Implement Tier 1\n(4 capabilities)"]
     T1 -->|"Unlocks"| Dec["Declarative Profile\nAddress validation, explorer links,\nnetwork catalogs"]
 
-    T1 --> T2["Add Tier 2\n(4 capabilities)"]
+    T1 --> T2["Add Tier 2\n(5 capabilities)"]
     T2 -->|"Unlocks"| View["Viewer Profile\nContract reading, schema parsing,\ntype mapping, queries"]
 
     T2 --> T3a["Add Execution + Wallet"]
@@ -24,6 +24,9 @@ flowchart TD
 
     T3a --> T3c["Add UiKit + AccessControl"]
     T3c -->|"Unlocks"| Op["Operator Profile\nRole and permission\nmanagement"]
+
+    T3a --> T3d["Add RWA caps (optional)"]
+    T3d -->|"Unlocks"| RWA["ERC3643 / ERC4626 / IRS\nRegulated-asset workflows\n(EVM sub-path exports)"]
 
     style Start fill:#e8eaf6,stroke:#3f51b5,color:#000
     style T1 fill:#e3f2fd,stroke:#1976d2,color:#000
@@ -50,7 +53,8 @@ packages/adapter-<chain>/
 │   │   ├── explorer.ts
 │   │   ├── network-catalog.ts
 │   │   ├── ui-labels.ts
-│   │   ├── contract-loading.ts    # Tier 2+
+│   │   ├── name-resolution.ts   # Tier 2 (optional)
+│   │   ├── contract-loading.ts  # Tier 2+
 │   │   ├── schema.ts
 │   │   ├── type-mapping.ts
 │   │   ├── query.ts
@@ -59,6 +63,9 @@ packages/adapter-<chain>/
 │   │   ├── ui-kit.ts
 │   │   ├── relayer.ts
 │   │   ├── access-control.ts
+│   │   ├── erc3643.ts             # Tier 3 (opt-in sub-path)
+│   │   ├── erc4626.ts
+│   │   ├── irs.ts
 │   │   └── index.ts
 │   ├── profiles/              # Profile runtime factories
 │   │   ├── shared-state.ts
