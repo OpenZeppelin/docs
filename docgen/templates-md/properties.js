@@ -71,6 +71,11 @@ module.exports.functions = function ({ item }) {
   ];
 };
 
+module.exports.structs = function ({ item }) {
+  if (!isNodeType('ContractDefinition', item)) return [];
+  return item.nodes.filter((n) => isNodeType('StructDefinition', n));
+};
+
 module.exports.returns2 = function ({ item }) {
   if (isNodeType('VariableDeclaration', item)) {
     return [{ type: item.typeDescriptions.typeString }];

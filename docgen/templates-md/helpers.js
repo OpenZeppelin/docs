@@ -72,6 +72,24 @@ module.exports['typed-params'] = params => {
   return params?.map(p => `${p.type}${p.indexed ? ' indexed' : ''}${p.name ? ' ' + p.name : ''}`).join(', ');
 };
 
+// Extract the @dev tag body from a raw StructuredDocumentation node.
+// Solidity strips the leading ` *` per line but keeps a single leading space,
+// so we normalise: trim leading whitespace per line, then take everything
+// after `@dev ` up to the next `@tag` (or end-of-string).
+module.exports['struct-dev'] = function (struct) {
+  const raw = struct?.documentation?.text;
+  if (!raw) return '';
+  const dedented = raw.replace(/^[ \t]+/gm, '');
+  const match = dedented.match(/@dev\s+([\s\S]*?)(?=\n@\w+|$)/);
+  return match ? match[1].trim() : dedented.trim();
+};
+
+// Render a struct member as `<type> <name>` (Solidity declaration form).
+module.exports['struct-member-decl'] = function (member) {
+  const type = member?.typeDescriptions?.typeString || '';
+  return `${type} ${member.name}`;
+};
+
 const slug = (module.exports.slug = str => {
   if (str === undefined) {
     throw new Error('Missing argument');
