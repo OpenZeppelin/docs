@@ -446,8 +446,14 @@ npx tsx scripts/link-validation.ts --scope "/contracts/*"
 # Output results to a file
 npx tsx scripts/link-validation.ts --output link-errors.txt
 
-# Disable fragment checking
+# Include fragment checking (disabled by default)
 npx tsx scripts/link-validation.ts --no-ignore-fragments
+
+# Produce a report without failing on known broken links
+npx tsx scripts/link-validation.ts --no-ignore-fragments --output link-errors.txt
+
+# Run the MDX anchor regression tests
+node --import tsx --test scripts/link-anchors.test.ts
 ```
 
 **Options:**
@@ -455,6 +461,10 @@ npx tsx scripts/link-validation.ts --no-ignore-fragments
 - `--scope <pattern>` - Validate only files matching the pattern (supports wildcards)
 - `--output <file>` - Write results to a file instead of console
 - `--no-ignore-fragments` - Include fragment validation (hash links)
+
+`--output` reports validation errors without making them fail the command. Parsing
+and execution errors still fail. The PR lint workflow uploads a `link-errors`
+artifact using this mode, while keeping its existing checks unchanged.
 
 **What it validates:**
 

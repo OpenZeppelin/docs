@@ -8,6 +8,7 @@ import remarkMath from "remark-math";
 import type { InferPageType } from "fumadocs-core/source";
 import { source } from "@/lib/source";
 import { writeFileSync } from "fs";
+import { extractAnchorIds } from "./link-anchors";
 import {
 	arbitrumStylusTree,
 	ethereumEvmTree,
@@ -137,13 +138,7 @@ async function getHeadings({
 
 	// Also extract actual anchor IDs from the content for API reference pages
 	const content = await data.getText("raw");
-	const anchorRegex = /<a id="([^"]+)"><\/a>/g;
-	const anchorIds: string[] = [];
-	let match: any;
-
-	while ((match = anchorRegex.exec(content)) !== null) {
-		anchorIds.push(match[1]);
-	}
+	const anchorIds = extractAnchorIds(content);
 
 	// Combine TOC headings and actual anchor IDs, removing duplicates
 	const allHeadings = [...new Set([...tocHeadings, ...anchorIds])];
