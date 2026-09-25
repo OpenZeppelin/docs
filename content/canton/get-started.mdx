@@ -5,8 +5,7 @@ title: Get Started
 This page shows how to set up the Daml toolchain, build the OpenZeppelin packages, and use them in your own Daml project.
 
 <Callout type="warn">
-  The packages are experimental, unaudited, and have no release yet. They will
-  be redesigned before their first release. Pin a source commit of
+  The packages are unaudited and have no release yet. Pin a source commit of
   [`OpenZeppelin/canton-contracts`](https://github.com/OpenZeppelin/canton-contracts)
   and take version numbers from its package manifests, not from this page.
 </Callout>
@@ -35,22 +34,25 @@ dpm install
 dpm build --all
 ```
 
-To build one package, set `DAML_PACKAGE` to its directory:
+To build one package, set `DAML_PACKAGE` to its directory. Build a package's dependencies first:
 
 ```bash
-DAML_PACKAGE=experiments/security/pausable-v1 dpm build
+DAML_PACKAGE=packages/security/api-pausable-v1 dpm build
+DAML_PACKAGE=packages/security/pausable-v1 dpm build
 ```
 
-The packages live under `experiments/`, grouped by category:
+The packages are grouped by status and category:
 
 | Directory | Contents |
 | --- | --- |
-| `experiments/access/` | Access Control and Ownable |
-| `experiments/security/` | Pausable |
-| `experiments/token/` | Token (CIP-0112) |
-| `experiments/test/` | One test package for each component |
+| `packages/security/` | Pausable (pre-release) |
+| `test/` | Test packages for `packages/` |
+| `experiments/access/` | Access Control and Ownable (experimental) |
+| `experiments/token/` | Token (CIP-0112) (experimental) |
+| `experiments/test/` | Test packages for `experiments/` |
+| `examples/` | Runnable projects that use the packages |
 
-Each build writes its DAR to the `.daml/dist/` directory of the package, for example `experiments/security/pausable-v1/.daml/dist/openzeppelin-pausable-v1-0.1.0.dar`.
+Each build writes its DAR to the `.daml/dist/` directory of the package, for example `packages/security/pausable-v1/.daml/dist/openzeppelin-pausable-v1-0.1.0.dar`.
 
 Released DARs will go in [`dars/released/`](https://github.com/OpenZeppelin/canton-contracts/tree/main/dars), with package IDs and SHA-256 digests in `dars/manifest.yaml`. Participant operators use these values to verify and vet the packages.
 
@@ -69,19 +71,21 @@ dependencies:
 data-dependencies:
   - ../canton-contracts/experiments/access/access-control-v1/.daml/dist/openzeppelin-access-control-v1-0.1.0.dar
   - ../canton-contracts/experiments/access/ownable-v1/.daml/dist/openzeppelin-ownable-v1-0.1.0.dar
-  - ../canton-contracts/experiments/security/pausable-v1/.daml/dist/openzeppelin-pausable-v1-0.1.0.dar
+  - ../canton-contracts/packages/security/api-pausable-v1/.daml/dist/openzeppelin-api-pausable-v1-0.1.0.dar
+  - ../canton-contracts/packages/security/pausable-v1/.daml/dist/openzeppelin-pausable-v1-0.1.0.dar
 build-options:
   - --target=2.1
 ```
 
-Change the paths to match your clone. List only the DARs that you use.
+Change the paths to match your clone. List only the DARs that you use, plus their dependencies: `openzeppelin-pausable-v1` needs `openzeppelin-api-pausable-v1`.
 
 The [Token](/canton/library/token) package also needs the Token Standard V2 DARs from `dars/vendor/` in `data-dependencies`. The token page lists them.
 
 Import the modules and build:
 
 ```daml
-import OpenZeppelin.PausableV1
+import OpenZeppelin.Api.PausableV1 (Pausable, PausableView (..))
+import qualified OpenZeppelin.PausableV1 as Pausable
 ```
 
 ```bash
