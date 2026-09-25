@@ -2,71 +2,164 @@
 title: Pausable
 ---
 
-Pausable is a standalone, token-agnostic emergency-stop switch for Daml. It is the analogue of OpenZeppelin's `Pausable.sol`: a single boolean the authority can flip, plus a guard (`whenNotPaused`) that gated operations call to refuse work while paused.
-
-The package is independent: it carries no role type and depends on no other OpenZeppelin package, so a project that wants only a pause switch imports only this one package.
+Pausable is an emergency stop for Daml. It is the Daml analogue of OpenZeppelin's `Pausable`. Your template holds a `paused` flag and implements the `Pausable` interface. Gated choices call `whenNotPaused this` and refuse to run while the flag is set.
 
 <Callout type="warn">
-  Experimental and work in progress. This package is version 0.x, unaudited,
-  and not yet a stable public API: interfaces may change before a 1.0 release,
-  and it is not intended for production use. Source:
-  [`experiments/security/pausable-v1`](https://github.com/OpenZeppelin/canton-contracts/tree/main/experiments/security/pausable-v1)
+  Pre-release and unaudited. The packages have no release yet. Source:
+  [`packages/security/api-pausable-v1`](https://github.com/OpenZeppelin/canton-contracts/tree/main/packages/security/api-pausable-v1)
+  and
+  [`packages/security/pausable-v1`](https://github.com/OpenZeppelin/canton-contracts/tree/main/packages/security/pausable-v1)
   in `OpenZeppelin/canton-contracts`.
 </Callout>
 
-```daml
-import OpenZeppelin.PausableV1
-```
+## Packages
 
-## What "Paused" Means on a UTXO Ledger
-
-Solidity stores `_paused` in contract storage and reads it through a modifier. Daml-LF 2.1 has no contract keys, so there is no global "is the resource paused?" lookup. Instead the live `PauseState` is a contract that gated operations read by `ContractId` (disclosed to them by the pauser) and check via `whenNotPaused`.
-
-Pause is therefore origination control: new operations that consult the flag refuse to start while paused, while already-committed work is unaffected. That is the only pause semantic that is robustly enforceable on a UTXO ledger. Flipping the flag archives the old `PauseState` and creates the next one, which is how state transitions work throughout Daml.
-
-## Templates
-
-### `PauseState`
-
-The current pause state of a resource, administered by `pauser`.
-
-| Field | Type | Description |
+| Package | Module | Contents |
 | --- | --- | --- |
-| `pauser` | `Party` | The authority that may pause and unpause. |
-| `paused` | `Bool` | Whether the resource is currently paused. |
+| `openzeppelin-api-pausable-v1` | `OpenZeppelin.Api.PausableV1` | The `Pausable` interface and `PausableView`. Frozen. |
+| `openzeppelin-pausable-v1` | `OpenZeppelin.PausableV1` | The guards and the failure statuses. Depends on the API package. |
 
-Signatory `pauser` (the contract is pauser-signed and so unforgeable). Observers are granted read access by explicit disclosure, keeping the privacy surface minimal.
-
-- **`PauseState_Set`** (returns `ContractId PauseState`): flip the flag, archiving the current state and creating its successor. Rejects a redundant change (setting the flag to its current value) so on-ledger history records only real transitions.
-- **`PauseState_Get`** (nonconsuming, returns `Bool`): read the current flag without archiving the contract.
-
-## Helper Functions
-
-- **`whenNotPaused : PauseState -> Update ()`**: the `whenNotPaused` modifier analogue. A gated operation fetches the disclosed `PauseState` and calls this before doing origination work; it fails the transaction when paused.
-- **`isPaused : PauseState -> Bool`**: the pure predicate form, for callers that already hold the flag.
-
-## Guarding an Operation
+The interface is in its own package because Daml cannot upgrade an interface. A fix to a guard is a new version of `openzeppelin-pausable-v1`, and the interface package does not change.
 
 ```daml
-nonconsuming choice Transfer : ContractId Token
-  with
-    pauseStateCid : ContractId PauseState
-    to : Party
-    amount : Int
-  controller owner
-  do
-    ps <- fetch pauseStateCid
-    whenNotPaused ps
-    create Token with owner = to; amount
+import OpenZeppelin.Api.PausableV1 (Pausable, PausableView (..))
+import qualified OpenZeppelin.PausableV1 as Pausable
 ```
 
-## Errors
+## The Flag Is on Your Template
 
-| Message | When |
-| --- | --- |
-| `Pausable: paused` | A guarded operation ran while the resource was paused. |
-| `Pausable: redundant pause change` | `PauseState_Set` was called with the flag's current value. |
+Solidity stores `_paused` in the contract that it protects. Pausable does the same in Daml: the flag is a field of your template. A guard reads the flag from the contract that the choice runs on, so the caller cannot substitute a different switch.
+
+The package has no template of its own. The interface defines no choices, so a party that holds only a `ContractId Pausable` cannot change the flag. Your own choices change it.
+
+## Usage
+
+**1. Add the flag and the interface instance.**
+
+```daml
+template Vault
+  with
+    admin : Party
+    owner : Party
+    balance : Decimal
+    paused : Bool
+  where
+    signatory admin, owner
+
+    interface instance Pausable for Vault where
+      view = PausableView with paused
+```
+
+**2. Guard the choices that a pause must stop.** Call `whenNotPaused this` before the choice changes state:
+
+```daml
+    choice Vault_Withdraw : ContractId Vault
+      with amount : Decimal
+      controller owner
+      do
+        Pausable.whenNotPaused this
+        create this with balance = balance - amount
+```
+
+**3. Write the pause and unpause choices.** The controller and the body of these choices define who can pause. Each choice guards, then creates the next contract with `paused` changed:
+
+```daml
+    choice Vault_Pause : ContractId Vault
+      controller admin
+      do
+        Pausable.whenNotPaused this
+        create this with paused = True
+
+    choice Vault_Unpause : ContractId Vault
+      controller admin
+      do
+        Pausable.whenPaused this
+        create this with paused = False
+```
+
+Make these choices consuming, or call `archive self`, so that one contract stays active. Any authority model fits: a single party, a role grant, an M-of-N approval, or a timelock. For a role, take the caller and its credential as choice arguments and check them before the flip.
+
+## Functions
+
+All functions take any template that implements `Pausable`.
+
+- **`whenNotPaused : HasToInterface t Pausable => t -> Update ()`**: fails with `eEnforcedPause` if the contract is paused. Use it in gated choices and in the pause choice.
+- **`whenPaused : HasToInterface t Pausable => t -> Update ()`**: fails with `eExpectedPause` if the contract is not paused. Use it in the unpause choice and in choices that run only during an incident, such as an emergency drain.
+- **`isPaused : HasToInterface t Pausable => t -> Bool`**: returns the flag, for a choice that branches instead of failing.
+
+## Failure Statuses
+
+Each guard fails with a `FailureStatus`. A Ledger API or JSON Ledger API client receives a `DAML_FAILURE` error with the `errorId` below. Match on the `errorId`, not on the message.
+
+| Status | `errorId` | Message |
+| --- | --- | --- |
+| `eEnforcedPause` | `openzeppelin.com/pausable-enforced-pause` | `Pausable: the contract is paused` |
+| `eExpectedPause` | `openzeppelin.com/pausable-expected-pause` | `Pausable: the contract is not paused` |
+
+In Daml Script, compare the whole status:
+
+```daml
+Left (FailureStatusError status) <-
+  trySubmit owner do exerciseCmd vault Vault_Withdraw with amount = 1.0
+status === Pausable.eEnforcedPause
+```
+
+## Reading the Flag Off-Ledger
+
+A wallet, a registry endpoint, or an auditor reads `PausableView` through the interface, without knowing the template. In Daml Script:
+
+```daml
+Some v <- queryInterfaceContractId reader (toInterfaceContractId @Pausable cid)
+v.paused === True
+```
+
+## Adding Pausable to an Existing Template
+
+A template with active contracts adds Pausable in its next Smart Contract Upgrade (SCU) version. SCU accepts a new field only as an `Optional` at the end of the record, so the flag is `paused : Optional Bool`, and the view reads `None` as unpaused:
+
+```daml
+import DA.Optional (fromOptional)
+
+    interface instance Pausable for UpgradedVault where
+      view = PausableView with paused = fromOptional False paused
+```
+
+The pause and unpause choices store `Some True` and `Some False`. By default, `damlc` rejects a new interface instance on an existing template with `template-has-new-interface-instance`. Review the old-version behavior below, then build with `-Wno-template-has-new-interface-instance`.
+
+The choices of the old version have no guard, so a submission that selects the old version skips the pause. After a flip stores `Some True` or `Some False`, the old version cannot read the contract, and such a submission fails with an upgrade error. If clients of the old version must resume after an unpause, store `None` on unpause. Unvet the old version when all clients use the new one.
+
+The [`examples/pausable/`](https://github.com/OpenZeppelin/canton-contracts/tree/main/examples/pausable) directory has runnable projects for a vault, a registry, and this retrofit.
+
+## Security Considerations
+
+- **Per-contract switch.** Each contract has its own flag. To pause several templates together, give each a flag, or route every protected operation through one contract that holds the flag.
+- **One guard per choice.** A choice is gated only if it calls the guard. Call `whenNotPaused` before the state change in every choice that a pause must stop. The guard checks only the flag, so keep each choice's controller as its access control.
+- **Signatories bypass the flip choice.** The template's `Archive` has no guard. Its signatories can archive a paused contract and create it again with any flag value, without your pause authority checks. Make every signatory part of your pause authority, or trust it with the flag.
+- **Pass `this`.** Do not guard with a `Pausable` fetched from a contract ID that the caller supplies. The caller can present an unpaused contract, and the gated choice runs.
+- **Origination control.** A pause stops new exercises of gated choices. It does not affect committed transactions.
+- **CIP-0112 fields.** `PausableView` carries only `paused`. A registry that serves CIP-0112 `reason` and `until` keeps them as its own template fields; see `examples/pausable/registry`.
+
+## Upgrades
+
+- A fix to `openzeppelin-pausable-v1` reaches your contracts in your next SCU version, built against the new DAR. A submission that selects your old version still runs the old guard, so unvet it. Each `errorId` stays the same across versions.
+- Your template stays upgradeable, because the interface instance is on your template.
+- To adopt a future `openzeppelin-api-pausable-v2`, add a second interface instance under SCU and keep both, or create a new template version outside SCU and migrate the contracts offline. The migration must copy the flag.
+
+## Build and Consume
+
+From the root of `canton-contracts`:
+
+```bash
+DAML_PACKAGE=packages/security/api-pausable-v1 dpm build
+DAML_PACKAGE=packages/security/pausable-v1 dpm build
+```
+
+```yaml
+data-dependencies:
+  - ../canton-contracts/packages/security/api-pausable-v1/.daml/dist/openzeppelin-api-pausable-v1-0.1.0.dar
+  - ../canton-contracts/packages/security/pausable-v1/.daml/dist/openzeppelin-pausable-v1-0.1.0.dar
+```
 
 ## Related
 
-- [Access Control](/canton/library/access-control) or [Ownable](/canton/library/ownable), to decide who is allowed to pause and resume.
+- [Access Control](/canton/library/access-control) or [Ownable](/canton/library/ownable) to control who can pause.

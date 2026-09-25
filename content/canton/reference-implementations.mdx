@@ -2,45 +2,48 @@
 title: Reference Implementations
 ---
 
-Reference Implementations (RIs) are complete application blueprints that show how OpenZeppelin's Canton library and settlement primitives compose into real applications. Each RI pairs a full architecture design document with working Daml, so teams can adopt an end-to-end pattern instead of assembling isolated modules.
+Reference Implementations (RIs) are target architectures for complete Canton applications. Each RI describes the parties, contracts, authority, privacy, and settlement flows of one application, and names the OpenZeppelin packages that it uses.
 
 <Callout type="info">
-  The four RIs below are in the research and design phase: each has a complete,
-  reviewed design document, maintained as a reference architecture in
-  [`OpenZeppelin/canton-specs`](https://github.com/OpenZeppelin/canton-specs/tree/main/docs/reference-architectures),
-  and their application logic is being built out. These sections will expand
-  with code walkthroughs and integration guides as each implementation lands.
+  The four RIs are design documents in
+  [`OpenZeppelin/canton-specs`](https://github.com/OpenZeppelin/canton-specs/tree/main/docs/reference-architectures).
+  The designs are still in review, and no RI has published application code
+  yet. This page will add code walkthroughs when implementations are available.
 </Callout>
 
 ## Privacy-Preserving DEX
 
-An exchange design adapted to Canton's privacy model. Its organizing primitive is the atomic delivery-versus-payment (DvP) swap: a trade is two legs (asset against payment) settled all-or-nothing through the settlement engine, so no party is ever left half-filled. Canton's projection model keeps each trader's positions and flows visible only to the parties involved, which changes how order flow, pricing, and liquidity have to be designed compared to a public-mempool chain.
+An operator-run, non-custodial spot exchange built as a constant-product AMM (`x·y = k`), with one liquidity pool for each instrument pair. Each trade is an atomic delivery-versus-payment swap: two committed CIP-0112 allocations settle together or not at all, within limits that the trader signs (exact input, minimum output). The ledger enforces the swap math. A multi-hosted venue party holds the authority to execute swaps. Compliance screening and KYC run off-ledger in the venue backend.
 
-**Full design document:** [Privacy-Preserving DEX](https://github.com/OpenZeppelin/canton-specs/blob/main/docs/reference-architectures/dex.md)
+The DEX settles through the Token Standard V2 interfaces, so it works with any conforming token registry. It uses [Access Control](/canton/library/access-control) for optional governance.
 
-## Lending Protocol
+**Design document:** [Privacy-Preserving DEX](https://github.com/OpenZeppelin/canton-specs/blob/main/docs/reference-architectures/dex.md)
 
-A fixed-rate, open-term, overcollateralized, permissioned lending protocol designed for institutional participants. It covers the vault, collateral, borrow, repay, and liquidation flows, with authorization built on the library's role and ownership primitives and value movement running through the settlement engine.
+## Institutional Lending Protocol
 
-**Full design document:** [Institutional Lending Protocol](https://github.com/OpenZeppelin/canton-specs/blob/main/docs/reference-architectures/lending.md)
+A vault-based lending protocol: fixed-rate, open-term, overcollateralized, and permissioned. Each position is an isolated collateralized debt position that accrues simple interest. Borrowers draw debt tokens from a treasury that a privileged funder supplies. Borrowers and liquidators need a KYC claim from a trusted issuer, and each operation can also require a compliance attestation. An unhealthy vault gets a margin-call grace period, then a partial liquidation in proportion to the payment.
+
+Transfers happen directly inside the vault choices. The protocol uses [Access Control](/canton/library/access-control), [Ownable](/canton/library/ownable), and [Pausable](/canton/library/pausable) for authorization, and the [Token](/canton/library/token) package for holdings and attestations.
+
+**Design document:** [Institutional Lending Protocol](https://github.com/OpenZeppelin/canton-specs/blob/main/docs/reference-architectures/lending.md)
 
 ## Cross-Chain Stablecoin Payments
 
-An architectural blueprint for private, atomic settlement on Canton of stablecoin payments that originate on external blockchains. It resolves the tension between cross-chain liquidity and enterprise privacy requirements: institutional participants settle externally-originated payments on Canton without exposing their flows to the originating chain.
+The Canton side of a two-way stablecoin bridge. Inbound, an attested lock on an external chain mints a wrapped instrument on Canton through a messaging gateway. Outbound, a burn on Canton causes a redemption gateway to release the backing asset on the external chain. Each inbound credit settles as a private, all-or-nothing CIP-0112 settlement batch, with a single-use compliance attestation and a KYC credential check.
 
-**Full design document:** [Cross-Chain Stablecoin Payment Orchestration](https://github.com/OpenZeppelin/canton-specs/blob/main/docs/reference-architectures/cross-chain-stablecoin.md)
+The hop between chains is not atomic, and privacy applies only on Canton: the lock on the external chain is public. The design uses the [Token](/canton/library/token) package for settlement, and [Access Control](/canton/library/access-control), [Ownable](/canton/library/ownable), and [Pausable](/canton/library/pausable) for roles, ownership handover, and pause state.
 
-## Confidential Auction Launchpad
+**Design document:** [Cross-Chain Stablecoin Payment Orchestration](https://github.com/OpenZeppelin/canton-specs/blob/main/docs/reference-architectures/cross-chain-stablecoin.md)
 
-A launchpad for institutional, regulated, confidential token distribution. It uses Canton's sub-transaction privacy to establish a sealed-bid environment by protocol design rather than cryptographic obfuscation: bids, allocations, and settlement details are visible only to explicitly authorized parties via native ledger projection, with no commit-reveal scheme required.
+## Confidential Auction
 
-**Full design document:** [Confidential Auction Launchpad](https://github.com/OpenZeppelin/canton-specs/blob/main/docs/reference-architectures/confidential-auction.md)
+A sealed-bid, uniform-price auction that distributes a fixed quantity of a fungible token in one round. The issuer's supply and each bidder's maximum payment are locked in advance as committed Token Standard V2 allocations. Bidders do not see each other's bids. The issuer and the auctioneer see all bids, and bidders trust the auctioneer to submit the complete set. One atomic transaction checks the auctioneer's off-ledger result against the published clearing rule, then settles the payment and token delivery of every winner.
 
-## How They Relate to the Library
+The design builds on the [Token](/canton/library/token) package. Pause is an optional deployment choice.
 
-Each RI reuses the same foundation: [Access Control](/canton/library/access-control), [Ownable](/canton/library/ownable), and [Pausable](/canton/library/pausable) for authorization and safety, and [Settlement](/canton/settlement) for atomic value movement. As the RIs mature, common patterns they surface are candidates for promotion into the general library.
+**Design document:** [Confidential Auction](https://github.com/OpenZeppelin/canton-specs/blob/main/docs/reference-architectures/confidential-auction.md)
 
 ## Related
 
-- [Settlement (CIP-112)](/canton/settlement)
+- [Library](/canton/library)
 - [Get Started](/canton/get-started)

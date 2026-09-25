@@ -2,14 +2,13 @@
 title: Ownable
 ---
 
-Ownable is a standalone, token-agnostic single-owner primitive for Daml. It is the analogue of OpenZeppelin's `Ownable.sol` and `Ownable2Step.sol`: exactly one `owner` party at a time, with an explicit transfer handshake and a renounce path.
+Ownable is single-owner authorization for Daml. It is the Daml analogue of OpenZeppelin's `Ownable2Step`: one `owner` party at a time, a two-step ownership transfer, and a renounce path.
 
-The package is independent: it carries no role type and has no dependency on [Access Control](/canton/library/access-control), so a project that wants only "an owner" imports only this one package.
+The package has no dependency on other OpenZeppelin packages.
 
 <Callout type="warn">
-  Experimental and work in progress. This package is version 0.x, unaudited,
-  and not yet a stable public API: interfaces may change before a 1.0 release,
-  and it is not intended for production use. Source:
+  Experimental. Version 0.x, unaudited, and subject to a redesign before
+  release. Source:
   [`experiments/access/ownable-v1`](https://github.com/OpenZeppelin/canton-contracts/tree/main/experiments/access/ownable-v1)
   in `OpenZeppelin/canton-contracts`.
 </Callout>
@@ -18,63 +17,71 @@ The package is independent: it carries no role type and has no dependency on [Ac
 import OpenZeppelin.OwnableV1
 ```
 
-## Why Transfer Is Always Two-Step in Daml
+## Why Transfer Has Two Steps
 
-In Solidity `transferOwnership(newOwner)` is a single call: the old owner writes the new owner into storage. That is not possible in Daml. The owner is a signatory of the `Ownership` contract, and a contract cannot be created without the authorization of every signatory, so the current owner cannot unilaterally bind a new owner.
+In Solidity, `transferOwnership(newOwner)` is one call. Daml cannot do this. The owner is a signatory of the `Ownership` contract, and Daml requires the authority of every signatory to create a contract. The current owner alone cannot make another party a signatory.
 
-Transfer is therefore a handshake: the owner makes an `OwnershipOffer`, and the prospective owner accepts it. This is exactly why OpenZeppelin recommends `Ownable2Step` on other ecosystems, and here it is the only correct shape, not merely the safer one. It also guarantees ownership never lands on a party that has not actively agreed to hold it.
+Transfer is therefore an offer and an acceptance. The owner creates an `OwnershipOffer`, and the new owner accepts it. As a result, no party becomes owner without its agreement.
 
-During a pending offer, ownership is suspended: the `Ownership` contract is archived and re-created on accept (to the new owner) or on withdraw / decline (back to the current owner). Consumers that gate on "owner exists" must treat the offer window accordingly.
+While an offer is pending, no `Ownership` contract exists. The offer archives the `Ownership` contract. Acceptance creates a new one for the new owner. A decline or a withdrawal creates a new one for the current owner. Applications that require an active `Ownership` contract must handle this period.
+
+`Ownership` is not bound to a specific resource. The application must define which `Ownership` contract controls each protected resource.
 
 ## Templates
 
 ### `Ownership`
 
-Sole ownership of a resource by `owner`.
+Ownership of a resource by one party.
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `owner` | `Party` | The current sole owner. |
+| `owner` | `Party` | The current owner. |
 
-Signatory `owner`. Every choice is owner-controlled.
+Signatory `owner`, no observers. Other parties read the contract through explicit disclosure. `owner` controls both choices, and both are consuming.
 
-- **`Ownership_OfferOwnership`** (returns `ContractId OwnershipOffer`): begin a two-step transfer to `newOwner`. Consuming: ownership is suspended into the returned offer until accepted, withdrawn, or declined. Offering to the current owner is rejected.
-- **`Ownership_RenounceOwnership`** (returns `()`): renounce ownership, leaving the resource permanently ownerless (the `renounceOwnership` analogue). Irreversible.
+- **`Ownership_OfferOwnership`** (takes `newOwner : Party`, returns `ContractId OwnershipOffer`): start a transfer to `newOwner`. Fails if `newOwner` is the current owner.
+- **`Ownership_RenounceOwnership`** (returns `()`): give up ownership permanently (the `renounceOwnership` analogue). No `Ownership` contract remains.
 
 ### `OwnershipOffer`
 
-A pending ownership transfer awaiting `newOwner`'s decision.
+A pending transfer.
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `owner` | `Party` | The current owner who made the offer. |
-| `newOwner` | `Party` | The prospective owner who must accept. |
+| `owner` | `Party` | The owner that made the offer. |
+| `newOwner` | `Party` | The party that can accept. |
 
-Signatory `owner`, observer `newOwner`.
+Signatory `owner`, observer `newOwner`. All choices are consuming and take no arguments.
 
 | Choice | Controller | Result | Description |
 | --- | --- | --- | --- |
-| `OwnershipOffer_Accept` | `newOwner` | `ContractId Ownership` | Accept the transfer. Creates `Ownership` signed by `newOwner`, whose authorization is what makes the transfer sound. |
-| `OwnershipOffer_Decline` | `newOwner` | `ContractId Ownership` | Decline; ownership returns to the offerer. |
-| `OwnershipOffer_Withdraw` | `owner` | `ContractId Ownership` | Withdraw the offer; ownership returns to the offerer. |
+| `OwnershipOffer_Accept` | `newOwner` | `ContractId Ownership` | Creates `Ownership` for `newOwner`, with `newOwner` as signatory. |
+| `OwnershipOffer_Decline` | `newOwner` | `ContractId Ownership` | Returns ownership to `owner`. |
+| `OwnershipOffer_Withdraw` | `owner` | `ContractId Ownership` | Returns ownership to `owner`. |
+
+A signatory can archive `Ownership` or `OwnershipOffer` directly. This leaves no `Ownership` contract, so the resource has no owner.
 
 ## Transferring Ownership
 
-```daml
--- current owner offers
-offerCid <- exercise ownershipCid Ownership_OfferOwnership with newOwner = bob
+Each step is a separate submission by a different party. In Daml Script:
 
--- prospective owner accepts, becoming the new owner
-newOwnershipCid <- exercise offerCid OwnershipOffer_Accept
+```daml
+-- alice, the current owner, makes the offer
+offerCid <- submit alice do
+  exerciseCmd ownershipCid Ownership_OfferOwnership with newOwner = bob
+
+-- bob accepts and becomes the owner
+newOwnershipCid <- submit bob do
+  exerciseCmd offerCid OwnershipOffer_Accept
 ```
 
 ## Errors
 
-| Message | When |
+| Message | Cause |
 | --- | --- |
-| `Ownable: new owner is the current owner` | An offer named the current owner. |
+| `Ownable: new owner is the current owner` | The offer names the current owner. |
 
 ## Related
 
-- [Access Control](/canton/library/access-control), when more than one party or action needs independent authorization.
-- [Pausable](/canton/library/pausable), for an emergency stop.
+- [Access Control](/canton/library/access-control) when more than one party or action needs separate authorization.
+- [Pausable](/canton/library/pausable) for an emergency stop.
