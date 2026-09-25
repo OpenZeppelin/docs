@@ -2,41 +2,31 @@
 title: Get Started
 ---
 
-This guide covers the prerequisites and the basic project wiring for building on Canton with OpenZeppelin's Daml packages.
+This page shows how to set up the Daml toolchain, build the OpenZeppelin packages, and use them in your own Daml project.
 
-<Callout type="info">
-  These packages target the Canton 3.4.x baseline and are under active
-  development. Pin exact versions from the package manifests in
+<Callout type="warn">
+  The packages are experimental, unaudited, and have no release yet. They will
+  be redesigned before their first release. Pin a source commit of
   [`OpenZeppelin/canton-contracts`](https://github.com/OpenZeppelin/canton-contracts)
-  rather than copying version numbers from this page.
+  and take version numbers from its package manifests, not from this page.
 </Callout>
 
 ## Prerequisites
 
-- **JDK 21+**: the Daml toolchain runs on Java. Install any JDK 21 or newer - e.g. OpenJDK or Eclipse Adoptium both work - and make sure `JAVA_HOME` points at it.
-- **DPM (Daml Package Manager)**: Digital Asset's package manager and SDK installer. Install it, then use it to provision the Daml SDK / Canton baseline:
+- **JDK 21 or newer.** The Daml toolchain runs on Java. Set `JAVA_HOME` to the JDK.
+- **DPM (Daml Package Manager).** DPM installs the Daml SDK and runs builds, tests, and the sandbox:
 
 ```bash
 curl https://get.digitalasset.com/install/install.sh | sh
-dpm install 3.4.11   # or the baseline pinned in your project's daml.yaml
 ```
 
-- **A Daml project**: a directory with a `daml.yaml` (single package) or a `multi-package.yaml` (workspace of packages). New to Daml? Start with the [Daml documentation](https://docs.digitalasset.com/) and the [Canton Network overview](https://www.canton.network/).
+The packages target the Canton 3.4 baseline (SDK `3.4.11`, Daml-LF target `2.1`). Run `dpm install` in a project directory to install the SDK version that its `daml.yaml` or `multi-package.yaml` declares.
 
-## Add OpenZeppelin Packages
+If you are new to Daml, read the [Daml documentation](https://docs.digitalasset.com/) and the [Canton guide to building and packaging](https://docs.canton.network/appdev/modules/m3-building-packaging) first.
 
-OpenZeppelin's Canton library is distributed as Daml packages: each primitive is its own DAR, so you add only the ones you need.
+## Build the Packages
 
-<Callout type="warn">
-  Experimental and work in progress. All library packages are version 0.x,
-  unaudited, and not yet a stable public API: interfaces may change before a
-  1.0 release, and they are not intended for production use. They live under
-  [`experiments/`](https://github.com/OpenZeppelin/canton-contracts/tree/main/experiments)
-  in `OpenZeppelin/canton-contracts` and move to `packages/` when they are
-  released.
-</Callout>
-
-**1. Get the DARs.** The source of truth for production DARs is the [`dars/released/`](https://github.com/OpenZeppelin/canton-contracts/tree/main/dars) directory in `OpenZeppelin/canton-contracts`: it holds immutable DARs copied from tagged GitHub Releases, indexed in `dars/manifest.yaml` with the package IDs and SHA-256 digests operators need for verification and vetting. No production releases have been published yet, so for now build the library packages from source:
+No DAR has a release yet, so build the packages from source:
 
 ```bash
 git clone https://github.com/OpenZeppelin/canton-contracts.git
@@ -45,9 +35,28 @@ dpm install
 dpm build --all
 ```
 
-Library packages live under `experiments/` until their first release, grouped by category (`experiments/access/` for authorization and ownership, `experiments/security/` for operational security, `experiments/token/` for the Token Standard V2 (CIP-112) token and settlement package); released packages will live under `packages/`. Each package's DAR lands in its own `.daml/dist/` directory (for example `experiments/security/pausable-v1/.daml/dist/openzeppelin-pausable-v1-0.1.0.dar`).
+To build one package, set `DAML_PACKAGE` to its directory:
 
-**2. Declare them as data-dependencies.** In your project's `daml.yaml`, reference the built DARs under `data-dependencies` (not `dependencies`, which is for the SDK's own libraries):
+```bash
+DAML_PACKAGE=experiments/security/pausable-v1 dpm build
+```
+
+The packages live under `experiments/`, grouped by category:
+
+| Directory | Contents |
+| --- | --- |
+| `experiments/access/` | Access Control and Ownable |
+| `experiments/security/` | Pausable |
+| `experiments/token/` | Token (CIP-0112) |
+| `experiments/test/` | One test package for each component |
+
+Each build writes its DAR to the `.daml/dist/` directory of the package, for example `experiments/security/pausable-v1/.daml/dist/openzeppelin-pausable-v1-0.1.0.dar`.
+
+Released DARs will go in [`dars/released/`](https://github.com/OpenZeppelin/canton-contracts/tree/main/dars), with package IDs and SHA-256 digests in `dars/manifest.yaml`. Participant operators use these values to verify and vet the packages.
+
+## Add the Packages to Your Project
+
+In the `daml.yaml` of your project, add each DAR under `data-dependencies`. The `dependencies` list is for SDK libraries only.
 
 ```yaml
 sdk-version: 3.4.11
@@ -65,43 +74,42 @@ build-options:
   - --target=2.1
 ```
 
-Adjust the paths to wherever you cloned the repo, and pin the exact versions from its package manifests. If you only need one primitive, list only that DAR.
+Change the paths to match your clone. List only the DARs that you use.
 
-**3. Import and build.** Import the modules you declared and build your project:
+The [Token](/canton/library/token) package also needs the Token Standard V2 DARs from `dars/vendor/` in `data-dependencies`. The token page lists them.
+
+Import the modules and build:
 
 ```daml
 import OpenZeppelin.PausableV1
 ```
 
 ```bash
-# from your project root, with DPM on PATH
 dpm build
 ```
 
-Refer to each component's page for the module path to import and the templates and interfaces it exposes:
+Each package page gives its module name, templates, and choices.
 
-- [Access Control](/canton/library/access-control)
-- [Ownable](/canton/library/ownable)
-- [Pausable](/canton/library/pausable)
+## Test Against a Local Ledger
 
-## Test Against a Local Canton Ledger
-
-Daml Script tests run in-memory by default, but you can point the same scripts at a real local Canton ledger over gRPC, which is useful for validating time semantics, party visibility, and DAR uploads before targeting a shared network:
+`dpm test` runs Daml Script tests on an in-memory ledger. To check time behavior, party visibility, and DAR upload on a real ledger, run the same scripts against a local Canton sandbox over the Ledger API:
 
 ```bash
-# start a local sandbox with your DAR uploaded
-dpm sandbox --dar .daml/dist/<your-package>.dar
+# start a sandbox with your DAR
+dpm sandbox --static-time --ledger-api-port 6865 --dar .daml/dist/<your-package>.dar
 
-# run a script against it over the Ledger API
+# in a second terminal, run a script against it
 dpm script --dar .daml/dist/<your-package>.dar \
   --script-name My.Module:myScript \
-  --ledger-host localhost --ledger-port 6865
+  --ledger-host localhost --ledger-port 6865 --static-time
 ```
 
-If your scripts control ledger time with `setTime`, start the sandbox with `--static-time` and pass `--static-time` to `dpm script` as well: both default to wall-clock time, and ledger time only moves forward.
+Use `--static-time` on both commands if your scripts call `setTime`. A wall-clock ledger rejects `setTime`, and a static-time clock only moves forward.
 
-## Explore Further
+A sandbox keeps its state between script runs. A second allocation of the same party hint fails, so give each script its own party hints.
 
-- The **[Settlement (CIP-112)](/canton/settlement)** primitive shows how to compose the library into an atomic, value-moving settlement flow.
-- The **[Reference Implementations](/canton/reference-implementations)** walk through complete application blueprints built on these pieces.
-- The [Canton Improvement Proposals (CIPs)](https://github.com/canton-foundation/cips) repository holds the ecosystem standards these packages align with.
+## Next Steps
+
+- Read the [Library overview](/canton/library) for the package design rules.
+- Read the [Reference Implementations](/canton/reference-implementations) for complete application designs.
+- See the [Canton Improvement Proposals (CIPs)](https://github.com/canton-foundation/cips) for the standards that the packages implement.
