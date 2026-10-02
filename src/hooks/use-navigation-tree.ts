@@ -53,8 +53,7 @@ export function useNavigationTree() {
 			pathname.startsWith("/community-contracts") ||
 			pathname.startsWith("/upgrades-plugins") ||
 			pathname.startsWith("/wizard") ||
-			pathname.startsWith("/upgrades") ||
-			pathname.startsWith("/defender")
+			pathname.startsWith("/upgrades")
 		) {
 			sessionStorage.setItem("lastEcosystem", "ethereum");
 		} else {

@@ -24,14 +24,11 @@ In Hardhat 3, all of the functions below are accessed via an `upgradesApi` objec
 
 ```typescript
 import hre from 'hardhat';
-import { upgrades, defender } from '@openzeppelin/hardhat-upgrades';
+import { upgrades } from '@openzeppelin/hardhat-upgrades';
 
 const connection = await hre.network.create();
 const { ethers } = connection;
 const upgradesApi = await upgrades(hre, connection);
-
-// For Defender-specific functions:
-const defenderApi = await defender(hre, connection);
 ```
 
 </Tab>
@@ -45,12 +42,12 @@ const connection = await hre.network.create();
 const upgradesApi = await upgrades(hre, connection);
 ```
 
-Contracts are referenced by name and returned as viem contract instances. OpenZeppelin Defender (`defender.*`) is available only with ethers. Transactions are signed by the connection's first wallet client by default; pass a specific one with the `client` option.
+Contracts are referenced by name and returned as viem contract instances. Transactions are signed by the connection's first wallet client by default; pass a specific one with the `client` option.
 
 </Tab>
 </Tabs>
 
-`upgradesApi` exposes every top-level function documented below (e.g. `upgradesApi.deployProxy(...)`). With ethers, `defenderApi` exposes the same functions plus the `defender.*` functions (e.g. `defenderApi.deployContract(...)`, `defenderApi.proposeUpgradeWithApproval(...)`). The `admin`, `erc1967`, and `beacon` namespaces are accessed as `upgradesApi.admin.*`, `upgradesApi.erc1967.*`, and `upgradesApi.beacon.*`.
+`upgradesApi` exposes every top-level function documented below (e.g. `upgradesApi.deployProxy(...)`). The `admin`, `erc1967`, and `beacon` namespaces are accessed as `upgradesApi.admin.*`, `upgradesApi.erc1967.*`, and `upgradesApi.beacon.*`.
 
 ## Common Options
 
@@ -80,20 +77,15 @@ The following options are common to some functions.
 * `timeout`: (`number`) Timeout in milliseconds to wait for the transaction confirmation when deploying an implementation contract. Defaults to `60000`. Use `0` to wait indefinitely.
 * `pollingInterval`: (`number`) Polling interval in milliseconds between checks for the transaction confirmation when deploying an implementation contract. Defaults to `5000`.
 * `redeployImplementation`: (`"always" | "never" | "onchange"`) Determines whether the implementation contract will be redeployed. Defaults to `"onchange"`.
-  * If set to `"always"`, the implementation contract is always redeployed even if it was previously deployed with the same bytecode. This can be used with the `salt` option when deploying a proxy through OpenZeppelin Defender to ensure that the implementation contract is deployed with the same salt as the proxy.
+  * If set to `"always"`, the implementation contract is always redeployed even if it was previously deployed with the same bytecode.
   * If set to `"never"`, the implementation contract is never redeployed. If the implementation contract was not previously deployed or is not found in the network file, an error will be thrown.
   * If set to `"onchange"`, the implementation contract is redeployed only if the bytecode has changed from previous deployments.
-* `txOverrides`: (`ethers.Overrides`) An ethers.js [Overrides](https://docs.ethers.org/v6/api/contract/#Overrides) object to override transaction parameters, such as `gasLimit` and `gasPrice`. Applies to all transactions sent by a function with this option, even if the function sends multiple transactions. For OpenZeppelin Defender deployments, only the `gasLimit`, `gasPrice`, `maxFeePerGas`, and `maxPriorityFeePerGas` parameters are supported. This option applies to the default ethers-based API.
+* `txOverrides`: (`ethers.Overrides`) An ethers.js [Overrides](https://docs.ethers.org/v6/api/contract/#Overrides) object to override transaction parameters, such as `gasLimit` and `gasPrice`. Applies to all transactions sent by a function with this option, even if the function sends multiple transactions. This option applies to the default ethers-based API.
   * If you are using viem, `txOverrides` does not apply. Instead, pass the transaction parameters `gas`, `gasPrice`, `maxFeePerGas`, `maxPriorityFeePerGas`, and `value` directly as options, and use the `client` option to select the wallet/public client.
 * `client`: (`KeyedClient`) viem-based API only. The viem public and/or wallet clients to use, following `@nomicfoundation/hardhat-viem` conventions. `KeyedClient` is an object `{ public?: PublicClient; wallet?: WalletClient }` (with at least one of the two provided). The **wallet client** is the viem counterpart of the ethers signer: it selects the account that signs the plugin's transactions, and must be an account managed by the network connection. Defaults to the first wallet client from `connection.viem.getWalletClients()`. The `admin.*` functions instead take a wallet client as a positional argument, not via this option.
-* `useDefenderDeploy`: (`boolean`) Deploy contracts using OpenZeppelin Defender instead of ethers.js. See [Using with OpenZeppelin Defender](/upgrades-plugins/defender-deploy).
-* `verifySourceCode`: (`boolean`) When using OpenZeppelin Defender deployments, whether to verify source code on block explorers. Defaults to `true`.
-* `relayerId`: (`string`) When using OpenZeppelin Defender deployments, the ID of the relayer to use for the deployment. Defaults to the relayer configured for your deployment environment on Defender.
-* `salt`: (`string`) When using OpenZeppelin Defender deployments, if this is not set, deployments will be performed using the CREATE opcode. If this is set, deployments will be performed using the CREATE2 opcode with the provided salt. Note that deployments using a Safe are done using CREATE2 and require a salt. ***Warning:*** CREATE2 affects `msg.sender` behavior. See [Caveats](/defender/tutorial/deploy#caveats) for more information.
-* `metadata`: (` commitHash?: string; tag?: string; [k: string]: any; `) When using OpenZeppelin Defender deployments, you can use this to identify, tag, or classify deployments. See [Metadata](/defender/module/deploy#metadata).
 * `proxyFactory`: (`ethers.ContractFactory`) Customizes the ethers contract factory to use for deploying the proxy, allowing a custom proxy contract to be deployed. See [factories.ts](https://github.com/OpenZeppelin/openzeppelin-upgrades/blob/master/packages/plugin-hardhat/src/utils/factories.ts) for the default contract factory for each kind of proxy.
   * **Since:** `@openzeppelin/hardhat-upgrades@3.7.0`
-* `deployFunction`: (`(hre, opts, factory, ...args) => Promise<EthersOrDefenderDeployment>`) Customizes the function used to deploy the proxy. Can be used along with the `proxyFactory` option to override constructor parameters for custom proxy deployments. See [deploy.ts](https://github.com/OpenZeppelin/openzeppelin-upgrades/blob/master/packages/plugin-hardhat/src/utils/deploy.ts) for the default deploy function.
+* `deployFunction`: (`(hre, opts, factory, ...args) => Promise<EthersOrDefenderDeployment>`) Customizes the function used to deploy the proxy. Can be used along with the `proxyFactory` option to override constructor parameters for custom proxy deployments. See [deploy.ts](https://github.com/OpenZeppelin/openzeppelin-upgrades/blob/master/packages/plugin-hardhat/src/utils/deploy.ts) for the default deploy function. `EthersOrDefenderDeployment` is the return type exported by `@openzeppelin/hardhat-upgrades`, kept under its upstream name.
   * **Since:** `@openzeppelin/hardhat-upgrades@3.7.0`
 
 Note that the options `unsafeAllow` can also be specified in a more granular way directly in the source code if using Solidity >=0.8.2. See [How can I disable some of the checks?](/upgrades-plugins/faq#how-can-i-disable-some-of-the-checks)
@@ -124,7 +116,6 @@ async function deployProxy(
     redeployImplementation?: 'always' | 'never' | 'onchange',
     txOverrides?: ethers.Overrides,
     kind?: 'uups' | 'transparent',
-    useDefenderDeploy?: boolean,
     proxyFactory?: ethers.ContractFactory,
     deployFunction?: () => Promise<EthersOrDefenderDeployment>,
   },
@@ -367,7 +358,6 @@ async function deployBeaconProxy(
   opts?: {
     initializer?: string | false,
     txOverrides?: ethers.Overrides,
-    useDefenderDeploy?: boolean,
     proxyFactory?: ethers.ContractFactory,
     deployFunction?: () => Promise<EthersOrDefenderDeployment>,
   },
@@ -526,7 +516,6 @@ async function deployImplementation(
     txOverrides?: ethers.Overrides,
     getTxResponse?: boolean,
     kind?: 'uups' | 'transparent' | 'beacon',
-    useDefenderDeploy?: boolean,
   },
 ): Promise<string | ethers.providers.TransactionResponse>
 ```
@@ -708,7 +697,6 @@ async function prepareUpgrade(
     txOverrides?: ethers.Overrides,
     getTxResponse?: boolean,
     kind?: 'uups' | 'transparent' | 'beacon',
-    useDefenderDeploy?: boolean,
   },
 ): Promise<string | ethers.providers.TransactionResponse>
 ```
@@ -750,131 +738,6 @@ Validates and deploys a new implementation contract, and returns its address. If
 **Returns:**
 
 * the new implementation contract address (or, with the ethers-based API, an ethers transaction response when `getTxResponse` is set).
-
-## defender.deployContract
-
-<Callout>
-The `defender.*` functions are available only with the ethers-based API (accessed via `defender(hre, connection)`); they are not part of the viem-based API.
-</Callout>
-
-```ts
-async function deployContract(
-  Contract: ethers.ContractFactory,
-  args: unknown[] = [],
-  opts?: {
-    unsafeAllowDeployContract?: boolean,
-    pollingInterval?: number,
-  },
-): Promise<ethers.Contract>
-```
-
-Deploys a non-upgradeable contract using OpenZeppelin Defender, and returns a contract instance. Throws an error if the contract looks like an implementation contract.
-
-<Callout type='warn'>
-Do not use this function to deploy implementations of upgradeable contracts, because upgrade safety validations are not performed with this function. For implementation contracts, use [deployImplementation](#deployimplementation) instead.
-</Callout>
-
-**Parameters:**
-
-* `Contract` - an ethers contract factory to use as the contract to deploy.
-* `opts` - an object with options:
-  * `unsafeAllowDeployContract`: if set to `true`, allows the contract to be deployed even if it looks like an implementation contract. Defaults to `false`.
-  * `pollingInterval`: polling interval in milliseconds between checks for the transaction confirmation when calling `.waitForDeployment()` on the resulting contract instance. Defaults to `5000`.
-
-**Returns:**
-
-* the contract instance.
-
-**Since:**
-
-* `@openzeppelin/hardhat-upgrades@2.2.0`
-
-## defender.getDeployApprovalProcess
-
-```ts
-async function getDeployApprovalProcess(
-): Promise<
-    approvalProcessId: string,
-    address?: string,
-    viaType?: 'EOA' | 'Contract' | 'Multisig' | 'Safe' | 'Gnosis Multisig' | 'Relayer' | 'Unknown' | 'Timelock Controller' | 'ERC20' | 'Governor' | 'Fireblocks',
-  >
-```
-
-Gets the default deploy approval process configured for your deployment environment on OpenZeppelin Defender.
-
-**Returns:**
-
-* an object with the default deploy approval process ID and the associated address, such as a Relayer, EOA, or multisig wallet address.
-
-**Since:**
-
-* `@openzeppelin/hardhat-upgrades@2.5.0`
-
-## defender.getUpgradeApprovalProcess
-
-```ts
-async function getUpgradeApprovalProcess(
-): Promise<
-    approvalProcessId: string,
-    address?: string,
-    viaType?: 'EOA' | 'Contract' | 'Multisig' | 'Safe' | 'Gnosis Multisig' | 'Relayer' | 'Unknown' | 'Timelock Controller' | 'ERC20' | 'Governor' | 'Fireblocks',
-  >
-```
-
-Gets the default upgrade approval process configured for your deployment environment on OpenZeppelin Defender. For example, this is useful for determining the default multisig wallet that you can use in your scripts to assign as the owner of your proxy.
-
-**Returns:**
-
-* an object with the default upgrade approval process ID and the associated address, such as a multisig or governor contract address.
-
-**Since:**
-
-* `@openzeppelin/hardhat-upgrades@2.5.0`
-
-## defender.proposeUpgradeWithApproval
-
-```ts
-async function proposeUpgradeWithApproval(
-  proxyAddress: string,
-  ImplFactory: ContractFactory,
-  opts?: {
-    unsafeAllow?: ValidationError[],
-    unsafeAllowRenames?: boolean,
-    unsafeSkipStorageCheck?: boolean,
-    constructorArgs?: unknown[],
-    timeout?: number,
-    pollingInterval?: number,
-    redeployImplementation?: 'always' | 'never' | 'onchange',
-    kind?: 'uups' | 'transparent' | 'beacon',
-    useDefenderDeploy?: boolean,
-    approvalProcessId?: string,
-  },
-): Promise<
-    proposalId: string,
-    url: string,
-    txResponse?: ethers.providers.TransactionResponse,
-  >
-```
-
-Proposes an upgrade using an upgrade approval process on OpenZeppelin Defender.
-
-Similar to `prepareUpgrade`. This method validates and deploys the new implementation contract, but also proposes an upgrade using an upgrade approval process on OpenZeppelin Defender. Supported for UUPS or Transparent proxies. Not currently supported for beacon proxies or beacons. For beacons, use `prepareUpgrade` along with a transaction proposal on Defender to upgrade the beacon to the deployed implementation.
-
-**Parameters:**
-
-* `proxyAddress` - the proxy address.
-* `ImplFactory` - the new implementation contract.
-* `opts` - an object with options:
-  * `approvalProcessId`: The ID of the upgrade approval process. Defaults to the upgrade approval process configured for your deployment environment on Defender.
-  * additional options as described in [Common Options](#common-options).
-
-**Returns:**
-
-* an object with the Defender proposal ID, the URL of the proposal in Safe App if applicable, and the ethers transaction response corresponding to the deployment of the new implementation contract. Note that if the new implementation contract was originally imported as a result of `forceImport`, the ethers transaction response will be undefined.
-
-**Since:**
-
-* `@openzeppelin/hardhat-upgrades@2.2.0`
 
 ## admin.changeProxyAdmin
 
