@@ -30,7 +30,6 @@ import {
 	UniswapIcon,
 	ZamaIcon,
 } from "@/components/icons";
-import { DefenderIcon } from "@/components/icons/defender-icon";
 import { latestStable as monitorLatestStable } from "../../content/monitor/latest-versions";
 import { latestStable as relayerLatestStable } from "../../content/relayer/latest-versions";
 import { baseOptions } from "./layout.config";
@@ -170,13 +169,6 @@ export default function HomePage() {
 							}
 							title="UI Builder"
 							description="Spin up user interfaces for any deployed contract. Select the function, auto-generate a React UI with wallet-connect and multi-network support, and export a complete app."
-						/>
-
-						<FeatureCard
-							href="/defender"
-							icon={<DefenderIcon className="h-5 w-5 sm:h-6 sm:w-6" />}
-							title="Defender"
-							description="Code, audit, deploy, monitor, and operate blockchain applications with OpenZeppelin's legacy developer security platform (maintenance mode)."
 						/>
 					</div>
 				</div>

@@ -130,7 +130,6 @@ async function convertAdocFiles(directory, apiRoute = "contracts/5.x/api") {
 				"community-contracts": "/community-contracts",
 				"confidential-contracts": "/confidential-contracts",
 				"upgrades-plugins": "/upgrades-plugins",
-				defender: "/defender",
 				learn: "/contracts/5.x/learn",
 			};
 			mdContent = mdContent.replace(

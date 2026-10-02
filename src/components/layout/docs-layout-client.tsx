@@ -104,7 +104,6 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 			"/monitor",
 			"/ui-builder",
 			"/upgrades",
-			"/defender",
 		]);
 		if (
 			!isSharedPath ||
