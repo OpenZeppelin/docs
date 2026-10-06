@@ -22,6 +22,7 @@ import {
 	MonitorIcon,
 	PolkadotIcon,
 	RelayersIcon,
+	RoleManagerIcon,
 	StarknetIcon,
 	StellarIcon,
 	SuiIcon,
@@ -169,6 +170,13 @@ export default function HomePage() {
 							}
 							title="UI Builder"
 							description="Spin up user interfaces for any deployed contract. Select the function, auto-generate a React UI with wallet-connect and multi-network support, and export a complete app."
+						/>
+
+						<FeatureCard
+							href="/role-manager"
+							icon={<RoleManagerIcon className="h-6 w-6 sm:h-8 sm:w-8" />}
+							title="Role Manager"
+							description="Manage contract permissions from one interface to define role-based access, set multi-level hierarchies, and assign granular admin controls for any team or governance model."
 						/>
 					</div>
 				</div>

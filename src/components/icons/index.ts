@@ -12,6 +12,7 @@ export { MidnightIcon } from "./midnight-icon";
 export { MonitorIcon } from "./monitor-icon";
 export { PolkadotIcon } from "./polkadot-icon";
 export { RelayersIcon } from "./relayers-icon";
+export { RoleManagerIcon } from "./role-manager-icon";
 export { StarknetIcon } from "./starknet-icon";
 export { StellarIcon } from "./stellar-icon";
 export { SuiIcon } from "./sui-icon";
