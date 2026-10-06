@@ -3,6 +3,8 @@ title: WAD Fixed-Point Math
 description: High-precision decimal arithmetic
 ---
 
+[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/contract-utils/src/math)
+
 # Overview
 
 The WAD library provides fixed-point decimal arithmetic for Soroban smart contracts with 18 decimal places of precision.
@@ -16,6 +18,9 @@ It is a fixed-point representation where:
 
 This allows precise decimal arithmetic using only integer operations, avoiding the pitfalls
 of floating-point arithmetic in smart contracts.
+
+For `x * y / denominator` on raw `i128` or `I256` values with an explicit rounding direction, see
+[Fixed-Point Math](/stellar-contracts/utils/math/fixed-point).
 
 # Why WAD?
 
@@ -83,6 +88,9 @@ All operations truncate toward zero rather than rounding:
 - **Conservative**: In financial calculations, truncation is often safer (e.g., don't over-calculate interest)
 - **Fast**: No additional logic needed
 
+When you need to round up or down explicitly (e.g. in favour of a vault), use the
+[fixed-point free functions](/stellar-contracts/utils/math/fixed-point) with a `Rounding` direction.
+
 ## 4. Operator Overloading
 
 We provide operator overloading (`+`, `-`, `*`, `/`, `-`) for convenience:
@@ -104,12 +112,31 @@ Operator overloading is supported across WAD and native i128 types where unambig
 
 **Overflow Behavior**
 
-Just like regular Rust, operator overloading does not include overflow checks:
+Operators work directly on the raw `i128` and panic on overflow. With `overflow-checks = true`, which the standard
+Stellar release profile sets and `stellar contract build` enforces, the panic is a native wasm trap
+(`Error(WasmVm, InvalidAction)`), not a `SorobanFixedPointError`. In a build without it, every row below except
+`a / n` wraps silently instead.
 
-- Use `checked_*` methods (`checked_add()`, `checked_sub()`, `checked_mul()`, etc.) when handling user inputs or when overflow is possible. These return `Option<Wad>` for safe error handling.
-- Use operator overloads (`+`, `-`, `*`, `/`) when you want to reduce computational overhead by skipping overflow checks, or when you're confident the operation cannot overflow.
+Unlike the `checked_*` methods, operators get no [phantom overflow](#notes-on-powi-and-phantom-overflow) handling,
+because they cannot reach an `Env` to promote the intermediate product to `I256`. Their domains are therefore much
+narrower:
 
-This design follows Rust's standard library pattern: operators for performance, checked methods for safety.
+| Expression | Panics once |
+|------------|-------------|
+| `a + b`, `a - b` | the result's magnitude passes `i128::MAX / WAD_SCALE` ≈ `1.7014 × 10^20` |
+| `a * b` | the **product** `a * b` passes `i128::MAX / WAD_SCALE^2` ≈ `170.1412` |
+| `a / b` | **`a`** alone passes `i128::MAX / WAD_SCALE^2` ≈ `170.1412`, whatever `b` is |
+| `a * n`, `n * a` (`i128`) | `a.raw() * n` leaves `i128` |
+| `a / n` (`i128`) | `n == 0`, or `a.raw() == i128::MIN && n == -1` |
+| `-a` | `a.raw() == i128::MIN` |
+
+The `*` bound constrains the product rather than either operand: `Wad(17) * Wad(10)` succeeds while
+`Wad(171) * Wad(1)` panics. Values below 1 keep plenty of headroom, but a price of `2000` scaled by a quantity
+already exceeds the bound.
+
+- Use `checked_mul()` / `checked_div()` wherever an operand can plausibly exceed these bounds, e.g. token amounts
+  or prices. They succeed over the full range in which the result is representable and return `Option<Wad>`.
+- Use operators only when the operands are known to stay within the bounds above.
 
 </Callout>
 
@@ -157,28 +184,64 @@ impl Div for Wad {
 
 ## Exponentiation
 
-WAD supports raising a value to an unsigned integer exponent via `pow`.
+WAD supports raising a value to an unsigned integer exponent via `powi`.
 
-- `pow(&e, exponent)` is optimized using exponentiation by squaring (O(log n) multiplications).
+- `powi(&e, exponent)` is optimized using exponentiation by squaring (O(log n) multiplications).
 - Each multiplication keeps WAD semantics (fixed-point multiplication and truncation toward zero).
 - Overflow is reported via Soroban errors.
 
-In addition to `pow`, WAD also provides `checked_pow`, which returns `None` on overflow.
+In addition to `powi`, WAD also provides `checked_powi`, which returns `None` on overflow.
 
 ```rust
 // Compound interest multiplier: (1.05)^10
 let rate = Wad::from_ratio(&e, 105, 100); // 1.05
-let multiplier = rate.pow(&e, 10);
+let multiplier = rate.powi(&e, 10);
 ```
 
-### Notes on `pow` and Phantom Overflow
+### Notes on `powi` and Phantom Overflow
 
-`pow` / `checked_pow` are implemented using exponentiation by squaring and rely
+`powi` / `checked_powi` are implemented using exponentiation by squaring and rely
 on Soroban fixed-point helpers that can automatically scale intermediate products
 to `I256` when needed.
 
 This avoids **phantom overflow** cases where an intermediate multiplication would
-overflow `i128`, but the final scaled result would still fit in `i128`.
+overflow `i128`, but the final scaled result would still fit in `i128`. The same handling applies to `from_ratio`,
+`checked_mul`, `checked_div` and `powf`, but not to the operators. See
+[Fixed-Point Math](/stellar-contracts/utils/math/fixed-point#phantom-overflow) for how it works.
+
+## Logarithm, Exponential and Fractional Powers
+
+`Wad` also provides transcendental functions, each in a panicking and a checked variant returning `Option<Wad>`:
+
+- `ln(&e)` / `checked_ln(&e)`: natural logarithm. Panics with `InvalidBase` when `self <= 0`.
+- `exp(&e)` / `checked_exp(&e)`: natural exponential `e^self`, where `e ≈ 2.71828` is Euler's number. This is not a
+  generic power function; use `powf` for `x^y`. The result truncates to `0` for inputs below `≈ -41.446`. Since the
+  result must fit in `i128`, it overflows (`exp` panics with `Overflow`, `checked_exp` returns `None`) once the input
+  exceeds `ln(i128::MAX / 10^18) ≈ 46.58`, well before the `≈ 135.305` limit of the internal 256-bit computation.
+- `powf(&e, exponent)` / `checked_powf(&e, exponent)`: raises `self` to a `Wad` exponent, computed as
+  `exp(exponent * ln(self))`. When `exponent` is an exact non-negative integer that fits in `u32`, it delegates to
+  `powi` instead, which is faster, more precise, and also accepts a negative base (e.g. `(-2)^3 = -8`).
+
+`powf` special cases:
+
+- `x^0 = 1` for any `x`, including `0^0 = 1` (the same convention as `powi`)
+- `0^y = 0` for `y > 0`
+- `1^y = 1` and `x^1 = x`
+
+`powf` panics with `DivisionByZero` for `0^y` with `y < 0`, with `InvalidBase` for a negative base unless the
+exponent is a non-negative integer in the `u32` range, and with `Overflow` when the result does not fit.
+`checked_powf` returns `None` in all of these cases.
+
+```rust
+// 2^0.5 ≈ √2
+let two = Wad::from_integer(&e, 2);
+let half = Wad::from_ratio(&e, 1, 2);
+let sqrt_two = two.powf(&e, half);
+
+// ln and exp are inverses
+let ten = Wad::from_integer(&e, 10);
+let roundtrip = ten.ln(&e).exp(&e); // ≈ 10.0
+```
 
 
 ## Token Conversions
@@ -240,18 +303,19 @@ let result2 = a * (b * c);    // Truncates after inner multiplication
 use soroban_sdk::Env;
 use stellar_contract_utils::math::wad::Wad;
 
-fn calculate_interest(e: &Env, principal: i128, rate_bps: u32) -> i128 {
+fn calculate_interest(e: &Env, principal: i128, rate_bps: u32) -> Option<i128> {
     // Convert principal (assume 6 decimals like USDC)
     let principal_wad = Wad::from_token_amount(e, principal, 6);
 
     // Rate in basis points (e.g., 550 = 5.5%)
     let rate_wad = Wad::from_ratio(e, rate_bps as i128, 10_000);
 
-    // Calculate interest
-    let interest_wad = principal_wad * rate_wad;
+    // Calculate interest. `principal_wad * rate_wad` would panic once the
+    // product exceeds ~170.14, i.e. for any principal above ~3,093 USDC at 5.5%
+    let interest_wad = principal_wad.checked_mul(e, rate_wad)?;
 
     // Convert back to token amount
-    interest_wad.to_token_amount(e, 6)
+    Some(interest_wad.to_token_amount(e, 6))
 }
 ```
 
@@ -263,19 +327,20 @@ fn calculate_swap_output(
     amount_in: i128,
     reserve_in: i128,
     reserve_out: i128,
-) -> i128 {
+) -> Option<i128> {
     // Convert to WAD
     let amount_in_wad = Wad::from_token_amount(e, amount_in, 6);
     let reserve_in_wad = Wad::from_token_amount(e, reserve_in, 6);
     let reserve_out_wad = Wad::from_token_amount(e, reserve_out, 6);
 
     // Constant product formula: amount_out = (amount_in * reserve_out) / (reserve_in + amount_in)
-    let numerator = amount_in_wad * reserve_out_wad;
-    let denominator = reserve_in_wad + amount_in_wad;
-    let amount_out_wad = numerator / denominator;
+    // Reserves easily exceed the operator bounds, so use the checked methods
+    let numerator = amount_in_wad.checked_mul(e, reserve_out_wad)?;
+    let denominator = reserve_in_wad.checked_add(amount_in_wad)?;
+    let amount_out_wad = numerator.checked_div(e, denominator)?;
 
     // Convert back
-    amount_out_wad.to_token_amount(e, 6)
+    Some(amount_out_wad.to_token_amount(e, 6))
 }
 ```
 
@@ -287,15 +352,18 @@ fn calculate_compound_interest(
     principal: i128,
     annual_rate_bps: u32,
     days: u32,
-) -> i128 {
+) -> Option<i128> {
     let principal_wad = Wad::from_token_amount(e, principal, 6);
+    let one = Wad::from_integer(e, 1);
     let rate = Wad::from_ratio(e, annual_rate_bps as i128, 10_000);
-    let time_fraction = Wad::from_ratio(e, days as i128, 365);
+    let years = Wad::from_ratio(e, days as i128, 365);
 
-    // Simple interest: principal * rate * time
-    let interest = principal_wad * rate * time_fraction;
+    // Annual compounding over a fractional number of years:
+    // interest = principal * ((1 + rate)^years - 1)
+    let growth = one.checked_add(rate)?.checked_powf(e, years)?;
+    let interest = principal_wad.checked_mul(e, growth.checked_sub(one)?)?;
 
-    interest.to_token_amount(e, 6)
+    Some(interest.to_token_amount(e, 6))
 }
 ```
 
@@ -348,6 +416,9 @@ fn safe_multiply(e: &Env, a: i128, b: i128) -> Result<i128, Error> {
 | `a / n` | Divide WAD by integer | `Wad(7.5) / 3` → 2.5 |
 | `-a` | Negation | `-Wad(5.0)` → -5.0 |
 
+Operators panic with a native wasm trap on overflow and have narrower bounds than the checked methods; see
+[Operator Overloading](#4-operator-overloading).
+
 ## Checked Arithmetic
 
 | Method | Returns | Description |
@@ -357,8 +428,11 @@ fn safe_multiply(e: &Env, a: i128, b: i128) -> Result<i128, Error> {
 | `checked_mul(e, rhs)` | `Option<Wad>` | Multiplication with overflow check (handles phantom overflow internally) |
 | `checked_div(e, rhs)` | `Option<Wad>` | Division with overflow/zero check |
 | `checked_mul_int(n)` | `Option<Wad>` | Integer multiplication with overflow check |
-| `checked_div_int(n)` | `Option<Wad>` | Integer division with zero check |
-| `checked_pow(e, exponent)` | `Option<Wad>` | Exponentiation with overflow check |
+| `checked_div_int(n)` | `Option<Wad>` | Integer division; `None` on division by zero or `i128::MIN / -1` |
+| `checked_powi(e, exponent)` | `Option<Wad>` | Integer exponentiation with overflow check |
+| `checked_powf(e, exponent)` | `Option<Wad>` | `Wad` exponentiation; `None` on overflow, `0^y` with `y < 0`, or an invalid base |
+| `checked_ln(e)` | `Option<Wad>` | Natural logarithm; `None` when `self <= 0` |
+| `checked_exp(e)` | `Option<Wad>` | Natural exponential `e^self`; `None` on overflow |
 
 ## Utility Methods
 
@@ -367,15 +441,25 @@ fn safe_multiply(e: &Env, a: i128, b: i128) -> Result<i128, Error> {
 | `abs()` | Absolute value |
 | `min(other)` | Minimum of two values |
 | `max(other)` | Maximum of two values |
-| `pow(e, exponent)` | Raises WAD to an unsigned integer power (panics with Soroban error on overflow) |
+| `powi(e, exponent)` | Raises WAD to an unsigned integer power (panics with Soroban error on overflow) |
+| `powf(e, exponent)` | Raises WAD to a `Wad` power via `exp(exponent * ln(self))` (panics with Soroban error) |
+| `ln(e)` | Natural logarithm (panics with `InvalidBase` when `self <= 0`) |
+| `exp(e)` | Natural exponential `e^self` (panics with `Overflow` when the result does not fit) |
 
 ## Error Handling
 
-WAD uses Soroban's contract error system via `SorobanFixedPointError`:
+The panicking methods (`from_integer`, `from_ratio`, `powi`, `powf`, `ln`, `exp`, etc.) use Soroban's contract
+error system via `SorobanFixedPointError`:
 
 ```rust
 pub enum SorobanFixedPointError {
     Overflow = 1500,
     DivisionByZero = 1501,
+    // `ln(x)` with `x <= 0`, or `powf` with a negative base and an exponent
+    // that is not a non-negative integer
+    InvalidBase = 1502,
 }
 ```
+
+The operators (`+`, `-`, `*`, `/`, unary `-`) do not raise these errors: they panic with a native arithmetic trap,
+which surfaces on-chain as `Error(WasmVm, InvalidAction)`.
