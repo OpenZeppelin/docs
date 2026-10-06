@@ -99,6 +99,7 @@ let config: Config = e.storage().instance().get(&key).unwrap();
 ### Pattern 1: Eager Migration (Bounded Data)
 
 For bounded data in instance storage (config, metadata, settings), add a `migrate` function to the upgraded contract that reads old-format data and converts it. Use `set_schema_version` / `get_schema_version` to guard against double invocation.
+Like `upgrade`, `migrate` must enforce its own access control; `set_schema_version` has no authorization checks.
 
 The old type must be defined in the new contract code so the host can deserialize it correctly.
 
@@ -118,6 +119,7 @@ pub struct Config {
 
 const CONFIG_KEY: Symbol = symbol_short!("CONFIG");
 
+#[only_role(operator, "migrator")]
 pub fn migrate(e: &Env, operator: Address) {
     assert!(upgradeable::get_schema_version(e) < 2, "already migrated");
 
@@ -229,28 +231,54 @@ atomic upgrade-and-migrate process. This approach ensures that the migration log
 upgrade without requiring a separate transaction.
 
 ```rust
-use soroban_sdk::{contract, contractimpl, symbol_short, Address, BytesN, Env, Val};
+use soroban_sdk::{contract, contractimpl, symbol_short, Address, BytesN, Env, Symbol, Val};
+use stellar_access::ownable;
 use stellar_contract_utils::upgradeable::UpgradeableClient;
+use stellar_macros::only_owner;
+
+pub const MIGRATE: Symbol = symbol_short!("migrate");
 
 #[contract]
 pub struct Upgrader;
 
 #[contractimpl]
 impl Upgrader {
+    pub fn __constructor(e: &Env, owner: Address) {
+        ownable::set_owner(e, &owner);
+    }
+
+    #[only_owner]
     pub fn upgrade_and_migrate(
-        env: Env,
+        e: &Env,
         contract_address: Address,
         operator: Address,
         wasm_hash: BytesN<32>,
         migration_data: soroban_sdk::Vec<Val>,
     ) {
-        operator.require_auth();
-        let contract_client = UpgradeableClient::new(&env, &contract_address);
+        let contract_client = UpgradeableClient::new(e, &contract_address);
 
         contract_client.upgrade(&wasm_hash, &operator);
-        // The types of the arguments to the migrate function are unknown to this
-        // contract, so we need to call it with invoke_contract.
-        env.invoke_contract::<()>(&contract_address, &symbol_short!("migrate"), migration_data);
+        // The types of the arguments to the migrate function are unknown to
+        // this contract, so we need to call it with invoke_contract.
+        e.invoke_contract::<()>(&contract_address, &MIGRATE, migration_data);
     }
 }
 ```
+
+The `Upgrader` is gated with `#[only_owner]`, while the target contract still enforces its own access control on
+`upgrade` and `migrate`: `operator` and the account passed in `migration_data` must hold the required roles and
+authorize those calls.
+
+## Examples
+
+Full examples are available under
+[`examples/upgradeable`](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/upgradeable):
+
+* [`v1`](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/upgradeable/v1) /
+  [`v2`](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/upgradeable/v2) — eager migration of
+  bounded instance storage (Pattern 1).
+* [`lazy-v1`](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/upgradeable/lazy-v1) /
+  [`lazy-v2`](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/upgradeable/lazy-v2) — lazy
+  per-entry migration of unbounded persistent storage (Pattern 2).
+* [`upgrader`](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/upgradeable/upgrader) — the
+  `Upgrader` helper above, upgrading `v1` to `v2` and migrating atomically.
