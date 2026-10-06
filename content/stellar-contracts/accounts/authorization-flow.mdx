@@ -20,9 +20,30 @@ pub struct AuthPayload {
 
 Each entry in `context_rule_ids` specifies the rule ID to validate against for the corresponding auth context (by index). Its length must equal `auth_contexts.len()`.
 
-<Callout type="warning">
-The `context_rule_ids` are bound into the signed digest: `sha256(signature_payload || context_rule_ids.to_xdr())`. This prevents rule-selection downgrade attacks where an attacker could redirect a signature to a less restrictive rule.
-</Callout>
+## AuthDigestPreimage
+
+Signers never sign the raw `signature_payload` that the host passes to `__check_auth`. Instead, the smart account wraps it in a structured message that every signer commits to:
+
+```rust
+#[contracttype]
+pub struct AuthDigestPreimage {
+    /// The smart account performing the authorization check.
+    pub account: Address,
+    /// The 32-byte payload provided by the host to `__check_auth`.
+    pub signature_payload: BytesN<32>,
+    /// Per-context rule IDs, aligned by index with `auth_contexts`.
+    pub context_rule_ids: Vec<u32>,
+}
+```
+
+How a signer commits to the preimage depends on its type:
+
+- **External signers** sign the **auth digest**, `sha256(preimage.to_xdr())`, which the smart account passes to their verifier contract.
+- **Delegated signers** authorize the preimage itself through `require_auth_for_args((preimage,))`.
+
+Binding `context_rule_ids` prevents rule-selection downgrade attacks, where an attacker collects signatures under a strict rule and then swaps `context_rule_ids` to point to a less restrictive one: any change to the rule IDs invalidates every signature. Binding `account` scopes each signature to a single smart account.
+
+See [Auth Digest Computation](/stellar-contracts/accounts/signers-and-verifiers#auth-digest-computation) for how off-chain clients build the preimage and sign it.
 
 ## Detailed Flow
 ```mermaid
@@ -35,18 +56,18 @@ sequenceDiagram
     participant Policy
 
     User->>SmartAccount: AuthPayload (signers + context_rule_ids)
-    SmartAccount->>SmartAccount: Compute auth_digest<br/>sha256(payload || rule_ids.to_xdr())
+    SmartAccount->>SmartAccount: Build AuthDigestPreimage<br/>(account, payload, rule_ids)
 
     loop Each auth context
         SmartAccount->>ContextRule: Look up rule by ID<br/>from context_rule_ids
         ContextRule->>ContextRule: Validate not expired<br/>and matches context type
 
         Note over ContextRule,DelegatedSigner: Built-in authorization <br/>for delegated signers
-        ContextRule->>DelegatedSigner: require_auth_for_args()
+        ContextRule->>DelegatedSigner: require_auth_for_args(preimage)
         DelegatedSigner-->>ContextRule: Authorized
 
         Note over ContextRule,Verifier: Signature verification for external signers
-        ContextRule->>Verifier: verify()
+        ContextRule->>Verifier: verify(sha256(preimage.to_xdr()))
         Verifier-->>ContextRule: Valid
 
         Note over ContextRule,Policy: Policy enforcement (panics on failure)
@@ -67,7 +88,7 @@ For each auth context, the corresponding rule ID is used to look up the context 
 
 - Exist in the account's storage
 - Not be expired (if `valid_until` is set, it must be ≥ current ledger sequence)
-- Match the context type: a `CallContract(address)` rule matches a `CallContract(address)` context, and `Default` rules match any context
+- Match the context type: a `CallContract(address)` rule matches a call to that contract, a `CreateContract(wasm_hash)` rule matches a deployment from that WASM hash, a `CreateContractExternalRef(owner, tag)` rule matches a deployment from that executable reference, and `Default` rules match any context
 
 ### 2. Rule Evaluation
 
@@ -77,8 +98,8 @@ For each (context, rule_id) pair:
 
 Extract authenticated signers from the rule's signer list. A signer is considered authenticated if:
 
-- **Delegated Signer**: The address has authorized the operation via `require_auth_for_args(payload)`
-- **External Signer**: The verifier contract confirms the signature is valid for the public key
+- **Delegated Signer**: The address has authorized the operation via `require_auth_for_args((preimage,))`, where `preimage` is the [`AuthDigestPreimage`](#authdigestpreimage)
+- **External Signer**: The verifier contract confirms the signature over the auth digest, `sha256(preimage.to_xdr())`, is valid for the public key
 
 Only authenticated signers proceed to the next step.
 
