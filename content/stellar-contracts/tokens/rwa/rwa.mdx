@@ -25,7 +25,7 @@ security tokens, including:
 - **Transfer Controls**: Sophisticated transfer restrictions and validations
 - **Freezing Mechanisms**: Address-level and partial token freezing capabilities
 - **Recovery System**: Lost/old account recovery for verified investors
-- **Pausable Operations**: Emergency pause functionality for the entire token
+- **Pausable Operations**: Emergency pause that halts minting and transfers
 - **Role-Based Access Control (RBAC)**: Flexible privilege management for administrative functions
 
 ## Architecture
@@ -325,7 +325,7 @@ identity verifier contract to ensure the recipient has a valid identity with the
 //                       which reverts the mint if a compliance module rejects it
 <Self as FungibleToken>::ContractType::mint(e, &recipient, amount);
 
-// Example: Transferring tokens
+// Example: Transferring tokens (`to` is a `MuxedAddress`, see Custodial Destinations below)
 // Internally calls: identity_verifier.verify_identity(&from)
 // Then calls: identity_verifier.verify_identity(&to)
 // Then transfers and calls: compliance.transferred(from_snapshot, to_snapshot, amount, TransferKind::Standard, token),
@@ -382,6 +382,12 @@ These `RWA` functions, like the ones for recovery and forced transfers below, do
 checks. The corresponding `RWAToken` functions take an `operator` argument on which the contract must enforce access
 control, as in the [Usage](#usage) example.
 
+Burning bypasses freezing: when the amount exceeds the free (unfrozen) balance, `RWA::burn` unfreezes the difference
+first. Tokens locked by a compliance module are not treated the same way, since the `Destroyed` hook has no notion of a
+privileged burn. For example, with the `initial_lockup_period` module registered, a burn that reaches still-locked
+tokens is rejected. Destroying a locked position takes a forced transfer to a treasury wallet, which consumes the locks,
+followed by a burn from that treasury.
+
 ### Recovery System
 
 The recovery system allows authorized operators to transfer tokens from a lost/old account to a
@@ -391,20 +397,69 @@ Balance Recovery System is handled on the RWA token contract, whereas Identity R
 on a separate contract as a module (may be a part of the Identity Registry contract).
 
 ```rust
-// Recover tokens from old account to new account
-RWA::recover_balance(e, &old_account, &new_account);
+// Recover tokens from old account to new account, returns whether any tokens were moved
+let moved: bool = RWA::recover_balance(e, &old_account, &new_account);
 ```
+
+`recover_balance` moves the whole balance and carries both the address freeze and the partially frozen amount over to
+the new account. Balances and freezes are stored per token, so after the identity has been recovered in the registry,
+`recover_balance` must be called on each token separately. It is still needed on a token where the old account holds
+nothing but is frozen, otherwise the freeze is not carried over to the new account.
 
 ### Forced Transfers
 
 Forced Transfers are handled on the RWA token contract.
 
-Authorized operators can force transfers between verified wallets for regulatory compliance:
+Authorized operators can force transfers for regulatory compliance, e.g. court-ordered seizures:
 
 ```rust
 // Force a transfer for regulatory reasons
 RWA::forced_transfer(e, &from, &to, amount);
 ```
+
+Only `to` must pass identity verification. `from` is deliberately not verified, so that tokens can still be pulled out
+of accounts whose identity is no longer valid (sanctioned, revoked or compromised wallets). Forced transfers bypass the
+freezing checks and unfreeze tokens of `from` as needed. Like `burn` and `recover_balance`, they also keep working
+while the token is paused, whereas minting and transfers are halted.
+
+### Custodial (Muxed) Destinations
+
+`transfer` accepts a muxed destination (`MuxedAddress`), which enables omnibus custody. The muxed address is narrowed to
+its base address before any check runs, so identity verification, compliance and the balance update all operate on the
+base address, and the muxed ID only appears in the `transfer` event, where it lets a custodian attribute the transfer to
+one of its off-chain sub-accounts.
+
+The muxed ID is supplied by the caller and is not verified on-chain, so a verified holder may be a custodian holding on
+behalf of beneficiaries who have no on-chain identity of their own. An issuer that requires beneficial owners on the
+on-chain register can refuse muxed destinations by overriding `transfer`:
+
+```rust
+#[contractimpl(contracttrait)]
+impl FungibleToken for RealEstateToken {
+    type ContractType = Compose<(RWA, TotalSupply)>;
+
+    fn transfer(e: &Env, from: Address, to: MuxedAddress, amount: i128) {
+        if to.id().is_some() {
+            panic_with_error!(e, RWAError::IdentityVerificationFailed);
+        }
+        RWA::transfer(e, &from, &to, amount);
+    }
+}
+```
+
+### Batch Operations
+
+The operator-gated functions of `RWAToken` have `batch_` siblings (`batch_mint`, `batch_burn`, `batch_forced_transfer`,
+`batch_set_address_frozen`, `batch_freeze_partial_tokens` and `batch_unfreeze_partial_tokens`) that apply the same
+operation to a list of accounts in a single invocation, mirroring the batch functions of ERC-3643. In addition,
+`RWAToken` provides a default `batch_transfer(from, recipients, amounts)` entry point, which the sender authorizes once
+and where the sender's identity is verified once for the whole batch.
+
+A batch is atomic: an item that fails reverts the whole call, and every item emits the same event as its single-account
+counterpart. The batch size is bounded by the [per-transaction network limits](https://lab.stellar.org/network-limits)
+rather than by the library. Measured against a stack with two compliance modules and one required claim topic, the
+limit is reached at roughly 35 accounts for `batch_mint` and `batch_transfer`, and 99 for the freezing functions. Every
+additional compliance module or required claim topic lowers these numbers, so measure against your own configuration.
 
 ## Modules
 
@@ -426,9 +481,9 @@ graph TD
     A[RWA Token Transfer/Mint/Burn] --> B[Compliance Contract]
     B --> C{Transferred<br/>or<br/>Created<br/>or<br/>Destroyed}
     C --> D[Registered Modules 1..N]
-    D --> E[Transfer Limit Module]
-    D --> F[Country Restriction Module]
-    D --> G[Investor Count Module]
+    D --> E[Time Transfers Limits Module]
+    D --> F[Country Restrict Module]
+    D --> G[Max Balance Module]
     D --> H[Custom Module X]
     E --> I{Any module<br/>panics?}
     F --> I
@@ -473,10 +528,29 @@ every kind of transfer.
 Hook arguments, including `token`, can be forged, since any contract can call a module's hooks directly. Hooks that modify state should authenticate their caller, the compliance contract bound to `token`, e.g. with `Self::get_compliance_address(e, token).require_auth()`. Hooks that only validate and modify no state need no authentication.
 </Callout>
 
+The following ready-made modules are ports of the T-REX modular compliance modules. Each one has an example contract
+under [`examples/rwa`](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/rwa) and must be
+registered on the hooks listed:
+
+| Module | Rule | Hooks |
+| ------ | ---- | ----- |
+| `country_allow` | Only recipients whose identity has at least one country code on the allowlist can receive tokens | `Transferred`, `Created` |
+| `country_restrict` | Recipients whose identity has a country code on the restriction list cannot receive tokens | `Transferred`, `Created` |
+| `transfer_allow` | A transfer passes only when the sender or the recipient is on the address allowlist; mints and burns are not restricted | `Transferred` |
+| `time_transfers_limits` | Caps the outgoing volume of each sender identity within configurable time windows | `Transferred` |
+| `max_balance` | Caps the aggregate balance of each identity across all its wallets | `Transferred`, `Created`, `Destroyed` |
+| `supply_limit` | Caps the total supply through an internal counter | `Created`, `Destroyed` |
+| `initial_lockup_period` | Locks minted tokens for a configurable period; transfers and burns can only spend unlocked tokens | `Transferred`, `Created`, `Destroyed` |
+
+`max_balance` and `supply_limit` track balances and supply on their own. When one of them is registered on a token that
+already has holders or circulating supply, the operator must seed its state during the preset phase
+(`preset_id_balance` or `batch_preset_id_balances` for `max_balance`, `preset_supply_count` for `supply_limit`) and then
+close the phase with `mark_preset_completed`.
+
 ### - Identity Verifier
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/identity_verification)
 
-This is a mandatory module, since RWA token contract expects `verify_identity(e: &Env, address: Address)`
+This is a mandatory module, since RWA token contract expects `verify_identity(e: &Env, account: &Address)`
 function to be available.
 
 The **Identity Verifier Module** provides the interface for verifying user identities.
@@ -581,6 +655,11 @@ Stores identity information for verified investors, including:
 - Support for both individual and organizational identities
 - Recovery account mappings for lost wallet scenarios
 
+`remove_identity` is rejected while the wallet still holds a balance in any linked token, and a wallet replaced through
+`recover_identity` is permanently tombstoned and can never be registered again. There is no in-place identity swap:
+replacing a wallet's identity contract takes emptying the wallet first, through regular or forced transfers, then
+`remove_identity` followed by `add_identity` with the new identity.
+
 ### - Identity Claims
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/identity_verification/identity_claims)
 
@@ -654,8 +733,8 @@ registries and compliance contracts. This allows a single periphery contract to 
 Features:
 - Bind/unbind tokens to periphery services
 - Query all linked tokens
-- Efficient storage with bucket-based architecture (supports up to 10,000 tokens)
-- Swap-remove pattern for compact storage
+- All bound tokens are kept in a single storage entry, capped at 100 tokens per periphery contract
+- Swap-remove pattern for compact storage (the list order is not stable across unbinds)
 
 ## Architecture Overview
 

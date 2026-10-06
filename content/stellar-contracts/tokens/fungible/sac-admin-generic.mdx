@@ -86,10 +86,13 @@ function:
 
 ```rust
 use soroban_sdk::{
-    auth::Context, CustomAccountInterface,
+    auth::{Context, CustomAccountInterface},
     contract, contracterror, contractimpl, contracttype,
     crypto::Hash,
     Address, BytesN, Env, IntoVal, Val, Vec,
+};
+use stellar_tokens::fungible::sac_admin_generic::{
+    extract_sac_contract_context, get_sac_address, set_sac_address, SacFn,
 };
 
 #[contractimpl]
@@ -169,6 +172,24 @@ fn ensure_caller_operator<K: IntoVal<Env, Val>>(
         Some(is_op) if is_op => Ok(()),
         _ => Err(SACAdminGenericError::Unauthorized),
     }
+}
+
+fn ensure_minting_limit(
+    e: &Env,
+    caller: &BytesN<32>,
+    amount: i128,
+) -> Result<(), SACAdminGenericError> {
+    let key = SacDataKey::MintingLimit(caller.clone());
+
+    let (max, curr): (i128, i128) = e.storage().instance().get(&key).expect("limit not set");
+    let new_limit: i128 = curr.checked_add(amount).expect("overflow");
+    if new_limit > max {
+        return Err(SACAdminGenericError::MintingLimitExceeded);
+    }
+
+    // update
+    e.storage().instance().set(&key, &(max, new_limit));
+    Ok(())
 }
 ```
 
