@@ -2,7 +2,7 @@
 title: Non-Fungible Consecutive
 ---
 
-[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/non-fungible/extensions/consecutive)
+[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/non_fungible/extensions/consecutive)
 
 Consecutive extension for [Non-Fungible Token](/stellar-contracts/tokens/non-fungible/non-fungible) is useful
 for efficiently minting multiple tokens in a single transaction. This can significantly
@@ -18,8 +18,9 @@ implement access control to restrict who can mint.
 ```rust
 use soroban_sdk::{contract, contractimpl, Address, Env, String};
 use stellar_tokens::non_fungible::{
+    burnable::NonFungibleBurnable,
     consecutive::{Consecutive, NonFungibleConsecutive},
-    Base, ContractOverrides, NonFungibleToken,
+    Base, Compose, NonFungibleToken,
 };
 
 #[contract]
@@ -38,19 +39,28 @@ impl GameItem {
 
     pub fn award_items(e: &Env, to: Address, amount: u32) -> u32 {
         // access control might be needed
-        Consecutive::batch_mint(e, &to, amount)
-    }
-
-    pub fn burn(e: &Env, from: Address, token_id: u32) {
-        Consecutive::burn(e, &from, token_id);
+        // Mints `amount` tokens with consecutive IDs and returns the last one
+        <Self as NonFungibleToken>::ContractType::mint_range(e, &to, amount)
     }
 }
 
 #[contractimpl(contracttrait)]
 impl NonFungibleToken for GameItem {
-    type ContractType = Consecutive;
+    type ContractType = Compose<(Consecutive,)>;
 }
 
 // no entry-point functions required, marker impl
 impl NonFungibleConsecutive for GameItem {}
+
+#[contractimpl(contracttrait)]
+impl NonFungibleBurnable for GameItem {}
 ```
+
+<Callout type="warning">
+Tokens must be minted only with `mint_range`, reached through the contract type. The `Consecutive` contract
+type has no single-token mint, so `mint` and `mint_with_id` do not compile with it, and calling `Base::mint`
+directly would break the ownership tracking.
+</Callout>
+
+A single call to `mint_range` can mint up to 32,000 tokens. The `Consecutive` contract type can be combined
+with `NonFungibleVotes`, i.e. `Compose<(Consecutive, NonFungibleVotes)>`, but not with `Enumerable`.
