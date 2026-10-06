@@ -55,7 +55,7 @@ graph TB
         IVS[Custom Identity Suite]
     end
 
-    RWA -->|"can_transfer()<br/>can_create()<br/>transferred()<br/>created()<br/>destroyed()"| COMP
+    RWA -->|"transferred()<br/>created()<br/>destroyed()"| COMP
     RWA -->|"verify_identity()<br/>recovery_target()"| IDV
     RWA -.-> DM
 
@@ -68,19 +68,26 @@ graph TB
 
 ### Core Components
 
-1. **RWA Token Contract**: The main token contract implementing the `RWAToken` trait, which extends both
-`FungibleToken` and `Pausable` traits.
+1. **RWA Token Contract**: The main token contract implementing the `RWAToken` trait, which extends the
+`FungibleToken`, `FungibleTotalSupply` and `Pausable` traits.
 
 2. **Identity Verifier**: A separate contract responsible for verifying user identities.
-The RWA token expects the following function to be available: `fn verify_identity(e: &Env, account: &Address);`.
+The RWA token expects the following functions to be available:
+    - `fn verify_identity(e: &Env, account: &Address);`
+    - `fn recovery_target(e: &Env, old_account: &Address) -> Option<Address>;`
 
 3. **Compliance Contract**: A separate contract that validates transfers, minting, and burning operations.
 The RWA token expects the following functions to be available:
-    - `fn can_transfer(e: &Env, from: Address, to: Address, amount: i128, token: Address) -> bool;`
-    - `fn can_create(e: &Env, to: Address, amount: i128, token: Address) -> bool;`
-    - `fn created(e: &Env, to: Address, amount: i128, token: Address);`
-    - `fn destroyed(e: &Env, from: Address, amount: i128, token: Address);`
-    - `fn transferred(e: &Env, from: Address, to: Address, amount: i128, token: Address);`
+    - `fn transferred(e: &Env, from: AccountSnapshot, to: AccountSnapshot, amount: i128, kind: TransferKind, token: Address);`
+    - `fn created(e: &Env, to: AccountSnapshot, amount: i128, token: Address);`
+    - `fn destroyed(e: &Env, from: AccountSnapshot, amount: i128, token: Address);`
+
+    These hooks are called after the operation's state changes, within the same transaction. The compliance contract
+    rejects an operation by panicking, which reverts it entirely. Each account is passed as an `AccountSnapshot` holding
+    its `balance` and `frozen` amount before the operation, so that compliance never needs to call back into the token.
+    `TransferKind` tells whether the transfer is a `Standard` one, a `Delegated` one (via `transfer_from`), or a
+    privileged `Forced` or `Recovery` one, so that compliance rules can exempt privileged operations while still
+    keeping their records up to date.
 
 This loose coupling between the RWA token and the modules allows the following:
 - Share identity verifier and compliance contracts across multiple RWA tokens
@@ -102,13 +109,26 @@ The module provides default implementations for common use cases:
 We'll create a regulated security token for tokenized real estate shares. The token requires KYC verification,
 implements transfer restrictions, and provides administrative controls for compliance.
 
+The RWA token uses the `RWA` contract type, which tracks the total supply, so it is selected with
+`Compose<(RWA, TotalSupply)>` and the contract implements `FungibleTotalSupply`. The privileged functions of
+`RWAToken` (minting, burning, freezing, forced transfers, recovery, and setting the compliance and identity verifier
+contracts) have no default implementation: they take an `operator` argument, and each contract must implement them
+and enforce its own access control on it. Similarly, `pause` and `unpause` from `Pausable` must be implemented.
+
 Here's what a basic RWA token contract might look like (only the base token contract, not the modules):
 
 ```rust
-use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env, String};
+use soroban_sdk::{
+    contract, contractimpl, symbol_short, Address, Env, MuxedAddress, String, Symbol, Vec,
+};
 use stellar_access::access_control::{self as access_control, AccessControl};
+use stellar_contract_utils::pausable::{self as pausable, Pausable};
+use stellar_macros::{only_admin, only_role};
 use stellar_tokens::{
-    fungible::{Base, FungibleToken},
+    fungible::{
+        total_supply::{FungibleTotalSupply, TotalSupply},
+        Base, Compose, FungibleToken,
+    },
     rwa::{RWAToken, RWA},
 };
 
@@ -144,24 +164,147 @@ impl RealEstateToken {
         access_control::grant_role_no_auth(e, &manager, &symbol_short!("manager"), &admin);
 
         // Mint initial supply to the admin (must be a verified identity)
-        RWA::mint(e, &admin, initial_supply);
+        <Self as FungibleToken>::ContractType::mint(e, &admin, initial_supply);
     }
 }
 
-// Implement the FungibleToken trait with RWA contract type
+// Implement the FungibleToken trait with the RWA contract type
 #[contractimpl(contracttrait)]
 impl FungibleToken for RealEstateToken {
-    type ContractType = RWA;
+    type ContractType = Compose<(RWA, TotalSupply)>;
 }
 
-// Implement the RWAToken trait for regulatory features
 #[contractimpl(contracttrait)]
-impl RWAToken for RealEstateToken {}
+impl FungibleTotalSupply for RealEstateToken {}
+
+#[contractimpl(contracttrait)]
+impl Pausable for RealEstateToken {
+    #[only_admin]
+    fn pause(e: &Env, _caller: Address) {
+        pausable::pause(e);
+    }
+
+    #[only_admin]
+    fn unpause(e: &Env, _caller: Address) {
+        pausable::unpause(e);
+    }
+}
+
+// Implement the RWAToken trait for regulatory features, restricting the
+// privileged functions to the "manager" role
+#[contractimpl(contracttrait)]
+impl RWAToken for RealEstateToken {
+    #[only_role(operator, "manager")]
+    fn mint(e: &Env, to: Address, amount: i128, operator: Address) {
+        <Self as FungibleToken>::ContractType::mint(e, &to, amount);
+    }
+
+    #[only_role(operator, "manager")]
+    fn batch_mint(e: &Env, to_list: Vec<Address>, amounts: Vec<i128>, operator: Address) {
+        <Self as FungibleToken>::ContractType::batch_mint(e, &to_list, &amounts);
+    }
+
+    #[only_role(operator, "manager")]
+    fn burn(e: &Env, user_address: Address, amount: i128, operator: Address) {
+        RWA::burn(e, &user_address, amount);
+    }
+
+    #[only_role(operator, "manager")]
+    fn batch_burn(e: &Env, user_addresses: Vec<Address>, amounts: Vec<i128>, operator: Address) {
+        RWA::batch_burn(e, &user_addresses, &amounts);
+    }
+
+    #[only_role(operator, "manager")]
+    fn forced_transfer(e: &Env, from: Address, to: Address, amount: i128, operator: Address) {
+        RWA::forced_transfer(e, &from, &to, amount);
+    }
+
+    #[only_role(operator, "manager")]
+    fn batch_forced_transfer(
+        e: &Env,
+        from_list: Vec<Address>,
+        to_list: Vec<Address>,
+        amounts: Vec<i128>,
+        operator: Address,
+    ) {
+        RWA::batch_forced_transfer(e, &from_list, &to_list, &amounts);
+    }
+
+    #[only_role(operator, "manager")]
+    fn recover_balance(
+        e: &Env,
+        old_account: Address,
+        new_account: Address,
+        operator: Address,
+    ) -> bool {
+        RWA::recover_balance(e, &old_account, &new_account)
+    }
+
+    #[only_role(operator, "manager")]
+    fn set_address_frozen(e: &Env, user_address: Address, freeze: bool, operator: Address) {
+        RWA::set_address_frozen(e, &user_address, freeze);
+    }
+
+    #[only_role(operator, "manager")]
+    fn batch_set_address_frozen(
+        e: &Env,
+        user_addresses: Vec<Address>,
+        freeze_list: Vec<bool>,
+        operator: Address,
+    ) {
+        RWA::batch_set_address_frozen(e, &user_addresses, &freeze_list);
+    }
+
+    #[only_role(operator, "manager")]
+    fn freeze_partial_tokens(e: &Env, user_address: Address, amount: i128, operator: Address) {
+        RWA::freeze_partial_tokens(e, &user_address, amount);
+    }
+
+    #[only_role(operator, "manager")]
+    fn batch_freeze_partial_tokens(
+        e: &Env,
+        user_addresses: Vec<Address>,
+        amounts: Vec<i128>,
+        operator: Address,
+    ) {
+        RWA::batch_freeze_partial_tokens(e, &user_addresses, &amounts);
+    }
+
+    #[only_role(operator, "manager")]
+    fn unfreeze_partial_tokens(e: &Env, user_address: Address, amount: i128, operator: Address) {
+        RWA::unfreeze_partial_tokens(e, &user_address, amount);
+    }
+
+    #[only_role(operator, "manager")]
+    fn batch_unfreeze_partial_tokens(
+        e: &Env,
+        user_addresses: Vec<Address>,
+        amounts: Vec<i128>,
+        operator: Address,
+    ) {
+        RWA::batch_unfreeze_partial_tokens(e, &user_addresses, &amounts);
+    }
+
+    #[only_role(operator, "manager")]
+    fn set_compliance(e: &Env, compliance: Address, operator: Address) {
+        RWA::set_compliance(e, &compliance);
+    }
+
+    #[only_role(operator, "manager")]
+    fn set_identity_verifier(e: &Env, identity_verifier: Address, operator: Address) {
+        RWA::set_identity_verifier(e, &identity_verifier);
+    }
+}
 
 // Implement AccessControl for role-based permissions
 #[contractimpl(contracttrait)]
 impl AccessControl for RealEstateToken {}
 ```
+
+Tokens are minted through the contract type, `<Self as FungibleToken>::ContractType::mint`. To cap the supply,
+add `Capped` to the list, i.e. `Compose<(RWA, Capped, TotalSupply)>`, set the cap with `Capped::set_cap` in the
+constructor and implement `FungibleCapped`. Minting through the contract type then enforces the cap, whereas
+calling `RWA::mint` directly would bypass it.
 
 ## Key Features
 
@@ -178,15 +321,15 @@ identity verifier contract to ensure the recipient has a valid identity with the
 ```rust
 // Example: Minting tokens
 // Internally calls: identity_verifier.verify_identity(&recipient)
-// Then calls: compliance.can_create(&recipient, &amount)
-// Finally calls: compliance.created(&recipient, &amount) after minting
-RWA::mint(e, &recipient, amount);
+// Then mints and calls: compliance.created(recipient_snapshot, amount, token),
+//                       which reverts the mint if a compliance module rejects it
+<Self as FungibleToken>::ContractType::mint(e, &recipient, amount);
 
 // Example: Transferring tokens
 // Internally calls: identity_verifier.verify_identity(&from)
 // Then calls: identity_verifier.verify_identity(&to)
-// Then calls: compliance.can_transfer(&from, &to, &amount)
-// Finally calls: compliance.transferred(&from, &to, &amount) after transfer
+// Then transfers and calls: compliance.transferred(from_snapshot, to_snapshot, amount, TransferKind::Standard, token),
+//                           which reverts the transfer if a compliance module rejects it
 RWA::transfer(e, &from, &to, amount);
 
 // Example: Wallet recovery for lost/old accounts
@@ -194,7 +337,7 @@ RWA::transfer(e, &from, &to, amount);
 // Then calls: identity_verifier.recovery_target(&old_account) to verify the new account
 //             is the authorized recovery target for the old account
 // Transfers all tokens and preserves frozen status
-RWA::recover_balance(e, &old_account, &new_account, &operator);
+RWA::recover_balance(e, &old_account, &new_account);
 ```
 
 **Identity Verification Flow:**
@@ -207,13 +350,13 @@ RWA::recover_balance(e, &old_account, &new_account, &operator);
 
 Compliance Validation is handled on a separate contract as a module.
 
-The compliance framework allows you to implement custom transfer and minting rules through a modular hook system:
+The compliance framework allows you to implement custom transfer and minting rules through a modular hook system.
+Each hook is called after the token operation within the same transaction, so a hook can both validate the operation,
+rejecting it by panicking, and update its own state:
 
-- **CanTransfer**: Validates if a transfer should be allowed
-- **CanCreate**: Validates if a mint operation should be allowed
-- **Transferred**: Updates state after a successful transfer
-- **Created**: Updates state after a successful mint
-- **Destroyed**: Updates state after a successful burn
+- **Transferred**: Called after a transfer
+- **Created**: Called after a mint
+- **Destroyed**: Called after a burn
 
 ### Freezing Mechanisms
 
@@ -225,15 +368,19 @@ RWA tokens support two types of freezing:
 2. **Partial token freezing**: Freeze a specific amount of tokens for an address
 
 ```rust
-// Freeze an entire address
-RWA::set_address_frozen(e, &user_address, bool, &operator);
+// Freeze an entire address (pass `false` to unfreeze it)
+RWA::set_address_frozen(e, &user_address, true);
 
 // Freeze a specific amount of tokens
-RWA::freeze_partial_tokens(e, &user_address, amount, &operator);
+RWA::freeze_partial_tokens(e, &user_address, amount);
 
 // Unfreeze tokens
-RWA::unfreeze_partial_tokens(e, &user_address, amount, &operator);
+RWA::unfreeze_partial_tokens(e, &user_address, amount);
 ```
+
+These `RWA` functions, like the ones for recovery and forced transfers below, do not perform any authorization
+checks. The corresponding `RWAToken` functions take an `operator` argument on which the contract must enforce access
+control, as in the [Usage](#usage) example.
 
 ### Recovery System
 
@@ -245,7 +392,7 @@ on a separate contract as a module (may be a part of the Identity Registry contr
 
 ```rust
 // Recover tokens from old account to new account
-RWA::recover_balance(e, &old_account, &new_account, &operator);
+RWA::recover_balance(e, &old_account, &new_account);
 ```
 
 ### Forced Transfers
@@ -256,7 +403,7 @@ Authorized operators can force transfers between verified wallets for regulatory
 
 ```rust
 // Force a transfer for regulatory reasons
-RWA::forced_transfer(e, &from, &to, amount, &operator);
+RWA::forced_transfer(e, &from, &to, amount);
 ```
 
 ## Modules
@@ -269,26 +416,26 @@ The RWA package includes several supporting modules that work together to provid
 This is a mandatory module, since RWA token contract expects the compliance checks and hooks to be available.
 
 Provides a modular framework for implementing custom compliance rules through a hook-based architecture where multiple
-[compliance modules](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/tokens/src/rwa/compliance/mod.rs#L327)
-can be registered to the [Compliance Contract](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/tokens/src/rwa/compliance/mod.rs#L67).
+[compliance modules](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/tokens/src/rwa/compliance/modules/mod.rs)
+can be registered to the [Compliance Contract](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/tokens/src/rwa/compliance/mod.rs).
 
 **Compliance Validation Flow:**
 
 ```mermaid
 graph TD
-    A[RWA Token Transfer/Mint] --> B[Compliance Contract]
-    B --> C{CanTransfer<br/>or<br/>CanCreate}
+    A[RWA Token Transfer/Mint/Burn] --> B[Compliance Contract]
+    B --> C{Transferred<br/>or<br/>Created<br/>or<br/>Destroyed}
     C --> D[Registered Modules 1..N]
     D --> E[Transfer Limit Module]
     D --> F[Country Restriction Module]
     D --> G[Investor Count Module]
     D --> H[Custom Module X]
-    E --> I{All modules<br/>return true?}
+    E --> I{Any module<br/>panics?}
     F --> I
     G --> I
     H --> I
-    I -->|Yes| J[Operation Proceeds]
-    I -->|No| K[Operation Reverts]
+    I -->|No| J[Operation Proceeds]
+    I -->|Yes| K[Operation Reverts]
 ```
 
 The compliance contract is designed to be shared across multiple RWA tokens, with each hook function accepting a
@@ -301,25 +448,33 @@ Individual compliance modules implement the `ComplianceModule` trait, which defi
 
 ```rust
 pub trait ComplianceModule {
-    fn on_transfer(e: &Env, token: Address, from: Address, to: Address, amount: i128);
-    fn on_created(e: &Env, token: Address, to: Address, amount: i128);
-    fn on_destroyed(e: &Env, token: Address, from: Address, amount: i128);
-    fn can_transfer(e: &Env, token: Address, from: Address, to: Address, amount: i128) -> bool;
-    fn can_create(e: &Env, token: Address, to: Address, amount: i128) -> bool;
+    fn on_transfer(
+        e: &Env,
+        from: AccountSnapshot,
+        to: AccountSnapshot,
+        amount: i128,
+        kind: TransferKind,
+        token: Address,
+    );
+    fn on_created(e: &Env, to: AccountSnapshot, amount: i128, token: Address);
+    fn on_destroyed(e: &Env, from: AccountSnapshot, amount: i128, token: Address);
     fn name(e: &Env) -> String;
-    fn get_compliance_address(e: &Env) -> Address;
-    fn set_compliance_address(e: &Env, compliance: Address);
+    fn get_compliance_address(e: &Env, token: Address) -> Address;
+    fn set_compliance_address(e: &Env, token: Address, compliance: Address, operator: Address);
 }
 ```
 
-Modules can be registered for specific hooks via the compliance contract. The `ComplianceHook` enum defines which hooks a module handles: `Transferred`, `Created`, `Destroyed`, `CanTransfer`, `CanCreate`.
+Modules can be registered for specific hooks via the compliance contract. The `ComplianceHook` enum defines which hooks a module handles: `Transferred`, `Created`, `Destroyed`.
+A module rejects an operation by panicking from the hook. Policy modules can use the `TransferKind` passed to
+`on_transfer` to exempt privileged `Forced` and `Recovery` transfers, while bookkeeping modules update their state for
+every kind of transfer.
 
 <Callout type="warning">
-State-modifying hooks (`on_transfer`, `on_created`, `on_destroyed`) should restrict their caller to the compliance contract address. Read-only hooks (`can_transfer`, `can_create`) can be exposed more broadly.
+Hook arguments, including `token`, can be forged, since any contract can call a module's hooks directly. Hooks that modify state should authenticate their caller, the compliance contract bound to `token`, e.g. with `Self::get_compliance_address(e, token).require_auth()`. Hooks that only validate and modify no state need no authentication.
 </Callout>
 
 ### - Identity Verifier
-[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/identity_verifier)
+[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/identity_verification)
 
 This is a mandatory module, since RWA token contract expects `verify_identity(e: &Env, address: Address)`
 function to be available.
@@ -357,7 +512,7 @@ graph TB
 ```
 
 ### - Claim Topics and Issuers
-[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/claim_topics_and_issuers)
+[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/identity_verification/claim_topics_and_issuers)
 
 This module is an implementation detail. It is provided as the suggested implementation for the **Claim-based** approach.
 
@@ -415,7 +570,7 @@ Each claim contains:
 
 
 ### - Identity Registry Storage
-[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/identity_registry_storage)
+[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/identity_verification/identity_registry_storage)
 
 This module is an implementation detail. It is provided as the suggested implementation for the **Claim-based** approach.
 
@@ -427,7 +582,7 @@ Stores identity information for verified investors, including:
 - Recovery account mappings for lost wallet scenarios
 
 ### - Identity Claims
-[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/identity_claims)
+[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/identity_verification/identity_claims)
 
 This module is an implementation detail. It is provided as the suggested implementation for the **Claim-based** approach.
 
@@ -447,7 +602,7 @@ Claims are issued by trusted authorities and contain:
 - Issuer information
 
 ### - Claim Issuer
-[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/claim_issuer)
+[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/identity_verification/claim_issuer)
 
 This module is an implementation detail. It is provided as the suggested implementation for the **Claim-based** approach.
 
@@ -520,7 +675,7 @@ sequenceDiagram
     Note over Token,ComplianceContract: 1. Eligibility
 
     InvestorA->>Token: transfer(B, amount)
-    Token->>IdentityVerifier: is_verified(B)
+    Token->>IdentityVerifier: verify_identity(B)
 
     IdentityVerifier->>IdentityRegistryStorage: Fetch identity: stored_identity(B)
     IdentityVerifier->>ClaimTopicsAndIssuers: Fetch required claims and issuers: get_claim_topics_and_issuers()
@@ -535,14 +690,12 @@ sequenceDiagram
 
     IdentityVerifier-->>Token: B eligible
 
-    Note over Token,ComplianceContract: 2. Compliance
-
-    Token->>ComplianceContract: can_transfer(A, B, amount)
-    ComplianceContract->>ComplianceContract: checks all compliance modules
-    ComplianceContract-->>Token: transfer compliant
+    Note over Token,ComplianceContract: 2. Transfer and compliance
 
     Token->>Token: process transfer
-    Token->>InvestorA: notification hook: transferred()
+    Token->>ComplianceContract: transferred(A snapshot, B snapshot, amount, Standard)
+    ComplianceContract->>ComplianceContract: runs all registered modules (any can revert)
+    ComplianceContract-->>Token: transfer compliant
 ```
 
 ## Security Considerations

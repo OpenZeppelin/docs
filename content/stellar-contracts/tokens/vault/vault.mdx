@@ -120,7 +120,8 @@ For more details about the mechanics of this attack, see the [OpenZeppelin ERC-4
 
 ### Custom Authorization
 
-Custom authorization logic can be implemented as needed:
+`deposit`, `mint`, `withdraw` and `redeem` already require authorization from `operator`. Additional
+authorization logic can be implemented as needed by overriding them in the `FungibleVault` implementation:
 
 ```rust
 fn deposit(
@@ -135,8 +136,8 @@ fn deposit(
         panic_with_error!(e, Error::NotWhitelisted);
     }
 
-    operator.require_auth();
-    Vault::deposit(e, assets, receiver, from, operator)
+    // `operator.require_auth()` is called by the contract type's `deposit`
+    Self::ContractType::deposit(e, assets, receiver, from, operator)
 }
 ```
 
@@ -163,12 +164,16 @@ Aside from this deviation, the vault implementation for Soroban provides:
 
 ### Basic Implementation
 
-To create a vault contract, implement both the `FungibleToken` and `FungibleVault` traits:
+To create a vault contract, select the `Vault` contract type, which requires supply tracking, i.e.
+`Compose<(Vault, TotalSupply)>`, and implement the `FungibleToken`, `FungibleTotalSupply` and `FungibleVault` traits:
 
 ```rust
-use soroban_sdk::{contract, contractimpl, Address, Env, String};
+use soroban_sdk::{contract, contractimpl, Address, Env, MuxedAddress, String};
 use stellar_tokens::{
-    fungible::{Base, FungibleToken},
+    fungible::{
+        total_supply::{FungibleTotalSupply, TotalSupply},
+        Base, Compose, FungibleToken,
+    },
     vault::{FungibleVault, Vault},
 };
 
@@ -197,40 +202,24 @@ impl VaultContract {
 
 #[contractimpl(contracttrait)]
 impl FungibleToken for VaultContract {
-    type ContractType = Vault;
+    type ContractType = Compose<(Vault, TotalSupply)>;
 
     fn decimals(e: &Env) -> u32 {
         Vault::decimals(e)
     }
 }
 
-#[contractimpl]
-impl FungibleVault for VaultContract {
-    fn deposit(
-        e: &Env,
-        assets: i128,
-        receiver: Address,
-        from: Address,
-        operator: Address,
-    ) -> i128 {
-        operator.require_auth();
-        Vault::deposit(e, assets, receiver, from, operator)
-    }
+#[contractimpl(contracttrait)]
+impl FungibleTotalSupply for VaultContract {}
 
-    fn withdraw(
-        e: &Env,
-        assets: i128,
-        receiver: Address,
-        owner: Address,
-        operator: Address,
-    ) -> i128 {
-        operator.require_auth();
-        Vault::withdraw(e, assets, receiver, owner, operator)
-    }
-
-    // Implement other required methods...
-}
+// All vault functions have default implementations
+#[contractimpl(contracttrait)]
+impl FungibleVault for VaultContract {}
 ```
+
+To cap the total amount of shares, add `Capped` to the list, i.e. `Compose<(Vault, Capped, TotalSupply)>`, set the cap
+with `Capped::set_cap` in the constructor and implement `FungibleCapped`. `deposit` and `mint` then fail if they would
+mint shares beyond the cap. See [Capped](/stellar-contracts/tokens/fungible/fungible#--capped).
 
 ### Initialization
 
