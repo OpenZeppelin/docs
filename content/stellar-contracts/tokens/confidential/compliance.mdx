@@ -1,0 +1,446 @@
+---
+title: Compliance
+---
+
+[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/confidential/src/compliance)
+
+The compliance extension adds optional controls, configured by the deployer, on top of the Confidential Token:
+per-account freezing, passthrough of a Stellar Asset Contract's (SAC) authorization, an external authorization
+policy, and opt-in [seizure](/stellar-contracts/tokens/confidential/clawback). [Auditing](/stellar-contracts/tokens/confidential/auditing)
+is always on and needs none of this. Compliance is for deployments that also have to *restrict* who can use the
+token.
+
+A deployment with no compliance configuration pays one instance-storage read per operation and otherwise behaves
+like a plain Confidential Token.
+
+## Overview
+
+The [compliance](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/confidential/src/compliance)
+module provides:
+
+- **`ComplianceHooks`**: a ready-made [`Hooks`](/stellar-contracts/tokens/confidential/confidential#hooks) implementation
+  that runs every token entry point through the active configuration. Wire it as `type Hooks = ComplianceHooks;`.
+- **`ConfidentialCompliance`**: the admin-facing trait for `freeze`, `unfreeze`, `set_compliance_config`, and the
+  `is_frozen` and `compliance_config` reads.
+- **`ConfidentialClawback`**: the opt-in seizure trait, covered on the [Clawback](/stellar-contracts/tokens/confidential/clawback)
+  page. A deployment that doesn't implement it keeps freeze and policy checks but cannot seize funds.
+- **`Policy`**: the cross-contract interface for an external allowlist, denylist, KYC, or sanctions registry.
+- **Storage helpers** in `compliance::storage` (`gate_account`, `check_policy`, `check_sac`, and others) for
+  writing custom hooks.
+
+## Configuration
+
+All controls are driven by a single `ComplianceConfig` entry in instance storage:
+
+```rust
+pub struct ComplianceConfig {
+    pub policy: Option<Address>,
+    pub sac_passthrough: bool,
+}
+```
+
+| Field | Purpose |
+| ----- | ------- |
+| `policy` | Address of an external [policy contract](#policy-contract), or `None` for no policy check. |
+| `sac_passthrough` | When `true`, the check on every fund-holding address also asks the underlying SAC's `authorized()` view (see [SAC Authorization Passthrough](#sac-authorization-passthrough)). |
+
+The initial configuration is usually written in the constructor with `compliance::storage::set_compliance_config`.
+Later changes go through the admin-gated `set_compliance_config` entry point. It also works when no configuration
+exists yet, so compliance can be switched on after deployment. The same storage function serves both cases and
+replaces the whole configuration in one call.
+
+Until a configuration exists, `ComplianceHooks` does nothing, `is_frozen` returns `false`, `compliance_config`
+returns `None`, and `freeze` and `unfreeze` revert with `NotConfigured`. Once written, a configuration can't be
+deleted. Setting `policy: None` and `sac_passthrough: false` turns those checks off, but freezes keep applying.
+
+<Callout type="warning">
+Enable `sac_passthrough` only when the underlying token is a Stellar Asset Contract. `authorized()` is part of the
+SAC admin interface, not SEP-41, so over a plain SEP-41 token every checked operation fails on the missing function.
+</Callout>
+
+## Usage
+
+The write methods of `ConfidentialCompliance` have no default body, because the choice of access-control module
+is yours. Each override authorizes `operator` and then calls the matching storage function. The example below
+uses role-based access control, with separate roles for freezing and for configuration changes:
+
+```rust
+// `Bytes` and `Vec` are used by the traits' default methods.
+use soroban_sdk::{contract, contractimpl, symbol_short, Address, Bytes, Env, Symbol, Vec};
+use stellar_access::access_control::{self as access_control, AccessControl};
+use stellar_macros::only_role;
+use stellar_confidential::{
+    compliance::{
+        storage as compliance, ComplianceConfig, ComplianceHooks, ConfidentialCompliance,
+    },
+    storage as confidential,
+    ConfidentialAccount, // used by the trait's default methods
+    ConfidentialToken,
+    SpenderDelegation, // used by the trait's default methods
+};
+
+const FREEZER_ROLE: Symbol = symbol_short!("freezer");
+
+#[contract]
+pub struct ConfidentialTokenContract;
+
+#[contractimpl]
+impl ConfidentialTokenContract {
+    pub fn __constructor(
+        e: &Env,
+        token: Address,
+        verifier: Address,
+        auditor: Address,
+        admin: Address,
+        freezer: Address,
+        compliance_config: Option<ComplianceConfig>,
+    ) {
+        confidential::set_underlying_asset(e, &token);
+        confidential::set_verifier(e, &verifier);
+        confidential::set_auditor(e, &auditor);
+        confidential::set_address_as_field_element(e);
+
+        access_control::set_admin(e, &admin);
+        access_control::grant_role_no_auth(e, &freezer, &FREEZER_ROLE, &admin);
+
+        if let Some(config) = compliance_config {
+            compliance::set_compliance_config(e, &config);
+        }
+    }
+}
+
+#[contractimpl(contracttrait)]
+impl ConfidentialToken for ConfidentialTokenContract {
+    type Hooks = ComplianceHooks;
+}
+
+#[contractimpl(contracttrait)]
+impl ConfidentialCompliance for ConfidentialTokenContract {
+    #[only_role(operator, "freezer")]
+    fn freeze(e: &Env, account: Address, operator: Address) {
+        compliance::freeze(e, &account);
+    }
+
+    #[only_role(operator, "freezer")]
+    fn unfreeze(e: &Env, account: Address, operator: Address) {
+        compliance::unfreeze(e, &account);
+    }
+
+    // The admin grants the `manager` role after deployment.
+    #[only_role(operator, "manager")]
+    fn set_compliance_config(e: &Env, config: ComplianceConfig, operator: Address) {
+        compliance::set_compliance_config(e, &config);
+    }
+}
+
+#[contractimpl(contracttrait)]
+impl AccessControl for ConfidentialTokenContract {}
+```
+
+A deployment with a single compliance authority can use [Ownable](/stellar-contracts/access/ownable) and
+`#[only_owner]` instead. In that case the macro performs the check and `operator` is informational only.
+
+<Callout type="info">
+`compliance::storage::set_compliance_config` and the other storage helpers, such as `freeze`, `clawback`, and
+`force_revoke_spender`, skip authorization checks. Call them only from the constructor or from entry points that do
+their own authorization.
+</Callout>
+
+## Checks
+
+When a configuration is present, `ComplianceHooks` runs each relevant address through up to three checks:
+
+1. **Freeze**: the address must not be frozen (`AccountFrozen`).
+2. **Policy**: if `policy` is set, `policy.is_authorized(address, token)` must return `true` (`NotAuthorizedByPolicy`).
+3. **SAC**: if `sac_passthrough` is enabled, the underlying SAC's `authorized(address)` must return `true` (`NotAuthorizedBySac`).
+
+Which addresses go through which checks depends on the entry point:
+
+| Entry point | Freeze | Policy | SAC |
+| ----------- | ------ | ------ | --- |
+| `register` | — | `account` | `account` |
+| `deposit` | `from`, `to` | `from`, `to` | `from`, `to` |
+| `merge` | `account` | `account` | `account` |
+| `withdraw` | `from`, `to` | `from`, `to` | `from`, `to` |
+| `confidential_transfer` | `from`, `to` | `from`, `to` | `from`, `to` |
+| `confidential_transfer_from` | `from`, `to` | `from`, `to`, `spender` | `from`, `to` |
+| `set_spender` | `account` | `account`, `spender` | `account` |
+| `revoke_spender` | `account` | `account` | `account` |
+
+`register` skips the freeze check because the account doesn't exist yet. `freeze` doesn't require registration,
+though, so an address frozen in advance can still register, but can do nothing else.
+
+### Freezing
+
+A frozen account cannot deposit, receive, transfer, withdraw, merge, or manage its spenders. Its commitments stay
+exactly as they are, so nothing can accumulate in the account and nothing can leave it until it is unfrozen. Because
+a frozen owner is also checked as `from` in `confidential_transfer_from`, freezing the owner halts its delegations
+too.
+
+The freeze targets ownership of funds, so a **spender** is never subject to the freeze or SAC checks: a spender holds
+no funds of its own. This matches the allowance models of the library's fungible and RWA tokens. Spenders are
+screened by the policy instead.
+
+Freezing is also the precondition for [clawback](/stellar-contracts/tokens/confidential/clawback). The seizure
+entry points don't run the hooks, so they can act on a frozen account.
+
+### SAC Authorization Passthrough
+
+With `sac_passthrough = true`, an issuer's own `set_authorized` / deauthorization on the underlying SAC takes
+effect at the confidential layer automatically, with no state mirrored by the token admin. The cost is one extra
+cross-contract call per checked address per operation. Like the freeze, it checks only addresses that hold funds,
+never the spender.
+
+What the SAC answers depends on the address and the asset:
+
+- **Classic account (`G...`)**: `authorized` reads the account's trustline for the asset and traps if there is
+  none. Every checked `G...` address needs a trustline, including the account at `register` and the recipient of a
+  `deposit` or `withdraw`. A missing trustline fails with the SAC's own error, not `NotAuthorizedBySac`.
+- **Contract (`C...`)**: with no SAC balance yet, `authorized` returns `true` unless the asset has
+  `AUTH_REQUIRED` set. On such an asset, the issuer has to authorize a contract account, such as a smart wallet,
+  before it can use the token.
+- **Native XLM**: `authorized` always returns `true`, so passthrough has no effect.
+
+## Policy Contract
+
+The policy is any contract implementing the `Policy` interface:
+
+```rust
+pub trait Policy {
+    fn is_authorized(e: Env, account: Address, token: Address) -> bool;
+}
+```
+
+This one boolean callback covers allowlists, denylists, and delegation to an identity registry, attestation
+provider, or sanctions oracle. List management and identity proofs stay inside the policy contract. The token
+passes its own address as `token`, so one registry can serve several confidential tokens and still apply per-token
+rules.
+
+A minimal owner-managed allowlist:
+
+```rust
+use soroban_sdk::{contract, contractimpl, Address, Env};
+use stellar_access::ownable::{self as ownable, Ownable};
+use stellar_macros::only_owner;
+use stellar_confidential::compliance::Policy;
+
+#[contract]
+pub struct AllowListPolicy;
+
+#[contractimpl]
+impl AllowListPolicy {
+    pub fn __constructor(e: &Env, owner: Address) {
+        ownable::set_owner(e, &owner);
+    }
+
+    #[only_owner]
+    pub fn set_allowed(e: &Env, account: Address, allowed: bool) {
+        // A production registry also manages the TTL of these entries.
+        if allowed {
+            e.storage().persistent().set(&account, &true);
+        } else {
+            e.storage().persistent().remove(&account);
+        }
+    }
+}
+
+#[contractimpl]
+impl Policy for AllowListPolicy {
+    fn is_authorized(e: Env, account: Address, _token: Address) -> bool {
+        e.storage().persistent().has(&account)
+    }
+}
+
+#[contractimpl(contracttrait)]
+impl Ownable for AllowListPolicy {}
+```
+
+Unlike the freeze, the policy also screens spenders. `set_spender` checks the spender when the delegation is
+granted, and `confidential_transfer_from` checks it again at spend time. `revoke_spender` deliberately doesn't check
+the spender: revocation is the owner's way out of a delegation to a spender that has since become non-compliant.
+
+The policy address can be rotated, or removed by setting it to `None`, with `set_compliance_config`. It is part of
+the deployment's trust surface. A deployment over a SAC can rely on `sac_passthrough` and skip the policy entirely.
+
+## Customizing the Hooks Trait
+
+`ComplianceHooks` is one implementation of `Hooks`. Deployments that need different behavior write their own
+implementation, usually reusing the same `compliance::storage` primitives and changing only the callbacks that need
+it. A callback only has to revert, with `panic_with_error!`, to reject an operation.
+
+<Callout type="warning">
+Every `Hooks` method has an empty default body. A custom implementation has to **forward every callback it doesn't
+customize** to `ComplianceHooks` explicitly. Any callback it leaves out becomes ungated, which silently disables
+freezing for that operation and makes the clawback freeze precondition meaningless.
+</Callout>
+
+### Exempt Unregistered Depositors from Screening
+
+`deposit` is the one operation where `from` may be an address that never registered: the depositor only needs to
+hold the underlying token. The default `ComplianceHooks::on_deposit` screens `from` whether or not it is registered.
+An unregistered depositor gets through if it isn't frozen, passes the policy, and, with `sac_passthrough`, is
+authorized by the SAC. Under an allowlist that lists only onboarded users, that rejects every outside payer.
+
+This implementation exempts an unregistered sender from the freeze and policy checks and keeps only the SAC check:
+
+```rust
+use soroban_sdk::{Address, Env};
+use stellar_confidential::{
+    compliance::{storage as compliance, ComplianceHooks},
+    storage::account_exists,
+    Hooks, RegisterPayload, SetSpenderPayload, SpenderTransferPayload, TransferPayload,
+    WithdrawPayload,
+};
+
+pub struct PermissiveDepositHooks;
+
+impl Hooks for PermissiveDepositHooks {
+    fn on_deposit(e: &Env, from: &Address, to: &Address, _amount: i128) {
+        let Some(config) = compliance::compliance_config(e) else {
+            return;
+        };
+        if account_exists(e, from) {
+            compliance::gate_account(e, from, &config);
+        } else if config.sac_passthrough {
+            // The SEP-41 transfer would fail anyway for a depositor the SAC
+            // has unauthorized.
+            compliance::check_sac(e, from, &config);
+        }
+        compliance::gate_account(e, to, &config);
+    }
+
+    // Every other callback keeps the default compliance behavior.
+    fn on_register(e: &Env, account: &Address, auditor_id: u32, payload: &RegisterPayload) {
+        ComplianceHooks::on_register(e, account, auditor_id, payload);
+    }
+
+    fn on_merge(e: &Env, account: &Address) {
+        ComplianceHooks::on_merge(e, account);
+    }
+
+    fn on_withdraw(
+        e: &Env,
+        from: &Address,
+        to: &Address,
+        amount: i128,
+        payload: &WithdrawPayload,
+    ) {
+        ComplianceHooks::on_withdraw(e, from, to, amount, payload);
+    }
+
+    fn on_transfer(e: &Env, from: &Address, to: &Address, payload: &TransferPayload) {
+        ComplianceHooks::on_transfer(e, from, to, payload);
+    }
+
+    fn on_spender_transfer(
+        e: &Env,
+        spender: &Address,
+        from: &Address,
+        to: &Address,
+        payload: &SpenderTransferPayload,
+    ) {
+        ComplianceHooks::on_spender_transfer(e, spender, from, to, payload);
+    }
+
+    fn on_set_spender(
+        e: &Env,
+        account: &Address,
+        spender: &Address,
+        live_until_ledger: u32,
+        payload: &SetSpenderPayload,
+    ) {
+        ComplianceHooks::on_set_spender(e, account, spender, live_until_ledger, payload);
+    }
+
+    fn on_revoke_spender(e: &Env, account: &Address, spender: &Address) {
+        ComplianceHooks::on_revoke_spender(e, account, spender);
+    }
+}
+```
+
+Wire it with `type Hooks = PermissiveDepositHooks;`. This suits deployments that accept inbound payments from
+counterparties that never register, such as an exchange wallet paying into a payroll pool. Skipping the *policy*
+check on an unregistered sender is a trade-off, not a recommendation: it also lets in an outside address that the
+policy would deny, or that the admin froze before it registered. A deployment that screens with a denylist or
+sanctions policy doesn't need this variant, because the default `ComplianceHooks` already accepts unregistered
+depositors that the policy allows.
+
+### Permit Deposits Only for Oneself
+
+Require the depositor to be the recipient, so nobody can deposit on someone else's behalf. For example, this
+prevents unsolicited "dusting" deposits that complicate auditor bookkeeping:
+
+```rust
+impl Hooks for SelfDepositOnlyHooks {
+    fn on_deposit(e: &Env, from: &Address, to: &Address, amount: i128) {
+        if from != to {
+            panic_with_error!(e, ComplianceError::NotAuthorizedByPolicy);
+        }
+        ComplianceHooks::on_deposit(e, from, to, amount);
+    }
+
+    // ...forward every other callback to ComplianceHooks, as above...
+}
+```
+
+### Restrict Auditor Selection
+
+At `register`, the account owner picks the `auditor_id` the account binds to. The core only checks that the id
+exists in the auditor registry, and `ComplianceHooks::on_register` deliberately leaves the choice open. On a shared
+registry, a deployment with designated auditors checks the choice against its own approved set:
+
+```rust
+impl Hooks for ApprovedAuditorHooks {
+    fn on_register(e: &Env, account: &Address, auditor_id: u32, payload: &RegisterPayload) {
+        let approved: Vec<u32> = e
+            .storage()
+            .instance()
+            .get(&DataKey::ApprovedAuditors)
+            .unwrap_or_else(|| Vec::new(e));
+        if !approved.contains(auditor_id) {
+            panic_with_error!(e, DeploymentError::AuditorNotApproved);
+        }
+        ComplianceHooks::on_register(e, account, auditor_id, payload);
+    }
+
+    // ...forward every other callback to ComplianceHooks, as above...
+}
+```
+
+`DataKey::ApprovedAuditors` and `DeploymentError::AuditorNotApproved` are defined by the deployment. The list is
+filled at construction or through an admin entry point. An account's `auditor_id` can never change after
+registration, so this check is the only point where a deployment controls which auditors may ever see an account's
+activity.
+
+The same mechanism supports per-deposit rate limits, allowlists keyed on the amount, writes to a separate audit
+log, or any other check that has to run atomically with the token operation. For purely observational needs,
+subscribe to the token's events instead.
+
+## Events
+
+| Event | Topics | Data | Emitted by |
+| ----- | ------ | ---- | ---------- |
+| `Frozen` | `"frozen"`, `account` | — | `freeze` |
+| `Unfrozen` | `"unfrozen"`, `account` | — | `unfreeze` |
+| `ComplianceConfigChanged` | `"compliance_config_changed"` | `policy`, `sac_passthrough` | Every `compliance::storage::set_compliance_config` call, including the one in the constructor |
+
+Seizures emit `Clawback` and, for forced revocation, `RevokeSpender` (see
+[Clawback](/stellar-contracts/tokens/confidential/clawback#seizure-flow)).
+
+## Errors
+
+| Error | Code | Raised when |
+| ----- | ---- | ----------- |
+| `NotConfigured` | 3600 | `freeze` or `unfreeze` is called before a configuration exists |
+| `AccountFrozen` | 3601 | A checked address is frozen |
+| `NotAuthorizedByPolicy` | 3602 | The policy returns `false` for a checked address |
+| `NotAuthorizedBySac` | 3603 | The SAC's `authorized` returns `false` for a checked address |
+| `AccountNotFrozen` | 3604 | The target of `clawback` or `force_revoke_spender` isn't frozen |
+| `InvalidClawbackAmount` | 3605 | The `clawback` amount isn't strictly positive |
+| `InvalidClawbackDestination` | 3606 | The `clawback` destination is the token contract itself |
+
+On a deployment with no configuration, `is_frozen` always returns `false`, so `clawback` and `force_revoke_spender`
+fail with `AccountNotFrozen` (3604), not `NotConfigured`.
+
+See the [compliance specification](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/compliance.md)
+for the full design rationale.

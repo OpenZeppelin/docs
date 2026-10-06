@@ -1,0 +1,203 @@
+---
+title: Wallet Integration
+---
+
+[Specification](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/sdk/README.md)
+
+Apart from the public amounts of deposits and withdrawals, the confidential token contract never sees an amount. It
+stores Pedersen commitments, verifies proofs, and emits encrypted ciphertexts. Every balance, transfer
+amount, or allowance a user sees is computed by client software, the *wallet*. This page describes what a wallet must
+do to operate a confidential account correctly and safely.
+
+<Callout type="info">
+This page summarizes the SDK specification that accompanies the library. The library does not ship an SDK: it ships
+the on-chain contracts and the Noir circuits. The specification defines obligations rather than an API, so an
+implementation in any language can conform to it.
+</Callout>
+
+## Why the Client Is Load-Bearing
+
+A balance is a commitment `C = v·G + r·H`. The chain stores the point, but the opening `(v, r)` needed to spend lives
+only in wallet state: if a wallet loses or misaccumulates it, the funds become unspendable, and the contract cannot
+help because it never knew the value. Every amount is client-decrypted, so a decryption bug yields a plausible wrong
+number rather than a visible failure. And all keys, blinding factors, and salts originate in the client, so
+confidentiality reduces to the wallet's key handling and random number generator.
+
+## Keys
+
+All keys of a confidential account derive from a single spending secret `sk`:
+
+| Key | Derived from | Published on-chain | Purpose |
+| --- | --- | --- | --- |
+| Spending key `sk` | The account's root, or imported directly | Spending public key `Y = sk·H` | Witness in every proof the owner produces |
+| Viewing key `vk` | `sk` and the token contract address | Public viewing key `PVK = vk·H` | Decrypts incoming transfers and balance checkpoints; cannot spend |
+| Delegation viewing key `dvk_i` | `vk` and the spender's address | Escrowed to the spender at `set_spender` | Lets one spender track its own allowance, and nothing else |
+
+Because `vk` is bound to the contract address, keys for one deployment reveal nothing about another.
+
+<Callout type="warning">
+The viewing key carries more authority than "read-only" suggests. Besides decrypting balances and incoming transfers,
+it lets its holder recompute the ephemeral scalar of every transfer the account sent, and therefore open those
+transfer commitments retroactively. Never present `vk` as a shareable credential. To prove a single fact to a third
+party, use [Selective Disclosure](/stellar-contracts/tokens/confidential/selective-disclosure).
+</Callout>
+
+### Deriving the Spending Key
+
+The SDK specification fixes one
+[derivation](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/sdk/key-derivation.md#derivation)
+for every client: HKDF-SHA-512 over a *root*, bound to both the token contract and the account address, so one root
+never yields linkable keys on two addresses. What controls the address determines the root:
+
+- **Signer root.** For an ed25519-controlled address, the root is a deterministic
+  [SEP-53](https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0053.md) signature over a message
+  naming the protocol, the contract, and the account, so the user reproduces it from the key they already hold. The
+  wallet must verify the signature against the expected signer and reject signers that do not return the same
+  signature twice, which typically rules out threshold and MPC signers.
+- **Raw root.** For a smart account or other contract address, or a custody stack that cannot sign arbitrary
+  messages, the root is 32 raw bytes from the controlling custody mechanism. Nothing else reproduces it, so the
+  wallet must surface it for backup at creation.
+- **Direct import.** An `sk` sampled directly from a CSPRNG, with no root behind it, stays usable as a first-class
+  account secret and bypasses the derivation. Only an exported copy of `sk` recovers it.
+
+With a signer root, whoever obtains the ed25519 secret gains both view and spend access, and since `register` is
+single-use, `sk` cannot be rotated: remediation means registering a new address and moving the funds. On recovery, a
+wallet derives `sk` for each candidate address and compares `Y = sk·H` against the spending public key stored
+on-chain.
+
+The [key derivation specification](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/sdk/key-derivation.md)
+also requires a wallet to:
+
+- record, per account, which of the three forms produced `sk`, and never offer a recovery path that form cannot
+  satisfy;
+- record the enrolled ed25519 signer instead of assuming the master key, since an address can have several signers,
+  and should warn on sync when that signer has been rotated off the address, which orphans the root;
+- offer `sk` export as a direct-import backup even for signer roots, ideally before the account first receives funds,
+  because a signer can be deterministic within a session but not across sessions;
+- state, where it offers to create an account, that the account's confidentiality is bounded by the secrecy of its
+  signing key.
+
+## Holder Wallet
+
+### Tracking Balances
+
+The wallet keeps one opening for the spendable balance and one for the receiving balance, and updates them from the
+contract's events:
+
+- **Deposits and incoming transfers** add to the receiving opening. Transfer amounts and blindings are recovered by
+  ECDH between the viewing key and the event's ephemeral public key.
+- **Merge** folds the receiving opening into the spendable one and resets the receiving side. `RevokeSpender` and,
+  with the compliance extension, `Clawback` are also folds.
+- **Withdrawals, outgoing transfers, and `set_spender`** *overwrite* the spendable opening from the encrypted balance
+  and salt in the event, so a wallet that missed earlier events still converges on the spendable side.
+- **A self-transfer** is applied on both sides.
+
+Blindings compose in the Grumpkin scalar field, whose modulus `q` is larger than the modulus `r` of Noir's `Field`.
+Fold them as unbounded integers and
+[reduce modulo `q`](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/sdk/crypto-core.md#blinding-accumulation)
+only where a blinding leaves the wallet for the curve: a proof witness or a consistency recommit. Reducing modulo `r`
+instead, or at every fold, yields an opening that no longer matches the on-chain point.
+
+Events must be applied in emission order, deduplicated by event id, and idempotently, since a duplicated credit
+inflates the balance. Persisted wallet state is not a cache: once events age out of Stellar RPC, state that no archive
+holds is lost for good (see [Indexing and Recovery](/stellar-contracts/tokens/confidential/indexing)).
+
+### Consistency Checks
+
+After every sync and before building any proof, the wallet re-commits each opening and compares it against the
+on-chain commitment from `confidential_balance`. A missed event, a duplicate, or a bug then shows up as a mismatch
+rather than a wrong balance. The wallet must not spend from mismatched state and should report which balance diverged.
+
+### Salts and Retries
+
+Every attempt samples a fresh salt from a CSPRNG, including retries after a reverted or dropped transaction. The salt
+is the only freshness input to the operation's blinding, its ephemeral key (derived deterministically from the
+originator's viewing key and the salt), and every encryption mask. Reusing one is therefore a confidentiality failure,
+not only a linkability one. The contract cannot enforce freshness, so wallets must never cache, reuse, or cycle salts.
+
+### In-Flight Operations and Merging
+
+A wallet may show the projected balance right after submission, but must reconcile it against the emitted event
+before treating it as confirmed.
+
+Received funds become spendable only after a merge. Merge needs no proof and is cheap, so a wallet should merge
+automatically, or prompt, before a spend the spendable balance cannot cover. Regular merges also shorten the replay
+window for recovery.
+
+### The Unspendable-Blinding Case
+
+After a proofless fold (merge, revocation, or clawback), the spendable blinding can, with negligible probability (about
+2⁻¹²⁷ per fold), land outside the range a proof can witness. The commitment stays valid and consistency checks pass,
+but no proof can be built against it until the next merge that folds in an inbound confidential transfer; deposits
+alone do not resolve it. Wallets should test for this before proving and surface it as a distinct state with that
+recovery path.
+
+## Proving and Submission
+
+- **Witness assembly.** Assemble public inputs in exactly the order the contract does: a permutation of two same-typed
+  inputs proves a different statement. Leave inputs the contract loads from its own state out of the payload.
+- **Canonical encoding.** Every field value the wallet emits, in a payload, proof input, or persisted state, must be
+  the [canonical](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/sdk/crypto-core.md#canonicality)
+  representative below `r`. Reject non-canonical values at the wallet's own boundary: the contract rejects them too,
+  but by then local state may already hold bytes that recovery cannot reproduce.
+- **Toolchain pinning.** Generate proofs with the toolchain and flags pinned in
+  [`circuits/vks/README.md`](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/circuits/vks/README.md),
+  notably a Keccak Fiat-Shamir transcript (many backends default to Poseidon2, which verifies locally and fails
+  on-chain) with zero-knowledge mode off. That recipe is provisional and will be finalized together with the
+  verifier, including the zero-knowledge setting (see
+  [Generating Proofs](/stellar-contracts/tokens/confidential/proof-system#generating-proofs) for what the current
+  setting implies). Check that the circuit's verification key matches the deployed one before submitting.
+- **Where proving runs.** Keep the prover pluggable (in-process WASM, native, or remote). Remote proving discloses the
+  spending key, balance, and amount to the prover, so it must be explicit opt-in, never a fallback.
+- **Submission.** Authorize with the principal the entry point expects, which for `confidential_transfer_from` is the
+  spender, not the owner (see [Operations](/stellar-contracts/tokens/confidential/operations)). Simulating first
+  catches stale commitments, frozen accounts, and expired delegations without a fee.
+- **Failures.** Distinguish proof verification failures (check the verification key and witness) from state
+  mismatches (re-sync and rebuild): they look alike on the wire but have opposite remedies. A rotation of an auditor
+  key or of the verifier between proving and submission also invalidates an in-flight proof; the wallet rebuilds it
+  against the new key with a fresh salt (see
+  [Key Rotation](/stellar-contracts/tokens/confidential/auditing#key-rotation)).
+
+## Roles
+
+The specification separates the holder, spender, auditor, and disclosure-recipient roles, each holding distinct key
+material and structurally unable to exceed its capability. A spender wallet, for example, rebuilds allowance state
+from the on-chain delegation entry and must never reach the owner's spendable balance (see
+[Spenders](/stellar-contracts/tokens/confidential/spenders)), and an auditor client must never be able to build a
+spending witness (see [Auditing](/stellar-contracts/tokens/confidential/auditing)).
+
+## Requirements
+
+- **Secrets stay local.** The root, keys, ephemeral scalars, and cached openings never leave the device, except under
+  opted-in remote proving, and never reach logs, telemetry, or crash reports.
+- **Storage at rest.** A persisted opening is as sensitive as its amount, and a persisted root is equivalent to the
+  funds, so encrypt both. Never persist a signer root; re-derive it on demand.
+- **Randomness and supply chain.** Use a CSPRNG and fail rather than fall back. Pin verification keys and the proving
+  toolchain; never fetch them at runtime from a mutable location.
+- **Host compromise.** Software cannot defend against a compromised host, and a hardware device that does not prove
+  internally must expose `sk` to the host, since `sk` is a proof witness.
+- **Scale.** Proving targets single-digit seconds. Inbound volume is limited only by transaction fees, so do not size
+  storage on the user's own activity.
+
+Conformance is defined against the language-agnostic fixtures in
+[`circuits/lib/testdata`](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/confidential/circuits/lib/testdata):
+an implementation reproduces every fixture byte-for-byte, and runs the real compiled circuits against its own
+witnesses, including tampered ones that must be rejected. See
+[Conformance and Versioning](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/sdk/requirements.md#conformance-and-versioning).
+
+<Callout type="warning">
+Two vectors the specification
+[requires](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/sdk/conformance.md#vectors-this-specification-requires)
+do not exist yet: the ephemeral-scalar derivation, and the chain from a root (including its SEP-53 signature) to `sk`,
+`vk`, `Y`, and `PVK`. Until they land, no fixture checks that two clients derive the same account from the same
+backup, or the same ephemeral scalars, so transfers sent from one client may not be disclosable from another.
+</Callout>
+
+## UX Considerations
+
+Confidential transfers should feel like regular ones, with two visible differences: **proof generation latency** when
+sending, withdrawing, or delegating, and **the merge step** before received funds become spendable, which the wallet
+should make nearly automatic. Keys, commitments, proofs, salts, and auditor ciphertexts stay behind the wallet, and
+the holder selects an auditor once at registration. Incoming transfers never invalidate an in-flight spend proof, and
+an expired delegation still holds its escrow until the owner revokes it, so wallets should surface upcoming
+expirations.
