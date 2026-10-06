@@ -107,14 +107,28 @@ If a higher offset is required, a custom version of `set_decimals_offset()` must
 
 ### Inflation (Precision) Attacks
 
-The virtual decimals offset helps protect against inflation attacks where an attacker:
+In empty or nearly empty vaults, deposits are at risk of being stolen through a "donation" that inflates the price of a
+share. In an inflation attack, an attacker:
 1. Deposits 1 stroop to get the first share (becoming the sole shareholder)
 2. **Donates** (not deposits) an enormous amount of assets directly to the vault contract via a direct transfer, without receiving any shares in return. This inflates the vault's total assets while keeping total shares at 1, making that single share worth an enormous amount
-3. When a legitimate user tries to deposit (e.g., 1000 stroops), the share calculation rounds down to 0 shares because their deposit is negligible compared to the inflated vault balance. The user loses their deposit while receiving nothing
+3. When a legitimate user deposits (e.g., 1000 stroops), the share calculation rounds down because their deposit is small compared to the inflated vault balance, and the assets lost to rounding accrue to the attacker's share
 
-For example: If the attacker donates 1,000,000 stroops after their initial 1 stroop deposit, the vault has 1,000,001 total assets and 1 total share. A user depositing 1000 stroops would receive `(1000 × 1) / 1,000,001 = 0.000999` shares, which rounds down to 0.
+For example: without any mitigation, if the attacker donates 1,000,000 stroops after their initial 1 stroop deposit, the vault has 1,000,001 total assets and 1 total share. A user depositing 1000 stroops would receive `(1000 × 1) / 1,000,001 = 0.000999` shares, which rounds down to 0.
 
-The offset adds virtual shares and assets to the conversion formula, making such attacks economically infeasible by ensuring the denominator is never so small that legitimate deposits round to zero.
+The vault mitigates this in two ways:
+
+- **Zero-share deposit rejection**: `deposit` reverts with `VaultZeroShares` when a positive amount of assets would mint
+  zero shares, so no depositor can lose their entire deposit to an inflated price. Each deposit can still lose up to one
+  share's worth of assets to rounding. Integrators that need a tighter bound should compare `preview_deposit` against a
+  caller-supplied minimum before depositing.
+- **Virtual shares and assets**: the offset adds virtual shares and assets to the conversion formula. They do not fully
+  prevent the attack. With the default offset of 0, diluting a single deposit costs the attacker at least as much as
+  that deposit, so attacking a single victim is never profitable, but the rounding loss of every deposit accrues to the
+  existing shareholders, and an attacker holding most of the real shares profits once enough deposits land on the
+  inflated price. With a larger offset, the attack becomes orders of magnitude more expensive than it is profitable.
+
+Vault deployers can also make an initial deposit of a non-trivial amount of the asset ("dead shares"), so that
+manipulating the share price becomes economically unviable.
 
 For more details about the mechanics of this attack, see the [OpenZeppelin ERC-4626 security documentation](https://docs.openzeppelin.com/contracts/5.x/erc4626#security-concern-inflation-attack).
 
@@ -247,6 +261,8 @@ let shares_received = vault_client.deposit(
 );
 ```
 
+A positive deposit that would mint zero shares reverts with `VaultZeroShares`.
+
 Alternatively, mint a specific amount of shares:
 
 ```rust
@@ -284,6 +300,9 @@ let assets_received = vault_client.redeem(
     &user_address,      // Operator (requires auth)
 );
 ```
+
+A positive redemption that would return zero assets reverts with `VaultZeroAssets`. When the owner's whole balance is
+worth zero assets, `max_redeem` returns `0` and the redemption fails with `VaultExceededMaxRedeem` instead.
 
 ### Preview Functions
 
@@ -326,7 +345,7 @@ let total_assets = vault_client.total_assets();
 let max_deposit = vault_client.max_deposit(&user_address);
 let max_mint = vault_client.max_mint(&user_address);
 let max_withdraw = vault_client.max_withdraw(&user_address);
-let max_redeem = vault_client.max_redeem(&user_address);
+let max_redeem = vault_client.max_redeem(&user_address); // 0 if the balance is worth zero assets
 ```
 
 ### Operator Pattern
