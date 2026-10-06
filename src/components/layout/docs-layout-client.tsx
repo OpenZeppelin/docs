@@ -54,6 +54,7 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 			pathname.startsWith("/monitor") ||
 			pathname.startsWith("/relayer") ||
 			pathname.startsWith("/ui-builder") ||
+			pathname.startsWith("/role-manager") ||
 			pathname.startsWith("/ecosystem-adapters") ||
 			pathname.startsWith("/tools");
 
@@ -65,6 +66,7 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 						"/monitor",
 						"/relayer",
 						"/ui-builder",
+						"/role-manager",
 						"/ecosystem-adapters",
 						"/tools",
 					])
@@ -103,6 +105,7 @@ export function DocsLayoutClient({ children }: DocsLayoutClientProps) {
 			"/relayer",
 			"/monitor",
 			"/ui-builder",
+			"/role-manager",
 			"/upgrades",
 		]);
 		if (
