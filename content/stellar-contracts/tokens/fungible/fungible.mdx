@@ -11,16 +11,67 @@ same value and properties, with balances and ownership tracked through Soroban s
 ## Overview
 
 The [fungible](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/fungible)
-module provides three different Fungible Token variants that differ in how certain features like
-token transfers and approvals are handled:
+module provides the `FungibleToken` trait, which exposes the SEP-41 interface, together with a set of
+**contract types** that define how the token behaves. All contract types share a common interface and
+expose identical contract functions as entry-points. They differ in the logic they run around the core
+operations, such as checking an allowlist before a transfer or updating the total supply on every mint
+and burn.
 
-The module provides several implementation options to suit different use cases:
+The contract type is selected through the `ContractType` associated type of `FungibleToken`, by listing
+what the token is made of with `Compose`:
 
-1. **Base implementation** (`FungibleToken` with `Base` contract type): Suitable for most standard token use cases.
-2. **AllowList extension** (`FungibleToken` with `AllowList` contract type): For tokens that require an allowlist mechanism to control who can transfer tokens.
-3. **BlockList extension** (`FungibleToken` with `BlockList` contract type): For tokens that need to block specific addresses from transferring tokens.
+```rust
+#[contractimpl(contracttrait)]
+impl FungibleToken for MyToken {
+    type ContractType = Compose<(AllowList, TotalSupply)>;
+}
+```
 
-These implementations share core functionality and a common interface, exposing identical contract functions as entry-points. However, the extensions provide specialized behavior by overriding certain functions to implement their specific requirements.
+The following contract types are available:
+
+| Contract type | Behavior | Enables |
+| --- | --- | --- |
+| `Base` | Standard SEP-41 behavior. Suitable for most use cases. | - |
+| `AllowList` | Only allowed accounts can send, receive, approve or burn tokens. | `FungibleAllowList` |
+| `BlockList` | Blocked accounts cannot send, receive, approve or burn tokens. | `FungibleBlockList` |
+| `TotalSupply` | Tracks the total supply on every mint and burn. | `FungibleTotalSupply` |
+| `Capped` | Enforces a maximum total supply on every mint. | `FungibleCapped` |
+| `FungibleVotes` | Moves voting units on every balance change. | `Votes` |
+| [`RWA`](/stellar-contracts/tokens/rwa/rwa) | Enforces identity verification and compliance rules. | `RWAToken` |
+| [`Vault`](/stellar-contracts/tokens/vault/vault) | Issues the token as shares of a tokenized vault. | `FungibleVault` |
+
+Contract types can be combined as follows:
+
+- `AllowList`, `BlockList` and `FungibleVotes` can be combined with each other, in pairs or all three
+  together, e.g. `Compose<(AllowList, BlockList)>` or `Compose<(AllowList, FungibleVotes)>`. When both
+  lists are used, an account has to be allowed and must not be blocked.
+- `TotalSupply` can be added to `AllowList`, `BlockList` or both, e.g. `Compose<(BlockList, TotalSupply)>`.
+- `Capped`, `RWA` and `Vault` rely on the tracked supply, so they require `TotalSupply` in the list,
+  e.g. `Compose<(RWA, TotalSupply)>`. `Capped` can be added to any supply-tracking list, e.g.
+  `Compose<(AllowList, Capped, TotalSupply)>` or `Compose<(Vault, Capped, TotalSupply)>`.
+- `FungibleVotes` tracks voting units rather than the token supply, so it cannot be combined with
+  `TotalSupply` or `Capped`.
+
+The order of the list does not matter, and additive extensions that don't override any behavior, such as
+`Burnable`, may be listed as well. A list that is not supported is rejected at compile time with an error
+naming the valid combinations. Likewise, implementing an extension trait that the contract type does not
+back (e.g. `FungibleTotalSupply` without `TotalSupply` in the list) does not compile.
+
+### Minting
+
+`mint` is not part of SEP-41, so it is not exposed by the `FungibleToken` trait: the contract defines its
+own mint entry-point, with the access control it needs. That entry-point must mint through the selected
+contract type, which applies the bookkeeping of every listed extension:
+
+```rust
+<Self as FungibleToken>::ContractType::mint(e, &to, amount);
+```
+
+<Callout type="warning">
+Do not call a specific primitive such as `Base::mint` directly. Depending on the contract type, doing so
+would skip updating the total supply (causing a later burn to fail), enforcing the cap, or moving the
+voting units.
+</Callout>
 
 ## Usage
 
@@ -31,10 +82,10 @@ and players can transfer tokens between accounts.
 Here’s what a basic fungible token contract might look like:
 
 ```rust
-use soroban_sdk::{contract, contractimpl, Address, Env, String};
-use stellar_tokens::fungible::{burnable::FungibleBurnable, Base, ContractOverrides, FungibleToken};
+use soroban_sdk::{contract, contractimpl, Address, Env, MuxedAddress, String};
 use stellar_access::ownable::{self as ownable, Ownable};
 use stellar_macros::only_owner;
+use stellar_tokens::fungible::{burnable::FungibleBurnable, Base, Compose, FungibleToken};
 
 #[contract]
 pub struct GameCurrency;
@@ -56,18 +107,21 @@ impl GameCurrency {
 
     #[only_owner]
     pub fn mint_tokens(e: &Env, to: Address, amount: i128) {
-        // Mint tokens to the recipient
-        Base::mint(e, &to, amount);
+        // Mint tokens to the recipient through the contract type
+        <Self as FungibleToken>::ContractType::mint(e, &to, amount);
     }
 }
 
 #[contractimpl(contracttrait)]
 impl FungibleToken for GameCurrency {
-    type ContractType = Base;
+    type ContractType = Compose<(Base,)>;
 }
 
 #[contractimpl(contracttrait)]
 impl FungibleBurnable for GameCurrency {}
+
+#[contractimpl(contracttrait)]
+impl Ownable for GameCurrency {}
 ```
 
 ## Extensions
@@ -81,30 +135,131 @@ The `FungibleBurnable` trait extends the `FungibleToken` trait to provide the ca
 To fully comply with the SEP-41 specification, a contract must implement both the `FungibleToken`
 and `FungibleBurnable` traits.
 
+An empty implementation is enough: the burn logic is selected based on the contract type, e.g. burning
+checks the allowlist with `AllowList` and decreases the total supply with `TotalSupply`.
+
+### - Total Supply
+[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/fungible/extensions/total_supply)
+
+Tracking the total supply is not required by SEP-41, so it is not part of the `FungibleToken` trait.
+Keeping a global supply counter has a scalability cost: every mint and burn writes the same storage entry,
+and transactions writing the same entry cannot be executed in parallel. Tokens that do not need the
+counter are better off without it, which is why supply tracking is provided as an opt-in extension.
+
+To track the total supply, list `TotalSupply` in the contract type and implement the `FungibleTotalSupply`
+trait, which exposes the `total_supply()` function. Building on the [example](#usage) above:
+
+```rust
+#[contractimpl]
+impl GameCurrency {
+    #[only_owner]
+    pub fn mint_tokens(e: &Env, to: Address, amount: i128) {
+        // Resolves to the `TotalSupply` mint, which increases the supply
+        <Self as FungibleToken>::ContractType::mint(e, &to, amount);
+    }
+}
+
+#[contractimpl(contracttrait)]
+impl FungibleToken for GameCurrency {
+    type ContractType = Compose<(TotalSupply,)>;
+}
+
+#[contractimpl(contracttrait)]
+impl FungibleTotalSupply for GameCurrency {}
+```
+
+Burns performed through `FungibleBurnable` decrease the supply automatically. The supply is stored in its
+own `persistent` entry, so mints and burns only conflict with each other and never with plain transfers.
+
 ### - Capped
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/fungible/extensions/capped)
 
-Unlike other extensions, the capped extension does not expose a separate trait. Instead,
-it offers helper functions designed to assist in implementing the mint function, enforcing a supply cap.
+The capped extension enforces a maximum total supply. It consists of the `Capped` contract type, whose mint
+checks the cap before minting, and the `FungibleCapped` trait, which exposes the `cap()` function.
+
+Since the cap is compared against the tracked supply, `Capped` requires `TotalSupply` in the contract type,
+and `FungibleCapped` requires `FungibleTotalSupply` to be implemented:
+
+```rust
+use soroban_sdk::{contract, contractimpl, Address, Env, MuxedAddress, String};
+use stellar_access::ownable::{self as ownable, Ownable};
+use stellar_macros::only_owner;
+use stellar_tokens::fungible::{
+    capped::{Capped, FungibleCapped},
+    total_supply::{FungibleTotalSupply, TotalSupply},
+    Base, Compose, FungibleToken,
+};
+
+#[contract]
+pub struct CappedToken;
+
+#[contractimpl]
+impl CappedToken {
+    pub fn __constructor(e: &Env, initial_owner: Address, cap: i128) {
+        Base::set_metadata(e, 7, String::from_str(e, "Capped Token"), String::from_str(e, "CAP"));
+        ownable::set_owner(e, &initial_owner);
+        Capped::set_cap(e, cap);
+    }
+
+    #[only_owner]
+    pub fn mint(e: &Env, to: Address, amount: i128) {
+        // Resolves to the `Capped` mint: checks the cap, then increases the supply
+        <Self as FungibleToken>::ContractType::mint(e, &to, amount);
+    }
+}
+
+#[contractimpl(contracttrait)]
+impl FungibleToken for CappedToken {
+    type ContractType = Compose<(Capped, TotalSupply)>;
+}
+
+#[contractimpl(contracttrait)]
+impl FungibleTotalSupply for CappedToken {}
+
+#[contractimpl(contracttrait)]
+impl FungibleCapped for CappedToken {}
+
+#[contractimpl(contracttrait)]
+impl Ownable for CappedToken {}
+```
+
+`Capped::set_cap` is best called once, in the constructor, so that holders can rely on a fixed cap. If the
+cap needs to be adjusted later, it can also be called from an access-controlled function.
 
 ### - AllowList
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/fungible/extensions/allowlist)
 
 The `FungibleAllowList` trait extends the `FungibleToken` trait to provide an allowlist mechanism that
 can be managed by an authorized account. This extension ensures that only allowed accounts can
-transfer/receive tokens or approve token transfers.
+transfer/receive tokens or approve token transfers. It requires `AllowList` in the contract type,
+e.g. `Compose<(AllowList,)>`.
+
+`allow_user` and `disallow_user` have no default implementation because they are privileged operations:
+they take an `operator` parameter on which the desired access control should be enforced. See the
+[example](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/fungible-allowlist) for a
+complete integration.
 
 ### - BlockList
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/fungible/extensions/blocklist)
 
 The `FungibleBlockList` trait extends the `FungibleToken` trait to provide a blocklist mechanism that
 can be managed by an authorized account. This extension ensures that blocked accounts cannot transfer/receive
-tokens, or approve token transfers.
+tokens, or approve token transfers. It requires `BlockList` in the contract type, e.g. `Compose<(BlockList,)>`.
+
+`block_user` and `unblock_user` have no default implementation because they are privileged operations:
+they take an `operator` parameter on which the desired access control should be enforced. See the
+[example](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/fungible-blocklist) for a
+complete integration.
+
+The AllowList and BlockList extensions can also be used together, with `Compose<(AllowList, BlockList)>`.
 
 ### - Votes
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/fungible/extensions/votes)
 
-The `FungibleVotes` extension integrates with the governance [Votes](/stellar-contracts/governance/votes) module to track voting power based on token balances. It overrides `transfer`, `transfer_from`, `burn`, and `burn_from` to call `transfer_voting_units` after each balance change, enabling delegation-based governance. Token holders must call `delegate` (even to themselves) before their voting power is counted.
+The `FungibleVotes` contract type integrates with the governance [Votes](/stellar-contracts/governance/votes) module to track voting power based on token balances. It overrides `transfer`, `transfer_from`, `burn`, `burn_from` and `mint` to call `transfer_voting_units` after each balance change, enabling delegation-based governance. Token holders must call `delegate` (even to themselves) before their voting power is counted.
+
+It is selected with `Compose<(FungibleVotes,)>` and can be combined with `AllowList`, `BlockList` or both.
+The total amount of voting units is exposed through `get_total_supply()` from the `Votes` trait.
 
 ## Stellar Asset Contract (SAC)
 
