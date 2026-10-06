@@ -22,6 +22,11 @@ Defines the scope where the rule applies:
 - `Default`: Applies to any context. Used for admin-like authorization that spans all operations.
 - `CallContract(Address)`: Applies to specific contract calls. Useful for scoped permissions like session logins to a particular dApp.
 - `CreateContract(BytesN<32>)`: Applies to contract deployments with a specific WASM hash. Enables control over which contracts can be deployed.
+- `CreateContractExternalRef(Address, String)`: Applies to contract deployments from the executable reference that an owner contract stores under a tag (Protocol 28, [CAP-85](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0085.md)).
+
+<Callout type="warning">
+With `CreateContractExternalRef(owner, tag)`, the WASM hash is resolved at deployment time and the `owner` contract can change it later, so the rule trusts the owner contract to point the tag at acceptable code. A deployment is matched by how its executable is referenced, not by the code it resolves to: a `CreateContract(hash)` rule does not cover a deployment through an external reference, even if that reference resolves to the same hash.
+</Callout>
 
 #### Valid Until
 Optional expiration defined by a ledger sequence. Rules with expiration automatically become invalid after the specified ledger, enabling time-limited permissions like 24-hour sessions.

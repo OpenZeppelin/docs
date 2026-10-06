@@ -149,9 +149,11 @@ Threshold policies (both simple and weighted) store authorization requirements t
 **Adding Signers:** Conversely, if signers are added without updating the threshold, the security guarantee silently weakens. A strict 3-of-3 multisig becomes a 3-of-5 multisig after adding two signers, reducing the required approval from 100% to 60% without any explicit warning.
 
 **Resolution:** Administrators must manually update thresholds and weights when modifying signer sets:
-1. Before removing signers, verify that the threshold remains achievable
+1. Before removing signers, verify that the threshold remains achievable, lowering it first if needed
 2. After adding signers, adjust thresholds or assign weights to maintain the desired security level
 3. Ideally, bundle these updates in the same transaction as the signer modifications
+
+For weighted thresholds, these updates must also happen in a specific order; see [Required Operation Ordering](#required-operation-ordering).
 
 ## Example Policies
 
@@ -190,18 +192,31 @@ The policy requires two configuration parameters:
 When using threshold policies, be aware of signer set divergence issues. See the [Caveats](#caveats) section above for details on how adding or removing signers affects threshold policies and how to properly manage these changes.
 </Callout>
 
+#### Required Operation Ordering
+
+Both `set_threshold()` and `set_signer_weight()` enforce `threshold <= total signer weight` on every individual call. Because each call is validated in isolation, reconfiguration is order-sensitive:
+
+- **Adding weight and raising the threshold**: call `set_signer_weight()` first to increase the total weight, then `set_threshold()`. Raising the threshold first reverts if it exceeds the current total weight.
+- **Removing a signer or reducing weight**: call `set_threshold()` first to lower the threshold, then `set_signer_weight()`. Reducing the weight first reverts if the total weight drops below the current threshold.
+
+A call that would leave `threshold > total signer weight` reverts with `InvalidThreshold` (error `3211`), so a wrong-order sequence fails at the first step whose intermediate state violates the invariant.
+
 ### Spending Limit
 
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/accounts/src/policies/spending_limit.rs)
 
 The `spending_limit` policy enforces spending caps over time periods, enabling budget controls, allowances, and rate limiting for smart accounts. This is particularly useful for session keys, sub-accounts, and automated operations that need spending constraints.
 
-The policy tracks cumulative spending within a rolling time window and rejects transactions that would exceed the configured limit. The policy maintains state to track spending and automatically resets when the time window expires.
+The policy tracks cumulative spending of `transfer` calls within a rolling window and rejects transactions that would exceed the configured limit. Entries older than the window are evicted before each new transfer is evaluated, so the available budget frees up as the window rolls forward. Any other call under a rule with this policy is rejected.
 
 The policy requires two configuration parameters:
 
-- **Limit Amount**: Maximum spending allowed in the time window
-- **Time Window**: Duration in seconds for the spending period
+- **Spending Limit** (`spending_limit`): Maximum amount that can be spent within the window
+- **Period** (`period_ledgers`): Length of the rolling window, in ledgers (e.g. `17280` for roughly one day)
+
+Zero-amount transfers move no funds and are always permitted, even when the amount already spent exceeds a limit that was lowered in the meantime.
+
+The spending history is capped at 815 entries (`MAX_HISTORY_ENTRIES`), the largest history that still fits in a single ledger entry. Once the window holds that many transfers, further transfers fail with `HistoryCapacityExceeded` until older entries fall out of the window.
 
 ## Best Practices
 
