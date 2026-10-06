@@ -99,22 +99,27 @@ graph TD
 
 
 ```rust
-use soroban_sdk::{map, vec, Env, String}
-use stellar_accounts::smart_account::{self as smart_account, ContextRuleType};
+use soroban_sdk::{map, vec, Env, String};
+use stellar_accounts::smart_account::{self as smart_account, ContextRuleType, Signer};
+
+// ~5 seconds per ledger
+const DAY_IN_LEDGERS: u32 = 17_280;
+
+let current_ledger = e.ledger().sequence();
 
 // This rule applies to all contexts and requires 2-of-3 signatures from Alice, Bob, or Dave.
 smart_account::add_context_rule(
     e,
-    ContextRuleType::Default,
-    String::from_str(e, "Sudo"),
+    &ContextRuleType::Default,
+    &String::from_str(e, "Sudo"),
     None, // No expiration
-    vec![
+    &vec![
         e,
-        Signer::External(bls_verifier, alice_key),
+        Signer::External(bls_verifier.clone(), alice_key),
         Signer::External(bls_verifier, bob_key),
         Signer::Delegated(dave_addr)
     ],
-    map![
+    &map![
         e,
         (threshold_policy, threshold_params) // 2-of-3 Threshold
     ],
@@ -124,14 +129,14 @@ smart_account::add_context_rule(
 // requires a dapp1 key signature, and enforces spending limits.
 smart_account::add_context_rule(
     e,
-    ContextRuleType::CallContract(usdc_addr),
-    String::from_str(e, "Dapp1 Subscription"),
-    Some(current_ledger + 1_year),
-    vec![
+    &ContextRuleType::CallContract(usdc_addr),
+    &String::from_str(e, "Dapp1 Subscription"),
+    Some(current_ledger + 365 * DAY_IN_LEDGERS),
+    &vec![
         e,
-        Signer::External(ed25519_verifier, dapp1_key)
+        Signer::External(ed25519_verifier.clone(), dapp1_key)
     ],
-    map![
+    &map![
         e,
         (spending_limit_policy, spending_params)
     ],
@@ -141,14 +146,14 @@ smart_account::add_context_rule(
 // requires a dapp2 key signature, and enforces rate limiting and time window policies.
 smart_account::add_context_rule(
     e,
-    ContextRuleType::CallContract(dapp_addr),
-    String::from_str(e, "Dapp2 Session"),
-    Some(current_ledger + 7_days),
-    vec![
+    &ContextRuleType::CallContract(dapp_addr),
+    &String::from_str(e, "Dapp2 Session"),
+    Some(current_ledger + 7 * DAY_IN_LEDGERS),
+    &vec![
         e,
         Signer::External(ed25519_verifier, dapp2_key)
     ],
-    map![
+    &map![
         e,
         (rate_limit_policy, rate_limit_params),
         (time_window_policy, time_window_params)
@@ -159,14 +164,14 @@ smart_account::add_context_rule(
 // requires an AI agent key signature, and enforces volume caps.
 smart_account::add_context_rule(
     e,
-    ContextRuleType::CallContract(some_addr),
-    String::from_str(e, "AI Agent"),
-    Some(current_ledger + 12_hours),
-    vec![
+    &ContextRuleType::CallContract(some_addr),
+    &String::from_str(e, "AI Agent"),
+    Some(current_ledger + DAY_IN_LEDGERS / 2),
+    &vec![
         e,
         Signer::External(secp256r1_verifier, agent_key)
     ],
-    map![
+    &map![
         e,
         (volume_cap_policy, volume_cap_params)
     ],
