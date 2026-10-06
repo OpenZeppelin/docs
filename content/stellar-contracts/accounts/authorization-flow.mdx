@@ -56,25 +56,29 @@ sequenceDiagram
     participant Policy
 
     User->>SmartAccount: AuthPayload (signers + context_rule_ids)
-    SmartAccount->>SmartAccount: Build AuthDigestPreimage<br/>(account, payload, rule_ids)
 
     loop Each auth context
         SmartAccount->>ContextRule: Look up rule by ID<br/>from context_rule_ids
-        ContextRule->>ContextRule: Validate not expired<br/>and matches context type
+        ContextRule->>ContextRule: Validate not expired,<br/>context type and signers
+        ContextRule-->>SmartAccount: Rule + matched signers
+    end
 
-        Note over ContextRule,DelegatedSigner: Built-in authorization <br/>for delegated signers
-        ContextRule->>DelegatedSigner: require_auth_for_args(preimage)
-        DelegatedSigner-->>ContextRule: Authorized
+    SmartAccount->>SmartAccount: Build AuthDigestPreimage<br/>(account, payload, rule_ids)
 
-        Note over ContextRule,Verifier: Signature verification for external signers
-        ContextRule->>Verifier: verify(sha256(preimage.to_xdr()))
-        Verifier-->>ContextRule: Valid
+    loop Each signer in AuthPayload (must belong to a selected rule)
+        alt Delegated signer
+            SmartAccount->>DelegatedSigner: require_auth_for_args(preimage)
+            DelegatedSigner-->>SmartAccount: Authorized
+        else External signer
+            SmartAccount->>Verifier: verify(sha256(preimage.to_xdr()))
+            Verifier-->>SmartAccount: Valid
+        end
+    end
 
-        Note over ContextRule,Policy: Policy enforcement (panics on failure)
-        ContextRule->>Policy: enforce()
+    loop Each auth context
+        Note over SmartAccount,Policy: Policy enforcement (panics on failure)
+        SmartAccount->>Policy: enforce(matched signers)
         Policy->>Policy: Validate + update state
-
-        ContextRule-->>SmartAccount: ✓ Authorized
     end
 
     SmartAccount-->>User: Success
@@ -90,46 +94,41 @@ For each auth context, the corresponding rule ID is used to look up the context 
 - Not be expired (if `valid_until` is set, it must be ≥ current ledger sequence)
 - Match the context type: a `CallContract(address)` rule matches a call to that contract, a `CreateContract(wasm_hash)` rule matches a deployment from that WASM hash, a `CreateContractExternalRef(owner, tag)` rule matches a deployment from that executable reference, and `Default` rules match any context
 
-### 2. Rule Evaluation
+### 2. Signer Matching
 
-For each (context, rule_id) pair:
+For each (context, rule) pair, the smart account determines the rule's **matched signers**: the signers of the rule that appear as keys in `AuthPayload.signers`. No signature is checked at this stage.
 
-#### Step 2.1: Signer Filtering
+- **Rule without policies**: every signer of the rule must be present in the payload. Otherwise, the context is rejected with `UnvalidatedContext`.
+- **Rule with policies**: any subset of the rule's signers can be present. The policies decide in step 4 whether the matched signers are sufficient.
 
-Extract authenticated signers from the rule's signer list. A signer is considered authenticated if:
+### 3. Signature Authentication
 
-- **Delegated Signer**: The address has authorized the operation via `require_auth_for_args((preimage,))`, where `preimage` is the [`AuthDigestPreimage`](#authdigestpreimage)
-- **External Signer**: The verifier contract confirms the signature over the auth digest, `sha256(preimage.to_xdr())`, is valid for the public key
+The smart account then builds the [`AuthDigestPreimage`](#authdigestpreimage) and goes through every entry of `AuthPayload.signers` once, across all auth contexts:
 
-Only authenticated signers proceed to the next step.
+- A signer that is not part of any selected rule is rejected with `UnauthorizedSigner`. This prevents a payload from making the smart account call arbitrary verifier contracts.
+- **Delegated Signer**: The address must have authorized `require_auth_for_args((preimage,))`.
+- **External Signer**: The verifier contract must confirm that the signature over the auth digest, `sha256(preimage.to_xdr())`, is valid for the public key. Otherwise, authorization fails with `ExternalVerificationFailed`.
 
-#### Step 2.2: Policy Enforcement
+Invalid signatures are not skipped: a single failed signature aborts the whole authorization, even if the remaining signers would satisfy every rule.
 
-If the rule has attached policies, the smart account calls `enforce()` on each policy. The `enforce()` method both validates conditions and applies state changes — it panics if the policy conditions are not satisfied:
+### 4. Policy Enforcement
+
+Once all signatures are authenticated, the smart account calls `enforce()` on each policy of each selected rule, passing the rule's matched signers. The `enforce()` method both validates conditions and applies state changes — it panics if the policy conditions are not satisfied:
 
 ```rust
 for policy in rule.policies {
-    policy.enforce(e, context, authenticated_signers, context_rule, smart_account);
-    // Panics if policy conditions aren't satisfied, causing the rule to fail
+    policy.enforce(e, context, matched_signers, context_rule, smart_account);
+    // Panics if policy conditions aren't satisfied, causing authorization to fail
 }
 ```
 
-If any policy panics, authorization fails for that context.
+If any policy panics, authorization fails.
 
 Policy enforcement requires the smart account's authorization, ensuring that policies can only be enforced by the account itself.
 
-#### Step 2.3: Authorization Check
+A rule without policies has no further checks: all of its signers are present (step 2) and authenticated (step 3).
 
-The authorization check depends on whether policies are present:
-
-**With Policies:**
-- Success if all policies' `enforce()` calls completed without panicking
-
-**Without Policies:**
-- Success if all signers in the rule are authenticated
-- At least one signer must be authenticated for the rule to match
-
-### 3. Result
+### 5. Result
 
 **Success:** Authorization is granted and the transaction proceeds. All policy state changes are committed.
 
@@ -167,9 +166,9 @@ ContextRule {
 1. Lookup: Client specifies rule ID 2 in `context_rule_ids`
 2. Evaluate Rule 2:
    - Rule matches `CallContract(dex_address)` context and is not expired
-   - Signer filtering: Passkey authenticated
-   - Policy enforcement: Spending limit validates and updates counters
-   - Authorization check: All policies enforced successfully → Success
+   - Signer matching: Passkey is a signer of rule 2
+   - Signature authentication: Passkey signature over the auth digest is valid
+   - Policy enforcement: Spending limit validates and updates counters → Success
 3. Result: Authorized
 
 
@@ -201,7 +200,7 @@ ContextRule {
 
 **Flow:**
 1. Lookup: Client specifies rule ID 1 in `context_rule_ids` (rule 2 is known to be expired)
-2. Evaluate Rule 1: Both Alice and Bob authenticated, no policies to enforce → Success
+2. Evaluate Rule 1: Alice and Bob, the rule's only signers, are both present and their signatures are valid; no policies to enforce → Success
 3. Result: Authorized
 
 ### Authorization Failure
@@ -224,7 +223,8 @@ ContextRule {
 **Flow:**
 1. Lookup: Client specifies default rule ID in `context_rule_ids`
 2. Evaluate:
-   - Signer filtering: Only Alice authenticated
+   - Signer matching: Only Alice is present
+   - Signature authentication: Alice's signature is valid
    - Policy enforcement: Threshold policy requires 2 signers, only 1 present → Panics
 3. Result: Denied (transaction reverts)
 

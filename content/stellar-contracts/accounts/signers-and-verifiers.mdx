@@ -665,7 +665,7 @@ fn remove_signer(
 );
 ```
 
-Removes a signer (identified by its numeric ID) from an existing context rule. The rule must maintain at least one signer OR one policy after removal.
+Removes a signer (identified by its numeric ID) from an existing context rule. The rule must maintain at least one signer OR one policy after removal. The ID is returned by `add_signer`, and the `get_signer_id(signer)` view looks it up for an already registered signer.
 
 <Callout>
 **Important:** 
@@ -793,7 +793,7 @@ Components:
   - Signature counter (4 bytes)
 - **`client_data`**: JSON string from the browser/platform (max 1024 bytes), containing:
   - `type`: Must be `"webauthn.get"` for authentication
-  - `challenge`: Base64url-encoded signature payload
+  - `challenge`: Base64url-encoded (unpadded) auth digest, `sha256(preimage.to_xdr())` (see [Auth Digest Computation](#auth-digest-computation)), not the host's `signature_payload`
   - `origin`: The origin where authentication occurred
 
 The `sig_data` parameter passed to the verifier must be the XDR-encoded representation of this structure to ensure proper serialization and deserialization.
