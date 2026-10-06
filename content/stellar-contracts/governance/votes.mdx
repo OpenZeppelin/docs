@@ -72,19 +72,22 @@ If you are using the Fungible or Non-Fungible token from this library, the **Vot
 
 ```rust
 use stellar_governance::votes::Votes;
-use stellar_tokens::fungible::{votes::FungibleVotes, FungibleToken};
+use stellar_tokens::fungible::{votes::FungibleVotes, Compose, FungibleToken};
 
-// 1. Set ContractType to FungibleVotes — this hooks into all balance
+// 1. Select the FungibleVotes contract type — this hooks into all balance
 //    changes (transfers, mints, burns) and updates voting units automatically.
 #[contractimpl(contracttrait)]
 impl FungibleToken for MyToken {
-    type ContractType = FungibleVotes;
+    type ContractType = Compose<(FungibleVotes,)>;
 }
 
 // 2. Implement the Votes trait to expose voting queries to the Governor.
 #[contractimpl(contracttrait)]
 impl Votes for MyToken {}
 ```
+
+Mint through the contract type, e.g. `<Self as FungibleToken>::ContractType::mint(e, &to, amount)`, so that the
+minted voting units are tracked. Calling `Base::mint` directly skips the voting-unit update.
 </Callout>
 
 ## The Votes Trait
