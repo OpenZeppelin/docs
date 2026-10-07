@@ -1,0 +1,130 @@
+---
+title: Fixed-Point Math
+description: Full-precision x * y / denominator for i128 and I256 with explicit rounding
+---
+
+[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/contract-utils/src/math)
+
+## Overview
+
+Besides the [`Wad`](/stellar-contracts/utils/math/wad) decimal type, the `math` module exposes free functions that
+compute `x * y / denominator` on `i128` and `I256` values with full precision and an explicit rounding direction.
+They are the building blocks for share conversions, price scaling and other ratio computations where the
+intermediate product may not fit the operand type.
+
+Each operation comes in a panicking and a checked variant:
+
+- **Panicking** variants panic with `SorobanFixedPointError::Overflow` (`1500`) when the result overflows.
+- **Checked** variants (`checked_*`) return `None` instead, for every failure including a zero denominator.
+
+## Functions
+
+### `i128_fixed_point`
+
+```rust
+pub fn mul_div_with_rounding(e: &Env, x: i128, y: i128, denominator: i128, rounding: Rounding) -> i128;
+pub fn checked_mul_div_with_rounding(
+    e: &Env, x: i128, y: i128, denominator: i128, rounding: Rounding,
+) -> Option<i128>;
+
+pub fn mul_div(e: &Env, x: &i128, y: &i128, denominator: &i128) -> i128; // truncates toward zero
+pub fn mul_div_floor(e: &Env, x: &i128, y: &i128, denominator: &i128) -> i128;
+pub fn mul_div_ceil(e: &Env, x: &i128, y: &i128, denominator: &i128) -> i128;
+
+pub fn checked_mul_div(e: &Env, x: &i128, y: &i128, denominator: &i128) -> Option<i128>;
+pub fn checked_mul_div_floor(e: &Env, x: &i128, y: &i128, denominator: &i128) -> Option<i128>;
+pub fn checked_mul_div_ceil(e: &Env, x: &i128, y: &i128, denominator: &i128) -> Option<i128>;
+```
+
+### `i256_fixed_point`
+
+`I256` carries its own `Env`, so these functions take no `&Env`.
+
+```rust
+pub fn mul_div_with_rounding(x: I256, y: I256, denominator: I256, rounding: Rounding) -> I256;
+pub fn checked_mul_div_with_rounding(
+    x: I256, y: I256, denominator: I256, rounding: Rounding,
+) -> Option<I256>;
+
+pub fn mul_div(x: &I256, y: &I256, denominator: &I256) -> I256; // truncates toward zero
+pub fn mul_div_floor(x: &I256, y: &I256, denominator: &I256) -> I256;
+pub fn mul_div_ceil(x: &I256, y: &I256, denominator: &I256) -> I256;
+
+pub fn checked_mul_div(x: &I256, y: &I256, denominator: &I256) -> Option<I256>;
+pub fn checked_mul_div_floor(x: &I256, y: &I256, denominator: &I256) -> Option<I256>;
+pub fn checked_mul_div_ceil(x: &I256, y: &I256, denominator: &I256) -> Option<I256>;
+```
+
+In both modules, the `*_with_rounding` variants take their operands by value and the others by reference.
+
+## Rounding
+
+```rust
+#[contracttype]
+pub enum Rounding {
+    Floor,    // toward negative infinity
+    Ceil,     // toward positive infinity
+    Truncate, // toward zero
+}
+```
+
+The direction matters whenever the result is not exact. Protocols typically round against the caller, e.g. a vault
+rounds shares minted on deposit down and assets required for a mint up.
+
+## Phantom Overflow
+
+Both widths recover from an intermediate `x * y` that overflows while the final result is representable, a case
+known as *phantom overflow*:
+
+- **`i128`**: the operands are promoted to `I256`, and the result is scaled back if it fits `i128`.
+- **`I256`**: there is no wider type to promote to, so both operands are split by the denominator and the division
+  is distributed, which is an exact identity rather than an approximation:
+
+  ```text
+  |x| = q1*D + r1     |y| = q2*D + r2     (D = |denominator|, 0 <= r1, r2 < D)
+  floor(|x*y|/D) = q1*q2*D + q1*r2 + r1*q2 + floor(r1*r2/D)
+  ```
+
+  This holds for every `|denominator| <= 2^128` (roughly `3.4e38`, far above the fixed-point scales in practical
+  use: `10^18`, `10^27`, `2^96`, `10^38`). Within that domain the result is bit-for-bit what a 512-bit intermediate
+  would produce. Above `2^128` the operation rejects rather than returning an incorrect value, and rejection is
+  permitted rather than guaranteed: a large denominator whose remainders happen to be small still succeeds.
+
+Phantom overflow handling covers all the free functions above and the `checked_*` methods of `Wad`. It does not
+cover `Wad`'s operators (`+`, `-`, `*`, `/`), which cannot reach an `Env` to build the intermediate; see the
+[`Wad` overflow bounds](/stellar-contracts/utils/math/wad#4-operator-overloading).
+
+## Errors
+
+- The panicking variants raise `SorobanFixedPointError::Overflow` (`1500`) when the result does not fit.
+- Domain errors (a zero `denominator`, `MIN / -1`) are left to the platform rather than mapped to a contract error.
+  Native `i128` arithmetic surfaces as a generic wasm trap (`Error(WasmVm, InvalidAction)`), and `I256` host
+  arithmetic as `Error(Object, ArithDomain)`. Inside the `I256` phantom overflow fallback, every failure, a zero
+  `denominator` included, surfaces as `Overflow`.
+- The checked variants return `None` for all of the above.
+
+A caller that needs a distinct division-by-zero error has to validate the denominator up front, as
+`Wad::from_ratio` does with `SorobanFixedPointError::DivisionByZero` (`1501`).
+
+## Example
+
+```rust
+use soroban_sdk::{Env, I256};
+use stellar_contract_utils::math::{i128_fixed_point, i256_fixed_point, Rounding};
+
+// Share conversion, rounding in the vault's favour.
+pub fn to_shares(e: &Env, assets: i128, total_shares: i128, total_assets: i128) -> i128 {
+    i128_fixed_point::mul_div_with_rounding(e, assets, total_shares, total_assets, Rounding::Floor)
+}
+
+// Assets required to mint `shares`, rounding up; `None` instead of panicking,
+// e.g. when `total_shares` is zero.
+pub fn assets_for_mint(e: &Env, shares: i128, total_assets: i128, total_shares: i128) -> Option<i128> {
+    i128_fixed_point::checked_mul_div_ceil(e, &shares, &total_assets, &total_shares)
+}
+
+// The same share conversion at 256-bit width.
+pub fn to_shares_256(assets: &I256, total_shares: &I256, total_assets: &I256) -> I256 {
+    i256_fixed_point::mul_div_floor(assets, total_shares, total_assets)
+}
+```

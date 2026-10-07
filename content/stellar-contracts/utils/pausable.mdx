@@ -8,11 +8,12 @@ title: Pausable
 
 Allows contracts to be paused and unpaused by authorized accounts.
 
-This utility contract can be used with any token standard (fungible, non-fungible, multi-token).
+This utility can be used in any contract, including token contracts (e.g. fungible or non-fungible tokens).
 
 ## Design
 
-To make it easier to spot when inspecting the code, we turned this simple functionality into a macro that can annotate your smart contract functions.
+To make it easier to spot when inspecting the code, we turned this simple functionality into two macros that can
+annotate your smart contract functions: `#[when_not_paused]` and `#[when_paused]`.
 
 An example:
 ```rust
@@ -26,15 +27,56 @@ Which will expand into the below code:
 
 ```rust
 pub fn emergency_reset(e: &Env) {
-    when_paused(e);
+    stellar_contract_utils::pausable::when_paused(e);
 
     e.storage().instance().set(&DataKey::Counter, &0);
 }
 ```
 
+`#[when_not_paused]` works the same way, injecting `stellar_contract_utils::pausable::when_not_paused(e)`.
+`when_paused` panics with `PausableError::ExpectedPause` (`1001`) when the contract is not paused, and `when_not_paused`
+panics with `PausableError::EnforcedPause` (`1000`) when it is.
+
 ## Implementing Pausable Trait
 
+The `pausable::pause()` and `pausable::unpause()` helpers don't check authorization, so access control must be added
+by the implementor. The example below restricts them to the owner with
+[`#[only_owner]`](/stellar-contracts/access/ownable):
+
 ```rust
+use soroban_sdk::{contract, contractimpl, contracttype, Address, Env};
+use stellar_access::ownable::{self as ownable, Ownable};
+use stellar_contract_utils::pausable::{self as pausable, Pausable};
+use stellar_macros::{only_owner, when_not_paused, when_paused};
+
+#[contracttype]
+pub enum DataKey {
+    Counter,
+}
+
+#[contract]
+pub struct ExampleContract;
+
+#[contractimpl]
+impl ExampleContract {
+    pub fn __constructor(e: &Env, owner: Address) {
+        ownable::set_owner(e, &owner);
+        e.storage().instance().set(&DataKey::Counter, &0);
+    }
+
+    #[when_not_paused]
+    pub fn increment(e: &Env) -> i32 {
+        let counter: i32 = e.storage().instance().get(&DataKey::Counter).unwrap();
+        e.storage().instance().set(&DataKey::Counter, &(counter + 1));
+        counter + 1
+    }
+
+    #[when_paused]
+    pub fn emergency_reset(e: &Env) {
+        e.storage().instance().set(&DataKey::Counter, &0);
+    }
+}
+
 #[contractimpl]
 impl Pausable for ExampleContract {
     fn paused(e: &Env) -> bool {
@@ -51,6 +93,13 @@ impl Pausable for ExampleContract {
         pausable::unpause(e);
     }
 }
+
+#[contractimpl(contracttrait)]
+impl Ownable for ExampleContract {}
 ```
 
-
+See the [pausable example](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/pausable) for a
+complete contract, and the
+[fungible-pausable example](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/fungible-pausable)
+for `#[when_not_paused]` applied to the `transfer`, `transfer_from`, `burn` and `burn_from` overrides of a fungible
+token.

@@ -13,17 +13,66 @@ represents something distinct, with ownership tracked through Soroban smart cont
 ## Overview
 
 The [non-fungible](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/non_fungible) module
-provides three different NFT variants that differ in how certain features like ownership tracking,
-token creation and destruction are handled:
+provides the `NonFungibleToken` trait together with a set of **contract types** that differ in how certain
+features like ownership tracking, token creation and destruction are handled. All contract types share a
+common interface and expose identical contract functions as entry-points.
 
-1. **Base**: Contract variant that implements the base logic for the NonFungibleToken interface. Suitable for most use cases.
-2. **Consecutive**: Contract variant for optimized minting of batches of tokens. Builds on top of the base variant, and overrides the necessary functions from the `Base` variant.
-3. **Enumerable**: Contract variant that allows enumerating the tokens on-chain. Builds on top of the base variant, and overrides the necessary functions from the `Base` variant.
+The contract type is selected through the `ContractType` associated type of `NonFungibleToken`, by listing
+what the token is made of with `Compose`:
 
-These three variants share core functionality and a common interface, exposing identical contract functions as
-entry-points. However, composing custom flows must be handled with extra caution. That is required because of the
-incompatible nature between the business logic of the different NFT variants or the need to wrap the base
-functionality with additional logic.
+```rust
+#[contractimpl(contracttrait)]
+impl NonFungibleToken for MyToken {
+    type ContractType = Compose<(Enumerable,)>;
+}
+```
+
+The following contract types are available:
+
+| Contract type | Behavior | Enables |
+| --- | --- | --- |
+| `Base` | Implements the base logic for the `NonFungibleToken` interface. Suitable for most use cases. | - |
+| `Enumerable` | Allows enumerating the tokens on-chain. | `NonFungibleEnumerable` |
+| `Consecutive` | Optimized for minting batches of tokens with consecutive IDs. | `NonFungibleConsecutive` |
+| `NonFungibleVotes` | Moves one voting unit per token on every ownership change. | `Votes` |
+
+`NonFungibleVotes` can be combined with either `Enumerable` or `Consecutive`, e.g.
+`Compose<(Enumerable, NonFungibleVotes)>`. `Enumerable` and `Consecutive` are mutually exclusive, because
+each of them has its own business logic for creating and destroying tokens.
+
+The order of the list does not matter, and additive extensions that don't override any behavior, such as
+`Burnable` and `Royalties`, may be listed as well. A list that is not supported is rejected at compile time
+with an error naming the valid combinations. Likewise, implementing an extension trait that the contract
+type does not back (e.g. `NonFungibleEnumerable` without `Enumerable` in the list) does not compile.
+
+### Minting
+
+Minting is not part of the `NonFungibleToken` trait: the contract defines its own mint entry-point, with
+the access control it needs. That entry-point must mint through the selected contract type, which
+applies the bookkeeping of every listed extension. Depending on how the contract type stores ownership,
+it provides different mint functions:
+
+| Function | Description | Contract types |
+| --- | --- | --- |
+| `mint(e, &to) -> u32` | Mints the next ID from the sequential counter and returns it. | `Base`, `Enumerable`, `NonFungibleVotes` |
+| `mint_with_id(e, &to, token_id)` | Mints a token with an ID chosen by the caller. | `Base`, `Enumerable`, `NonFungibleVotes` |
+| `mint_range(e, &to, amount) -> u32` | Mints `amount` tokens with consecutive IDs and returns the last one. | `Consecutive` |
+
+For example:
+
+```rust
+let token_id = <Self as NonFungibleToken>::ContractType::mint(e, &to);
+```
+
+Calling a mint function that the contract type does not support results in a compile error.
+
+<Callout type="warning">
+Do not call a specific primitive such as `Base::mint` directly. On an `Enumerable` token, for example, it
+would compile but leave the token out of the enumeration.
+
+`mint` does not check whether the next ID from the counter is already in use. If both `mint` and
+`mint_with_id` are used in the same contract, the uniqueness of token IDs must be ensured.
+</Callout>
 
 ## Usage
 
@@ -38,7 +87,7 @@ Here’s what a contract for tokenized items might look like:
 use soroban_sdk::{contract, contractimpl, Address, Env, String};
 use stellar_tokens::non_fungible::{
     burnable::NonFungibleBurnable,
-    Base, ContractOverrides, NonFungibleToken,
+    Base, Compose, NonFungibleToken,
 };
 
 #[contract]
@@ -57,13 +106,13 @@ impl GameItem {
 
     pub fn award_item(e: &Env, to: Address) -> u32 {
         // access control might be needed
-        Base::sequential_mint(e, &to)
+        <Self as NonFungibleToken>::ContractType::mint(e, &to)
     }
 }
 
 #[contractimpl(contracttrait)]
 impl NonFungibleToken for GameItem {
-    type ContractType = Base;
+    type ContractType = Compose<(Base,)>;
 }
 
 #[contractimpl(contracttrait)]
@@ -78,24 +127,22 @@ The following optional extensions are provided to enhance capabilities:
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/non_fungible/extensions/burnable)
 
 The `NonFungibleBurnable` trait extends the `NonFungibleToken` trait to provide the capability to burn tokens.
+An empty implementation is enough: the burn logic is selected based on the contract type, and is compatible
+with all of them.
 
 ### - Consecutive
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/non_fungible/extensions/consecutive)
 
-The `NonFungibleConsecutive` extension is optimized for batch minting of tokens with consecutive IDs. This approach drastically reduces storage writes during minting by storing ownership only at boundaries and inferring ownership for other tokens. See [Non-Fungible Consecutive](/stellar-contracts/tokens/non-fungible/nft-consecutive) for detailed documentation.
+The `NonFungibleConsecutive` extension is optimized for batch minting of tokens with consecutive IDs. This approach drastically reduces storage writes during minting by storing ownership only at boundaries and inferring ownership for other tokens.
 
-This extension is build around the contract variant `Consecutive`. Here is an example usage:
-
-* [Non-Fungible Consecutive](/stellar-contracts/tokens/non-fungible/nft-consecutive)
+This extension is built around the `Consecutive` contract type, selected with `Compose<(Consecutive,)>`. See [Non-Fungible Consecutive](/stellar-contracts/tokens/non-fungible/nft-consecutive) for detailed documentation and an example usage.
 
 ### - Enumerable
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/non_fungible/extensions/enumerable)
 
-The `NonFungibleEnumerable` extension enables on-chain enumeration of tokens owned by an address. See [Non-Fungible Enumerable](/stellar-contracts/tokens/non-fungible/nft-enumerable) for detailed documentation.
+The `NonFungibleEnumerable` extension enables on-chain enumeration of all the tokens in the contract, as well as the tokens owned by each address.
 
-This extension is build around the contract variant `Enumerable`. Here is an example usage:
-
-* [Non-Fungible Enumerable](/stellar-contracts/tokens/non-fungible/nft-enumerable)
+This extension is built around the `Enumerable` contract type, selected with `Compose<(Enumerable,)>`. See [Non-Fungible Enumerable](/stellar-contracts/tokens/non-fungible/nft-enumerable) for detailed documentation and an example usage.
 
 ### - Royalties
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/non_fungible/extensions/royalties)
@@ -104,7 +151,87 @@ The `NonFungibleRoyalties` trait extends the `NonFungibleToken` trait to provide
 
 Note: The royalties extension allows both collection-wide default royalties and per-token royalty settings.
 
+The setters are privileged operations, so they have no default implementation: they take an `operator`
+parameter on which the desired access control should be enforced. Since setting or removing a per-token
+royalty first checks that the token exists, and the way ownership is stored depends on the contract type,
+those functions are called on the contract type:
+
+```rust
+use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env, String, Symbol, Vec};
+use stellar_access::access_control::{self as access_control, AccessControl};
+use stellar_macros::{only_admin, only_role};
+use stellar_tokens::non_fungible::{
+    royalties::{NonFungibleRoyalties, Royalties, RoyaltySupport},
+    Base, Compose, NonFungibleToken,
+};
+
+#[contract]
+pub struct GameItem;
+
+#[contractimpl]
+impl GameItem {
+    pub fn __constructor(e: &Env, admin: Address, manager: Address) {
+        Base::set_metadata(
+            e,
+            String::from_str(e, "www.mygame.com"),
+            String::from_str(e, "My Game Items Collection"),
+            String::from_str(e, "MGMC"),
+        );
+        access_control::set_admin(e, &admin);
+
+        // Grant the "manager" role, allowed to manage royalties
+        access_control::grant_role_no_auth(e, &manager, &symbol_short!("manager"), &admin);
+
+        // Set a default royalty of 5% for the entire collection
+        Base::set_default_royalty(e, &admin, 500);
+    }
+
+    #[only_admin]
+    pub fn award_item(e: &Env, to: Address) -> u32 {
+        <Self as NonFungibleToken>::ContractType::mint(e, &to)
+    }
+}
+
+#[contractimpl(contracttrait)]
+impl NonFungibleToken for GameItem {
+    type ContractType = Compose<(Base, Royalties)>;
+}
+
+#[contractimpl(contracttrait)]
+impl NonFungibleRoyalties for GameItem {
+    #[only_role(operator, "manager")]
+    fn set_default_royalty(e: &Env, receiver: Address, basis_points: u32, operator: Address) {
+        Base::set_default_royalty(e, &receiver, basis_points);
+    }
+
+    #[only_role(operator, "manager")]
+    fn set_token_royalty(
+        e: &Env,
+        token_id: u32,
+        receiver: Address,
+        basis_points: u32,
+        operator: Address,
+    ) {
+        // Routed through the contract type, so that the token existence
+        // check matches its ownership model
+        Self::ContractType::set_token_royalty(e, token_id, &receiver, basis_points);
+    }
+
+    #[only_role(operator, "manager")]
+    fn remove_token_royalty(e: &Env, token_id: u32, operator: Address) {
+        Self::ContractType::remove_token_royalty(e, token_id);
+    }
+}
+
+#[contractimpl(contracttrait)]
+impl AccessControl for GameItem {}
+```
+
+The royalties extension can be used with every contract type, including `Consecutive`.
+
 ### - Votes
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/non_fungible/extensions/votes)
 
-The `NonFungibleVotes` extension integrates with the governance [Votes](/stellar-contracts/governance/votes) module. Each NFT represents one voting unit. It overrides `transfer`, `transfer_from`, `burn`, and `burn_from` to call `transfer_voting_units` after each balance change. Token holders must call `delegate` (even to themselves) before their voting power is counted.
+The `NonFungibleVotes` contract type integrates with the governance [Votes](/stellar-contracts/governance/votes) module. Each NFT represents one voting unit. It overrides `transfer`, `transfer_from`, `burn`, `burn_from` and the mint functions to call `transfer_voting_units` after each balance change. Token holders must call `delegate` (even to themselves) before their voting power is counted.
+
+It is selected with `Compose<(NonFungibleVotes,)>`, and can be combined with `Enumerable` or `Consecutive`, e.g. `Compose<(Consecutive, NonFungibleVotes)>`.

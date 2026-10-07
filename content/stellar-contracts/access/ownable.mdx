@@ -32,8 +32,9 @@ This feature is useful for contracts that need to become fully decentralized aft
 A common use case is renouncing ownership after initial setup to ensure the contract becomes immutable and cannot be upgraded:
 
 ```rust
-use soroban_sdk::{contract, contractimpl, Address, Env};
+use soroban_sdk::{contract, contractimpl, Address, BytesN, Env};
 use stellar_access::ownable::{self as ownable, Ownable};
+use stellar_contract_utils::upgradeable;
 use stellar_macros::only_owner;
 
 #[contract]
@@ -45,7 +46,8 @@ impl MyContract {
         ownable::set_owner(e, &initial_owner);
     }
 
-    #[only_owner]
+    // No `#[only_owner]` here: `renounce_ownership` already requires the owner's
+    // authorization, and requiring it twice in the same call would panic.
     pub fn finalize_and_lock(e: &Env) {
         // Perform any final configuration here
         // ...
@@ -60,9 +62,12 @@ impl MyContract {
     #[only_owner]
     pub fn emergency_upgrade(e: &Env, new_wasm_hash: BytesN<32>) {
         // This function becomes permanently inaccessible after renounce_ownership
-        e.deployer().update_current_contract_wasm(new_wasm_hash);
+        upgradeable::upgrade(e, &new_wasm_hash);
     }
 }
+
+#[contractimpl(contracttrait)]
+impl Ownable for MyContract {}
 ```
 
 **Important Notes:**
@@ -75,7 +80,7 @@ impl MyContract {
 
 The module includes a procedural macro to simplify owner authorization checks:
 
-#### @only_owner
+#### `#[only_owner]`
 
 Ensures the caller is the owner before executing the function:
 
@@ -86,7 +91,12 @@ pub fn restricted_function(e: &Env, other_param: u32) {
 }
 ```
 
-This expands to code that retrieves the owner from storage and requires authorization before executing the function body.
+This expands to a call to `stellar_access::ownable::enforce_owner_auth(e)` at the start of the function body, which
+retrieves the owner from storage and requires its authorization. It panics with `OwnableError::OwnerNotSet` (`2100`)
+if no owner is set, e.g. after ownership has been renounced.
+
+Don't add `#[only_owner]` to a function that calls `ownable::transfer_ownership()` or `ownable::renounce_ownership()`:
+these already enforce the owner's authorization, and requiring it twice in the same call panics.
 
 ## Usage Example
 
@@ -119,7 +129,14 @@ impl MyContract {
         42
     }
 }
+
+// Exposes `get_owner`, `transfer_ownership`, `accept_ownership` and `renounce_ownership`
+#[contractimpl(contracttrait)]
+impl Ownable for MyContract {}
 ```
+
+For a complete contract with tests, see the
+[ownable example](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/ownable).
 
 ## Benefits and Trade-offs
 
