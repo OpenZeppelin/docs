@@ -47,8 +47,9 @@ for access control and contract management.
 Our contracts are built with security as a top priority. You can find our audit reports [here](https://github.com/OpenZeppelin/stellar-contracts/tree/main/audits).
 
 ## Error Codes
-In Stellar Soroban, each error variant is assigned an integer. To prevent duplication of error codes,
-we use the following convention:
+In Stellar Soroban, each error variant is assigned an integer. A failed invocation reports only that integer,
+e.g. `Error(Contract, #4200)`, and not which contract in the call tree raised it, so every error code is unique
+across the library. We use the following convention:
 
 * Fungible: `1XX`
 * Non-Fungible: `2XX`
@@ -62,7 +63,6 @@ Similarly, utilities and other modules have their own error codes:
 
 * Utilities: `1XXX`
   * Pausable: `10XX`
-  * Upgradeable: `11XX`
   * Merkle Distributor: `13XX`
   * Crypto: `14XX`
   * Math: `15XX`
@@ -77,8 +77,14 @@ Similarly, utilities and other modules have their own error codes:
   * Token: `35XX`
   * Compliance: `36XX`
 * Governance: `4XXX`
+  * Timelock: `40XX`
+  * Votes: `41XX`
+  * Governor: `42XX`
 * Fee Abstraction: `5XXX`
 * ZK Email: `6XXX`
+
+The library never uses `39XX`, which is reserved for smart account policies built outside of it, nor codes
+below `100`, which are left to contract-specific errors.
 
 ## Important Notes
 As a deliberate design choice, this library manages the TTL for temporary and persistent storage items.
