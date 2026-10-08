@@ -1,0 +1,146 @@
+---
+title: Indexing and Recovery
+---
+
+[Specification](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/indexer.md)
+
+A confidential balance can only be spent by someone who knows its opening, and the contract never stores openings. A
+wallet that loses its local state rebuilds them from its keys and the account's event history. This page describes
+that recovery procedure and the durable event archive, the *indexer*, it depends on.
+
+<Callout type="info">
+This page summarizes the indexer specification that accompanies the library. The library does not ship an indexer.
+Deployments that want users to be able to recover from seed need to run, or contract, an archive that meets this
+specification.
+</Callout>
+
+## Why an Indexer Is Required
+
+Stellar RPC keeps events only for a bounded window, which a node reports through `getHealth` as `oldestLedger` and
+`ledgerRetentionWindow`. Once an account's events fall out of that window, a wallet without local state can still see
+its commitments on-chain but cannot reconstruct the openings needed to spend them. Without a conforming archive,
+wallet-local state should be treated as unrecoverable once events age out of RPC. Wallets with RPC-only access must
+therefore sync at least once per retention window and warn when they have not: a crediting event, or a
+`RevokeSpender` after the latest checkpoint, that ages out before the wallet applies it is lost for good.
+
+RPC and the archive work together. A client can read the recent tail from RPC and older history from the archive,
+stitching the two at a *seam*. The seam sits strictly above the RPC retention floor, with a margin, because the floor
+advances while the client is querying. The two legs cover disjoint ledger ranges, and the client still deduplicates
+by event id at the boundary. The archive does not have to keep up with the chain head, but it must never fall behind
+the seam. If a configured archive fails,
+the whole sync fails: silently falling back to RPC alone and saving the resulting sync position would skip the
+archived range forever.
+
+## How Recovery Works
+
+Recovery uses two anchors in the account's history:
+
+```mermaid
+graph LR
+    R[Register] -.-> T0["T₀: last Merge or Clawback<br/>at or before the checkpoint"]
+    T0 --> CP["Latest checkpoint<br/>Withdraw, outgoing Transfer, or SetSpender"]
+    CP --> NOW[Now]
+```
+
+1. **Spendable side: the latest checkpoint.** Every withdrawal, outgoing transfer, and `set_spender` emits the owner's
+   new spendable balance, encrypted under the viewing key, together with the salt that determines the new blinding.
+   The latest such event recovers the spendable opening in a single lookup, without any earlier history. An account
+   with no checkpoint since `Register` starts its spendable opening at zero.
+2. **Receiving side: replay from `T₀`.** The receiving balance has no checkpoint. The wallet finds `T₀`, the most
+   recent merge or clawback at or before the checkpoint (or `Register` if there is none), starts the receiving
+   opening at zero, and replays every later event in order:
+   - Deposits and incoming transfers credit the receiving side, including the incoming side of a self-transfer.
+   - Checkpoint events leave the spendable side alone, since step 1 already captured it.
+   - A `RevokeSpender` at or before the checkpoint is skipped, since the checkpoint already absorbed it. One after
+     the checkpoint folds into the spendable side.
+   - A merge after the checkpoint folds as usual, and a clawback folds the same way and then subtracts its public
+     `amount` from the spendable side.
+3. **Verify.** The wallet re-commits both openings and compares them against the on-chain commitments.
+
+The replay window is set by how long the account went without merging before its latest checkpoint, not by how often
+it spends. Wallets that merge regularly keep it short; in the worst case, funds received but never merged, it reaches
+back to registration. See
+[Recovery](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/protocol/wallet-state.md#recovery)
+for the exact procedure.
+
+Recovery needs only the viewing key, the event history, and the on-chain commitments, and nothing from the auditor,
+counterparties, or the contract admin. Because commitments are binding, a tampered or truncated history cannot
+produce an opening that verifies; it produces a detectable mismatch. Incoming-transfer spam, even zero-value, costs
+the recipient indexer storage and replay time but never affects correctness.
+
+## What the Indexer Stores
+
+For every in-scope event, the archive keeps the contract id, ledger sequence and close time, transaction hash, the
+transaction's position within its ledger, the event index, and the event's topics and data. Verbatim XDR is the
+recommended payload format: it is the on-chain wire form and survives renames in the Rust bindings. A decoded form is
+also acceptable if it reproduces the on-chain event exactly.
+
+**Events in scope.** These events play a role in recovery:
+
+- `Register` starts an account's history and bounds the worst-case replay.
+- `Deposit` and the recipient side of `Transfer` and `SpenderTransfer` are replayed into the receiving opening.
+- `Merge` and, with the compliance extension, `Clawback` are the receiving-side anchors.
+- `Withdraw`, the sender side of `Transfer`, and `SetSpender` are spendable-side checkpoints. Spenders recover their
+  allowance from the on-chain delegation entry, not from the archive.
+- `RevokeSpender` folds the reclaimed allowance back into the spendable opening. The compliance extension's forced
+  revocation emits the same event.
+
+Configuration and compliance events are not needed for balance recovery, but are worth archiving for forensics.
+
+**Account attribution.** An event belongs to every account address in its topics (a `Transfer` to both sender and
+recipient, a `SpenderTransfer` to owner, recipient, and spender), never to the transaction's source account. The
+indexer can filter per account on the server, which is recommended for busy contracts, or serve the whole contract
+stream for clients to filter.
+
+**Ordering.** Replay is order-sensitive, so the archive preserves the total order
+`(ledger_seq, tx_application_order, event_index)`. The event id `(ledger_seq, tx_hash, event_index)` identifies an
+event but does not order it within a ledger.
+
+## Ingestion and Retention
+
+- **Source.** Any source that yields the complete, final event stream works: Stellar RPC `getEvents`, Horizon, or a
+  captive core. Stellar ledgers are final at close, so there are no reorgs to handle.
+- **Freshness and gaps.** The archive tracks which ledger ranges it has ingested and backfills gaps while the source
+  still has them. A gap that can no longer be filled is permanent and must be reported as incomplete.
+- **Idempotency.** Ingestion is at-least-once, deduplicated by event id.
+- **Retention.** The full per-account history is kept indefinitely, because no pruning horizon is safe. A dormant
+  account's latest checkpoint can be arbitrarily old, an account that never merges replays from registration, and a
+  `RevokeSpender` after the latest checkpoint is the only surviving record of the allowance it folded, since the
+  delegation entry is deleted in the same call.
+
+## API Capabilities
+
+The specification defines capabilities rather than a transport, with a recommended REST shape in
+[API Surface](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/indexer.md#api-surface):
+
+- **Ordered history** (required): all in-scope events for an account within a ledger range, in total order,
+  paginated, each with its event id and payload.
+- **Completeness signal** (required): every response states whether the indexer holds a gap-free history for the
+  whole requested range.
+- **Ingestion status** (required): the latest fully ingested ledger, so clients can bound staleness and check it
+  against their seam.
+- **Latest checkpoint** (recommended): the most recent checkpoint for an account at or before a given ledger, so a
+  dormant account need not download the spend history before it. It does not return `T₀`, so the client still reads
+  the ordered history from `T₀` onward, which for an account that never merged is its whole history.
+
+The specification is versioned with the protocol documentation; breaking changes to the archived record or the
+required capabilities bump that version.
+
+## Trust Model
+
+The indexer is trusted only for availability and completeness, never for confidentiality or integrity:
+
+- **Confidentiality.** Everything it holds is public chain data, so a curious indexer learns nothing a chain observer
+  does not.
+- **Integrity.** Wallets verify reconstructed openings against the on-chain commitments, so tampering is detected.
+- **Withholding.** A malicious or broken indexer can deny recovery. RPC independently serves the recent window, and
+  for older history, wallets should support several independent archive endpoints, with deployments running or
+  contracting at least two. Clients must pass the completeness signal on to their callers, because an incomplete
+  range and a tampered one both end in the same failed consistency check.
+
+### Auditor Recovery
+
+Auditors depend on the archive even more than holders do. The blinding of each allowance commitment is escrowed only
+in the `SetSpender` or `SpenderTransfer` event that wrote it, never in contract storage, so a missed or unarchived
+event leaves the auditor without that opening. An auditor client should check each reconstructed allowance opening
+against the stored allowance commitment. See [Auditing](/stellar-contracts/tokens/confidential/auditing).

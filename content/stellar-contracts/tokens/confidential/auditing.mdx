@@ -1,0 +1,237 @@
+---
+title: Auditing
+---
+
+[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/confidential/src/auditor)
+
+The Confidential Token hides balances and amounts from the public, but not from everyone. Every account is bound
+to an **auditor**, and each operation that moves private value encrypts the relevant figures to that auditor's key.
+The zero-knowledge proof of the operation checks this encryption, so it cannot be skipped or faked, and the
+account holder never has to take a separate step.
+
+This page covers what auditors can see, how auditor keys are managed, and what an auditor operator has to run
+off-chain.
+
+## Dual-Auditor Model
+
+Each account picks an `auditor_id` when it calls `register`. A confidential transfer then produces two sets of
+ciphertexts in the same transaction:
+
+- One for the **recipient's auditor**, the auditor bound to the receiving account.
+- One for the **sender's auditor**, the auditor bound to the sending account (for a spender transfer, the owner's
+  auditor).
+
+Withdrawals and `set_spender` produce ciphertexts for the sender's (owner's) auditor only. A spender's own auditor
+receives nothing, either at `set_spender` or on spender transfers. Deposits, merges, `revoke_spender` and clawbacks
+produce none: a deposit amount is already public, and the others only combine existing commitments (a clawback also
+subtracts a public amount).
+
+Each auditor decrypts its ciphertexts from the public event using its own secret key, the ephemeral public key and
+the per-operation salt published in that event (for a spender transfer, the new allowance salt). The one exception
+is the allowance blinding escrowed at `set_spender`, which is masked with the spender's address from the event
+topic instead of the salt. Decryption needs no viewing key, no cooperation from the account holder and no extra
+on-chain read.
+
+Auditing is scoped to accounts: an auditor learns only about operations that involve accounts bound to its
+`auditor_id`. That includes the amount of every transfer between those accounts and counterparties bound to other
+auditors.
+
+### Auditor Binding
+
+The `auditor_id` is stored in the account's `ConfidentialAccount` entry and **cannot be changed** after
+registration. The core contract only checks that the id exists in the auditor registry. Any auditor in a shared
+registry is therefore a valid choice unless the deployment restricts it. To allow only designated auditors,
+override `on_register`, as shown in [Restrict Auditor Selection](/stellar-contracts/tokens/confidential/compliance#restrict-auditor-selection).
+
+Only the **key** registered under an `auditor_id` can change, through rotation (see
+[Key Rotation](#key-rotation)).
+
+## What Each Auditor Sees
+
+| Data | Recipient's auditor | Sender's (owner's) auditor |
+| ---- | ------------------- | -------------------------- |
+| Transfer amount (transfers and spender transfers) | Yes | Yes |
+| Per-transfer blinding factor `r_transfer` | Yes | No |
+| Sender's post-transfer balance | No | Yes |
+| Post-withdrawal balance | n/a | Yes (the withdrawal amount itself is public) |
+| Spendable-balance blinding after a withdrawal, outgoing transfer, or `set_spender` | No | Yes |
+| Escrowed allowance and post-escrow balance at `set_spender` | n/a | Yes |
+| Allowance blinding at `set_spender` | n/a | Yes |
+| Post-transfer allowance and its blinding (spender transfers) | No | Yes |
+
+The recipient's auditor never sees the sender's balance. The [auditing specification](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/protocol/auditing.md#auditor-visibility-properties)
+gives the exact ciphertext layout for each event.
+
+### Opening Capabilities
+
+Balances are Pedersen commitments `C = v·G + r·H`. Knowing both the value `v` and the blinding `r` (the
+*opening*) means knowing the balance exactly. The table above gives each auditor enough to reconstruct an
+opening in the following cases:
+
+- **Recipient's auditor: the receiving balance between merges.** Deposits are added with zero blinding, and the
+  recipient's auditor decrypts the amount and `r_transfer` of every inbound transfer. So it can sum these to get
+  the full opening of the receiving balance. A merge folds the receiving balance into the spendable balance, and
+  this reconstruction then starts again from zero. A [clawback](/stellar-contracts/tokens/confidential/clawback)
+  resets it in the same way.
+- **Sender's auditor: the spendable balance from each checkpoint onward.** A withdrawal, an outgoing transfer, or
+  `set_spender` each hand the sender's auditor both the new spendable value and its blinding. Together these are a
+  full opening, called a *checkpoint*. An account has one auditor key for both its sender and recipient channels.
+  So an auditor that also decrypted every inbound flow can carry that opening forward through merges and
+  `revoke_spender` folds by doing the same additions the contract does.
+
+Both capabilities are **forward-only**: a key can decrypt only ciphertexts produced while it was the active key.
+Both also depend on the auditor having actually observed every event involved (see
+[Running an Auditor](#running-an-auditor)).
+
+## Spender Auditing
+
+Delegated spending is audited with the same two-auditor model:
+
+- At `set_spender`, the owner's auditor learns the escrowed amount, the owner's post-escrow balance, and the
+  blinding of the allowance commitment the operation wrote.
+- At each `confidential_transfer_from`, the recipient's auditor gets the amount and `r_transfer`, as for any
+  transfer. The owner's auditor gets the amount, the remaining allowance and the new allowance blinding.
+- `revoke_spender` publishes no auditor ciphertext. The auditor folds the allowance opening it took from the
+  delegation's last `SetSpender` or `SpenderTransfer` event back into the owner's spendable balance. A
+  [forced revocation](/stellar-contracts/tokens/confidential/clawback#forced-revocation) emits the same
+  `RevokeSpender` event and is folded the same way.
+
+Every allowance opening comes from the event that wrote that state, not from contract storage. An auditor that
+misses a delegation event cannot recover that opening later. See [Spenders](/stellar-contracts/tokens/confidential/spenders)
+for the delegation flows themselves.
+
+## The Auditor Registry
+
+Auditor public keys live in a separate contract implementing the `ConfidentialAuditor` trait. The token stores the
+registry's address at construction and calls `get_key` each time it builds the public inputs of an operation that
+encrypts to an auditor. It also calls `get_key` at `register`, to check that the id exists, and at clawback, whose
+proof takes the auditor key as a public input. Because the registry is separate:
+
+- One registry can serve many confidential tokens.
+- Keys can be registered and rotated without redeploying any token.
+- Key-management authority is separate from the token's admin powers.
+
+```rust
+pub trait ConfidentialAuditor {
+    fn register_key(e: &Env, auditor_id: u32, point: BytesN<64>, operator: Address);
+    fn rotate_key(e: &Env, auditor_id: u32, new_point: BytesN<64>, operator: Address);
+    fn get_key(e: &Env, auditor_id: u32) -> BytesN<64>; // default implementation provided
+}
+```
+
+`register_key` and `rotate_key` are privileged and have no default implementation. The implementor wires access
+control on `operator` and delegates to the matching function in `auditor::storage`. The `auditor_id` is any `u32`
+the registry operator chooses; nothing assigns it automatically. `register_key` reverts with
+`AuditorAlreadyRegistered` if the id is taken, so it never overwrites a key, and `rotate_key` reverts with
+`AuditorNotRegistered` if the id has no key. There is no function to remove a key. The two writes emit
+`AuditorRegistered` (`auditor_id`, `point`) and `AuditorRotated` (`auditor_id`, `old_point`, `new_point`).
+
+Keys are Grumpkin points encoded as 64 bytes: the `x` coordinate followed by the `y` coordinate, each 32 bytes,
+big-endian. Every write rejects the identity point (`IdentityPoint`) and any key that is not canonically encoded or
+not on the curve (`PointNotOnCurve`). An identity key would make every auditor ciphertext trivially decryptable,
+because the salt is public.
+
+Keys live in persistent storage. Each `get_key` call extends the entry's TTL to 30 days once it drops below 29
+days, so the tokens' own lookups keep an id in use alive. `register_key` and `rotate_key` don't extend it. An id
+that no token reads lasts only as long as its initial TTL unless the operator extends it, and once archived it must
+be restored before its next use.
+
+The example below gates both writes behind a `manager` role. See [Installation](/stellar-contracts/tokens/confidential/confidential#installation)
+for the crate dependency and the `alloc` feature it requires.
+
+```rust
+use soroban_sdk::{contract, contractimpl, symbol_short, Address, BytesN, Env, Symbol, Vec};
+use stellar_access::access_control::{self as access_control, AccessControl};
+use stellar_macros::only_role;
+use stellar_confidential::auditor::{storage as auditor, ConfidentialAuditor};
+
+const MANAGER_ROLE: Symbol = symbol_short!("manager");
+
+#[contract]
+pub struct ConfidentialAuditorContract;
+
+#[contractimpl]
+impl ConfidentialAuditorContract {
+    pub fn __constructor(e: &Env, admin: Address, manager: Address) {
+        access_control::set_admin(e, &admin);
+        access_control::grant_role_no_auth(e, &manager, &MANAGER_ROLE, &admin);
+    }
+}
+
+#[contractimpl(contracttrait)]
+impl ConfidentialAuditor for ConfidentialAuditorContract {
+    #[only_role(operator, "manager")]
+    fn register_key(e: &Env, auditor_id: u32, point: BytesN<64>, operator: Address) {
+        auditor::register_key(e, auditor_id, &point);
+    }
+
+    #[only_role(operator, "manager")]
+    fn rotate_key(e: &Env, auditor_id: u32, new_point: BytesN<64>, operator: Address) {
+        auditor::rotate_key(e, auditor_id, &new_point);
+    }
+}
+
+#[contractimpl(contracttrait)]
+impl AccessControl for ConfidentialAuditorContract {}
+```
+
+<Callout type="warning">
+Whoever can call `rotate_key` decides who can read future auditor ciphertexts for every account bound to that
+`auditor_id`. Gate it at least as tightly as the token's own admin functions.
+
+The same applies one level up. The token's `set_auditor` storage function has no single-shot guard, so if the token
+exposes it, its caller can point every account at a different registry. For accounts whose `auditor_id` is missing
+from the new registry, every operation that needs their key, including transfers to them, then reverts with
+`AuditorNotRegistered`.
+</Callout>
+
+## Key Rotation
+
+The registry shipped with the library keeps one current key per `auditor_id`, and `rotate_key` overwrites it in
+place. Production deployments can build a registry that keeps versioned keys with activation ledgers instead.
+The token and the circuits don't depend on either design: they always use whichever key the registry currently
+returns.
+
+- **In-flight proofs fail cleanly.** A proof built against the old key no longer matches the key the contract
+  fetches, so verification fails and the call reverts with no state change. The wallet rebuilds the proof against
+  the new key, with a fresh salt, and resubmits. An observer cannot link the retry to the failed attempt.
+- **The auditor keeps its old secrets.** Each historical key decrypts the events produced while it was active. The
+  registry's `AuditorRotated` event, which carries the old and the new key, is the on-chain record of each switch.
+  To decrypt an event, the auditor uses it to resolve which of its keys was active at that point and uses that
+  secret.
+- **A retired key keeps what it already opened.** Rotation does not revoke openings the old key's holder already
+  has.
+- **A new key starts with nothing.** For the spendable balance it starts over at the account's next checkpoint
+  (withdrawal, outgoing transfer, or `set_spender`). For an allowance it starts at the delegation's next
+  state-changing event. Until then it reads individual amounts but holds no full opening. Even after that
+  checkpoint, a merge that folds transfers received before the rotation, or a `revoke_spender` of a delegation last
+  written before it, breaks the spendable opening again until the next checkpoint. If the receiving balance holds
+  transfers from before the rotation, the new key can open it only after the next merge. A new-key holder therefore
+  cannot build a clawback proof for an account until it holds both openings.
+
+## Running an Auditor
+
+The library provides the `ConfidentialAuditor` trait and the `auditor::storage` helpers; a deployable registry is
+the [example contract](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/confidential/auditor).
+It does not include an auditor client. An auditor operator has to run software that:
+
+1. **Tracks its accounts.** It indexes the token's `Register` events, whose data carries the account's
+   `auditor_id`, to learn which accounts are bound to its id and so which channel of each event is its own.
+2. **Decrypts every relevant event** with its secret key, using the ephemeral key and salt published in the event.
+3. **Maintains openings.** It replaces the spendable opening at each checkpoint, adds the amount and `r_transfer`
+   of every inbound transfer and spender transfer to the receiving opening, treats each deposit as `(amount, 0)`,
+   and folds the receiving opening into the spendable one on each `Merge`. On each `RevokeSpender` it folds in the
+   allowance opening it recorded; if it holds no record for that delegation, it marks the spendable opening
+   unavailable until the next checkpoint rather than carry a stale one. Where seizure is enabled, it applies each
+   `Clawback` as a merge minus the public amount.
+4. **Checks openings against chain state.** It recomputes the commitment from its opening and compares it with the
+   stored one. A mismatch means a missed, reordered, or pruned event, not a wrong balance.
+5. **Archives events durably.** The blindings escrowed to an auditor exist only in events, and Stellar RPC keeps
+   only a limited window of history. A durable archive is required; see
+   [Indexing and Recovery](/stellar-contracts/tokens/confidential/indexing).
+6. **Keeps every historical secret key** for as long as old events may need decrypting.
+7. **Produces clawback proofs**, where the deployment enables seizure. The auditor's secret key and the openings
+   it maintains are the witness for the [Clawback](/stellar-contracts/tokens/confidential/clawback) circuit.
+
+The client-side requirements are specified in the [Auditor Client specification](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/sdk/auditor-client.md).
+The full auditing model, including how each capability is bounded, is in the [auditing specification](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/protocol/auditing.md).
