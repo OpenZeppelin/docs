@@ -73,10 +73,10 @@ import '@openzeppelin/hardhat-upgrades';
 
 **After:**
 ```typescript
-import { upgrades, defender } from '@openzeppelin/hardhat-upgrades';
+import { upgrades } from '@openzeppelin/hardhat-upgrades';
 ```
 
-All functions are now exported by the API. Import `upgrades` for standard functions, or `defender` for Defender-specific functions.
+All functions are now exported by the API.
 
 ### Update Usage
 
@@ -94,7 +94,7 @@ await upgradesApi.deployProxy(MyContract, []);
 
 <Callout>
 **Important:**
-- Both `upgrades` and `defender` receive `hre` and `connection` as parameters: `upgrades(hre, connection)` or `defender(hre, connection)`
+- `upgrades` receives `hre` and `connection` as parameters: `upgrades(hre, connection)`
 - Share the connection across multiple operations; do not create a new one each time (or use `hre.network.getOrCreate()`, which reuses a connection per network)
 - In tests, create the connection once in a `before` block or use top-level await (ESM)
 </Callout>
@@ -181,12 +181,11 @@ describe('MyContract', () => {
 **After (Hardhat 3) - with ESM top-level await:**
 ```typescript
 import hre from 'hardhat';
-import { upgrades, defender } from '@openzeppelin/hardhat-upgrades';
+import { upgrades } from '@openzeppelin/hardhat-upgrades';
 
 const connection = await hre.network.create();
 const { ethers } = connection;
 const upgradesApi = await upgrades(hre, connection);
-const defenderApi = await defender(hre, connection);
 
 describe('MyContract', () => {
   it('should deploy', async () => {
@@ -196,7 +195,7 @@ describe('MyContract', () => {
 });
 ```
 
-Note: Both `upgrades` and `defender` receive `hre` and `connection` as parameters.
+Note: `upgrades` receives `hre` and `connection` as parameters.
 
 Hardhat 3 also supports tests written in Solidity. See [Solidity tests](/upgrades-plugins/hardhat-upgrades#solidity-tests) for setup with `@openzeppelin/foundry-upgrades`.
 
@@ -217,9 +216,8 @@ Note that you do not need to include constructor arguments when verifying if you
 - Install the peer dependencies for the API you use: `@nomicfoundation/hardhat-ethers` and `ethers` for the ethers-based API, or `@nomicfoundation/hardhat-viem` and `viem` if you are using viem
 - Add `hardhatUpgrades` to `plugins` in `hardhat.config.ts`
 - If using `verify`, add `hardhatVerify` to `plugins`, install `@nomicfoundation/hardhat-verify`, and configure Hardhat's `verify.etherscan.apiKey` setting
-- Replace `import '@openzeppelin/hardhat-upgrades'` → `import { upgrades, defender } from '@openzeppelin/hardhat-upgrades'` in scripts/tests
+- Replace `import '@openzeppelin/hardhat-upgrades'` → `import { upgrades } from '@openzeppelin/hardhat-upgrades'` in scripts/tests
 - Add `const connection = await hre.network.create();` (share connection across operations, don't create new ones)
 - Replace `hre.ethers` → `ethers` from connection (`const { ethers } = connection`)
 - Replace `hre.upgrades.method()` → call methods from `const upgradesApi = await upgrades(hre, connection)`
-- Replace `hre.defender.method()` → call methods from `const defenderApi = await defender(hre, connection)`
 - Update all scripts, tasks, and tests

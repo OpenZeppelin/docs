@@ -74,7 +74,6 @@ content/
 ├── contracts-compact/      # Compact contract implementations
 ├── contracts-stylus/       # Stylus contracts for Arbitrum
 ├── ui-builder/             # UI Builder documentation
-├── defender/               # Defender platform documentation
 ├── monitor/                # Monitoring tools documentation
 ├── relayer/                # Relayer service documentation
 ├── stellar-contracts/      # Stellar blockchain contracts
@@ -266,7 +265,7 @@ To add or modify navigation:
 Product-specific icons located in `src/components/icons/`:
 
 - **Blockchain Icons**: Ethereum, Arbitrum, Starknet, Stellar, Polkadot, Midnight, Zama
-- **Product Icons**: Contracts, Defender, Monitor, Relayer
+- **Product Icons**: Contracts, Monitor, Relayer
 - **Tool Icons**: Wizard, Ethernaut, and others
 
 Icons are React components that accept className props for styling.

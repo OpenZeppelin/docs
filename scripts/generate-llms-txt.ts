@@ -36,7 +36,7 @@ const TREES: NavigationTree[] = [
 
 const INTRO = `# OpenZeppelin Docs
 
-> Security-first libraries, tools, and infrastructure for building on Ethereum and other blockchains. Covers smart contract libraries for Solidity, Cairo, Stylus, Sui, Midnight, Stellar, Zama FHEVM, and Polkadot; operational tools (Defender, Monitor, Relayer, UI Builder); and the Upgrades Plugins and Contract Wizard.
+> Security-first libraries, tools, and infrastructure for building on Ethereum and other blockchains. Covers smart contract libraries for Solidity, Cairo, Stylus, Sui, Midnight, Stellar, Zama FHEVM, and Polkadot; operational tools (Monitor, Relayer, UI Builder); and the Upgrades Plugins and Contract Wizard.
 
 Each ecosystem section lists the smart-contract libraries and language-specific guides for that chain. Cross-ecosystem developer libraries and tools are grouped at the end to avoid duplication. Unversioned URLs (for example \`/contracts/\`) redirect to the latest supported version.
 `;
