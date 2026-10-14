@@ -15,31 +15,33 @@ malicious spender can lose at most the allowance.
 
 ## Lifecycle
 
-```mermaid
-stateDiagram-v2
-    [*] --> Active: set_spender
-    Active --> Active: confidential_transfer_from
-    Active --> Expired: ledger > live_until_ledger
-    Active --> [*]: revoke_spender / force_revoke_spender
-    Expired --> [*]: revoke_spender / force_revoke_spender
-```
-
-`force_revoke_spender` exists only in deployments with the compliance extension (see
-[Revoking a Spender](#revoking-a-spender)).
+A delegation is active from `set_spender` until the ledger passes `live_until_ledger`, and expired
+after that. Expiry only stops spending: the remaining allowance stays escrowed in the delegation entry
+until `revoke_spender` deletes the entry and returns the allowance to the owner's spendable balance. In
+deployments with the compliance extension, the token admin can also end a frozen account's delegation
+with `force_revoke_spender` (see [Revoking a Spender](#revoking-a-spender)).
 
 Each `(owner, spender)` pair holds at most one delegation. `set_spender` reverts with
 `DelegationAlreadyExists` while an entry exists for the pair, even if it has expired. To re-delegate to
 the same spender, the owner first calls `revoke_spender` and then `set_spender` again.
 
+The owner's spendable balance and each allowance are separate commitments, so they never need to be
+kept in sync. The owner can transfer, withdraw, merge, or set up more spenders while delegations are
+active. None of these touch an allowance, so a spender's in-flight proof stays valid. Spender
+transfers never touch the owner's spendable balance either. The one owner action that does affect a
+spender is `revoke_spender`, which removes the allowance the spender's next proof would reference.
+
 ## Setting a Spender
 
 ```rust
 // `set_spender_data` is the XDR-encoded `SetSpenderData` built by the owner's wallet.
+// `spender` must already be registered. Moves the allowance out of the owner's spendable
+// balance into escrow.
 token_client.set_spender(&owner, &spender, &live_until_ledger, &set_spender_data);
 ```
 
-The spender must already be a registered confidential account. The owner's wallet needs the spender's
-spending public key to hand over the key the spender uses to read its allowance.
+The owner's wallet needs the spender's spending public key to hand over the key the spender uses to
+read its allowance.
 
 The owner's proof shows that:
 
@@ -55,18 +57,16 @@ reveals only this spender's allowance in this token contract, and it cannot be u
 owner's viewing key. Because it is escrowed on-chain inside the delegation entry, owner and spender
 never need to exchange keys off-chain.
 
-The owner's spendable balance drops by the allowance as soon as the call succeeds.
-
 ## Spending from an Allowance
 
 ```rust
-// Authorized by the spender, not the owner.
+// Authorized by the spender, not the owner. Reverts with `DelegationNotFound` if there is
+// no delegation, and with `DelegationExpired` once the ledger is past `live_until_ledger`.
 token_client.confidential_transfer_from(&spender, &owner, &recipient, &spender_transfer_data);
 ```
 
-Only the spender signs. The owner approved in advance at `set_spender`, and that approval lives in the
-delegation entry until it expires or is revoked. The call reverts with `DelegationNotFound` if there is
-no entry, and with `DelegationExpired` once the current ledger is past `live_until_ledger`.
+The owner approved in advance at `set_spender`, and that approval lives in the delegation entry until
+it expires or is revoked.
 
 The spender's proof shows that the allowance covers the amount and that the new allowance commitment is
 correct. It also encrypts the amount for the recipient and both auditors, as a direct transfer does.
@@ -79,26 +79,23 @@ Two more details differ from a direct transfer:
 
 - **Sender-side auditing follows the funds.** The ciphertexts on the sender side go to the **owner's**
   auditor, not the spender's, and include the remaining allowance after the transfer.
-- **Masks use a replacement salt.** The delegation stores its current salt, `allowance_salt`, which only
-  opens the current allowance. Every encryption mask is keyed to the replacement salt `sigma_a_new` that
-  the spender's wallet picks, and the contract writes it back as the new `allowance_salt`. A reverted
-  call leaves the stored salt unchanged, so the wallet must sample a fresh `sigma_a_new` for every
-  attempt, retries included. The circuit only rejects a value equal to the stored salt; it cannot
-  enforce freshness.
+- **Masks use a replacement salt.** The delegation stores the salt of its current state,
+  `allowance_salt`, which only opens the current allowance. The spender's wallet picks a new salt,
+  `sigma_a_new`, keys every encryption mask to it, and the contract stores it as the new
+  `allowance_salt`. A reverted call leaves the stored salt unchanged, so the wallet must pick a fresh
+  `sigma_a_new` for every attempt, retries included. The circuit rejects only a value equal to the
+  stored salt; it can't enforce freshness.
 
 ## Revoking a Spender
 
 ```rust
+// Needs no proof. Adds the remaining allowance commitment back to the owner's spendable
+// commitment and deletes the delegation entry, whether active or expired.
 token_client.revoke_spender(&owner, &spender);
 ```
 
-Revocation needs no proof. The contract adds the remaining allowance commitment back to the owner's
-spendable commitment and deletes the delegation entry. It works for both active and expired
-delegations.
-
-The `RevokeSpender` event carries the encrypted allowance and its salt. Since the entry is deleted in
-the same call, these event fields are the only place the owner's wallet can read them to learn how much
-came back.
+The `RevokeSpender` event carries the encrypted allowance and its salt. Because the call deletes the
+entry, the event is the only place the owner's wallet can read how much came back.
 
 In deployments with the compliance extension, the token admin can also end a frozen account's
 delegation with [`force_revoke_spender`](/stellar-contracts/tokens/confidential/clawback#forced-revocation).
@@ -108,11 +105,9 @@ not initiate.
 
 ## Expiry
 
-`live_until_ledger` limits how long the spender can spend, but the escrowed funds stay put:
-
-- While `ledger.sequence() <= live_until_ledger`, the spender can call `confidential_transfer_from`.
-- After that, spending reverts, but the escrowed value **stays on-chain** in the delegation entry until
-  the owner calls `revoke_spender`.
+The spender can call `confidential_transfer_from` while `ledger.sequence() <= live_until_ledger`. After
+that, spending reverts, but the escrow stays in the delegation entry until the owner revokes it (see
+[Lifecycle](#lifecycle)).
 
 `set_spender` does not validate `live_until_ledger`. The value is bound by the owner's authorization,
 but the contract does not compare it with the current ledger and the proof does not cover it. A value
@@ -121,18 +116,7 @@ through `revoke_spender`. Wallets should check the value before submitting.
 
 Delegations live in persistent storage, not temporary storage, so an expired escrow is never deleted
 automatically. Its TTL is still finite: a new delegation starts with the network's minimum TTL, and the
-library extends it only when an operation reads the entry. An escrow that nobody touches for long
-enough is archived and must be restored before `revoke_spender` or `confidential_transfer_from` can
-use it (see [TTL Management](/stellar-contracts/tokens/confidential/confidential#ttl-management)).
-Wallets should show upcoming expirations and prompt the owner to renew or revoke.
-
-## Owner Operations While Spenders Are Active
-
-The owner's spendable balance and each allowance are separate commitments, so they never need to be
-kept in sync. The owner can transfer, withdraw, merge, or set up more spenders while delegations are
-active. None of these touch an allowance, so a spender's in-flight proof stays valid. Spender
-transfers never touch the owner's spendable balance either. The one owner action that does affect a
-spender is `revoke_spender`, which removes the allowance the spender's next proof would reference.
+library extends it only when an operation reads the entry.
 
 ## Reading Delegation State
 
@@ -153,9 +137,6 @@ active delegation from an expired one.
 | `live_until_ledger` | Last ledger at which the spender may spend |
 
 ## Events
-
-Each event's first topic is its name in snake case (`set_spender`, `spender_transfer`, `revoke_spender`),
-followed by the addresses below.
 
 | Event | Topic addresses | Data |
 | --- | --- | --- |

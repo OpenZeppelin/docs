@@ -75,8 +75,8 @@ opening in the following cases:
   resets it in the same way.
 - **Sender's auditor: the spendable balance from each checkpoint onward.** A withdrawal, an outgoing transfer, or
   `set_spender` each hand the sender's auditor both the new spendable value and its blinding. Together these are a
-  full opening, called a *checkpoint*. An account has one auditor key for both its sender and recipient channels.
-  So an auditor that also decrypted every inbound flow can carry that opening forward through merges and
+  full opening, called a *checkpoint*. An account uses the same auditor for its sender and recipient channels,
+  so an auditor that also decrypted every inbound flow can carry that opening forward through merges and
   `revoke_spender` folds by doing the same additions the contract does.
 
 Both capabilities are **forward-only**: a key can decrypt only ciphertexts produced while it was the active key.
@@ -85,20 +85,18 @@ Both also depend on the auditor having actually observed every event involved (s
 
 ## Spender Auditing
 
-Delegated spending is audited with the same two-auditor model:
+Delegated spending uses the same two-auditor model. The table above shows what each auditor learns at
+`set_spender` and on each spender transfer: the recipient's auditor sees a spender transfer like any other, and the
+owner's auditor tracks the allowance from the escrowed amount onward. Two things are specific to delegations:
 
-- At `set_spender`, the owner's auditor learns the escrowed amount, the owner's post-escrow balance, and the
-  blinding of the allowance commitment the operation wrote.
-- At each `confidential_transfer_from`, the recipient's auditor gets the amount and `r_transfer`, as for any
-  transfer. The owner's auditor gets the amount, the remaining allowance and the new allowance blinding.
-- `revoke_spender` publishes no auditor ciphertext. The auditor folds the allowance opening it took from the
-  delegation's last `SetSpender` or `SpenderTransfer` event back into the owner's spendable balance. A
+- **Revocation publishes no auditor ciphertext.** On `revoke_spender`, the auditor folds the allowance opening it
+  took from the delegation's last `SetSpender` or `SpenderTransfer` event back into the owner's spendable balance. A
   [forced revocation](/stellar-contracts/tokens/confidential/clawback#forced-revocation) emits the same
   `RevokeSpender` event and is folded the same way.
+- **Allowance openings exist only in events.** Each one comes from the event that wrote that state, not from
+  contract storage, so an auditor that misses a delegation event can't recover that opening later.
 
-Every allowance opening comes from the event that wrote that state, not from contract storage. An auditor that
-misses a delegation event cannot recover that opening later. See [Spenders](/stellar-contracts/tokens/confidential/spenders)
-for the delegation flows themselves.
+See [Spenders](/stellar-contracts/tokens/confidential/spenders) for the delegation flows themselves.
 
 ## The Auditor Registry
 
@@ -119,25 +117,9 @@ pub trait ConfidentialAuditor {
 }
 ```
 
-`register_key` and `rotate_key` are privileged and have no default implementation. The implementor wires access
-control on `operator` and delegates to the matching function in `auditor::storage`. The `auditor_id` is any `u32`
-the registry operator chooses; nothing assigns it automatically. `register_key` reverts with
-`AuditorAlreadyRegistered` if the id is taken, so it never overwrites a key, and `rotate_key` reverts with
-`AuditorNotRegistered` if the id has no key. There is no function to remove a key. The two writes emit
-`AuditorRegistered` (`auditor_id`, `point`) and `AuditorRotated` (`auditor_id`, `old_point`, `new_point`).
-
-Keys are Grumpkin points encoded as 64 bytes: the `x` coordinate followed by the `y` coordinate, each 32 bytes,
-big-endian. Every write rejects the identity point (`IdentityPoint`) and any key that is not canonically encoded or
-not on the curve (`PointNotOnCurve`). An identity key would make every auditor ciphertext trivially decryptable,
-because the salt is public.
-
-Keys live in persistent storage. Each `get_key` call extends the entry's TTL to 30 days once it drops below 29
-days, so the tokens' own lookups keep an id in use alive. `register_key` and `rotate_key` don't extend it. An id
-that no token reads lasts only as long as its initial TTL unless the operator extends it, and once archived it must
-be restored before its next use.
-
-The example below gates both writes behind a `manager` role. See [Installation](/stellar-contracts/tokens/confidential/confidential#installation)
-for the crate dependency and the `alloc` feature it requires.
+The registry depends on `stellar-confidential`, like the token (see
+[Installation](/stellar-contracts/tokens/confidential/confidential#installation)). The example below gates all writes
+behind a `manager` role:
 
 ```rust
 use soroban_sdk::{contract, contractimpl, symbol_short, Address, BytesN, Env, Symbol, Vec};
@@ -201,13 +183,13 @@ returns.
   secret.
 - **A retired key keeps what it already opened.** Rotation does not revoke openings the old key's holder already
   has.
-- **A new key starts with nothing.** For the spendable balance it starts over at the account's next checkpoint
-  (withdrawal, outgoing transfer, or `set_spender`). For an allowance it starts at the delegation's next
-  state-changing event. Until then it reads individual amounts but holds no full opening. Even after that
-  checkpoint, a merge that folds transfers received before the rotation, or a `revoke_spender` of a delegation last
-  written before it, breaks the spendable opening again until the next checkpoint. If the receiving balance holds
-  transfers from before the rotation, the new key can open it only after the next merge. A new-key holder therefore
-  cannot build a clawback proof for an account until it holds both openings.
+- **A new key starts with nothing.** It can read individual amounts right away, but it holds no full opening of the
+  spendable balance until the account's next checkpoint (withdrawal, outgoing transfer, or `set_spender`), and none
+  of an allowance until the delegation's next state-changing event. Older state can break the spendable opening
+  again after that checkpoint: merging transfers received before the rotation, or revoking a delegation last
+  written before it, leaves it unknown until the next checkpoint. A receiving balance that holds pre-rotation
+  transfers opens only after the next merge. Until it holds both openings, the new key's holder can't build a
+  clawback proof for the account.
 
 ## Running an Auditor
 
@@ -233,5 +215,7 @@ It does not include an auditor client. An auditor operator has to run software t
 7. **Produces clawback proofs**, where the deployment enables seizure. The auditor's secret key and the openings
    it maintains are the witness for the [Clawback](/stellar-contracts/tokens/confidential/clawback) circuit.
 
+Key custody, rotation planning, and how to use the access an auditor key grants are covered in
+[Best Practices for Auditors](/stellar-contracts/tokens/confidential/best-practices/auditors).
 The client-side requirements are specified in the [Auditor Client specification](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/sdk/auditor-client.md).
 The full auditing model, including how each capability is bounded, is in the [auditing specification](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/protocol/auditing.md).

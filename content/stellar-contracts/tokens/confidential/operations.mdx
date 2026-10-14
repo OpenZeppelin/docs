@@ -42,17 +42,10 @@ value `v` behind a blinding factor `r`:
 
 The split prevents griefing. A spend proof references the spendable commitment as it is on-chain when
 the proof is built. Incoming transfers touch only the receiving commitment, so no other user can
-change the commitment an in-flight proof references. An account can also receive any number of transfers
-without the owner having to do anything. See
+change the commitment an in-flight proof references, and an account can receive any number of transfers
+without the owner doing anything. The cost is one extra step: received funds must be merged before they
+can be spent. See
 [Griefing Resistance](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/protocol/security.md#griefing-resistance).
-
-A proof is also tied to the auditor keys and the verification key in force when it is built. If the
-deployment rotates an [auditor key](/stellar-contracts/tokens/confidential/auditing#key-rotation) or the
-[verifier](/stellar-contracts/tokens/confidential/proof-system#updating-a-verification-key) while a proof
-is in flight, the call reverts with `InvalidProof` and no state change. The wallet rebuilds the proof with a
-fresh salt and resubmits.
-
-The cost is that received funds must be merged before they can be spent.
 
 ## Register
 
@@ -60,11 +53,11 @@ An account must register before it can receive deposits or transfers. The wallet
 key and a viewing key from a single secret (see [Wallet Integration](/stellar-contracts/tokens/confidential/wallet-integration))
 and proves the two public keys are well formed and tied to this token contract.
 
-The caller also picks an `auditor_id`. It must exist in the auditor registry; an unknown id reverts with
-the registry's `AuditorNotRegistered`. Once set it cannot change,
-and it decides which auditor receives the encrypted copies of this account's activity (see
-[Auditing](/stellar-contracts/tokens/confidential/auditing)). The core does not restrict which auditor an account
-picks; deployments that need to restrict it do so in `Hooks::on_register`.
+The caller also picks an `auditor_id`, which decides who receives the encrypted copies of this account's
+activity (see [Auditing](/stellar-contracts/tokens/confidential/auditing)). It can never change. The id must
+exist in the auditor registry, or the call reverts with the registry's `AuditorNotRegistered`. Beyond that,
+the core lets an account pick any auditor; deployments that need to restrict the choice do so in
+`Hooks::on_register` (see [Restrict Auditor Selection](/stellar-contracts/tokens/confidential/compliance#restrict-auditor-selection)).
 
 Registration is single-use: a second call for the same address reverts with `AccountAlreadyRegistered`.
 The contract checks this after the auditor lookup and proof verification, so a retry with an invalid
@@ -74,40 +67,41 @@ registration data cannot be replayed to create a duplicate-key account under a d
 ## Deposit
 
 ```rust
-// `from` authorizes the underlying SEP-41 transfer; `to` must be registered.
+// `depositor` authorizes the underlying SEP-41 transfer and needs no confidential account;
+// `recipient` must be registered. A negative amount reverts with `NegativeAmount`.
 token_client.deposit(&depositor, &recipient, &500);
 ```
 
 The contract pulls `amount` of the underlying token from `from` and adds a zero-blinding commitment
-`amount·G` to `to`'s receiving balance. No proof is needed because the amount is already public. The
-depositor doesn't need a confidential account; only the recipient does. Negative amounts revert with
-`NegativeAmount`.
+`amount·G` to `to`'s receiving balance. No proof is needed because the amount is already public.
 
 ## Merge
 
 ```rust
+// Authorized by `owner`. Adds the receiving commitment to the spendable one and resets the
+// receiving balance to zero.
 token_client.merge(&owner);
 ```
 
-Merge adds the receiving commitment to the spendable commitment and resets the receiving balance to
-zero. It needs no proof: adding two commitments yields a commitment to the sum of their values and
-blinding factors, so no value is created or lost. Only the owner can authorize it.
+Merge needs no proof: adding two commitments yields a commitment to the sum of their values and
+blinding factors, so no value is created or lost.
 
 The owner's wallet knows the new opening because it has tracked every deposit and transfer credited to
-the receiving balance. Wallets should prompt a merge before any spend so that received funds are
-available.
+the receiving balance. Wallets should merge, or prompt the owner to, before a spend the spendable
+balance can't cover.
 
 ## Confidential Transfer
 
 ```rust
 // `transfer_data` is the XDR-encoded `TransferData` built by the sender's wallet.
+// Replaces the sender's spendable commitment and adds the transfer commitment to the
+// recipient's receiving balance.
 token_client.confidential_transfer(&sender, &recipient, &transfer_data);
 ```
 
 The sender's wallet proves that the sender holds at least the transfer amount, that the new spendable
 commitment is the old balance minus the amount, and that the amount is encrypted correctly for the
-recipient and both auditors. The contract checks the proof, replaces the sender's spendable
-commitment, and adds the transfer commitment to the recipient's receiving balance.
+recipient and both auditors.
 
 ```mermaid
 sequenceDiagram
@@ -135,18 +129,21 @@ events, which credit it the same way (see
 shared secret from the event's ephemeral public key and its own viewing key. With that secret and the
 event's salt, it decrypts the amount and derives the blinding factor. The recipient does nothing on-chain.
 
-Observers see that `from` transferred to `to`. They do not see the amount or either balance.
+Observers see that `from` transferred to `to`. They do not see the amount or either balance, although public
+deposits and withdrawals can let them infer some of it (see
+[Privacy Model](/stellar-contracts/tokens/confidential/privacy-model#what-observers-can-infer)).
 
 ## Withdraw
 
 ```rust
 // `withdraw_data` is the XDR-encoded `WithdrawData` built by the owner's wallet.
+// Replaces the owner's spendable commitment and sends the underlying tokens to
+// `destination`, which can be any address.
 token_client.withdraw(&owner, &destination, &200, &withdraw_data);
 ```
 
 The wallet proves that the spendable balance covers `amount` and that the new commitment is correct.
-The contract replaces the spendable commitment and sends `amount` of the underlying token to `to`, which
-can be any address. The withdrawn amount is public; the remaining balance stays hidden.
+The withdrawn amount is public; the remaining balance stays hidden.
 
 ## Payload Encoding
 
@@ -163,14 +160,13 @@ use stellar_confidential::{TransferData, TransferPayload};
 
 // `payload` and `proof` are produced by the wallet's prover.
 let data = TransferData { payload, proof }.to_xdr(&e);
+// Reverts with `InvalidData` if `data` doesn't decode, and with `NonCanonicalEncoding`
+// if a field or point coordinate isn't the canonical encoding of its field element.
 token_client.confidential_transfer(&sender, &recipient, &data);
 ```
 
 The structs are `#[contracttype]` values and Soroban's XDR encoding is canonical, so any client
-compiled against the same type definitions produces identical bytes. A payload that does not decode
-reverts with `InvalidData`. A field or point coordinate that is not the canonical encoding of its field
-element reverts with `NonCanonicalEncoding` (see
-[Proof System](/stellar-contracts/tokens/confidential/proof-system)).
+compiled against the same type definitions produces identical bytes.
 
 ## Authorization Model
 
@@ -191,35 +187,22 @@ commitment that no longer exists and fails verification. No nonce or nullifier i
 
 ## Events
 
-Events are how wallets, auditors and indexers learn what happened, because storage holds only
-commitments.
+Storage holds only commitments, so events are how wallets, auditors and indexers learn what happened.
+[What Each Event Reveals](/stellar-contracts/tokens/confidential/privacy-model#what-each-event-reveals) lists
+every event with its public and encrypted fields.
 
-- `Register`, `Deposit` and `Merge` carry only addresses, the `auditor_id`, and the public deposit
-  amount.
-- `Transfer` carries the ephemeral public key, the salt, the amount encrypted for the recipient, the
-  sender's encrypted new balance (for the sender's own recovery), and the ciphertexts for the
-  recipient's and the sender's auditors.
-- `Withdraw` carries the public amount, the ephemeral key, the salt, the encrypted new balance, and the
-  sender-auditor ciphertexts.
-- `SetSpender`, `SpenderTransfer` and `RevokeSpender` are covered on the
-  [Spenders](/stellar-contracts/tokens/confidential/spenders#events) page.
-
-A wallet that loses its local state rebuilds both balances from these events. It restores the spendable
-balance from its latest checkpoint (a `Withdraw`, a `Transfer` it sent, or a `SetSpender`), then replays
-the events that follow. Stellar RPC
-keeps events for a limited window only, so recovery depends on a durable archive (see
-[Indexing and Recovery](/stellar-contracts/tokens/confidential/indexing)).
+A wallet that loses its local state rebuilds both balances from these events. Stellar RPC keeps events
+only for a limited window, so recovery depends on a durable archive; see
+[Indexing and Recovery](/stellar-contracts/tokens/confidential/indexing) for the procedure.
 
 ## Read Methods
 
 ```rust
+// Returns the `ConfidentialAccount` below; reverts if `owner` isn't registered.
 let account = token_client.confidential_balance(&owner);
 let active = token_client.is_spender(&owner, &spender);
 let delegation = token_client.get_spender_delegation(&owner, &spender);
 ```
-
-`confidential_balance` returns the `ConfidentialAccount` stored for an address. It reverts if the
-address isn't registered.
 
 | Field | Description |
 | --- | --- |
@@ -238,12 +221,17 @@ replayed matches the chain.
 
 ## Failed Transactions
 
+A proof is tied to the auditor keys and the verification key in force when it is built. If the deployment
+rotates an [auditor key](/stellar-contracts/tokens/confidential/auditing#key-rotation) or updates a
+[verification key](/stellar-contracts/tokens/confidential/proof-system#updating-a-verification-key) while a
+proof is in flight, the call reverts with `InvalidProof` and nothing changes. The wallet rebuilds the proof
+and resubmits.
+
 Every proof-carrying operation except `register` carries a salt: `sigma`, or `sigma_a_new` for a spender
-transfer. The salt determines the new commitment's blinding factor and every encryption mask. The wallet
-must sample a fresh salt for every attempt, so when a transaction reverts, it picks a new salt and
-rebuilds the proof. Reusing the old salt would let an observer link the failed attempt to the retry,
-and a retry with a different amount would leak the difference between the two amounts. The contract
-cannot enforce freshness; it is the wallet's job (see
+transfer. The salt determines the new commitment's blinding factor and every encryption mask, so each
+attempt needs a fresh one, retries included. Reusing a salt would let an observer link the failed attempt
+to the retry, and a retry with a different amount would reveal the difference between the two amounts. The
+contract can't enforce freshness, so this is the wallet's job (see
 [Salts and Retries](/stellar-contracts/tokens/confidential/wallet-integration#salts-and-retries)). The salt is
 published in the event, so the owner and the auditor can still reconstruct the randomness. See
 [Revert Safety](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/protocol/security.md#revert-safety).

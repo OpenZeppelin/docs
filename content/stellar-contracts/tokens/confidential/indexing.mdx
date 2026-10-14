@@ -18,18 +18,17 @@ specification.
 
 Stellar RPC keeps events only for a bounded window, which a node reports through `getHealth` as `oldestLedger` and
 `ledgerRetentionWindow`. Once an account's events fall out of that window, a wallet without local state can still see
-its commitments on-chain but cannot reconstruct the openings needed to spend them. Without a conforming archive,
-wallet-local state should be treated as unrecoverable once events age out of RPC. Wallets with RPC-only access must
-therefore sync at least once per retention window and warn when they have not: a crediting event, or a
-`RevokeSpender` after the latest checkpoint, that ages out before the wallet applies it is lost for good.
+its commitments on-chain but can't reconstruct the openings needed to spend them. Without a conforming archive, treat
+wallet state as unrecoverable once its events age out of RPC. A wallet with RPC-only access must sync at least once
+per retention window and warn the user when it hasn't: a crediting event, or a `RevokeSpender` after the latest
+checkpoint, that ages out before the wallet applies it is lost for good.
 
 RPC and the archive work together. A client can read the recent tail from RPC and older history from the archive,
 stitching the two at a *seam*. The seam sits strictly above the RPC retention floor, with a margin, because the floor
 advances while the client is querying. The two legs cover disjoint ledger ranges, and the client still deduplicates
 by event id at the boundary. The archive does not have to keep up with the chain head, but it must never fall behind
-the seam. If a configured archive fails,
-the whole sync fails: silently falling back to RPC alone and saving the resulting sync position would skip the
-archived range forever.
+the seam. If a configured archive fails, the whole sync fails: silently falling back to RPC alone and saving the
+resulting sync position would skip the archived range forever.
 
 ## How Recovery Works
 
@@ -37,9 +36,8 @@ Recovery uses two anchors in the account's history:
 
 ```mermaid
 graph LR
-    R[Register] -.-> T0["T₀: last Merge or Clawback<br/>at or before the checkpoint"]
-    T0 --> CP["Latest checkpoint<br/>Withdraw, outgoing Transfer, or SetSpender"]
-    CP --> NOW[Now]
+    T0["T<sub>0</sub>"] -->|"replay receiving side"| CP[Latest checkpoint]
+    CP -->|"replay both sides"| NOW[Now]
 ```
 
 1. **Spendable side: the latest checkpoint.** Every withdrawal, outgoing transfer, and `set_spender` emits the owner's
@@ -90,7 +88,8 @@ Configuration and compliance events are not needed for balance recovery, but are
 **Account attribution.** An event belongs to every account address in its topics (a `Transfer` to both sender and
 recipient, a `SpenderTransfer` to owner, recipient, and spender), never to the transaction's source account. The
 indexer can filter per account on the server, which is recommended for busy contracts, or serve the whole contract
-stream for clients to filter.
+stream for clients to filter. Per-account queries tell the indexer which accounts a client follows (see
+[Trust Model](#trust-model)), so an indexer should offer both.
 
 **Ordering.** Replay is order-sensitive, so the archive preserves the total order
 `(ledger_seq, tx_application_order, event_index)`. The event id `(ledger_seq, tx_hash, event_index)` identifies an
@@ -130,8 +129,11 @@ required capabilities bump that version.
 
 The indexer is trusted only for availability and completeness, never for confidentiality or integrity:
 
-- **Confidentiality.** Everything it holds is public chain data, so a curious indexer learns nothing a chain observer
-  does not.
+- **Confidentiality.** Everything it holds is public chain data, so its contents tell a curious indexer nothing a
+  chain observer doesn't already know. Its queries do: a client that asks for one account's history tells the
+  indexer which account it follows, from which network address, and when, and an auditor's queries reveal which
+  accounts it audits. Clients that need to hide this fetch the whole contract stream and filter locally, or run
+  their own archive.
 - **Integrity.** Wallets verify reconstructed openings against the on-chain commitments, so tampering is detected.
 - **Withholding.** A malicious or broken indexer can deny recovery. RPC independently serves the recent window, and
   for older history, wallets should support several independent archive endpoints, with deployments running or
@@ -140,7 +142,6 @@ The indexer is trusted only for availability and completeness, never for confide
 
 ### Auditor Recovery
 
-Auditors depend on the archive even more than holders do. The blinding of each allowance commitment is escrowed only
-in the `SetSpender` or `SpenderTransfer` event that wrote it, never in contract storage, so a missed or unarchived
-event leaves the auditor without that opening. An auditor client should check each reconstructed allowance opening
-against the stored allowance commitment. See [Auditing](/stellar-contracts/tokens/confidential/auditing).
+Auditors depend on the archive even more than holders do. The blinding of each allowance commitment exists only in
+the `SetSpender` or `SpenderTransfer` event that wrote it, so a missed or unarchived event leaves the auditor without
+that opening. See [Running an Auditor](/stellar-contracts/tokens/confidential/auditing#running-an-auditor).

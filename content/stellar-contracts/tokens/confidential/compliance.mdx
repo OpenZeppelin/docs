@@ -34,15 +34,13 @@ All controls are driven by a single `ComplianceConfig` entry in instance storage
 
 ```rust
 pub struct ComplianceConfig {
+    /// Address of an external policy contract, or `None` for no policy check.
     pub policy: Option<Address>,
+    /// When `true`, the check on every fund-holding address also asks the
+    /// underlying SAC's `authorized()` view.
     pub sac_passthrough: bool,
 }
 ```
-
-| Field | Purpose |
-| ----- | ------- |
-| `policy` | Address of an external [policy contract](#policy-contract), or `None` for no policy check. |
-| `sac_passthrough` | When `true`, the check on every fund-holding address also asks the underlying SAC's `authorized()` view (see [SAC Authorization Passthrough](#sac-authorization-passthrough)). |
 
 The initial configuration is usually written in the constructor with `compliance::storage::set_compliance_config`.
 Later changes go through the admin-gated `set_compliance_config` entry point. It also works when no configuration
@@ -207,14 +205,14 @@ The policy is any contract implementing the `Policy` interface:
 
 ```rust
 pub trait Policy {
+    /// `token` is the calling confidential token, so one registry can serve several
+    /// tokens and still apply per-token rules.
     fn is_authorized(e: Env, account: Address, token: Address) -> bool;
 }
 ```
 
 This one boolean callback covers allowlists, denylists, and delegation to an identity registry, attestation
-provider, or sanctions oracle. List management and identity proofs stay inside the policy contract. The token
-passes its own address as `token`, so one registry can serve several confidential tokens and still apply per-token
-rules.
+provider, or sanctions oracle. List management and identity proofs stay inside the policy contract.
 
 A minimal owner-managed allowlist:
 
@@ -266,7 +264,9 @@ the deployment's trust surface. A deployment over a SAC can rely on `sac_passthr
 
 `ComplianceHooks` is one implementation of `Hooks`. Deployments that need different behavior write their own
 implementation, usually reusing the same `compliance::storage` primitives and changing only the callbacks that need
-it. A callback only has to revert, with `panic_with_error!`, to reject an operation.
+it. A callback only has to revert, with `panic_with_error!`, to reject an operation. Besides the examples below,
+custom hooks can enforce per-deposit rate limits, allowlists keyed on the amount, writes to a separate audit log, or
+any other check that has to run atomically with the token operation.
 
 <Callout type="warning">
 Every `Hooks` method has an empty default body. A custom implementation has to **forward every callback it doesn't
@@ -292,6 +292,7 @@ use stellar_confidential::{
     WithdrawPayload,
 };
 
+// Wire it with `type Hooks = PermissiveDepositHooks;`.
 pub struct PermissiveDepositHooks;
 
 impl Hooks for PermissiveDepositHooks {
@@ -358,12 +359,11 @@ impl Hooks for PermissiveDepositHooks {
 }
 ```
 
-Wire it with `type Hooks = PermissiveDepositHooks;`. This suits deployments that accept inbound payments from
-counterparties that never register, such as an exchange wallet paying into a payroll pool. Skipping the *policy*
-check on an unregistered sender is a trade-off, not a recommendation: it also lets in an outside address that the
-policy would deny, or that the admin froze before it registered. A deployment that screens with a denylist or
-sanctions policy doesn't need this variant, because the default `ComplianceHooks` already accepts unregistered
-depositors that the policy allows.
+This suits deployments that accept inbound payments from counterparties that never register, such as an exchange
+wallet paying into a payroll pool. Skipping the *policy* check on an unregistered sender is a trade-off, not a
+recommendation: it also lets in an outside address that the policy would deny, or that the admin froze before it
+registered. A deployment that screens with a denylist or sanctions policy doesn't need this variant, because the
+default `ComplianceHooks` already accepts unregistered depositors that the policy allows.
 
 ### Permit Deposits Only for Oneself
 
@@ -392,6 +392,8 @@ registry, a deployment with designated auditors checks the choice against its ow
 ```rust
 impl Hooks for ApprovedAuditorHooks {
     fn on_register(e: &Env, account: &Address, auditor_id: u32, payload: &RegisterPayload) {
+        // `DataKey` and `DeploymentError` are defined by the deployment, which fills the
+        // approved list at construction or through an admin entry point.
         let approved: Vec<u32> = e
             .storage()
             .instance()
@@ -407,14 +409,8 @@ impl Hooks for ApprovedAuditorHooks {
 }
 ```
 
-`DataKey::ApprovedAuditors` and `DeploymentError::AuditorNotApproved` are defined by the deployment. The list is
-filled at construction or through an admin entry point. An account's `auditor_id` can never change after
-registration, so this check is the only point where a deployment controls which auditors may ever see an account's
-activity.
-
-The same mechanism supports per-deposit rate limits, allowlists keyed on the amount, writes to a separate audit
-log, or any other check that has to run atomically with the token operation. For purely observational needs,
-subscribe to the token's events instead.
+An account's `auditor_id` can never change after registration, so this check is the only point where a deployment
+controls which auditors may ever see an account's activity.
 
 ## Events
 
@@ -426,21 +422,6 @@ subscribe to the token's events instead.
 
 Seizures emit `Clawback` and, for forced revocation, `RevokeSpender` (see
 [Clawback](/stellar-contracts/tokens/confidential/clawback#seizure-flow)).
-
-## Errors
-
-| Error | Code | Raised when |
-| ----- | ---- | ----------- |
-| `NotConfigured` | 3600 | `freeze` or `unfreeze` is called before a configuration exists |
-| `AccountFrozen` | 3601 | A checked address is frozen |
-| `NotAuthorizedByPolicy` | 3602 | The policy returns `false` for a checked address |
-| `NotAuthorizedBySac` | 3603 | The SAC's `authorized` returns `false` for a checked address |
-| `AccountNotFrozen` | 3604 | The target of `clawback` or `force_revoke_spender` isn't frozen |
-| `InvalidClawbackAmount` | 3605 | The `clawback` amount isn't strictly positive |
-| `InvalidClawbackDestination` | 3606 | The `clawback` destination is the token contract itself |
-
-On a deployment with no configuration, `is_frozen` always returns `false`, so `clawback` and `force_revoke_spender`
-fail with `AccountNotFrozen` (3604), not `NotConfigured`.
 
 See the [compliance specification](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/compliance.md)
 for the full design rationale.

@@ -15,13 +15,13 @@ the on-chain contracts and the Noir circuits. The specification defines obligati
 implementation in any language can conform to it.
 </Callout>
 
-## Why the Client Is Load-Bearing
+## Why the Wallet Matters
 
-A balance is a commitment `C = v·G + r·H`. The chain stores the point, but the opening `(v, r)` needed to spend lives
-only in wallet state: if a wallet loses or misaccumulates it, the funds become unspendable, and the contract cannot
-help because it never knew the value. Every amount is client-decrypted, so a decryption bug yields a plausible wrong
-number rather than a visible failure. And all keys, blinding factors, and salts originate in the client, so
-confidentiality reduces to the wallet's key handling and random number generator.
+A balance is a commitment `C = v·G + r·H`. The chain stores the point, but the opening `(v, r)` needed to spend it
+lives only in the wallet. If the wallet loses the opening or adds it up wrong, the funds can't be spent, and the
+contract can't help because it never knew the value. Every amount is decrypted by the client, so a decryption bug
+shows a plausible wrong number rather than an error. And all keys, blinding factors, and salts come from the client,
+so confidentiality is only as strong as the wallet's key handling and random number generator.
 
 ## Keys
 
@@ -143,10 +143,10 @@ recovery path.
 - **Toolchain pinning.** Generate proofs with the toolchain and flags pinned in
   [`circuits/vks/README.md`](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/circuits/vks/README.md),
   notably a Keccak Fiat-Shamir transcript (many backends default to Poseidon2, which verifies locally and fails
-  on-chain) with zero-knowledge mode off. That recipe is provisional and will be finalized together with the
-  verifier, including the zero-knowledge setting (see
-  [Generating Proofs](/stellar-contracts/tokens/confidential/proof-system#generating-proofs) for what the current
-  setting implies). Check that the circuit's verification key matches the deployed one before submitting.
+  on-chain) with zero-knowledge mode off.
+  [Generating Proofs](/stellar-contracts/tokens/confidential/proof-system#generating-proofs) has the commands and
+  the recipe's current status. Check that the circuit's verification key matches the deployed one before
+  submitting.
 - **Where proving runs.** Keep the prover pluggable (in-process WASM, native, or remote). Remote proving discloses the
   spending key, balance, and amount to the prover, so it must be explicit opt-in, never a fallback.
 - **Submission.** Authorize with the principal the entry point expects, which for `confidential_transfer_from` is the
@@ -164,18 +164,23 @@ The specification separates the holder, spender, auditor, and disclosure-recipie
 material and structurally unable to exceed its capability. A spender wallet, for example, rebuilds allowance state
 from the on-chain delegation entry and must never reach the owner's spendable balance (see
 [Spenders](/stellar-contracts/tokens/confidential/spenders)), and an auditor client must never be able to build a
-spending witness (see [Auditing](/stellar-contracts/tokens/confidential/auditing)).
+spending witness (see [Auditing](/stellar-contracts/tokens/confidential/auditing)). The operational practices for
+each role are in Best Practices, for
+[account holders](/stellar-contracts/tokens/confidential/best-practices/account-holders) and
+[auditors](/stellar-contracts/tokens/confidential/best-practices/auditors).
 
 ## Requirements
 
 - **Secrets stay local.** The root, keys, ephemeral scalars, and cached openings never leave the device, except under
-  opted-in remote proving, and never reach logs, telemetry, or crash reports.
+  opted-in remote proving.
+- **Nothing sensitive is logged.** Secrets, witness material, decrypted amounts, balances, and openings never reach
+  logs, telemetry, analytics, error reports, or crash dumps.
 - **Storage at rest.** A persisted opening is as sensitive as its amount, and a persisted root is equivalent to the
   funds, so encrypt both. Never persist a signer root; re-derive it on demand.
 - **Randomness and supply chain.** Use a CSPRNG and fail rather than fall back. Pin verification keys and the proving
   toolchain; never fetch them at runtime from a mutable location.
 - **Host compromise.** Software cannot defend against a compromised host, and a hardware device that does not prove
-  internally must expose `sk` to the host, since `sk` is a proof witness.
+  internally has to hand `sk` to the host, since `sk` is a proof witness.
 - **Scale.** Proving targets single-digit seconds. Inbound volume is limited only by transaction fees, so do not size
   storage on the user's own activity.
 
