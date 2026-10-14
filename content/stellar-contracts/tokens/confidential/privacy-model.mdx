@@ -1,0 +1,153 @@
+---
+title: Privacy Model
+---
+
+[Specification](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/protocol/security.md#privacy-properties)
+
+The confidential token hides how much an account holds and how much it sends. It does not hide who transacts with
+whom, when, or which operation they call. Most of what is public about amounts comes from wrapping a public token, so
+this page starts there. It then covers what each party can learn, what every event publishes, what a proof can reveal
+(see [Zero-Knowledge Setting](#zero-knowledge-setting)), what an observer can infer by combining events, and what can
+be learned off-chain.
+
+## Boundary with the Underlying Token
+
+The confidential token is a layer on top of an existing SEP-41 token, which stays transparent. Value enters the layer
+only through `deposit` and leaves it only through `withdraw` or a clawback, and every crossing settles on the
+underlying token in public. Two things follow from this boundary:
+
+- **Every crossing publishes its amount.** Deposit, withdrawal and clawback amounts are public. A clawback counts as a
+  crossing because the seized amount has to be reconciled against the pool of underlying tokens the contract holds.
+  [What Observers Can Infer](#what-observers-can-infer) shows how these amounts can reveal balances and transfers.
+- **The underlying token's history stays public.** Where a deposit's tokens came from, and where withdrawn tokens go
+  next, can be traced on the underlying token like any other transfer. Both ends of an account's confidential
+  activity are linked to its public history.
+
+A native confidential token, whose balances are confidential from issuance, avoids most of this. Value is minted
+straight into confidential balances and never exists in transparent form, so there are no deposits or withdrawals to
+watch, no public history to trace, and every holder is on the private side. Amounts are public only where the issuer
+chooses, typically at minting and burning. This library implements only the wrapped model.
+
+The boundary doesn't explain everything. The transaction graph, timing, auditor choice, transaction sources, freezes,
+and off-chain visibility described below follow from addresses being public and from how clients handle keys and data,
+so a native token inherits them. Outside privacy, the
+[underlying token requirements](/stellar-contracts/tokens/confidential/confidential#underlying-token-requirements)
+and the [pooled-custody problem](/stellar-contracts/tokens/confidential/clawback#the-pooled-custody-problem) behind
+clawback also come from wrapping.
+
+## Who Sees What
+
+| Party | What it learns |
+| --- | --- |
+| **Anyone** | Every address involved in every operation, which operation it was and when it ran, the amounts of deposits, withdrawals and clawbacks, every delegation and its expiry, and the `auditor_id` each account chose. |
+| **The holder** | Everything about its own account: both balances, every amount it sent or received, and the allowances it granted. |
+| **A counterparty** | The amount of each transfer between the two accounts. Never the other account's balance. |
+| **A spender** | Its own allowance and the amounts it sends from it. Never the owner's spendable balance. |
+| **The account's auditor** | The amount of every transfer the account sends or receives and, from the account's first spend onward, its balances and allowances. See [Auditing](/stellar-contracts/tokens/confidential/auditing). |
+| **A viewing-key holder** | Everything the holder's wallet can read, including the openings of every transfer the account sent. It cannot spend. |
+| **A disclosure recipient** | Only the fact a [selective disclosure](/stellar-contracts/tokens/confidential/selective-disclosure) proof attests to. |
+
+An auditor learns about an account it doesn't audit only through that account's transfers with accounts it does.
+
+## What Each Event Reveals
+
+Events and invocation arguments are public. `Transfer`, `Withdraw`, `SetSpender` and `SpenderTransfer` also carry an
+ephemeral public key and a salt, which let the intended readers decrypt and reveal nothing on their own.
+
+| Event | Public | Encrypted | Readable by |
+| --- | --- | --- | --- |
+| `Register` | `account`, `auditor_id` | | |
+| `Deposit` | `from`, `to`, `amount` | | |
+| `Merge` | `account` | | |
+| `Transfer` | `from`, `to` | The amount | Recipient, both auditors |
+| | | The sender's new balance | Sender, sender's auditor |
+| `Withdraw` | `from`, `to`, `amount` | The sender's new balance | Sender, sender's auditor |
+| `SetSpender` | `account`, `spender`, `live_until_ledger` | The owner's new balance | Owner, owner's auditor |
+| | | The escrowed amount | Owner's auditor |
+| `SpenderTransfer` | `spender`, `from`, `to` | The amount | Recipient, both auditors |
+| | | The remaining allowance | Owner's auditor |
+| `RevokeSpender` | `account`, `spender` | The returned allowance | Owner, spender |
+| `Clawback` | `account`, `amount`, `destination` | | |
+| `Frozen`, `Unfrozen` | `account` | | |
+
+`SetSpender` and `SpenderTransfer` also pass the allowance encrypted for the owner and the spender (`a_tilde`) as a
+call argument and write it to the delegation's storage, so both can read the escrowed amount and the remaining
+allowance there. `RevokeSpender` republishes that ciphertext. The owner's auditor can't decrypt it, but already knows
+the returned allowance from the last `SetSpender` or `SpenderTransfer`.
+
+`Clawback`, `Frozen` and `Unfrozen` exist only in deployments with the
+[compliance extension](/stellar-contracts/tokens/confidential/compliance).
+
+Contract storage is public too. `confidential_balance` returns an account's public keys, commitments and
+`auditor_id`, and `get_spender_delegation` returns a delegation's expiry. With the compliance extension, `is_frozen`
+and `clawback_nonce` return whether an account is frozen and how many seizures it has been through.
+
+## Zero-Knowledge Setting
+
+Proofs are invocation arguments, so they are public too. The on-chain verifier implements only the
+non-zero-knowledge flavor of UltraHonk, so proofs are generated without the zero-knowledge setting. That leaves
+soundness intact but changes where privacy comes from. The zero-knowledge flavor masks every committed witness
+polynomial with fresh randomness, so a proof reveals nothing about its witness by construction. The
+non-zero-knowledge flavor commits to the witness as it is, so privacy has to come from how the circuits are built:
+
+- **Every part of a proof mixes in high-entropy secrets**, such as keys, blinding factors, and Poseidon2-derived
+  masks, so no low-entropy value such as an amount or a balance can be separated out.
+- **No secret reaches a lookup table.** Without masking, lookup read counts are committed in the clear, so a lookup
+  indexed by a secret would publish which table rows it hit. The Pedersen generators therefore enter every scalar
+  multiplication as witnesses, which keeps Barretenberg off its fixed-base lookup tables.
+
+One consideration remains. A non-zero-knowledge proof carries an algebraic relation involving the prover's
+long-term key in BN254, the curve the proof system works over. That key is the holder's or the spender's spending
+key, or the auditor's key for a clawback. Recovering it from the proof is a discrete-logarithm problem in BN254,
+estimated at about 100 bits of security. That is the same assumption the proof system's soundness already relies on,
+but below the roughly 127 bits that protect the key behind its public key on Grumpkin.
+
+The zero-knowledge flavor removes both the reliance on circuit construction and the BN254 relation. See the
+package [README](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/README.md#zero-knowledge-setting)
+and [Generating Proofs](/stellar-contracts/tokens/confidential/proof-system#generating-proofs).
+
+## What Observers Can Infer
+
+Combining public events over time reveals more than any single event. The first two patterns come from amounts
+crossing the [boundary with the underlying token](#boundary-with-the-underlying-token); the others come from
+addresses being public:
+
+- **Balances built only from public flows are public.** Deposit and withdrawal amounts are public, and a merge only
+  moves value between an account's own balances. An account whose value has only entered through deposits and left
+  through withdrawals therefore has a balance anyone can compute. It becomes hidden once a confidential transfer, sent
+  or received, touches the account, and even then earlier flows bound it: an account known to hold 1,000 that sends a
+  transfer holds at most 1,000 afterwards.
+- **Matching amounts link flows.** A deposit of 1,234.56 into one account, a transfer from it to a second account,
+  and a withdrawal of 1,234.56 from the second strongly suggest what the transfer moved. The protocol cannot hide an
+  amount that appears in public on both sides.
+- **The transaction graph is public.** Every transfer names its sender and recipient, so observers can see who pays
+  whom, how often, and how many transfers an account receives. Each `SetSpender` publishes an owner-spender pair and
+  its expiry, and each `SpenderTransfer` names the owner it spends for.
+- **Timing reveals habits.** Merges, spends, and withdrawals that closely follow incoming transfers, or recur at fixed
+  intervals, show when a holder is active and can link accounts operated together.
+- **The auditor choice is public.** On a registry shared by several institutions, an account's `auditor_id` can hint
+  at whom the holder banks with or which jurisdiction it falls under.
+- **Transaction sources are public.** The Stellar transaction that carries an operation names a source account,
+  which pays the fee. When it differs from the account in the event, the two are linked.
+- **Compliance actions are public.** Freezes and clawbacks name the account. A clawback also publishes its
+  destination and, because it crosses to the underlying token, its amount.
+
+## Off-Chain Visibility
+
+The chain is not the only place where an account's activity can be seen:
+
+- **Queries.** A wallet or auditor that asks an RPC provider or an indexer for one account's events tells it which
+  account it follows, from which network address, and when. Fetching the whole contract stream and filtering
+  locally, or running one's own node and archive, avoids this. See
+  [Trust Model](/stellar-contracts/tokens/confidential/indexing#trust-model).
+- **Client software.** Keys, decrypted amounts, balances and openings that reach logs, analytics or crash reports
+  are beyond what the protocol can protect.
+- **Disclosed values.** Once a disclosure recipient decrypts a value, protecting it is the recipient's
+  responsibility.
+
+## Improving Privacy
+
+Most of these patterns are under the control of the holder and its wallet; see
+[Best Practices for Account Holders](/stellar-contracts/tokens/confidential/best-practices/account-holders). What a
+deployment can do for its users is covered in
+[Best Practices for Administrators](/stellar-contracts/tokens/confidential/best-practices/administrators).

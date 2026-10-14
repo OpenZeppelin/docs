@@ -5,12 +5,12 @@ title: Proof System
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/confidential/src/verifier)
 
 Every confidential operation that consumes private state comes with a proof that the state change is
-valid. The proofs are meant to be zero-knowledge, but the current verifier does not support that yet;
-see [Generating Proofs](#generating-proofs). The circuits are written in [Noir](https://noir-lang.org/)
-and compiled to UltraHonk. Proofs are generated client-side by the wallet. The token verifies each one
-with a cross-contract call to a separate **verifier registry**, which stores one verification key (VK)
-per circuit and runs the UltraHonk verifier from
-[NethermindEth/rs-soroban-ultrahonk](https://github.com/NethermindEth/rs-soroban-ultrahonk).
+valid. The circuits are written in [Noir](https://noir-lang.org/) and compiled to UltraHonk, and the
+wallet generates proofs on the client. The token verifies each one with a cross-contract call to a
+separate **verifier registry**, which stores one verification key (VK) per circuit and runs the UltraHonk
+verifier from [NethermindEth/rs-soroban-ultrahonk](https://github.com/NethermindEth/rs-soroban-ultrahonk).
+That verifier supports only the non-zero-knowledge flavor of UltraHonk, so the circuits themselves are
+built to keep amounts and balances private; see [Generating Proofs](#generating-proofs).
 
 The library ships the circuit sources, the pinned verification keys, and the verifier registry module.
 It does not ship a prover or client SDK; see [Wallet Integration](/stellar-contracts/tokens/confidential/wallet-integration).
@@ -119,6 +119,8 @@ impl ConfidentialVerifier for ConfidentialVerifierContract {
         verifier::register_verification_key(e, circuit_type, &verification_key);
     }
 
+    // Shares the `manager` role with registration purely for illustration. See
+    // "Updating a Verification Key" for what a production deployment should do instead.
     #[only_role(operator, "manager")]
     fn update_verification_key(
         e: &Env,
@@ -134,12 +136,8 @@ impl ConfidentialVerifier for ConfidentialVerifierContract {
 impl AccessControl for ConfidentialVerifierContract {}
 ```
 
-Like every contract that depends on `stellar-confidential`, the registry needs the crate as a git
-dependency and a global allocator. See [Installation](/stellar-contracts/tokens/confidential/confidential#installation).
-
-This example gates key updates behind the same `manager` role as registration, purely for
-illustration. See [Updating a Verification Key](#updating-a-verification-key) for what a production
-deployment should do instead.
+The registry depends on `stellar-confidential`, like the token. See
+[Installation](/stellar-contracts/tokens/confidential/confidential#installation).
 
 Verification keys live in **instance** storage. As with every module in this library, extending the
 instance TTL is the contract developer's responsibility.
@@ -153,8 +151,18 @@ two files per circuit:
 - `<name>.vk.bin`: the 1760-byte packed binary key the on-chain verifier parses. **Register this one.**
 - `<name>.vk.json`: a JSON array of field elements, for review only. The verifier can't parse it.
 
-Register one key per `CircuitType` before the token goes live. Registration fails with
-`VerificationKeyAlreadyRegistered` if that circuit already has a key.
+Register one key per `CircuitType` before the token goes live:
+
+| `CircuitType` | Key file |
+| --- | --- |
+| `Register` | `register.vk.bin` |
+| `Withdraw` | `withdraw.vk.bin` |
+| `Transfer` | `transfer.vk.bin` |
+| `SpenderTransfer` | `spender_transfer.vk.bin` |
+| `SetSpender` | `set_spender.vk.bin` |
+| `Clawback` | `clawback.vk.bin` (only with the clawback extension) |
+
+Registration fails with `VerificationKeyAlreadyRegistered` if that circuit already has a key.
 
 The registry stores the bytes without inspecting them. A wrong file, such as a `.vk.json`, registers
 without error and fails only once `verify_proof` runs, with `InvalidVerificationKey`. Registration is
@@ -182,6 +190,7 @@ fn register_transfer_key() {
     let verifier_id = e.register(ConfidentialVerifierContract, (&admin, &manager));
     let client = ConfidentialVerifierContractClient::new(&e, &verifier_id);
 
+    // On a live network, the manager signs this same call with the `.vk.bin` contents.
     client.register_verification_key(
         &CircuitType::Transfer,
         &Bytes::from_array(&e, TRANSFER_VK),
@@ -194,18 +203,6 @@ fn register_transfer_key() {
     assert!(!client.verify_proof(&CircuitType::Transfer, &junk, &junk));
 }
 ```
-
-On a live network, the manager signs the same `register_verification_key` call, passing the contents
-of the `.vk.bin` file as `verification_key`.
-
-| `CircuitType` | Key file |
-| --- | --- |
-| `Register` | `register.vk.bin` |
-| `Withdraw` | `withdraw.vk.bin` |
-| `Transfer` | `transfer.vk.bin` |
-| `SpenderTransfer` | `spender_transfer.vk.bin` |
-| `SetSpender` | `set_spender.vk.bin` |
-| `Clawback` | `clawback.vk.bin` (only with the clawback extension) |
 
 The keys can be reproduced from the circuit sources with the pinned toolchain (`nargo 1.0.0-beta.11`,
 `bb 0.87.0`), and CI fails if a regenerated key differs from the committed one. Publish the circuit
@@ -242,30 +239,36 @@ token's `verifier_set` event. See
 ## Generating Proofs
 
 Proving happens in the wallet. Proofs the deployed verifier accepts must be generated with the same
-pinned toolchain and two non-default settings:
+pinned toolchain and the settings below:
 
 ```bash
 nargo execute --package circuit_<name> <witness_name>
+# --oracle_hash keccak is required: the on-chain verifier reproduces the Fiat-Shamir
+# transcript with Keccak, while bb defaults to Poseidon2.
+# Don't pass --zk: the on-chain verifier implements only the non-zero-knowledge flavor.
 bb prove -s ultra_honk --oracle_hash keccak \
    -b target/circuit_<name>.json -w target/<witness_name>.gz -o <out_dir>
 ```
 
-- `--oracle_hash keccak` is required. The on-chain verifier reproduces the Fiat-Shamir transcript with
-  Keccak, while `bb` defaults to Poseidon2.
-- `--zk` must not be passed.
+The [verifier's README](https://github.com/NethermindEth/rs-soroban-ultrahonk/blob/9aae9581eab7bc4c69209c0322e54e119ed3180e/crates/ultrahonk-soroban-verifier/README.md)
+for release 0.1.0 warns that such a proof carries witness-dependent messages and gives no
+witness-hiding guarantee, so private inputs stay hidden only as far as the circuit hides them. The
+confidential circuits are built for that setting, with one residual effect on the prover's long-term key.
+[Zero-Knowledge Setting](/stellar-contracts/tokens/confidential/privacy-model#zero-knowledge-setting)
+explains both.
 
 <Callout type="warning">
-The on-chain verifier currently implements only the non-zero-knowledge UltraHonk flavor, so proofs are
-generated without `--zk`. Until the verifier supports the zero-knowledge flavor, proofs have no
-witness-hiding guarantee. They carry data that depends on the private inputs (spending key, balances,
-blinding factors, amounts) and are not guaranteed to hide them. The
-[verifier's README](https://github.com/NethermindEth/rs-soroban-ultrahonk/blob/097da17df8b0b971d71885566034958a8caebab4/crates/ultrahonk-soroban-verifier/README.md)
-at the pinned revision warns against using it for privacy-sensitive circuits. Upstream marks this
-proving recipe as provisional: it will be finalized together with the verifier, including the
+Privacy depends on the circuits keeping witness data out of lookup tables. Passing `G` or `H` to a
+scalar multiplication as a constant, for example, makes Barretenberg use its fixed-base lookup tables,
+and the proof then reveals which table rows the secret scalar's windows hit. Anyone modifying the
+circuits must keep
+[`check_witness_lookups.sh`](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/circuits/scripts/check_witness_lookups.sh) passing.
+</Callout>
+
+The proving recipe is provisional and will be finalized together with the verifier, including the
 zero-knowledge setting. Check the
 [verification-key README](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/circuits/vks/README.md)
 for the current status.
-</Callout>
 
 ## Trusted Setup
 
@@ -278,23 +281,6 @@ The verifier contract does not store the full SRS. It embeds only the two G2 poi
 check uses. The verification keys are derived from the SRS offline, and anyone with the circuit source
 and the public transcript can check them. See
 [Structured Reference String](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/docs/protocol/proof-system.md#structured-reference-string).
-
-## Network Requirements
-
-UltraHonk verification and the on-chain Grumpkin arithmetic depend on the BN254 host functions
-introduced by [CAP-80](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0080.md). The
-rollout spans two protocol versions, and both are needed:
-
-- **Protocol 25:** `bn254_g1_add`, `bn254_g1_mul`, `bn254_multi_pairing_check`.
-- **Protocol 26:** `bn254_g1_msm`, `bn254_g1_is_on_curve`, and the `bn254_fr_*` scalar-field
-  arithmetic that underlies Grumpkin point operations.
-
-The token also hashes addresses with the `poseidon2_permutation` host function, available since
-protocol 25.
-
-The host functions alone require **protocol 26**. In practice the minimum is higher: the library pins
-`soroban-sdk` 28, and a contract built with it can only be deployed and run on a network at
-**protocol 28** or later.
 
 ## Further Reading
 

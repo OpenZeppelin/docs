@@ -34,9 +34,9 @@ Seizure is coordinated between parties and no single one can carry it out alone:
 The admin cannot produce the proof and the auditor cannot pass the admin's access check. Deployments usually give
 the seizure authority its own role, separate from the role that freezes accounts.
 
-The proof has to come from the auditor. Knowing an account's balance isn't enough. An account whose history is
-only registration, deposits, and merges has balances anyone can reconstruct from public events. The circuit
-therefore also requires the auditor's secret key, which stops anyone else from proving a seizure of such an account.
+Knowing an account's balance isn't enough to build the proof. An account whose history is only registration,
+deposits, and merges has balances anyone can reconstruct from public events, so the circuit also requires the
+auditor's secret key, and only the auditor can prove a seizure.
 
 ## Usage
 
@@ -61,6 +61,8 @@ impl ConfidentialClawback for ConfidentialTokenContract {
         data: Bytes,
         operator: Address,
     ) {
+        // `data` is an XDR-encoded `ClawbackData { proof }`, not the raw proof bytes.
+        // A malformed envelope reverts with `InvalidData`.
         let data: ClawbackData = decode_data(e, &data);
         compliance::clawback(e, &account, amount, &destination, &data.proof);
     }
@@ -72,8 +74,7 @@ impl ConfidentialClawback for ConfidentialTokenContract {
 }
 ```
 
-The `data` argument is an XDR-encoded `ClawbackData { proof }`, not the raw proof bytes. A malformed envelope fails
-with `InvalidData`. The verifier also needs the `Clawback` key registered (see
+The verifier also needs the `Clawback` key registered (see
 [Registering Verification Keys](/stellar-contracts/tokens/confidential/proof-system#registering-verification-keys)).
 
 The trait also provides `clawback_nonce(account)`, a read that returns how many seizures the account has been
@@ -120,8 +121,6 @@ When `clawback` is called, after the access check on `operator`, the contract:
    account stays usable once it is unfrozen.
 5. **Advances the clawback nonce**, then settles the underlying (below) and emits a `Clawback` event with topics
    `"clawback"` and `account`, and data `amount` and `destination`.
-
-Error codes are listed under [Errors](/stellar-contracts/tokens/confidential/compliance#errors).
 
 Like `force_revoke_spender`, `clawback` runs no `Hooks` callback: a freeze-aware hook would reject the very account
 it acts on.
