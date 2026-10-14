@@ -40,17 +40,22 @@ The following contract types are available:
 | [`RWA`](/stellar-contracts/tokens/rwa/rwa) | Enforces identity verification and compliance rules. | `RWAToken` |
 | [`Vault`](/stellar-contracts/tokens/vault/vault) | Issues the token as shares of a tokenized vault. | `FungibleVault` |
 
-Contract types can be combined as follows:
+Contract types can be combined as shown below. Each cell is the tuple to pass to `Compose`, e.g.
+`Compose<(AllowList, Capped, TotalSupply)>`:
 
-- `AllowList`, `BlockList` and `FungibleVotes` can be combined with each other, in pairs or all three
-  together, e.g. `Compose<(AllowList, BlockList)>` or `Compose<(AllowList, FungibleVotes)>`. When both
-  lists are used, an account has to be allowed and must not be blocked.
-- `TotalSupply` can be added to `AllowList`, `BlockList` or both, e.g. `Compose<(BlockList, TotalSupply)>`.
-- `Capped`, `RWA` and `Vault` rely on the tracked supply, so they require `TotalSupply` in the list,
-  e.g. `Compose<(RWA, TotalSupply)>`. `Capped` can be added to any supply-tracking list, e.g.
-  `Compose<(AllowList, Capped, TotalSupply)>` or `Compose<(Vault, Capped, TotalSupply)>`.
-- `FungibleVotes` tracks voting units rather than the token supply, so it cannot be combined with
-  `TotalSupply` or `Capped`.
+| Starting from | Alone | + `FungibleVotes` | + `TotalSupply` | + `Capped` and `TotalSupply` |
+| --- | --- | --- | --- | --- |
+| Standard behavior | `(Base,)` | `(FungibleVotes,)` | `(TotalSupply,)` | `(Capped, TotalSupply)` |
+| `AllowList` | `(AllowList,)` | `(AllowList, FungibleVotes)` | `(AllowList, TotalSupply)` | `(AllowList, Capped, TotalSupply)` |
+| `BlockList` | `(BlockList,)` | `(BlockList, FungibleVotes)` | `(BlockList, TotalSupply)` | `(BlockList, Capped, TotalSupply)` |
+| `AllowList` and `BlockList` | `(AllowList, BlockList)` | `(AllowList, BlockList, FungibleVotes)` | `(AllowList, BlockList, TotalSupply)` | `(AllowList, BlockList, Capped, TotalSupply)` |
+| `RWA` | - | - | `(RWA, TotalSupply)` | `(RWA, Capped, TotalSupply)` |
+| `Vault` | - | - | `(Vault, TotalSupply)` | `(Vault, Capped, TotalSupply)` |
+
+Combinations that are not in the table are not supported. In particular, `Capped`, `RWA` and `Vault` rely on
+the tracked supply, so they require `TotalSupply` in the list, and `FungibleVotes` tracks voting units rather
+than the token supply, so it cannot be combined with `TotalSupply` or `Capped`. When both lists are used, an
+account has to be allowed and must not be blocked.
 
 The order of the list does not matter, and additive extensions that don't override any behavior, such as
 `Burnable`, may be listed as well. A list that is not supported is rejected at compile time with an error
@@ -68,9 +73,10 @@ contract type, which applies the bookkeeping of every listed extension:
 ```
 
 <Callout type="warning">
-Do not call a specific primitive such as `Base::mint` directly. Depending on the contract type, doing so
-would skip updating the total supply (causing a later burn to fail), enforcing the cap, or moving the
-voting units.
+It is not recommended to call a specific primitive such as `Base::mint` directly. Depending on the contract
+type, doing so would skip updating the total supply (causing a later burn to fail), enforcing the cap, or
+moving the voting units. Minting through the contract type applies whatever the selected contract type
+requires, and stays correct if the contract type changes later.
 </Callout>
 
 ## Usage

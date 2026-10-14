@@ -68,8 +68,8 @@ graph TB
 
 ### Core Components
 
-1. **RWA Token Contract**: The main token contract implementing the `RWAToken` trait, which extends the
-`FungibleToken`, `FungibleTotalSupply` and `Pausable` traits.
+1. **RWA Token Contract**: The main token contract implementing the `RWAToken` trait, which is built on the
+combination of the `FungibleToken`, `FungibleTotalSupply` and `Pausable` traits, so the contract implements all four.
 
 2. **Identity Verifier**: A separate contract responsible for verifying user identities.
 The RWA token expects the following functions to be available:
@@ -204,6 +204,10 @@ impl RWAToken for RealEstateToken {
         <Self as FungibleToken>::ContractType::batch_mint(e, &to_list, &amounts);
     }
 
+    // Only minting differs between the RWA contract types (the capped one also checks
+    // the cap), so it goes through the contract type. Burning, forced transfers,
+    // freezing and recovery are the same for every RWA contract type, so they are
+    // called on `RWA` directly.
     #[only_role(operator, "manager")]
     fn burn(e: &Env, user_address: Address, amount: i128, operator: Address) {
         RWA::burn(e, &user_address, amount);
