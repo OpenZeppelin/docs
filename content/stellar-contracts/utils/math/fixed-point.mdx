@@ -73,12 +73,24 @@ rounds shares minted on deposit down and assets required for a mint up.
 
 ## Phantom Overflow
 
-Both widths recover from an intermediate `x * y` that overflows while the final result is representable, a case
-known as *phantom overflow*:
+Computing `x * y / denominator` multiplies `x` by `y` first, and that intermediate product can be far larger than
+the final result. A *phantom overflow* is when the intermediate product does not fit the type, even though the final
+result does. For example, with `i128`, whose maximum is about `1.7 * 10^38`:
 
-- **`i128`**: the operands are promoted to `I256`, and the result is scaled back if it fits `i128`.
-- **`I256`**: there is no wider type to promote to, so both operands are split by the denominator and the division
-  is distributed, which is an exact identity rather than an approximation:
+```text
+x = 10^30    y = 10^30    denominator = 10^30
+
+x * y                = 10^60   // does not fit i128
+x * y / denominator  = 10^30   // fits i128
+```
+
+A plain `x * y / denominator` overflows at `x * y`. The functions above compute the correct result instead:
+
+- **`i128`**: when `x * y` overflows, the calculation is retried with `I256` as the intermediate type, and the result
+  is converted back to `i128` if it fits.
+- **`I256`**: there is no wider type to fall back on. Instead, both operands are split into a multiple of the
+  denominator plus a remainder, so that most of the division happens before the multiplication. This is an exact
+  identity rather than an approximation:
 
   ```text
   |x| = q1*D + r1     |y| = q2*D + r2     (D = |denominator|, 0 <= r1, r2 < D)
