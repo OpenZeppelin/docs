@@ -44,7 +44,7 @@ clawback also come from wrapping.
 | **A counterparty** | The amount of each transfer between the two accounts. Never the other account's balance. |
 | **A spender** | Its own allowance and the amounts it sends from it. Never the owner's spendable balance. |
 | **The account's auditor** | The amount of every transfer the account sends or receives and, from the account's first spend onward, its balances and allowances. See [Auditing](/stellar-contracts/tokens/confidential/auditing). |
-| **A viewing-key holder** | Everything the holder's wallet can read, including the openings of every transfer the account sent. It cannot spend. |
+| **A viewing-key holder** | Everything the holder's wallet can read, including the openings of every transfer the account originated. It cannot spend. |
 | **A disclosure recipient** | Only the fact a [selective disclosure](/stellar-contracts/tokens/confidential/selective-disclosure) proof attests to. |
 
 An auditor learns about an account it doesn't audit only through that account's transfers with accounts it does.
@@ -86,24 +86,31 @@ and `clawback_nonce` return whether an account is frozen and how many seizures i
 
 Proofs are invocation arguments, so they are public too. The on-chain verifier implements only the
 non-zero-knowledge flavor of UltraHonk, so proofs are generated without the zero-knowledge setting. That leaves
-soundness intact but changes where privacy comes from. The zero-knowledge flavor masks every committed witness
-polynomial with fresh randomness, so a proof reveals nothing about its witness by construction. The
-non-zero-knowledge flavor commits to the witness as it is, so privacy has to come from how the circuits are built:
+soundness intact but drops the guarantee that a proof hides its witness. The zero-knowledge flavor masks every
+committed witness polynomial with fresh randomness, so a proof reveals nothing about its witness by construction. The
+non-zero-knowledge flavor commits to the witness as it is, so a proof is a deterministic function of the witness and
+carries no such guarantee.
 
-- **Every part of a proof mixes in high-entropy secrets**, such as keys, blinding factors, and Poseidon2-derived
-  masks, so no low-entropy value such as an amount or a balance can be separated out.
-- **No secret reaches a lookup table.** Without masking, lookup read counts are committed in the clear, so a lookup
-  indexed by a secret would publish which table rows it hit. The Pedersen generators therefore enter every scalar
-  multiplication as witnesses, which keeps Barretenberg off its fixed-base lookup tables.
+The circuits close one known channel. Without masking, lookup read counts and read tags are committed in the clear,
+so a lookup indexed by a secret would make public which table rows it hit. Barretenberg multiplies by a constant
+base point with fixed-base lookup tables when that point is one of its precomputed generators, as the Pedersen
+generators `G` and `H` are, and the rows hit would follow windows of the secret scalar. The circuits therefore pass
+the generators to every scalar multiplication as witnesses, which moves it to the variable-base path. CI rejects any
+scalar multiplication with a constant base point and any circuit operation outside a list of those Barretenberg
+builds without lookup tables.
 
-One consideration remains. A non-zero-knowledge proof carries an algebraic relation involving the prover's
-long-term key in BN254, the curve the proof system works over. That key is the holder's or the spender's spending
-key, or the auditor's key for a clawback. Recovering it from the proof is a discrete-logarithm problem in BN254,
-estimated at about 100 bits of security. That is the same assumption the proof system's soundness already relies on,
-but below the roughly 127 bits that protect the key behind its public key on Grumpkin.
+This closes the lookup channel only; it does not make proofs private. Whether other parts of a non-zero-knowledge
+proof, such as the wire commitments or the opened evaluations, reveal private values has not been established. One
+case is known: the proof's commitment to its lookup inverses and that polynomial's opened evaluation determine two
+points in BN254, the curve the proof system works over, whose discrete logarithm is the prover's long-term key.
+Recovering the key from them is a discrete-logarithm problem in BN254, estimated at about 100 bits of security. That
+is the level the proof system's soundness already relies on, but below the roughly 127 bits that protect the key
+behind its public key on Grumpkin.
 
-The zero-knowledge flavor removes both the reliance on circuit construction and the BN254 relation. See the
-package [README](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/README.md#zero-knowledge-setting)
+Zero knowledge requires the zero-knowledge flavor of the verifier, which Nethermind has
+[in progress](https://github.com/NethermindEth/rs-soroban-ultrahonk/pull/38). Adopting it changes the proving
+recipe and the verifier dependency, not the circuits or the verification keys. See the package
+[README](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/confidential/README.md#zero-knowledge-setting)
 and [Generating Proofs](/stellar-contracts/tokens/confidential/proof-system#generating-proofs).
 
 ## What Observers Can Infer
