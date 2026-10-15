@@ -2,7 +2,7 @@
 title: Merkle Distributor
 ---
 
-[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/contract-utils/src/merkle-distributor)
+[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/contract-utils/src/merkle_distributor)
 
 The Merkle Distributor package builds on the [crypto package](./crypto) to provide a system for distributing tokens or other assets using Merkle proofs for verification.
 
@@ -20,26 +20,72 @@ pub trait IndexableLeaf {
 
 Each leaf in the merkle tree requires a unique index to track whether it has been claimed to prevent double-claiming. The custom leaf struct should implement this trait by returning a unique `u32` value for each recipient. This index serves as the key for storing claim status on-chain.
 
+The leaf must also implement `ToXdr`, which every `#[contracttype]` does. The distributor hashes the leaf's XDR
+encoding with its hasher to obtain the leaf hash, so the off-chain tree must be built from the same encoding.
+
 ### MerkleDistributor
 
 The `MerkleDistributor` struct is a generic component that manages the verification and claiming process. It is parameterized by a hash function (e.g. `Keccak256`) and provides the following core functionality:
 
 #### Setting the Merkle Root
 
-`set_root(env: &Env, root: BytesN<32>)` stores the Merkle tree root on-chain. This is typically called once during contract initialization or when updating the distribution list.
+`set_root(e: &Env, root: BytesN<32>)` stores the Merkle tree root on-chain and emits a `SetRoot` event. This is typically called once during contract construction or when updating the distribution list.
+
+<Callout type="warning">
+`set_root` performs no authorization checks. Call it only from the constructor or from an admin function that
+enforces its own authorization.
+</Callout>
+
+The root can be updated after the initial setup, and previously claimed indices remain claimed. This supports
+"append-only" distributions where an admin periodically expands the set of eligible claimants. The new tree must
+preserve the same index-to-leaf mapping for existing entries; otherwise, new claimants assigned to already-claimed
+indices will be unable to claim.
+
+`get_root(e: &Env) -> BytesN<32>` returns the stored root and panics with `RootNotSet` if none has been set.
 
 #### Checking Claim Status
 
-`is_claimed(env: &Env, index: u32) -> bool` queries whether a specific index has already been claimed. This allows you to check claim status before attempting verification.
+`is_claimed(e: &Env, index: u32) -> bool` queries whether a specific index has already been claimed. This allows you to check claim status before attempting verification. Claim flags are kept in persistent storage, and checking a claimed index extends its TTL.
 
 #### Verifying and Claiming
 
-`verify_and_set_claimed(env: &Env, leaf: impl IndexableLeaf, proof: Vec<BytesN<32>>)` performs two operations atomically:
+```rust
+pub fn verify_and_set_claimed<N: ToXdr + IndexableLeaf>(e: &Env, leaf: N, proof: Vec<BytesN<32>>);
+pub fn verify_with_index_and_set_claimed<N: ToXdr + IndexableLeaf>(e: &Env, leaf: N, proof: Vec<BytesN<32>>);
+```
 
-1. **Verification**: Validates that the provided leaf and proof correctly reconstruct the stored Merkle root
-2. **Claiming**: Marks the leaf's index as claimed to prevent duplicate claims
+Both functions perform two operations atomically:
 
-This function will panic if the proof is invalid or if the index has already been claimed, ensuring the integrity of the distribution process.
+1. **Verification**: Hashes the leaf's XDR encoding and validates that the leaf hash and proof correctly reconstruct the stored Merkle root
+2. **Claiming**: Marks the leaf's index as claimed to prevent duplicate claims and emits a `SetClaimed` event
+
+They differ in how the tree is expected to be built:
+
+* `verify_and_set_claimed` uses `Verifier::verify` and expects a tree built with commutative hashing, i.e. sorted
+  pairs.
+* `verify_with_index_and_set_claimed` uses `Verifier::verify_with_index` and expects a tree built without sorting,
+  where the leaf's index determines its position. It also panics with the `CryptoError` codes of
+  [`verify_with_index`](./crypto#merkle-tree-verification) for oversized proofs or out-of-range indices.
+
+Both panic if the root is not set, if the index has already been claimed, or if the proof is invalid, ensuring the integrity of the distribution process.
+
+### Errors
+
+```rust
+pub enum MerkleDistributorError {
+    /// The merkle root is not set.
+    RootNotSet = 1300,
+    /// The provided index was already claimed.
+    IndexAlreadyClaimed = 1301,
+    /// The proof is invalid.
+    InvalidProof = 1302,
+}
+```
+
+### Events
+
+* `SetRoot { root: Bytes }` (topic `set_root`): emitted by `set_root`.
+* `SetClaimed { index: u32 }` (topic `set_claimed`): emitted when an index is claimed.
 
 ## Usage Example
 
@@ -50,7 +96,8 @@ use stellar_contract_utils::merkle_distributor::{IndexableLeaf, MerkleDistributo
 
 // Define a leaf node structure
 #[contracttype]
-struct LeafData {
+#[derive(Clone)]
+pub struct LeafData {
     pub index: u32,
     pub address: Address,
     pub amount: i128,
@@ -68,9 +115,9 @@ pub struct TokenDistributor;
 
 #[contractimpl]
 impl TokenDistributor {
-    // Initialize the distributor with a Merkle root
-    pub fn initialize(e: &Env, root: BytesN<32>) {
-        MerkleDistributor::<Keccak256>::set_root(e, root);
+    // Set the Merkle root at deployment, since `set_root` performs no authorization checks
+    pub fn __constructor(e: Env, root: BytesN<32>) {
+        MerkleDistributor::<Keccak256>::set_root(&e, root);
     }
 
     // Claim tokens by providing a proof

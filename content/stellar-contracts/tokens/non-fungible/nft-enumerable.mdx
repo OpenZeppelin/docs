@@ -17,8 +17,9 @@ can call `award_item` and we might want to implement access control to restrict 
 ```rust
 use soroban_sdk::{contract, contractimpl, Address, Env, String};
 use stellar_tokens::non_fungible::{
+    burnable::NonFungibleBurnable,
     enumerable::{Enumerable, NonFungibleEnumerable},
-    Base, ContractOverrides, NonFungibleToken,
+    Base, Compose, NonFungibleToken,
 };
 
 #[contract]
@@ -37,21 +38,23 @@ impl GameItem {
 
     pub fn award_item(e: &Env, to: Address) -> u32 {
         // access control might be needed
-        Enumerable::sequential_mint(e, &to)
-    }
-
-    pub fn burn(e: &Env, from: Address, token_id: u32) {
-        Enumerable::sequential_burn(e, &from, token_id);
+        // Resolves to the `Enumerable` mint, which records the token in the
+        // enumeration lists
+        <Self as NonFungibleToken>::ContractType::mint(e, &to)
     }
 }
 
 #[contractimpl(contracttrait)]
 impl NonFungibleToken for GameItem {
-    type ContractType = Enumerable;
+    type ContractType = Compose<(Enumerable,)>;
 }
 
 #[contractimpl(contracttrait)]
 impl NonFungibleEnumerable for GameItem {}
+
+// Burning removes the token from the enumeration lists
+#[contractimpl(contracttrait)]
+impl NonFungibleBurnable for GameItem {}
 ```
 
 The extension exposes additionally the following entry-point functions:
@@ -61,3 +64,11 @@ fn total_supply(e: &Env) -> u32;
 fn get_owner_token_id(e: &Env, owner: Address, index: u32) -> u32;
 fn get_token_id(e: &Env, index: u32) -> u32;
 ```
+
+<Callout type="warning">
+Tokens must be minted through the contract type, with `mint` or `mint_with_id`. Calling `Base::mint` directly
+would leave the token out of the enumeration lists.
+</Callout>
+
+The `Enumerable` contract type can be combined with `NonFungibleVotes`, i.e. `Compose<(Enumerable, NonFungibleVotes)>`,
+but not with `Consecutive`.

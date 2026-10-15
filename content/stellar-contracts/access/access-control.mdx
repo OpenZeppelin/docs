@@ -36,7 +36,7 @@ This allows for creating complex organizational structures with chains of comman
 Here's how to establish and use role hierarchies in practice:
 
 ```rust
-use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env, Symbol};
+use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env, Symbol, Vec};
 use stellar_access::access_control::{self as access_control, AccessControl};
 
 const MANAGER_ROLE: Symbol = symbol_short!("manager");
@@ -71,6 +71,9 @@ impl MyContract {
         access_control::revoke_role_no_auth(e, &guardian1, &GUARDIAN_ROLE, &manager);
     }
 }
+
+#[contractimpl(contracttrait)]
+impl AccessControl for MyContract {}
 ```
 
 In this example:
@@ -96,7 +99,7 @@ The module includes several procedural macros to simplify authorization checks i
 
 These macros automatically call `require_auth()` on the specified account before executing the function:
 
-#### @only_admin
+#### `#[only_admin]`
 
 Restricts access to the contract admin only:
 
@@ -108,7 +111,7 @@ pub fn admin_function(e: &Env) {
 }
 ```
 
-#### @only_role
+#### `#[only_role]`
 
 Restricts access to accounts with a specific role:
 
@@ -120,7 +123,7 @@ pub fn mint(e: &Env, to: Address, token_id: u32, caller: Address) {
 }
 ```
 
-#### @only_any_role
+#### `#[only_any_role]`
 
 Restricts access to accounts with any of the specified roles:
 
@@ -136,7 +139,7 @@ pub fn multi_role_action(e: &Env, caller: Address) {
 
 These macros check role membership but do **not** enforce authorization. You must manually call `require_auth()` if needed:
 
-#### @has_role
+#### `#[has_role]`
 
 Checks if an account has a specific role:
 
@@ -148,7 +151,7 @@ pub fn conditional_mint(e: &Env, to: Address, token_id: u32, caller: Address) {
 }
 ```
 
-#### @has_any_role
+#### `#[has_any_role]`
 
 Checks if an account has any of the specified roles:
 
@@ -162,12 +165,13 @@ pub fn multi_role_check(e: &Env, caller: Address) {
 
 ## Usage Example
 
-Here’s a simple example of using the Access Control module:
+Here’s a simple example of using the Access Control module in a non-fungible token contract:
 
 ```rust
-use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env};
+use soroban_sdk::{contract, contractimpl, symbol_short, vec, Address, Env, String, Symbol, Vec};
 use stellar_access::access_control::{self as access_control, AccessControl};
-use stellar_macros::{has_role, only_admin};
+use stellar_macros::{has_any_role, only_admin, only_any_role, only_role};
+use stellar_tokens::non_fungible::{Base, Compose, NonFungibleToken};
 
 #[contract]
 pub struct MyContract;
@@ -190,11 +194,10 @@ impl MyContract {
 
 
     // we want `require_auth()` provided by the macro, since there is no
-    // `require_auth()` in `Base::mint`.
+    // `require_auth()` in the contract type's `mint_with_id`.
     #[only_role(caller, "minter")]
     pub fn mint(e: &Env, to: Address, token_id: u32, caller: Address) {
-        Base::mint(e, &to, token_id)
-
+        <Self as NonFungibleToken>::ContractType::mint_with_id(e, &to, token_id)
     }
 
 
@@ -213,6 +216,14 @@ impl MyContract {
         String::from_str(e, "multi_role_auth_action_success")
     }
 }
+
+#[contractimpl(contracttrait)]
+impl NonFungibleToken for MyContract {
+    type ContractType = Compose<(Base,)>;
+}
+
+#[contractimpl(contracttrait)]
+impl AccessControl for MyContract {}
 ```
 
 ## Benefits and Trade-offs

@@ -40,8 +40,13 @@ sequenceDiagram
     Relayer->>FeeForwarder: 7. Execute forward():<br/>submit a tx and pay XLM fees
     
     FeeForwarder->>FeeForwarder: 8. Validate authorizations
-    FeeForwarder->>Token: 9. Approve max fee amount (optional)
-    FeeForwarder->>Token: 10. Transfer fee amount to fee recipient
+    alt Eager approval
+        FeeForwarder->>Token: 9. Approve max_fee_amount
+        FeeForwarder->>Token: 10. Pull max_fee_amount from user,<br/>pay fee_amount to fee recipient,<br/>refund the remainder to user
+    else Lazy approval
+        FeeForwarder->>Token: 9. Approve max_fee_amount<br/>(only if allowance is insufficient)
+        FeeForwarder->>Token: 10. Transfer fee_amount from user to fee recipient
+    end
     FeeForwarder->>Target Contract: 11. Invoke target_fn(target_args)
     Target Contract-->>User: Result
 ```
@@ -57,7 +62,7 @@ FeeForwarder.forward()
     └─ Target.target_fn() ← nested sub-invocation (if needed)
 ```
 
-Equally important for the fee abstraction model is enabling the relayer to collect the compensation fee. This is done through the common 2-step fungible token flow of `approve` + `transfer_from`. Soroban authorization framework allows embedding the approval step in the same transaction, so the user might also need to sign `Token.approve()`.
+Equally important for the fee abstraction model is enabling the relayer to collect the compensation fee. This relies on the fungible token allowance mechanism: the user approves the FeeForwarder, which then pulls the tokens with `transfer_from`. Soroban authorization framework allows embedding the approval step in the same transaction, so the user might also need to sign `Token.approve()`.
 
 To guarantee the atomicity of both, the target invocation and the fee collection, the [fee-abstraction](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/fee-abstraction) package exposes the function `collect_fee_and_invoke()`, which, in most of the cases, will require signing an authorization tree that contains one entry with two sub-invocations:
 
@@ -71,15 +76,35 @@ The approval sub-invocation might be optional depending on the chosen approval s
 
 1. **Lazy**
     
-    The user pre-approves a lump sum to the FeeForwarder contract in a separate transaction. Each forwarded call then draws from this existing allowance. This strategy is more resource efficient per call, but requires an initial approval transaction and trust in the FeeForwarder contract.
+    The FeeForwarder approves `max_fee_amount` only when the user's current allowance is below it, then transfers
+    `fee_amount` from the user directly to the fee recipient with `transfer_from`. The `Token.approve()` sub-invocation
+    is thus needed only when the allowance is insufficient, and calls covered by an existing allowance (left over from
+    a previous call or approved separately) don't need it. The unspent remainder stays approved for later calls, which
+    makes this strategy cheaper per call, but requires trust in the FeeForwarder contract.
     
 2. **Eager**
     
-    The approval is embedded directly in the authorization entry as a sub-invocation for every call, no preliminary transactions needed. This strategy is self-contained with no  trust assumptions, but more expensive per call (~25%) due to the nested approval.
+    The FeeForwarder always approves `max_fee_amount` (overwriting any existing allowance), pulls the full
+    `max_fee_amount` from the user with `transfer_from`, pays `fee_amount` to the fee recipient (skipped when the
+    recipient is the FeeForwarder itself) and refunds the remainder to the user. The approval is embedded as a
+    sub-invocation in every call, but no allowance is left behind, so there are no trust assumptions. This strategy is
+    more expensive per call due to the approval and the extra transfers, and the user needs a spendable balance of at
+    least `max_fee_amount`, not just `fee_amount`.
+
+<Callout type="warning">
+Eager requires a balance-conserving fee token, i.e. one whose transfers credit the receiver exactly the amount
+debited from the sender. The FeeForwarder pays out the fee and the remainder regardless of the amount it received, so
+with fee-on-transfer or other non-conserving tokens the shortfall is drawn from the FeeForwarder's own balance, or the
+call reverts when that balance is insufficient. Use Lazy for such tokens, as it transfers directly from the user to
+the fee recipient. In both strategies, the `fee_collected` event reports the requested `fee_amount`, which can exceed
+what the recipient actually receives from a non-conserving token.
+</Callout>
 
 ## Fee Token Allowlist
 
-The package includes optional allowlist functionality to restrict which tokens can be used for fee payment:
+The package includes optional allowlist functionality to restrict which tokens can be used for fee payment. The
+allowlist is enabled implicitly once at least one token is added: while it is empty (including after the last token
+is removed), every token is allowed. `is_fee_token_allowlist_enabled` reports whether it is currently enabled.
 
 ```rust
 // Enable a token for fee payments
@@ -92,7 +117,12 @@ set_allowed_fee_token(e, &deprecated_token, false);
 let is_allowed = is_allowed_fee_token(e, &token);
 ```
 
-The allowlist uses a swap-and-pop algorithm for efficient O(1) removal and automatically extends TTL for frequently-used tokens.
+Allowing a token that is already allowed panics with `FeeTokenAlreadyAllowed`, and disallowing a token that is not
+allowed panics with `FeeTokenNotAllowed`.
+
+The allowlist uses a swap-and-pop algorithm for efficient O(1) removal and automatically extends TTL for frequently-used
+tokens. When a removal moves the last token into the freed slot, the TTL of the moved token's storage entries is
+extended as well.
 
 ## Token Sweeping
 
@@ -126,7 +156,7 @@ A role-based implementation where only authorized executors can relay transactio
 - Uses `#[only_role]` macro for executor authorization
 - Collects fees to the contract (not directly to relayer)
 - Managers can sweep accumulated fees to designated recipients
-- Uses lazy approval strategy (requires pre-approval transaction)
+- Uses lazy approval strategy (`Token.approve()` sub-invocation needed only when the allowance is insufficient)
 - Suitable for trusted relayer networks
 
 ```rust
@@ -143,7 +173,7 @@ pub fn forward(
     user: Address,
     relayer: Address,
 ) -> Val {
-    collect_fee_then_invoke(
+    collect_fee_and_invoke(
         e,
         &fee_token,
         fee_amount,
@@ -166,7 +196,7 @@ An open implementation where anyone can act as a relayer. Fees go directly to th
 **Characteristics:**
 - No role restrictions
 - Fees transfer directly to the relayer
-- Uses eager approval strategy (approval embedded in each call)
+- Uses eager approval strategy (approval embedded in each call, no allowance left behind)
 - Suitable for open relayer markets
 
 ```rust
@@ -202,7 +232,7 @@ pub fn forward(
 
 ## Integration with OpenZeppelin Relayer
 
-The fee abstraction package is designed to work seamlessly with [OpenZeppelin Relayer](/relayer/1.3.x). The Relayer can:
+The fee abstraction package is designed to work seamlessly with [OpenZeppelin Relayer](/relayer/1.5.x). The Relayer can:
 
 1. **Submit sponsored transactions**: Pay XLM fees on behalf of users
 2. **Calculate optimal fees**: Determine the actual fee based on network conditions
@@ -223,16 +253,16 @@ sequenceDiagram
     User->>User: Sign authorization
     User->>OZ Relayer: Submit signed authorization
     OZ Relayer->>Forwarder: Execute forward (pays XLM)
-    Forwarder->>Target: Invoke user's action
     Forwarder->>OZ Relayer: Transfer token fee
+    Forwarder->>Target: Invoke user's action
     OZ Relayer-->>User: Transaction complete
 ```
 
-For detailed integration instructions, see the [Stellar Sponsored Transactions Guide](/relayer/1.3.x/guides/stellar-sponsored-transactions-guide).
+For detailed integration instructions, see the [Stellar Sponsored Transactions Guide](/relayer/1.5.x/guides/stellar-sponsored-transactions-guide).
 
 ## See Also
 
 - [Smart Accounts](/stellar-contracts/accounts/smart-account)
 - [Access Control](/stellar-contracts/access/access-control)
-- [OpenZeppelin Relayer](/relayer/1.3.x)
-- [Stellar Sponsored Transactions Guide](/relayer/1.3.x/guides/stellar-sponsored-transactions-guide)
+- [OpenZeppelin Relayer](/relayer/1.5.x)
+- [Stellar Sponsored Transactions Guide](/relayer/1.5.x/guides/stellar-sponsored-transactions-guide)
