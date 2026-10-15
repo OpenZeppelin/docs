@@ -22,7 +22,7 @@ pub enum Signer {
 Signer::Delegated(Address)
 ```
 
-Delegated signers represent any Soroban address (C-account, G-account) and delegate authorization checks to that address using the built-in `require_auth_for_args()`. This enables using traditional Stellar account address (G-accounts) as signers, but also makes possible powerful composition patterns such as nested smart accounts (one smart account authorizing on behalf of another) and contract-based signers with custom authorization logic. This variant is particularly useful for building multi-level authorization hierarchies.
+Delegated signers represent any Soroban address (C-account, G-account) and delegate authorization checks to that address using the built-in `require_auth_for_args()`, with the [`AuthDigestPreimage`](/stellar-contracts/accounts/authorization-flow#authdigestpreimage) as the single argument. This enables using traditional Stellar account address (G-accounts) as signers, but also makes possible powerful composition patterns such as nested smart accounts (one smart account authorizing on behalf of another) and contract-based signers with custom authorization logic. This variant is particularly useful for building multi-level authorization hierarchies.
 
 ```mermaid
 graph TD
@@ -72,16 +72,21 @@ pub struct MySmartAccount;
 impl CustomAccountInterface for MySmartAccount {
     fn __check_auth(
         e: Env,
-        payload: Hash<32>,
+        signature_payload: Hash<32>,
         auth_payload: AuthPayload,
         auth_contexts: Vec<Context>,
     ) -> Result<(), SmartAccountError> {
-          for (signer, _) in auth_payload.signers.iter() {
+        let preimage = AuthDigestPreimage {
+            account: e.current_contract_address(),
+            signature_payload: signature_payload.to_bytes(),
+            context_rule_ids: auth_payload.context_rule_ids.clone(),
+        };
+        for (signer, _) in auth_payload.signers.iter() {
             match signer {
                 // ...
                 Signer::Delegated(addr) => {
-                    let payload = (payload.clone(),).into_val(e);
-                    addr.require_auth_for_args(payload);
+                    let args = (preimage.clone(),).into_val(&e);
+                    addr.require_auth_for_args(args);
                 }
             }
         }
@@ -143,7 +148,11 @@ When simulating this transaction, the following authorization entry is returned.
 The client implementation requires constructing two authorization entries:
 
 1. Replace `"signature": "void"` with the proper `AuthPayload` structure (containing the `signers` map and `context_rule_ids`)
-2. Create the missing authorization entry for the delegated signer's `__check_auth` call
+2. Create the missing root-level authorization entry for the delegated signer: its root invocation is `__check_auth` on the smart account, with the [`AuthDigestPreimage`](/stellar-contracts/accounts/authorization-flow#authdigestpreimage) as the single argument, and it is signed the way that address normally authorizes (an Ed25519 signature for a G-account, its own `AuthPayload` for a nested smart account)
+
+<Callout type="warning">
+The argument of the delegated signer's entry must be the preimage struct, encoded as an `ScVal::Map`, not the 32-byte digest or the host's `signature_payload`. A missing or wrongly encoded entry fails with `Error(Auth, InvalidAction)` and a trap inside `__check_auth`, not with a `SmartAccountError`.
+</Callout>
 
 The following typescript code demonstrates this process:
 
@@ -195,21 +204,41 @@ async function signAndSendTx(
     simAuth.credentials().address().signatureExpirationLedger(validUntil);
     signedAuths.push(simAuth);
 
-    // 2) Construct the 2nd auth entry for `__check_auth` and sign the invocation
-    const payload = HashIdPreimage.envelopeTypeSorobanAuthorization(
-        new HashIdPreimageSorobanAuthorization({
-            networkId,
-            nonce: simAuth.credentials().address().nonce(),
-            signatureExpirationLedger: validUntil,
-            invocation: simAuth.rootInvocation(),
-        }),
-    ).toXDR();
-    const hashed_payload = hash(payload);
+    // 2) Compute the host's `signature_payload` for the smart account's entry
+    const smartAccount = Address.fromScAddress(simAuth.credentials().address().address());
+    const signaturePayload = hash(
+        HashIdPreimage.envelopeTypeSorobanAuthorization(
+            new HashIdPreimageSorobanAuthorization({
+                networkId,
+                nonce: simAuth.credentials().address().nonce(),
+                signatureExpirationLedger: validUntil,
+                invocation: simAuth.rootInvocation(),
+            }),
+        ).toXDR(),
+    );
 
+    // AuthDigestPreimage is a named-field struct serialized as ScVal::Map (keys sorted)
+    const preimage = ScVal.scvMap([
+        new xdr.ScMapEntry({
+            key: ScVal.scvSymbol("account"),
+            val: smartAccount.toScVal(),
+        }),
+        new xdr.ScMapEntry({
+            key: ScVal.scvSymbol("context_rule_ids"),
+            val: ScVal.scvVec([ScVal.scvU32(ruleId)]), // same rule IDs as in AuthPayload
+        }),
+        new xdr.ScMapEntry({
+            key: ScVal.scvSymbol("signature_payload"),
+            val: ScVal.scvBytes(signaturePayload),
+        }),
+    ]);
+
+    // 3) Construct the 2nd auth entry: the delegated signer authorizes
+    //    `__check_auth` on the smart account with the preimage as its only argument
     const args = new InvokeContractArgs({
-        contractAddress: Address.fromString(contract).toScAddress(),
-        functionName: "__check_auth", 
-        args: [ScVal.scvBytes(hashed_payload)]
+        contractAddress: smartAccount.toScAddress(),
+        functionName: "__check_auth",
+        args: [preimage],
     });
     const invocation = new SorobanAuthorizedInvocation({
         function: SorobanAuthorizedFunction.sorobanAuthorizedFunctionTypeContractFn(args),
@@ -313,11 +342,25 @@ After including both authorization entries in `signedAuths` and re-simulating th
               "function_name": "__check_auth",
               "args": [
                 {
-                  "bytes": "ed0cfe2903d64e5383..." // the signature payload
+                  "map": [ // the AuthDigestPreimage
+                    {
+                      "key": { "symbol": "account" },
+                      "val": { "address": "CBH6XACZFDCJUHX..." } // the Smart Account
+                    },
+                    {
+                      "key": { "symbol": "context_rule_ids" },
+                      "val": { "vec": [{ "u32": 1 }] } // same rule IDs as in the AuthPayload
+                    },
+                    {
+                      "key": { "symbol": "signature_payload" },
+                      "val": { "bytes": "ed0cfe2903d64e5383..." } // the host's signature payload
+                    }
+                  ]
                 }
               ]
             }
           },
+          "sub_invocations": []
         }
       }
     ]
@@ -357,20 +400,26 @@ pub struct MySmartAccount;
 impl CustomAccountInterface for MySmartAccount {
     fn __check_auth(
         e: Env,
-        payload: Hash<32>,
+        signature_payload: Hash<32>,
         signatures: AuthPayload,
         auth_contexts: Vec<Context>,
     ) -> Result<(), SmartAccountError> {
-          for (signer, sig_data) in signatures.signers.iter() {
+        let preimage = AuthDigestPreimage {
+            account: e.current_contract_address(),
+            signature_payload: signature_payload.to_bytes(),
+            context_rule_ids: signatures.context_rule_ids.clone(),
+        };
+        for (signer, sig_data) in signatures.signers.iter() {
             match signer {
                 Signer::External(verifier, key_data) => {
-                    let sig_payload = Bytes::from_array(e, &signature_payload.to_bytes().to_array());
-                    if !VerifierClient::new(e, &verifier).verify(
-                        &sig_payload,
-                        &key_data.into_val(e),
-                        &sig_data.into_val(e),
+                    // External signers sign sha256(preimage.to_xdr()), not the raw signature_payload
+                    let auth_digest = preimage.digest(&e).to_bytes();
+                    if !VerifierClient::new(&e, &verifier).verify(
+                        &auth_digest,
+                        &key_data.into_val(&e),
+                        &sig_data.into_val(&e),
                     ) {
-                        panic_with_error!(e, SmartAccountError::ExternalVerificationFailed)
+                        panic_with_error!(&e, SmartAccountError::ExternalVerificationFailed)
                     }
                 }
                 // ...
@@ -434,7 +483,7 @@ In contrast to `Delegated` signers, constructing the auth entry for an `External
                           ]
                         },
                         "val": {
-                          "bytes": "6ead27ab6e8cab36..." // Signer's signature
+                          "bytes": "6ead27ab6e8cab36..." // Signer's signature over the auth digest
                         }
                       }
                     ]
@@ -472,29 +521,45 @@ The `context_rule_ids` field contains one rule ID per auth context, explicitly s
 
 ### Auth Digest Computation
 
-Signers must sign the **auth digest**, not the raw `signature_payload`. The context rule IDs are bound into the digest to prevent downgrade attacks:
+Signers do not sign the raw `signature_payload`. Every signer commits to an [`AuthDigestPreimage`](/stellar-contracts/accounts/authorization-flow#authdigestpreimage) that binds the smart account address and the selected context rule IDs alongside the payload:
 
+```rust
+#[contracttype]
+pub struct AuthDigestPreimage {
+    pub account: Address,              // the smart account
+    pub signature_payload: BytesN<32>, // from the host
+    pub context_rule_ids: Vec<u32>,    // one per auth context
+}
 ```
-auth_digest = sha256(signature_payload || context_rule_ids.to_xdr())
-```
+
+- `External` signers sign the **auth digest**, `sha256(preimage.to_xdr())`.
+- `Delegated` signers authorize `__check_auth` on the smart account with the preimage itself as the single argument (see [Transaction Simulation Behavior](#transaction-simulation-behavior)).
 
 Steps:
-1. Obtain the 32-byte `signature_payload` from the host
-2. XDR-encode the `Vec<u32>` of rule IDs (one per auth context)
-3. Concatenate both byte sequences
-4. SHA-256 hash the result
-5. Sign the resulting digest
+1. Compute the 32-byte `signature_payload` of the smart account's authorization entry: the SHA-256 hash of the XDR-encoded `HashIdPreimage::SorobanAuthorization { network_id, nonce, signature_expiration_ledger, invocation }`
+2. Build the preimage as an `ScVal::Map` with the symbol keys `account`, `context_rule_ids` and `signature_payload` (`ScMap` keys must be sorted, so they appear in this order)
+3. XDR-encode the map and SHA-256 hash it to obtain the auth digest
+4. Have every `External` signer sign the auth digest
 
 In Rust (Soroban SDK):
 
 ```rust
-use soroban_sdk::xdr::ToXdr;
+use stellar_accounts::smart_account::AuthDigestPreimage;
 
-let mut preimage = signature_payload.to_bytes().to_bytes();
-preimage.append(&context_rule_ids.to_xdr(e));
-let auth_digest = e.crypto().sha256(&preimage);
-// Sign auth_digest, not signature_payload
+let preimage = AuthDigestPreimage {
+    account: smart_account_address,
+    signature_payload, // BytesN<32> from the host
+    context_rule_ids,  // Vec<u32>, one per auth context
+};
+let auth_digest = preimage.digest(e);
+// External signers sign auth_digest, not signature_payload
 ```
+
+The `SmartAccount` trait also exposes an `auth_digest(preimage)` view that returns `sha256(preimage.to_xdr())`. Simulating it lets a client check its locally computed digest before collecting any signatures.
+
+<Callout type="warning">
+Up to v0.7.x, the digest was `sha256(signature_payload || context_rule_ids.to_xdr())` and `Delegated` signers authorized that 32-byte digest. Signatures produced that way are rejected by accounts built with v0.8.0 or later. See the [migration guide](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/accounts#migration-guide-from-v07x-to-080) for details.
+</Callout>
 
 ### XDR Encoding
 
@@ -525,6 +590,34 @@ creds.signature = ScVal::Map(Some(ScMap::sorted_from([
 ])?));
 ```
 
+The `AuthDigestPreimage` is encoded the same way. Its XDR serialization is what `External` signers hash, and the map itself is the argument of a `Delegated` signer's `__check_auth` entry:
+
+```rust
+let preimage = ScVal::Map(Some(ScMap::sorted_from([
+    (
+        ScVal::Symbol("account".try_into()?),
+        ScVal::Address(smart_account), // ScAddress of the smart account
+    ),
+    (
+        ScVal::Symbol("context_rule_ids".try_into()?),
+        ScVal::Vec(Some(ScVec(VecM::try_from([
+            ScVal::U32(rule_id_for_context_0),
+            ScVal::U32(rule_id_for_context_1),
+        ])?))),
+    ),
+    (
+        ScVal::Symbol("signature_payload".try_into()?),
+        ScVal::Bytes(ScBytes(signature_payload.to_vec().try_into()?)),
+    ),
+])?));
+
+let auth_digest = Sha256::digest(preimage.to_xdr(Limits::none())?);
+```
+
+### Client Implementations
+
+The [`auth_entries` test module](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/accounts/src/smart_account/test/auth_entries.rs) builds both the smart account's entry and a delegated signer's nested entry in Rust and drives them through the host's `__check_auth`; it is the reference for client implementations. The [smart-account-kit](https://github.com/stellar/smart-account-kit) TypeScript SDK implements this flow end to end. Check that its version targets the `stellar-accounts` release the account was built with.
+
 ## Signer Management
 
 The [`SmartAccount`](https://github.com/OpenZeppelin/stellar-contracts/blob/main/packages/accounts/src/smart_account/mod.rs) trait provides functions for managing signers within context rules:
@@ -543,19 +636,23 @@ Adds a signer to an existing context rule and returns the assigned signer ID. Th
 
 ### Batch Adding Signers
 
-```rust
-fn batch_add_signer(
-    e: &Env,
-    context_rule_id: u32,
-    signers: Vec<Signer>,
-);
-```
+Batch adding is not part of the `SmartAccount` trait. The `smart_account` module provides a `batch_add_signer` helper that adds multiple signers to an existing context rule at once, and a contract can expose it through its own entry point:
 
-Adds multiple signers to an existing context rule at once.
+```rust
+#[contractimpl]
+impl MySmartAccount {
+    pub fn batch_add_signer(e: &Env, context_rule_id: u32, signers: Vec<Signer>) {
+        // The helper does not perform any authorization check itself.
+        e.current_contract_address().require_auth();
+
+        smart_account::batch_add_signer(e, context_rule_id, &signers);
+    }
+}
+```
 
 <Callout>
 **Important:**
-When adding signers to rules with threshold policies, administrators must manually update policy thresholds to maintain security guarantees. See the Policies documentation for details.
+When adding signers to rules with threshold policies, administrators must manually update policy thresholds to maintain security guarantees. See the [Policies](/stellar-contracts/accounts/policies#caveats) documentation for details.
 </Callout>
 
 ### Removing Signers
@@ -568,11 +665,11 @@ fn remove_signer(
 );
 ```
 
-Removes a signer (identified by its numeric ID) from an existing context rule. The rule must maintain at least one signer OR one policy after removal.
+Removes a signer (identified by its numeric ID) from an existing context rule. The rule must maintain at least one signer OR one policy after removal. The ID is returned by `add_signer`, and the `get_signer_id(signer)` view looks it up for an already registered signer.
 
 <Callout>
 **Important:** 
-When removing signers from rules with threshold policies, verify that the threshold remains achievable with the remaining signers.
+When removing signers from rules with threshold policies, verify that the threshold remains achievable with the remaining signers. With a weighted threshold policy, lower the threshold before reducing weights (see [Required Operation Ordering](/stellar-contracts/accounts/policies#required-operation-ordering)).
 </Callout>
 
 ## Verifiers
@@ -696,7 +793,7 @@ Components:
   - Signature counter (4 bytes)
 - **`client_data`**: JSON string from the browser/platform (max 1024 bytes), containing:
   - `type`: Must be `"webauthn.get"` for authentication
-  - `challenge`: Base64url-encoded signature payload
+  - `challenge`: Base64url-encoded (unpadded) auth digest, `sha256(preimage.to_xdr())` (see [Auth Digest Computation](#auth-digest-computation)), not the host's `signature_payload`
   - `origin`: The origin where authentication occurred
 
 The `sig_data` parameter passed to the verifier must be the XDR-encoded representation of this structure to ensure proper serialization and deserialization.
