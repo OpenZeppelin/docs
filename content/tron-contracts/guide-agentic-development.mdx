@@ -1,0 +1,198 @@
+---
+title: "Agentic TRON development with OpenZeppelin MCP and dev tools"
+---
+
+{/*
+  SKELETON 2026-10-15 for DevRel review.
+  - Sections marked TODO(tool) depend on tools that do not exist yet. See the tooling brief.
+  - Everything not marked TODO(tool) describes tools that have shipped: @openzeppelin/contracts-mcp >= 0.6.5 (tron-* tools),
+    the hosted server on mcp.openzeppelin.com, and @openzeppelin/contracts-cli >= 0.2.x.
+  - Companion tutorial: /tron-contracts/guide-usdt-vault
+*/}
+
+AI coding assistants can write TRON contracts quickly, but they learned mostly from Ethereum code. Left alone, they reach for `parseEther`, trust `transfer`'s return value, and mix up TRON's address formats. OpenZeppelin's MCP server and dev tools keep the assistant on audited library code and TRON-correct defaults.
+
+This guide connects the tools to your assistant, then rebuilds the vault from [Build a USDT vault on TRON with Hardhat](/tron-contracts/guide-usdt-vault) by prompting instead of typing. Read that tutorial first if you haven't. You need to know what correct output looks like before you can review an agent's output.
+
+## What the tools are
+
+| Tool | What it does | Status |
+| --- | --- | --- |
+| [OpenZeppelin Contracts MCP](https://github.com/OpenZeppelin/contracts-wizard/tree/master/packages/mcp) | Generates contracts from [OpenZeppelin Contracts for TRON](/tron-contracts) with the same options as the Wizard. TRON tools: `tron-trc20`, `tron-trc721`, `tron-trc1155`, `tron-governor`, `tron-custom`. | Available |
+| [Hosted MCP servers](https://mcp.openzeppelin.com) | The same tools, hosted by OpenZeppelin, so nothing runs locally. | Available. TODO(verify): TRON server URL |
+| [`@openzeppelin/contracts-cli`](https://www.npmjs.com/package/@openzeppelin/contracts-cli) | The same generators on the command line, for scripts and agents without MCP. | Available |
+| TODO(tool): TRON dev tools | Scaffold a `hardhat-tron` project, run tests on TRE, deploy to Nile, verify on Tronscan, check for TVM pitfalls. | Planned |
+| TODO(tool): TRON agent skill | Step-by-step project setup and review instructions for agents, like the `setup-*-contracts` skills in [openzeppelin-skills](https://github.com/OpenZeppelin/openzeppelin-skills). | Planned |
+
+The generator tools return Solidity source as text. They don't write files, compile or deploy anything. In hosts that support [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview), such as Claude and Cursor, each tool also opens an interactive Wizard panel where you can change options and send the result back to the agent.
+
+Every generated contract imports from `@openzeppelin/tron-contracts`, uses TRON names (`TRC20`, `TIP712`), and targets Solidity 0.8.26. For example, `tron-custom` with `--name UsdtVault --access ownable` returns:
+
+```solidity
+// SPDX-License-Identifier: MIT
+// Compatible with OpenZeppelin TRON Contracts ^5.6.0
+pragma solidity ^0.8.26;
+
+import {Ownable} from "@openzeppelin/tron-contracts/access/Ownable.sol";
+
+contract UsdtVault is Ownable {
+    constructor(address initialOwner) Ownable(initialOwner) {}
+}
+```
+
+## Install and connect
+
+The local server runs with `npx`. `@openzeppelin/contracts-mcp` declares no `engines` constraint, so there is no enforced minimum; use an active Node.js LTS. If you are also following the [vault tutorial](/tron-contracts/guide-usdt-vault), `@openzeppelin/hardhat-tron` does require Node.js 22 or newer.
+
+### Claude Code
+
+```bash title="Shell"
+claude mcp add OpenZeppelinContracts -- npx -y @openzeppelin/contracts-mcp
+```
+
+### Claude Desktop, Cursor and Windsurf
+
+Add this to the client's MCP configuration. In Claude Desktop, go to **Settings > Developer > Edit Config**. In Cursor, go to **Settings > Cursor Settings > Tools & Integrations > MCP Tools > New MCP Server**.
+
+```json title="MCP configuration"
+{
+  "mcpServers": {
+    "OpenZeppelinContracts": {
+      "command": "npx",
+      "args": ["-y", "@openzeppelin/contracts-mcp"]
+    }
+  }
+}
+```
+
+### VS Code
+
+```json title=".vscode/mcp.json"
+{
+  "servers": {
+    "OpenZeppelinContracts": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@openzeppelin/contracts-mcp"]
+    }
+  }
+}
+```
+
+### Hosted server
+
+To skip the local install, connect your client to the hosted TRON server from [mcp.openzeppelin.com](https://mcp.openzeppelin.com). TODO(verify): the TRON server URL and the per-client steps shown there.
+
+### Dev tools and skill
+
+TODO(tool): install command for the TRON dev tools (scaffold / test / deploy / verify). Decide whether they ship in `@openzeppelin/contracts-mcp`, as a separate `@openzeppelin/tron-dev-mcp` package, or as a skill that drives `hardhat-tron` from a shell.
+
+TODO(tool): install command for the TRON skill, for example `npx skills add OpenZeppelin/openzeppelin-skills` once a `setup-tron-contracts` skill exists.
+
+<Callout>
+Check that the tools loaded before you start. Ask your assistant "Which OpenZeppelin TRON tools do you have?" It should list the `tron-*` tools. If it doesn't, see [Troubleshooting](#troubleshooting).
+</Callout>
+
+## Walkthrough: build the USDT vault with an agent
+
+You'll rebuild the [USDT vault](/tron-contracts/guide-usdt-vault): a TRC-4626 vault over USDT-TRON with an entry and exit fee, tested on TRE and deployed to Nile. At each step, compare the agent's output with the tutorial.
+
+### 1. Describe what you want
+
+Start with a prompt that states the TRON facts the agent might otherwise get wrong:
+
+```text title="Prompt"
+Build a TRC-4626 vault on TRON over USDT-TRON using OpenZeppelin Contracts for TRON 5.6.
+- Shares: "USDT Vault Share" / "vUSDT", decimals offset 6.
+- Entry and exit fee in basis points, capped at 5%, paid to a treasury set at deploy time.
+- Pay every outbound transfer with SafeTRC20.safeTransferChecked: USDT-TRON's transfer returns false on success.
+- USDT has 6 decimals. Never use ether units.
+Use the OpenZeppelin MCP tools for the contract, and Hardhat 2 with @openzeppelin/hardhat-tron for the project.
+```
+
+### 2. Generate the contract
+
+TODO(tool): `tron-trc4626` (or a vault option on `tron-trc20`). The generators don't produce TRC-4626 vaults yet. Until they do, the agent can call `tron-custom` for the access-control skeleton and write the vault code itself. Review that code especially carefully.
+
+TODO(tool): show the tool call and the generated contract. Expected result: equivalent to `contracts/UsdtVault.sol` in the tutorial, inheriting `TRC4626` and overriding `_decimalsOffset()`.
+
+Check the generated contract for these things:
+
+- It imports `TRC4626` and `SafeTRC20` from `@openzeppelin/tron-contracts`. It doesn't copy or reimplement them.
+- Every outbound token transfer it adds uses `safeTransferChecked`, not `safeTransfer` or a bare `transfer`.
+- It overrides `_decimalsOffset()`.
+- The preview functions account for fees. The tutorial's [fee section](/tron-contracts/guide-usdt-vault#add-an-entry-and-exit-fee) explains why.
+
+### 3. Scaffold the project
+
+TODO(tool): scaffold tool. Input: project name, contracts library version, networks (`tre`, `nile`). Output: `package.json` with Hardhat 2 (`@hh2`) dependencies, `hardhat.config.cjs` with the `tre` block, a `.gitignore`, and the contract from step 2.
+
+Expected result: the same layout and config as [Set up the project](/tron-contracts/guide-usdt-vault#set-up-the-project).
+
+<Callout type='warn'>
+If the agent runs `npm install hardhat` without a version, it gets a major the plugin doesn't support. Make sure the project uses `hardhat@hh2`.
+</Callout>
+
+### 4. Generate and run tests
+
+TODO(tool): test tool. Input: project path, optional test filter. Output: pass/fail per test, revert reasons and a summary that fits in the agent's context.
+
+Ask the agent for tests that cover the same ground as the tutorial: a mock USDT whose `transfer` returns `false`, the four entry points, the previews, rounding, and an inflation attack.
+
+TODO(tool): example output from a TRE run.
+
+### 5. Deploy to Nile
+
+TODO(tool): deploy tool. Input: network (`nile`), contract name, constructor arguments in Base58 `T…` form. Output: deployed address in Base58, transaction ID, energy used, Tronscan link.
+
+<Callout type='warn'>
+Never paste a private key into a chat. The deploy tool must read the key from your environment (`TRON_TESTNET_KEY`) or ask your wallet to sign. The agent must never see the key. Before you approve a deploy, check that the network is `nile`.
+</Callout>
+
+### 6. Verify and interact
+
+TODO(tool): verify tool (Tronscan source verification). Input: address, compiler settings (0.8.26, optimizer 200 runs, `viaIR`). Output: verification status and link.
+
+TODO(tool): show approve → deposit → redeem driven through the agent, matching [Interact with the vault](/tron-contracts/guide-usdt-vault#interact-with-the-vault).
+
+## Review what the agent built
+
+An agent's output is a draft. You are responsible for what you deploy.
+
+**Library first.** Prefer contracts the MCP generates, or imports from `@openzeppelin/tron-contracts`, over code the agent writes. The library is audited (TRON Foundation audit #01, covering the library and the upgradeable variant). Code the agent writes is not. Keep any custom code small and review it line by line.
+
+**Check every change against this TVM list.**
+
+| Check | What to look for |
+| --- | --- |
+| Amounts | No `ether`, `gwei` or `parseEther`. TRX and USDT-TRON use 6 decimals. |
+| Outbound transfers | `SafeTRC20.safeTransferChecked` for tokens you don't control. Not for rebasing or reflection tokens. |
+| Addresses | Contracts get 20-byte hex. Base58 `T…` stays off-chain. No 21-byte `0x41…` inside `bytes` payloads. |
+| Compiler | Solidity 0.8.26, `evmVersion: cancun`, compiled with tron-solc. |
+| Toolchain | Hardhat 2 with `@openzeppelin/hardhat-tron`. No Ethereum Upgrades plugins. |
+| Time | No block-count assumptions from Ethereum. TRON produces a block every 3 seconds. |
+| Keys | No private keys in code, config or chat. The TRE dev key appears only in the `tre` network. |
+
+TODO(tool): a TVM check tool that runs this list automatically and reports file and line.
+
+**Run the tests yourself.** Read the test file before you trust a green run. Agents sometimes weaken an assertion to make a test pass.
+
+**Before mainnet,** follow the usual path: tests, a review, and an audit for anything that holds user funds. See the [Security Center](https://contracts.openzeppelin.com/security).
+
+## Troubleshooting
+
+**The assistant doesn't list the `tron-*` tools.** Restart the client after you edit its MCP configuration. Check that `npx -y @openzeppelin/contracts-mcp` runs in a terminal. Make sure the package is 0.6.5 or later: earlier versions have no TRON tools.
+
+**The assistant writes Ethereum code anyway.** Name the tool in your prompt ("use `tron-custom`"), and repeat the TRON facts from [step 1](#1-describe-what-you-want).
+
+**Generated code imports `@openzeppelin/contracts`.** That's the Ethereum library. Ask the agent to regenerate with a `tron-*` tool, or replace the import paths with `@openzeppelin/tron-contracts` and the `ERC` names with `TRC`.
+
+**`npx hardhat test` can't connect to Docker.** Start Docker. The tests need a local TRE container. See the [tutorial](/tron-contracts/guide-usdt-vault#test-on-a-local-tron-node).
+
+TODO(tool): failure modes of the dev tools (TRE not ready, unfunded deploy account, Tronscan verification mismatch).
+
+## Next steps
+
+- Work through [Build a USDT vault on TRON with Hardhat](/tron-contracts/guide-usdt-vault) by hand, if you skipped it.
+- Read [TVM Differences](/tron-contracts/tvm-differences). Your review checklist comes from it.
+- Generate other contracts with the `tron-*` tools: [TRC-20](/tron-contracts/trc20), [TRC-721](/tron-contracts/trc721), [TRC-1155](/tron-contracts/trc1155), [Governance](/tron-contracts/governance).
