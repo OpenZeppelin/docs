@@ -1,0 +1,82 @@
+---
+title: Best Practices for Account Holders
+---
+
+These practices are for anyone who holds a confidential account, and for the wallet developers who choose defaults
+on their behalf. The wallet carries out most of them: [Wallet Integration](/stellar-contracts/tokens/confidential/wallet-integration)
+states what a wallet must do, and this page states what a holder should do and why. The
+[Privacy Model](/stellar-contracts/tokens/confidential/privacy-model) explains what the chain makes public.
+
+## Before Registering
+
+- **Choose the auditor deliberately.** The `auditor_id` picked at registration can never change. That auditor sees
+  the amount of every transfer the account sends or receives and, from the account's first spend onward, its
+  balances. The choice is public too. Find out who holds the auditor key and under which rules it may be used.
+- **Know what your keys derive from.** When the wallet derives the account's keys from its Stellar signing key,
+  that key controls both spending and viewing, and the account's keys can't be rotated: registration is single-use,
+  so replacing a compromised signing key means registering a new address and moving the funds. Export the spending
+  secret as a backup before the account receives funds.
+- **Don't expect anonymity.** Your address appears in every operation you take part in. The confidential token hides
+  amounts and balances, not whom you deal with.
+
+## Keeping Amounts Private
+
+- **Keep value inside the confidential layer.** Deposit and withdrawal amounts are public, and a balance built only
+  from them is public too. Pay other holders with confidential transfers instead of withdrawing to the underlying
+  token and depositing again.
+- **Don't mirror amounts at the boundary.** Withdrawing exactly what you received, or depositing exactly what you are
+  about to send, reveals the hidden amount. Prefer common amounts for deposits and withdrawals, and don't tie their
+  timing to specific transfers.
+- **Expect counterparties to know.** The recipient of a transfer learns its amount, and so does the auditor on each
+  side.
+- **Never share your viewing key.** It reveals your whole history and the openings of every transfer you sent, and
+  since it is bound to your account at registration, it can't be revoked. To prove one fact, such as the amount of a
+  payment or that a balance is above a threshold, use
+  [Selective Disclosure](/stellar-contracts/tokens/confidential/selective-disclosure).
+- **Prove locally.** A remote prover sees your spending key, your balance, and the amount of every proof it builds.
+  Opt in to one only if you would trust it with your entire confidential history.
+
+## Protecting Your Balance
+
+The chain stores only commitments. The opening of each balance, which every spend needs, lives in your wallet, and
+the wallet rebuilds it from your keys and your account's event history when it loses its local state.
+
+- **Back up what recovers your keys.** That is the Stellar signing key for an account whose keys derive from it, and
+  the root or the exported spending secret otherwise. Losing it means losing the funds.
+- **Keep old signing keys.** If you rotate the signer that controls your address, keep the previous key: an account
+  whose keys derive from it can't be re-derived without it.
+- **Sync regularly.** Stellar RPC keeps events only for a limited window. A wallet that relies on RPC alone must sync
+  at least once per window, because credits that age out before it applies them are lost unless an
+  [archive](/stellar-contracts/tokens/confidential/indexing) holds them. Prefer wallets that use one.
+- **Merge regularly.** Received funds become spendable only after a merge, and regular merges also shorten the history
+  a recovery has to replay.
+- **Resync before spending after a warning.** A wallet that reports a mismatch between its local balance and the
+  on-chain commitment has missed or misapplied an event. Spending from that state fails.
+
+### Recovery Scenarios
+
+| Situation | What recovers the account |
+| --- | --- |
+| Device lost, keys derived from the signing key | The signing key, plus the event history from RPC or an archive |
+| Device lost, keys from a raw root or an imported secret | The backup of that root or secret, plus the event history. Without the backup, the funds can't be spent. |
+| Signing key rotated off the address and discarded | Only a previously exported spending secret |
+| Wallet unsynced for longer than the RPC window, no archive | Nothing, for the credits in the events that aged out |
+
+<Callout type="warning">
+Recover with the same wallet software that created the account where possible. The conformance vectors for key
+derivation don't exist yet, so two wallets are not guaranteed to derive the same account from the same backup. See
+[Requirements](/stellar-contracts/tokens/confidential/wallet-integration#requirements).
+</Callout>
+
+## Working with Spenders
+
+- **Escrow only what the spender needs, for as long as it needs it.** The allowance is all a compromised spender can
+  take, and the expiry bounds how long it can take it.
+- **Check the expiry before delegating.** `set_spender` accepts a `live_until_ledger` that has already passed, which
+  creates a delegation that is expired from the start.
+- **Revoke expired delegations.** Expiry stops the spender but doesn't return the escrow; only `revoke_spender` does.
+  An escrow that nobody touches for long enough is also archived, and must be restored before it can be revoked.
+- **Remember that delegations are public.** Each owner-spender pair, its expiry, and every transfer the spender makes
+  on your behalf are visible on-chain.
+- **Plan how to disclose spender transfers.** You can't produce a sender-side disclosure for a transfer your spender
+  made: ask the spender, or your auditor. See [Spenders](/stellar-contracts/tokens/confidential/spenders#auditing-and-disclosure).
