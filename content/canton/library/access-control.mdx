@@ -2,16 +2,26 @@
 title: Access Control
 ---
 
-Access Control is a standalone, token-agnostic role-based access control (RBAC) substrate for Daml. It is the Daml analogue of OpenZeppelin's `AccessControl.sol`: an authority (the `admin`, which plays the role of Solidity's `DEFAULT_ADMIN_ROLE` holder) grants named roles to accounts, and gated operations require that the caller holds the right role.
+Access Control is role-based authorization for Daml. It is the Daml analogue of OpenZeppelin's `AccessControl` and `AccessControlDefaultAdminRules`. An `admin` party (the `DEFAULT_ADMIN_ROLE` holder in Solidity) grants named roles to parties, and gated choices check that the caller holds the required role.
 
-The package is independent: it has no dependency on [Ownable](/canton/library/ownable) or [Pausable](/canton/library/pausable), so a project that wants only RBAC imports only this one package.
+The package has no dependency on other OpenZeppelin packages.
 
 <Callout type="warn">
-  Experimental and work in progress. This package is version 0.x, unaudited,
-  and not yet a stable public API: interfaces may change before a 1.0 release,
-  and it is not intended for production use. Source:
+  Experimental. Version 0.x, unaudited, and subject to a redesign before
+  release. Source:
   [`experiments/access/access-control-v1`](https://github.com/OpenZeppelin/canton-contracts/tree/main/experiments/access/access-control-v1)
   in `OpenZeppelin/canton-contracts`.
+</Callout>
+
+<Callout type="info">
+  This page documents the current experimental package. A replacement is in
+  review in [PR #48](https://github.com/OpenZeppelin/canton-contracts/pull/48)
+  and will be merged soon. The new `ScopedAuthorizationGrantV1` component
+  issues revocable, time-bounded grants. Before a protected choice runs, the
+  application checks the caller, the issuing authority, and the resource scope
+  of the grant. A treasury example in the PR builds role-based access control
+  on these grants. This page
+  will change when the new version is merged.
 </Callout>
 
 ```daml
@@ -20,61 +30,83 @@ import OpenZeppelin.AccessControlV1
 
 ## The Daml Model
 
-Two design choices differ from Solidity, and both are deliberate.
+**Roles are `Text`.** Solidity uses `bytes32` role IDs such as `keccak256("MINTER_ROLE")`. A Daml template field cannot be a type variable, so a generic role primitive stores `role : Text`. For compile-time checks, define your own role type and convert it with a function such as `roleId : MyRole -> Text`.
 
-**Roles are `Text` identifiers.** Solidity identifies roles with `bytes32` constants (for example `keccak256("MINTER_ROLE")`). Daml templates are monomorphic (a template field cannot be a type variable), so a reusable role primitive stores `role : Text`. This keeps the library generic: any contract can reuse it. A consumer that wants compile-time exhaustiveness layers its own closed role type on top with a thin `roleId : MyRole -> Text` wrapper.
-
-**A grant is a bearer credential, not a global map.** Daml-LF 2.1 has no contract keys, so there is no global role table to look up. Instead a `RoleGrant` is a contract signed by `admin` that names one `account`. Possession of a valid grant is the authorization: a gated choice fetches the grant the caller presents and checks that it is admin-signed, names the caller, and carries the required role. Because the grant is admin-signed it cannot be forged, and because it names a specific account the worst an adversary can do is present a grant they do not hold and fail their own authorization.
+**A grant is a contract.** Daml-LF 2.1 has no contract keys, so there is no global role table. A `RoleGrant` is a contract that `admin` signs and that names one `account`. A gated choice fetches the grant that the caller presents and checks three things: `admin` issued it, it names the caller, and it carries the required role. A party cannot forge a grant, because only `admin` can sign one. A party that presents a grant for another account fails the check.
 
 ## Templates
 
 ### `RoleGrant`
 
-A role granted by `admin` to `account`. Possession is authorization.
+A role that `admin` grants to `account`.
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `admin` | `Party` | The role authority (the `DEFAULT_ADMIN_ROLE` analogue) that issued the grant. |
-| `account` | `Party` | The party granted the role. |
-| `role` | `Text` | The role identifier, for example `"MINTER_ROLE"`. |
+| `admin` | `Party` | The authority that issued the grant. |
+| `account` | `Party` | The party that holds the role. |
+| `role` | `Text` | The role ID, for example `"MINTER_ROLE"`. |
 
 Signatory `admin`, observer `account`.
 
-- **`RoleGrant_Renounce`**: the grantee gives up its own role, archiving the grant (the `renounceRole` analogue). Self-only by construction, since `account` is the controller.
+- **`RoleGrant_Renounce`** (controller `account`, consuming, returns `()`): the holder gives up the role (the `renounceRole` analogue).
+
+`admin` can also archive a grant directly, because it is the signatory.
 
 ### `RoleAdmin`
 
-The role-administration authority that mints and revokes grants. Two paths coexist:
+The contract that issues and revokes grants. It has one field, `admin : Party`. Signatory `admin`. All choices are nonconsuming, so the contract stays active.
 
-- The root path, controlled by `admin`, where the `DEFAULT_ADMIN_ROLE` holder manages any role directly.
-- The role-admin path, controlled by an arbitrary `caller` (the `getRoleAdmin` analogue), where a delegate presents a grant for a caller-supplied `adminRole` and may then grant or revoke the target role. The new grant is still `admin`-signed because the choice runs with the contract's authority, so a delegate administers roles without holding the admin key.
-
-| Choice | Controller | Result | Description |
+| Choice | Controller | Arguments | Result |
 | --- | --- | --- | --- |
-| `RoleAdmin_GrantRole` | `admin` | `ContractId RoleGrant` | Grant `role` to `account`. |
-| `RoleAdmin_RevokeRole` | `admin` | `()` | Revoke a grant this admin issued. |
-| `RoleAdmin_GrantRoleAs` | `caller` | `ContractId RoleGrant` | Delegate grant: `caller` grants `role` by presenting its own grant for `adminRole`. |
-| `RoleAdmin_RevokeRoleAs` | `caller` | `()` | Delegate revoke, gated the same way. |
-| `RoleAdmin_BeginDefaultAdminTransfer` | `admin` | `ContractId DefaultAdminTransferOffer` | Begin a two-step, timelocked handoff of a role. |
+| `RoleAdmin_GrantRole` | `admin` | `account`, `role` | `ContractId RoleGrant` |
+| `RoleAdmin_RevokeRole` | `admin` | `grantCid` | `()` |
+| `RoleAdmin_GrantRoleAs` | `caller` | `caller`, `adminRole`, `adminGrantCid`, `account`, `role` | `ContractId RoleGrant` |
+| `RoleAdmin_RevokeRoleAs` | `caller` | `caller`, `adminRole`, `adminGrantCid`, `grantCid` | `()` |
+| `RoleAdmin_BeginDefaultAdminTransfer` | `admin` | `newAdmin`, `role`, `effectiveTime` | `ContractId DefaultAdminTransferOffer` |
 
-The library hard-codes no role-to-admin graph. `adminRole` is a caller-supplied `Text`: a consumer that wants a fixed hierarchy computes which admin role gates which target role in its own code and passes the result in.
+There are two ways to manage roles:
+
+- **Directly.** `admin` grants or revokes any role.
+- **Through a delegate** (the `getRoleAdmin` analogue). The `caller` presents its own grant for `adminRole`, then grants or revokes `role`. The choice runs with the authority of the `RoleAdmin` contract, so `admin` still signs the new grant. The delegate needs `RoleAdmin` disclosed to it, usually by an off-ledger service of the application.
+
+<Callout type="warn">
+  The library has no role hierarchy. The caller supplies `adminRole`, and the
+  choice checks only that the caller holds a grant for it. A party that can see
+  `RoleAdmin` and holds any grant from the same `admin` can name that role as
+  `adminRole`, then grant or revoke any role. The application must check that
+  `adminRole` is the correct admin role for `role` before it accepts a delegated
+  grant or revoke, and it must bind grants to the resource that they protect.
+</Callout>
+
+`DEFAULT_ADMIN_ROLE` has no special handling. Restrictions on who can delegate the root role are application policy.
 
 ### `DefaultAdminTransferOffer`
 
-A pending, timelocked transfer of a role to `newAdmin`, the `AccessControlDefaultAdminRules` analogue. It is an offer / accept handshake plus a ledger-time gate: `newAdmin` cannot accept before `effectiveTime`, and `admin` can cancel within the window. Pass the `DEFAULT_ADMIN_ROLE` id as `role` for a default-admin handoff.
+A pending, timelocked transfer of a role to `newAdmin` (the `AccessControlDefaultAdminRules` analogue). Use the `DEFAULT_ADMIN_ROLE` ID as `role` to hand over the default admin role.
 
-- **`DefaultAdminTransferOffer_Accept`** (controller `newAdmin`): accept once the timelock has elapsed; grants `role` by creating a `RoleGrant` for `newAdmin`.
-- **`DefaultAdminTransferOffer_Cancel`** (controller `admin`): cancel the pending handoff (the `cancelDefaultAdminTransfer` analogue).
+| Field | Type | Description |
+| --- | --- | --- |
+| `admin` | `Party` | The current admin. |
+| `newAdmin` | `Party` | The party that receives the role. |
+| `role` | `Text` | The role to transfer. |
+| `effectiveTime` | `Time` | The earliest ledger time for acceptance. |
+
+Signatory `admin`, observer `newAdmin`.
+
+- **`DefaultAdminTransferOffer_Accept`** (controller `newAdmin`, returns `ContractId RoleGrant`): accept when ledger time is at or after `effectiveTime`. Creates a `RoleGrant` of `role` for `newAdmin`.
+- **`DefaultAdminTransferOffer_Cancel`** (controller `admin`, returns `()`): cancel the transfer at any time before acceptance (the `cancelDefaultAdminTransfer` analogue).
+
+Acceptance does not revoke the role from the current admin. To make the transfer exclusive, revoke the old grant after acceptance.
 
 ## Helper Functions
 
-- **`requireRole : Party -> Text -> Party -> RoleGrant -> Update ()`**: the `requireRole` modifier analogue. Call it at the top of a gated choice. It asserts the grant is issued by the expected `admin`, names the `caller` (anti-impersonation), and carries the required `role`.
-- **`hasRole : Party -> Text -> Party -> RoleGrant -> Bool`**: the pure predicate form, for callers that already hold the fetched grant.
-- **`requireTimelockElapsed : Time -> Update ()`**: asserts the current ledger time has reached a given effective time. Shared by `DefaultAdminTransferOffer` and reusable by consumers running their own timelocked handoff.
+- **`requireRole : Party -> Text -> Party -> RoleGrant -> Update ()`**: the `onlyRole` modifier analogue. Call it at the start of a gated choice with the caller, the required role, the expected admin, and the fetched grant.
+- **`hasRole : Party -> Text -> Party -> RoleGrant -> Bool`**: the same check as a pure predicate.
+- **`requireTimelockElapsed : Time -> Update ()`**: fails if ledger time is before the given time. `DefaultAdminTransferOffer` uses it, and you can use it in your own timelocks.
 
-## Gating an Operation
+## Gating a Choice
 
-A consumer's privileged choice fetches the grant the caller presents and validates it before doing work:
+A privileged choice fetches the grant that the caller presents and checks it first. In this example, the enclosing template has an `admin : Party` field:
 
 ```daml
 nonconsuming choice Mint : ContractId Token
@@ -89,17 +121,19 @@ nonconsuming choice Mint : ContractId Token
     create Token with owner = caller; amount
 ```
 
+The fetch succeeds because `caller` is an observer of its own grant.
+
 ## Errors
 
-| Message | When |
+| Message | Cause |
 | --- | --- |
-| `AccessControl: grant admin is not the expected authority` | The presented grant was issued by a different admin. |
-| `AccessControl: grant does not name the caller (impersonation)` | The grant does not name the calling party. |
-| `AccessControl: grant does not carry the required role` | The grant is for a different role. |
-| `AccessControl: default-admin handoff nominee is the current admin` | A begin-transfer named the current admin. |
-| `AccessControl: default-admin transfer timelock has not elapsed` | Acceptance was attempted before `effectiveTime`. |
+| `AccessControl: grant admin is not the expected authority` | A different admin issued the presented grant, or the grant to revoke. |
+| `AccessControl: grant does not name the caller (impersonation)` | The grant names another party. |
+| `AccessControl: grant does not carry the required role` | The grant is for another role. |
+| `AccessControl: default-admin handoff nominee is the current admin` | `newAdmin` is the current admin. |
+| `AccessControl: default-admin transfer timelock has not elapsed` | Acceptance before `effectiveTime`. |
 
 ## Related
 
-- [Ownable](/canton/library/ownable), for the single-owner case.
-- [Pausable](/canton/library/pausable), for an emergency stop.
+- [Ownable](/canton/library/ownable) for a single owner.
+- [Pausable](/canton/library/pausable) for an emergency stop.
