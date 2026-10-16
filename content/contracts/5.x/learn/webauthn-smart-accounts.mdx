@@ -103,7 +103,7 @@ import {ERC7821} from "@openzeppelin/contracts/account/extensions/draft-ERC7821.
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {SignerWebAuthn} from "@openzeppelin/contracts/utils/cryptography/signers/SignerWebAuthn.sol";
 import {SignerP256} from "@openzeppelin/contracts/utils/cryptography/signers/SignerP256.sol";
-
+import {ERC4337Utils} from "@openzeppelin/contracts/account/utils/draft-ERC4337Utils.sol";
 
 contract AccountWebAuthn is
     Initializable,
@@ -139,6 +139,13 @@ contract AccountWebAuthn is
              caller == address(entryPoint()) ||
              super._erc7821AuthorizedExecutor(caller, mode, executionData);
      }
+
+	 /** 
+	  * @dev Override to use `ENTRYPOINT_V08` (required by the tutorial) instead of the default `ENTRYPOINT_V09`, otherwise `validateUserOp()` reverts with AA23.
+	  */
+	 function entryPoint() public view virtual override returns (IEntryPoint) {
+		return ERC4337Utils.ENTRYPOINT_V08;
+	 }
 }
 ```
 
@@ -1432,7 +1439,7 @@ app.post("/account/create", async (c) => {
 		});
 
 		// Predict account address
-		const [predictedAddress] = await publicClient.readContract({
+		const predictedAddress = await publicClient.readContract({
 			address: FACTORY_ADDRESS,
 			abi: accountFactoryAbi,
 			functionName: "predictAddress",
