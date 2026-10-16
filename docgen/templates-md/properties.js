@@ -44,24 +44,24 @@ module.exports.inheritance = function ({ item, build }) {
     .filter((c, i) => c.name !== 'Context' || i === 0);
 };
 
-module.exports['has-functions'] = function ({ item }) {
+module.exports.hasFunctions = function ({ item }) {
   return item.inheritance && item.inheritance.some(c => c.functions.length > 0);
 };
 
-module.exports['has-events'] = function ({ item }) {
+module.exports.hasEvents = function ({ item }) {
   return item.inheritance && item.inheritance.some(c => c.events.length > 0);
 };
 
-module.exports['has-errors'] = function ({ item }) {
+module.exports.hasErrors = function ({ item }) {
   return item.inheritance && item.inheritance.some(c => c.errors.length > 0);
 };
 
-module.exports['internal-variables'] = function ({ item }) {
+module.exports.internalVariables = function ({ item }) {
   return item.variables ? item.variables.filter(({ visibility }) => visibility === 'internal') : [];
 };
 
-module.exports['has-internal-variables'] = function ({ item }) {
-  return module.exports['internal-variables']({ item }).length > 0;
+module.exports.hasInternalVariables = function ({ item }) {
+  return module.exports.internalVariables({ item }).length > 0;
 };
 
 module.exports.functions = function ({ item }) {
@@ -79,7 +79,7 @@ module.exports.returns2 = function ({ item }) {
   }
 };
 
-module.exports['inherited-functions'] = function ({ item }) {
+module.exports.inheritedFunctions = function ({ item }) {
   const { inheritance } = item;
   if (!inheritance) return [];
 
