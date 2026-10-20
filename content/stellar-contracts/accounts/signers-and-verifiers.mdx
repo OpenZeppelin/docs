@@ -48,9 +48,25 @@ graph TD
     style SA4 fill:transparent,stroke:#888,stroke-width:2px
 ```
 
+#### Restrictions
+
+The Soroban host approves `require_auth_for_args` without a signature when the address is the direct invoker of the current `__check_auth`. Delegated signers that could be in that position are therefore rejected:
+
+- **Self-delegation**: a smart account cannot be its own delegated signer.
+- **Context contracts**: authorization fails when a delegated signer's address is the contract of any context being authorized. This covers a delegate contract that calls into the smart account, and the delegate's own `__check_auth` when two accounts delegate to each other. Two smart accounts built on this library can still list each other as delegated signers: each one is then authorized through the other's remaining signers, never through the delegation back.
+
+`do_check_auth` runs the context contract check before authenticating each signer. A custom `__check_auth` that calls `authenticate` directly, or calls `require_auth_for_args` itself as in the [example below](#transaction-simulation-behavior), must call `validate_no_delegated_context_contract` first.
+
+<Callout type="warning">
+A delegated signer must not be an account that delegates its own authentication back to the smart account, unless it is another smart account that authenticates through `do_check_auth`. The context contract check does not detect the following cases, in which the host approves the delegation back without a signature:
+
+- The account delegates to the smart account through [CAP-71](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0071.md) (`CustomAccount::delegate_auth`). The host runs the smart account's `__check_auth` from the account's own `__check_auth` and with the account's contexts, so the account is the invoker without being the contract of any context. The account, and any account relying on its authorization, can then be authorized without any key.
+- The account calls `require_auth` on the smart account from its own `__check_auth` without an equivalent check. The smart account can then be authorized without any key.
+</Callout>
+
 #### Transaction Simulation Behavior
 
-However, there is a caveat when using delegated signers: authorization entries are not automatically included in transaction simulation results and clients must manually construct these entries, which adds additional implementation complexity. This limitation may be overcome with future protocol improvements such as [CAP-71](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0071.md).
+Delegated signers also come with a client-side caveat: authorization entries are not automatically included in transaction simulation results and clients must manually construct these entries, which adds additional implementation complexity.
 
 When building transactions in Soroban, clients typically simulate them first to obtain the authorization trees and nonces needed for signing. The simulation mechanism precomputes the `SorobanAuthorizedInvocation` trees that must be authorized by the `Address`es for all `require_auth`/`require_auth_for_args` checks to pass.
 
@@ -82,6 +98,9 @@ impl CustomAccountInterface for MySmartAccount {
             context_rule_ids: auth_payload.context_rule_ids.clone(),
         };
         for (signer, _) in auth_payload.signers.iter() {
+            // Reject a delegated signer that is the contract of a context being
+            // authorized, which the host would approve without a signature
+            validate_no_delegated_context_contract(&e, &signer, &auth_contexts);
             match signer {
                 // ...
                 Signer::Delegated(addr) => {
@@ -369,11 +388,7 @@ After including both authorization entries in `signedAuths` and re-simulating th
 }
 ```
 
-#### Future Improvements
-
-While delegated signers currently require manual authorization entry construction, future protocol changes like [CAP-71](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0071.md) aim to streamline this process. These improvements would eliminate the need for the additional authorization entry, making delegated signers more intuitive and reducing transaction overhead.
-
-Despite the current complexity, delegated signers are valuable both for simple scenarios using traditional Stellar accounts (G-accounts) as signers and for advanced use cases requiring multi-level authorization or custom contract-based signing logic.
+Despite the manual entry construction, delegated signers are valuable both for simple scenarios using traditional Stellar accounts (G-accounts) as signers and for advanced use cases requiring multi-level authorization or custom contract-based signing logic.
 
 
 ### External

@@ -55,6 +55,10 @@ Rules are not iterated or auto-discovered. Instead, off-chain clients specify ex
 ### Automatic Expiration
 Expired rules are rejected during authorization evaluation.
 
+<Callout type="warning">
+By default, the `SmartAccount` management functions (adding, updating or removing context rules, signers and policies) require authorization from the smart account itself, so they need a valid rule that matches a call to the account: a `Default` rule, or a `CallContract` rule for the account's own address. The library does not ensure that such a rule remains. `add_context_rule` and `update_context_rule_valid_until` accept any expiry that is not already in the past, and `remove_context_rule` accepts the last such rule. Once no valid rule covers calls to the account, nothing can authorize a management function again, including adding a new rule, and the account is locked permanently. Rules scoped to other contracts keep working, but cannot restore access. Before setting a rule's expiry or removing a rule, check that another valid rule still covers the account itself.
+</Callout>
+
 ## Context Rule Limits
 
 - Maximum signers per context rule: 15
