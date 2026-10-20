@@ -1,0 +1,87 @@
+---
+title: Chainlink CCIP and ACE Integration
+description: How to configure and use Chainlink CCIP bridging and ACE policy enforcement around a token generated with the OpenZeppelin Contracts Wizard
+---
+
+This guide explains how to configure Chainlink CCIP and ACE around a token generated with the OpenZeppelin Contracts Wizard. Generating a token is the starting point: pool registration, permissions and policy configuration remain separate deployment tasks.
+
+Use the Wizard's option descriptions, CLI help or the connected MCP server's tool schema for the options supported by your version.
+
+For Chainlink setup procedures and current product support, see the [CCIP documentation](https://docs.chain.link/ccip) and the [ACE documentation](https://docs.chain.link/ace).
+
+## What the generator leaves to you
+
+The Solidity ERC20, Stablecoin and RWA generators offer both options. A token generated with CCIP exposes the mint and burn calls that a Chainlink burn-and-mint token pool makes, behind the token's own permissions, and designates an administrator for CCIP registration. A token generated with ACE forwards its value-moving operations (transfers, and the exposed mint and burn) to a Policy Engine that you deploy and configure. One token can do both.
+
+Complete the deployment tasks for the options you selected: pool registration, permissions and remote configuration for CCIP; Policy Engine and policy configuration for ACE; identity infrastructure where the chosen policies require it. The generated token does none of this. Other token standards, the Vault and the non-Solidity generators are not covered by this integration.
+
+## Licensing
+
+Tokens that use ACE are subject to BUSL-1.1, because they build on Chainlink's ACE components. Production use must satisfy the [ACE license](https://github.com/smartcontractkit/chainlink-ace/blob/v1.2.0/LICENSE) and its [additional use grants](https://github.com/smartcontractkit/chainlink-ace/blob/v1.2.0/chainlink-ace-License-grants). Tokens that use CCIP alone include no Chainlink code and keep the license you choose.
+
+## Walkthrough: a cross-chain ERC20 with ACE policy enforcement
+
+1. **Generate and review the token.** Choose the integration in the Wizard and review the resulting source. Follow the generated project's instructions to compile and prepare deployment.
+2. **Define the administrators.** Identify who controls token permissions, CCIP registration, the token pool and the Policy Engine. These responsibilities are separate even when the same account initially holds them.
+3. **Prepare the Policy Engine and deploy the token.** Verify the engine address and the token's deployment or initialization inputs. Attaching an engine does not configure the policies it will enforce.
+4. **Configure CCIP.** Follow Chainlink's [token registration](https://docs.chain.link/ccip/concepts/cross-chain-token/evm/registration-administration) and [pool configuration](https://docs.chain.link/ccip/concepts/cross-chain-token/evm/architecture) guidance. Grant the selected pool mint permission and, if Burnable is disabled, burn permission. With Burnable enabled, the pool can burn its own balance without a burner role. Associate the token with the pool and configure the remote counterpart and transfer limits.
+5. **Configure ACE.** For each protected operation, define the actor and parameters the policy must evaluate. Configure the corresponding selectors, extractors, policies and fallback behavior. Include the calls made by the pool in this design.
+6. **Verify the combined behavior.** Exercise permitted and rejected operations, unauthorized minting, and missing-policy behavior. With Burnable enabled, test burning your own balance and burning through an allowance; otherwise, verify that burning requires authorization. Confirm that legitimate pool operations satisfy both token permissions and ACE policies.
+
+ACE enforces the policies you configure. You remain responsible for configuring them to meet applicable requirements.
+
+## Responsibilities
+
+Keep these responsibilities separate in the deployment record, even when one account initially holds several of them. Record both the chain ID and the CCIP chain selector of every chain involved; they are different identifiers.
+
+| Responsibility | What to configure and verify |
+|---|---|
+| Token administrator | Grants and revokes the token's permissions. Before enabling transfers, verify that the selected pool has the permissions required to mint and burn, and that no other account holds them unintentionally. |
+| CCIP token administrator | Registers the token with Chainlink's token administration registry through a path the deployed registry module supports (the token's CCIP administrator, or its default administrator), accepts the administrator role and associates the local pool. Registration does not grant mint or burn permissions. See [registration and administration](https://docs.chain.link/ccip/concepts/cross-chain-token/evm/registration-administration). |
+| Pool owner | Configures the remote chain, the remote token and pool addresses, and the inbound and outbound rate limits, in the token's units. See [token pools](https://docs.chain.link/ccip/concepts/cross-chain-token/evm/architecture). |
+| Policy Engine administrator | Owns the engine's extractors, policies, their order and parameters, and the default behavior for operations without a policy. The token's own access scheme decides who may attach or replace the engine. |
+| Hook authorization | When pool-level ACE hooks are used, authorizes the pool as a caller of the hooks. Token permissions do not authorize hook calls. |
+| Identity administrators | When policies rely on identities and credentials, operate the registries and issuers. The generated token issues no credentials and deploys no identity infrastructure. |
+
+Do not copy addresses, owners or permissive defaults from test fixtures into a deployment.
+
+## Policies on the token
+
+ACE resolves policies by the external function called. For each protected operation, configure the policies and any extractors or parameter mappings they require. Verify the effective fallback behavior for the token, including any target-specific override: an engine that allows by default lets every operation without a policy through, so attaching an engine configures nothing on its own. An ACE policy allowing an operation does not bypass the token's other permission checks. Test an operation with no policy, the default-allow and default-reject behavior, an allowed payload, a rejected payload and the policy order.
+
+### Identify the actor each policy evaluates
+
+The immediate caller is not always the token holder. A delegated transfer is called by a spender, while a CCIP mint or burn is called by the pool. Policies should evaluate the intended actor using the parameters available to that operation.
+
+Allowing a pool to call the token does not validate the original cross-chain user. If a policy needs cross-chain sender or receiver information, follow Chainlink's guidance for the appropriate integration layer and verify that the required information reaches the policy.
+
+Token permissions and ACE policies are separate checks. A policy that allows an operation does not grant the caller permission to mint or burn.
+
+### Allowances, permit and Permit2
+
+The token runs policies where value moves. Approving a spender, including through a signed permit, only sets an allowance and is not a policy check; spending the allowance is, through the delegated transfer. When a policy needs to evaluate the token holder or the recipient, use the corresponding transfer parameters. Through Permit2, the immediate caller is the Permit2 contract, not the spender who initiated the transfer. Policies on who may receive an allowance are not covered by the generated token.
+
+For transfers that must be authorized case by case, ACE provides policies that accept a permit signed by an authorized issuer for a specific call. Their configuration, issuer authorization and the way a permit is supplied are described in the [ACE policy library](https://github.com/smartcontractkit/chainlink-ace/tree/60f04505f440c662351fe934e580f49c1821decc/packages/policy-management/src/policies).
+
+### Why some combinations are not covered yet
+
+Four situations sit behind the combinations the generator does not offer with ACE. They need their own reviewed design before the generator can cover them:
+
+- **Callback (ERC-1363).** The callback transfers reach the policy check, but the engine receives the callback's own selector, so each of those selectors needs appropriate parameter extraction and policy configuration, with tests showing that every operation is checked exactly once.
+- **Flash minting and the other bridge modes.** Flash loans, the ERC-7802 bridge functions used by the Custom and Superchain modes, and the ERC-7786 hooks mint and burn through paths that do not pass through the policy check. CCIP works with the current integration because its pool calls the token's guarded mint and burn.
+- **Premint.** An initial supply is minted during construction or initialization, outside the policy check.
+- **Managed access.** Integrating an access manager requires defining who may attach or replace the Policy Engine through that manager.
+
+These are limits of the current generator, not statements about ACE or about the standards involved. The restriction and freezing features of Stablecoin and RWA tokens are separate checks: they must still reject where expected when a policy allows an operation.
+
+## Identity
+
+If you use Chainlink's cross-chain identity components, configure the required registries and issuers following the [ACE documentation](https://docs.chain.link/ace). Decide how the source and destination chains obtain current identity data, and how an unknown identity, an expired credential, a revoked issuer or changed requirements are treated. The generated token issues no credentials and deploys no identity infrastructure.
+
+## Destination rejection and retry
+
+A policy rejection on the destination chain happens after the source transaction has already burned or locked the tokens; the destination revert does not roll back the source. Preserve the message ID and track the message state. For a recoverable policy or configuration issue, fix the cause and retry the same message through Chainlink's [manual execution](https://docs.chain.link/ccip/concepts/manual-execution) procedure; increasing gas does not override a policy rejection, and sending a fresh transfer or minting replacement tokens is not a retry. Test that a failed destination execution leaves no destination balance change and that the recovery settles exactly once.
+
+## Networks and the managed platform
+
+Check the [CCIP directory](https://docs.chain.link/ccip/directory) for both chains and the lane you intend to use, and [ACE supported networks](https://docs.chain.link/ace/supported-networks) for where ACE is available; package versions do not establish what is deployed on a network. Operating a self-deployed Policy Engine with the generated token and onboarding to Chainlink's managed ACE platform are different things; this guide covers the first. See [ACE beta scope](https://docs.chain.link/ace/beta-scope) for the managed platform.

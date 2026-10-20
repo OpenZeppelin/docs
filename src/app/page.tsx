@@ -22,6 +22,7 @@ import {
 	MonitorIcon,
 	PolkadotIcon,
 	RelayersIcon,
+	RoleManagerIcon,
 	StarknetIcon,
 	StellarIcon,
 	SuiIcon,
@@ -30,7 +31,6 @@ import {
 	UniswapIcon,
 	ZamaIcon,
 } from "@/components/icons";
-import { DefenderIcon } from "@/components/icons/defender-icon";
 import { latestStable as monitorLatestStable } from "../../content/monitor/latest-versions";
 import { latestStable as relayerLatestStable } from "../../content/relayer/latest-versions";
 import { baseOptions } from "./layout.config";
@@ -173,10 +173,10 @@ export default function HomePage() {
 						/>
 
 						<FeatureCard
-							href="/defender"
-							icon={<DefenderIcon className="h-5 w-5 sm:h-6 sm:w-6" />}
-							title="Defender"
-							description="Code, audit, deploy, monitor, and operate blockchain applications with OpenZeppelin's legacy developer security platform (maintenance mode)."
+							href="/role-manager"
+							icon={<RoleManagerIcon className="h-6 w-6 sm:h-8 sm:w-8" />}
+							title="Role Manager"
+							description="Manage contract permissions from one interface to define role-based access, set multi-level hierarchies, and assign granular admin controls for any team or governance model."
 						/>
 					</div>
 				</div>

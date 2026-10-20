@@ -53,12 +53,12 @@ export function useNavigationTree() {
 			pathname.startsWith("/community-contracts") ||
 			pathname.startsWith("/upgrades-plugins") ||
 			pathname.startsWith("/wizard") ||
-			pathname.startsWith("/upgrades") ||
-			pathname.startsWith("/defender")
+			pathname.startsWith("/upgrades")
 		) {
 			sessionStorage.setItem("lastEcosystem", "ethereum");
 		} else {
-			// Shared paths (/ui-builder, /monitor, /relayer, /ecosystem-adapters, /tools)
+			// Shared paths (/ui-builder, /monitor, /relayer, /role-manager,
+			// /ecosystem-adapters, /tools)
 			// have no ecosystem in their prefix. If the specific page is uniquely owned
 			// by one ecosystem (e.g. /relayer/.../guides/stellar-channels-guide -> Stellar),
 			// persist that so later navigation to ambiguous shared pages (quickstart, api/*)
@@ -106,6 +106,7 @@ export function useNavigationTree() {
 			pathname.startsWith("/monitor") ||
 			pathname.startsWith("/relayer") ||
 			pathname.startsWith("/ui-builder") ||
+			pathname.startsWith("/role-manager") ||
 			pathname.startsWith("/ecosystem-adapters") ||
 			pathname.startsWith("/tools")
 		) {
