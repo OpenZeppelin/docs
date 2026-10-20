@@ -55,7 +55,8 @@ Contract types can be combined as shown below. Each cell is the tuple to pass to
 Combinations that are not in the table are not supported. In particular, `Capped`, `RWA` and `Vault` rely on
 the tracked supply, so they require `TotalSupply` in the list, and `FungibleVotes` tracks voting units rather
 than the token supply, so it cannot be combined with `TotalSupply` or `Capped`. When both lists are used, an
-account has to be allowed and must not be blocked.
+account has to be allowed and must not be blocked. Neither list is checked on mint: the recipient is chosen by
+the contract's own mint entry-point (see [Minting](#minting)), which enforces its own access control.
 
 The order of the list does not matter, and additive extensions that don't override any behavior, such as
 `Burnable`, may be listed as well. A list that is not supported is rejected at compile time with an error
@@ -177,6 +178,40 @@ impl FungibleTotalSupply for GameCurrency {}
 Burns performed through `FungibleBurnable` decrease the supply automatically. The supply is stored in its
 own `persistent` entry, so mints and burns only conflict with each other and never with plain transfers.
 
+#### Upgrading from v0.7.x or Earlier
+
+Up to `stellar-tokens` v0.7.x, `Base` tracked the total supply in `instance` storage. When such a token is
+upgraded in place to a contract type that lists `TotalSupply` (as `RWA` and `Vault` tokens must), the old entry
+stays where it is, while `TotalSupply` reads its own `persistent` entry, which does not exist yet. Until the
+supply is migrated, `total_supply()` returns `0`, `Capped` checks new mints against a supply of `0`, and burns
+panic with `MathOverflow`, as the burned amount exceeds the recorded supply.
+
+`migrate_total_supply` moves the old supply to the new entry. It has no authorization checks, so it must be
+called from an access-controlled migration function right after the upgrade, ideally in the same transaction
+through an [upgrader contract](/stellar-contracts/utils/upgradeable#atomic-upgrade-and-migration). Building on
+the example above:
+
+```rust
+use stellar_contract_utils::upgradeable;
+use stellar_tokens::fungible::total_supply::migrate_total_supply;
+
+#[contractimpl]
+impl GameCurrency {
+    #[only_owner]
+    pub fn migrate(e: &Env) {
+        assert!(upgradeable::get_schema_version(e) < 2, "already migrated");
+
+        migrate_total_supply(e);
+        upgradeable::set_schema_version(e, 2);
+    }
+}
+```
+
+The old supply is added to the `persistent` entry instead of overwriting it, so tokens minted between the
+upgrade and the migration stay accounted for, and the `instance` entry is removed. The
+[`v1` / `v2` examples](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/upgradeable) show
+the full upgrade.
+
 ### - Capped
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/fungible/extensions/capped)
 
@@ -258,6 +293,7 @@ they take an `operator` parameter on which the desired access control should be 
 complete integration.
 
 The AllowList and BlockList extensions can also be used together, with `Compose<(AllowList, BlockList)>`.
+Neither list is checked on mint, since the contract's own mint entry-point chooses the recipient.
 
 ### - Votes
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/fungible/extensions/votes)

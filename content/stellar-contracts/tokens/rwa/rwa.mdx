@@ -368,7 +368,9 @@ Freezing Mechanisms are handled on the RWA token contract.
 
 RWA tokens support two types of freezing:
 
-1. **Address-level freezing**: Completely freeze an address from sending or receiving tokens
+1. **Address-level freezing**: Freeze an address, so that it can neither send tokens from its own balance nor
+   receive tokens. The freeze covers the address's own balance only: a frozen address can still act as the
+   spender in `transfer_from`, within the allowances other accounts granted it.
 2. **Partial token freezing**: Freeze a specific amount of tokens for an address
 
 ```rust
@@ -409,6 +411,11 @@ let moved: bool = RWA::recover_balance(e, &old_account, &new_account);
 the new account. Balances and freezes are stored per token, so after the identity has been recovered in the registry,
 `recover_balance` must be called on each token separately. It is still needed on a token where the old account holds
 nothing but is frozen, otherwise the freeze is not carried over to the new account.
+
+`recover_balance` only checks that its destination is the account recorded as the old account's recovery target, so
+that account has to stay with the same investor until every token has been recovered. The Identity Registry Storage
+enforces this: while the old account still holds a balance in any linked token, `remove_identity` on the new account
+and `recover_identity` from the new account to another one both fail with `AccountHasBalance`.
 
 ### Forced Transfers
 
@@ -660,9 +667,12 @@ Stores identity information for verified investors, including:
 - Recovery account mappings for lost wallet scenarios
 
 `remove_identity` is rejected while the wallet still holds a balance in any linked token, and a wallet replaced through
-`recover_identity` is permanently tombstoned and can never be registered again. There is no in-place identity swap:
-replacing a wallet's identity contract takes emptying the wallet first, through regular or forced transfers, then
-`remove_identity` followed by `add_identity` with the new identity.
+`recover_identity` is permanently tombstoned and can never be registered again. A wallet that got its identity through
+`recover_identity` can neither be removed nor recovered again while the old wallet still holds a balance in any linked
+token, so that `recover_balance` can still move those tokens to it (see [Recovery System](#recovery-system)).
+
+There is no in-place identity swap: replacing a wallet's identity contract takes emptying the wallet first, through
+regular or forced transfers, then `remove_identity` followed by `add_identity` with the new identity.
 
 ### - Identity Claims
 [Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/tokens/src/rwa/identity_verification/identity_claims)
@@ -737,7 +747,7 @@ registries and compliance contracts. This allows a single periphery contract to 
 Features:
 - Bind/unbind tokens to periphery services
 - Query all linked tokens
-- All bound tokens are kept in a single storage entry, capped at 100 tokens per periphery contract
+- All bound tokens are kept in a single storage entry, capped at 75 tokens per periphery contract
 - Swap-remove pattern for compact storage (the list order is not stable across unbinds)
 
 ## Architecture Overview
