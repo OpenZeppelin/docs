@@ -2,7 +2,7 @@
 title: Library
 ---
 
-The OpenZeppelin library for Canton brings the patterns of the OpenZeppelin Solidity contracts to Daml: role-based access control, ownership, an emergency stop, and a standard token. Each package follows the Canton authorization and privacy model. Where Daml differs from the EVM, the package page explains the difference.
+The OpenZeppelin library for Canton brings the patterns of the OpenZeppelin Solidity contracts to Daml: scoped authorization, an emergency stop, and a standard token. Each package follows the Canton authorization and privacy model. Where Daml differs from the EVM, the package page explains the difference.
 
 <Callout type="warn">
   No package has a release or an audit yet. Packages under
@@ -18,9 +18,8 @@ The OpenZeppelin library for Canton brings the patterns of the OpenZeppelin Soli
 
 | Component | Module | Solidity analogue | Status |
 | --- | --- | --- | --- |
+| [Scoped Authorization Grant](/canton/library/scoped-authorization-grant) | `OpenZeppelin.ScopedAuthorizationGrantV1` | `AccessControl` (no role hierarchy) | Pre-release |
 | [Pausable](/canton/library/pausable) | `OpenZeppelin.Api.PausableV1`, `OpenZeppelin.PausableV1` | `Pausable` | Pre-release |
-| [Access Control](/canton/library/access-control) | `OpenZeppelin.AccessControlV1` | `AccessControl`, `AccessControlDefaultAdminRules` | Experimental |
-| [Ownable](/canton/library/ownable) | `OpenZeppelin.OwnableV1` | `Ownable2Step` | Experimental |
 | [Token (CIP-0112)](/canton/library/token) | `OpenZeppelin.TokenCIP112V1.*` | `ERC20` (partial) | Experimental |
 
 ## Design Rules
@@ -33,7 +32,7 @@ The OpenZeppelin library for Canton brings the patterns of the OpenZeppelin Soli
 
 **Composition in the application.** Implementation packages do not depend on each other. Applications combine them directly or through interfaces.
 
-**No Daml Script in production DARs.** The shipped packages do not depend on `daml-script`. Each component has its own test package under `test/` or `experiments/test/`. Test packages are never released or uploaded.
+**No Daml Script in production DARs.** The shipped packages do not depend on `daml-script`. Each component has its own `-test` package under `test/` or `experiments/test/`. Test packages are never released or uploaded.
 
 **Public and internal modules.** The documented modules are the public API. Implementation modules use an `.Internal` suffix. This is a naming convention; the ledger does not enforce it.
 
@@ -41,7 +40,7 @@ The OpenZeppelin library for Canton brings the patterns of the OpenZeppelin Soli
 
 The packages are keyless: there are no contract keys and no global lookups. The application that uses a package must:
 
-- Select the canonical contract for each protected resource, for example the one `Ownership` contract that applies.
+- Select the canonical contract for each protected resource, for example the one `Treasury` contract that a grant scope names.
 - Bind authority and state to that resource.
 - Disclose the contracts that other parties must read.
 - Review its complete dependency graph.
@@ -53,8 +52,7 @@ Build the packages, add the DARs as `data-dependencies`, and import the modules:
 ```daml
 import OpenZeppelin.Api.PausableV1 (Pausable, PausableView (..))
 import qualified OpenZeppelin.PausableV1 as Pausable
-import OpenZeppelin.AccessControlV1
-import OpenZeppelin.OwnableV1
+import qualified OpenZeppelin.ScopedAuthorizationGrantV1 as SAG
 ```
 
 See [Get Started](/canton/get-started) for the full setup, and [`examples/`](https://github.com/OpenZeppelin/canton-contracts/tree/main/examples) for runnable projects.
