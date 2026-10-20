@@ -15,7 +15,7 @@ for access control and contract management.
 *   **[Fungible Tokens](/stellar-contracts/tokens/fungible/fungible)**: Digital assets representing a fixed or dynamic supply of identical units.
 *   **[Non-Fungible Tokens (NFTs)](/stellar-contracts/tokens/non-fungible/non-fungible)**: Unique digital assets with verifiable ownership.
 *   **[Real World Assets (RWAs)](/stellar-contracts/tokens/rwa/rwa)**: Digital assets representing real-world assets.
-*   **[Vault](/stellar-contracts/tokens/vault/vault)**: Digital assets representing a fixed or dynamic supply of identical units.
+*   **[Vault](/stellar-contracts/tokens/vault/vault)**: ERC-4626 tokenized vaults issuing shares that represent proportional ownership of an underlying asset.
 *   **[Confidential Token](/stellar-contracts/tokens/confidential/confidential)**: SEP-41 wrapper with private balances and transfer amounts, verified on-chain with zero-knowledge proofs.
 
 ## Access Control
@@ -33,7 +33,10 @@ for access control and contract management.
 
 *   **[Pausable](/stellar-contracts/utils/pausable)**: Pause and unpause contract functions, useful for emergency response.
 *   **[Upgradeable](/stellar-contracts/utils/upgradeable)**: Manage contract upgrades and data migrations seamlessly.
+*   **[WAD](/stellar-contracts/utils/math/wad)**: Fixed-point decimal arithmetic with 18 decimals of precision.
+*   **[Fixed-Point Math](/stellar-contracts/utils/math/fixed-point)**: Full-precision `x * y / denominator` on `i128` and `I256` with explicit rounding.
 *   **[Cryptography](/stellar-contracts/utils/crypto/crypto)**: A set of cryptographic primitives and utilities for Soroban contracts.
+*   **[Merkle Distributor](/stellar-contracts/utils/crypto/merkle-distributor)**: Merkle-proof-based claims, e.g. for airdrops.
 
 ## Fee Abstraction
 
@@ -44,8 +47,9 @@ for access control and contract management.
 Our contracts are built with security as a top priority. You can find our audit reports [here](https://github.com/OpenZeppelin/stellar-contracts/tree/main/audits).
 
 ## Error Codes
-In Stellar Soroban, each error variant is assigned an integer. To prevent duplication of error codes,
-we use the following convention:
+In Stellar Soroban, each error variant is assigned an integer. A failed invocation reports only that integer,
+e.g. `Error(Contract, #4200)`, and not which contract in the call tree raised it, so every error code is unique
+across the library. We use the following convention:
 
 * Fungible: `1XX`
 * Non-Fungible: `2XX`
@@ -59,7 +63,6 @@ Similarly, utilities and other modules have their own error codes:
 
 * Utilities: `1XXX`
   * Pausable: `10XX`
-  * Upgradeable: `11XX`
   * Merkle Distributor: `13XX`
   * Crypto: `14XX`
   * Math: `15XX`
@@ -74,8 +77,14 @@ Similarly, utilities and other modules have their own error codes:
   * Token: `35XX`
   * Compliance: `36XX`
 * Governance: `4XXX`
+  * Timelock: `40XX`
+  * Votes: `41XX`
+  * Governor: `42XX`
 * Fee Abstraction: `5XXX`
 * ZK Email: `6XXX`
+
+The library never uses `39XX`, which is reserved for smart account policies built outside of it, nor codes
+below `100`, which are left to contract-specific errors.
 
 ## Important Notes
 As a deliberate design choice, this library manages the TTL for temporary and persistent storage items.

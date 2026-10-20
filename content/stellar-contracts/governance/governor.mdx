@@ -30,14 +30,15 @@ stateDiagram-v2
     Succeeded --> Executed: execute()
     Succeeded --> Queued: queue() (if enabled)
     Queued --> Executed: execute()
-    Queued --> Expired: expiration passes
+    Queued --> Expired: set by an extension (not built in)
     Pending --> Canceled: cancel()
     Active --> Canceled: cancel()
+    Defeated --> Canceled: cancel()
     Succeeded --> Canceled: cancel()
     Queued --> Canceled: cancel()
 ```
 
-1. **Propose**: Anyone with enough voting power (above the `proposal_threshold`) creates a proposal. A **voting delay** begins — a buffer period that gives token holders time to acquire tokens or delegate before the vote opens.
+1. **Propose**: Anyone with enough voting power (at least the `proposal_threshold`) creates a proposal. A **voting delay** begins — a buffer period that gives token holders time to acquire tokens or delegate before the vote opens.
 
 2. **Vote**: Once the delay passes, the proposal becomes **Active** and token holders can vote: Against (0), For (1), or Abstain (2). Each voter's power is looked up at the snapshot ledger (when the voting period started), not at the moment they vote. This prevents flash loan attacks.
 
@@ -53,7 +54,11 @@ stateDiagram-v2
 
 ### Optional: Queuing with a Timelock
 
-For systems that need a safety delay between a successful vote and execution, the Governor supports an optional **queue** step. When enabled, succeeded proposals must first be queued, which starts a timelock delay. During this delay, community members can review the upcoming change and exit the protocol if they disagree.
+For systems that need a safety delay between a successful vote and execution, the Governor supports an optional
+**queue** step. When enabled, succeeded proposals must first be queued before they can be executed. The Governor itself
+does not enforce the delay (`queue` only emits the `eta` in an event); it comes from the integration, typically a
+[Timelock Controller](/stellar-contracts/governance/timelock-controller) that schedules the proposal's execution.
+During this delay, community members can review the upcoming change and exit the protocol if they disagree.
 
 This flow becomes: **Propose → Vote → Queue → Execute**
 
@@ -131,12 +136,20 @@ The `Governor` trait defines the full governance interface. Most methods have de
 fn name(e: &Env) -> String;
 fn version(e: &Env) -> String;
 fn voting_delay(e: &Env) -> u32;          // ledgers before voting starts
-fn voting_period(e: &Env) -> u32;         // ledgers during which voting is open
+fn voting_period(e: &Env) -> u32;         // ledgers during which voting is open (non-zero)
 fn proposal_threshold(e: &Env) -> u128;   // minimum voting power to propose
 fn get_token_contract(e: &Env) -> Address; // the Votes-enabled token contract
 fn counting_mode(e: &Env) -> Symbol;      // identifies the counting strategy
 fn proposals_need_queuing(e: &Env) -> bool; // defaults to false
 ```
+
+The default getters read values written by the storage setters `set_name`, `set_version`, `set_token_contract`,
+`set_voting_delay`, `set_voting_period`, `set_proposal_threshold` and `set_quorum`. These setters perform no
+authorization checks and are typically called from the constructor (see [Example](#example)). Until a value is set, the
+corresponding getter panics with a `*NotSet` error (e.g. `GovernorError::VotingPeriodNotSet`), so proposing and voting
+fail. `set_token_contract` can only be called once, and `set_voting_period` rejects `0` with
+`GovernorError::InvalidVotingPeriod`, since a zero-length voting window would make every proposal go straight from
+`Pending` to `Defeated`.
 
 ### Proposal Lifecycle
 
@@ -184,37 +197,69 @@ pub enum ProposalState {
     Defeated = 2,   // Voting ended without success
     Canceled = 3,   // Cancelled by authorized account
     Succeeded = 4,  // Met quorum and vote thresholds
-    Queued = 5,     // Queued for execution (via extension)
+    Queued = 5,     // Queued for execution (when queuing is enabled)
     Expired = 6,    // Expired after queuing (via extension)
     Executed = 7,   // Successfully executed
 }
 ```
 
-States are divided into **time-based** (Pending, Active, Defeated) — derived from the current ledger, never stored — and **explicit** (all others) — persisted in storage, taking precedence once set.
+States are divided into **derived** (Pending, Active, Succeeded, Defeated) — computed from the current ledger and the
+vote tallies, never stored — and **stored** (Canceled, Queued, Executed, Expired) — persisted by the lifecycle
+functions, taking precedence once set. The library never sets `Expired`; it is reserved for extensions that implement
+an expiration window.
 
 ## Example
 
+The constructor initializes every configuration value, and the `Governor` implementation uses
+`#[contractimpl(contracttrait)]` so that the trait's default methods (`propose`, `cast_vote`, `queue`, `name`,
+`proposal_state`, ...) are exported alongside `execute` and `cancel`. With a plain `#[contractimpl]`, only the methods
+written out in the `impl` block would be callable. Types used in the default method signatures, such as
+`ProposalState`, must be in scope.
+
 ```rust
 use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String, Symbol, Val, Vec};
-use stellar_governance::governor::{self, storage, Governor, hash_proposal, get_proposal_snapshot};
+use stellar_governance::governor::{self as governor, Governor, ProposalState};
 
 #[contract]
 pub struct MyGovernor;
 
 #[contractimpl]
+impl MyGovernor {
+    pub fn __constructor(
+        e: &Env,
+        token_contract: Address,
+        voting_delay: u32,
+        voting_period: u32,
+        proposal_threshold: u128,
+        quorum: u128,
+    ) {
+        governor::set_name(e, String::from_str(e, "MyGovernor"));
+        governor::set_version(e, String::from_str(e, "1.0.0"));
+        governor::set_token_contract(e, &token_contract);
+        governor::set_voting_delay(e, voting_delay);
+        governor::set_voting_period(e, voting_period); // panics if 0
+        governor::set_proposal_threshold(e, proposal_threshold);
+        governor::set_quorum(e, quorum);
+    }
+}
+
+#[contractimpl(contracttrait)]
 impl Governor for MyGovernor {
-    // Open execution — anyone can trigger a succeeded proposal
+    // Open execution: any account can trigger a succeeded proposal,
+    // as long as they authenticate themselves as `executor`.
     fn execute(
         e: &Env,
         targets: Vec<Address>,
         functions: Vec<Symbol>,
         args: Vec<Vec<Val>>,
         description_hash: BytesN<32>,
-        _executor: Address,
+        executor: Address,
     ) -> BytesN<32> {
-        let proposal_id = hash_proposal(e, &targets, &functions, &args, &description_hash);
-        let quorum = Self::quorum(e, get_proposal_snapshot(e, &proposal_id));
-        storage::execute(
+        executor.require_auth();
+        let proposal_id =
+            governor::hash_proposal(e, &targets, &functions, &args, &description_hash);
+        let quorum = Self::quorum(e, governor::get_proposal_snapshot(e, &proposal_id));
+        governor::execute(
             e, targets, functions, args, &description_hash,
             Self::proposals_need_queuing(e), quorum,
         )
@@ -229,16 +274,21 @@ impl Governor for MyGovernor {
         description_hash: BytesN<32>,
         operator: Address,
     ) -> BytesN<32> {
-        let proposal_id = storage::hash_proposal(
-            e, &targets, &functions, &args, &description_hash,
-        );
-        let proposer = storage::get_proposal_proposer(e, &proposal_id);
+        let proposal_id =
+            governor::hash_proposal(e, &targets, &functions, &args, &description_hash);
+        let proposer = governor::get_proposal_proposer(e, &proposal_id);
         assert!(operator == proposer);
         operator.require_auth();
-        storage::cancel(e, targets, functions, args, &description_hash)
+        governor::cancel(e, targets, functions, args, &description_hash)
     }
 }
 ```
+
+For complete contracts with tests, see the
+[fungible-governor](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/fungible-governor) example
+and [fungible-governor-timelock](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/fungible-governor-timelock),
+which enables queuing and routes execution through a
+[Timelock Controller](/stellar-contracts/governance/timelock-controller).
 
 ## See Also
 
