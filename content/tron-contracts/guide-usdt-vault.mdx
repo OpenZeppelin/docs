@@ -144,7 +144,7 @@ contract UsdtVault is TRC4626 {
 
 That's a complete, standard-compliant vault. `TRC4626` handles share accounting, the preview functions and rounding. You don't write transfer code: deposits pull USDT with `SafeTRC20.safeTransferFrom`, and withdrawals pay out through `SafeTRC20.safeTransferChecked`, which works with USDT-TRON (more on that below).
 
-`_decimalsOffset()` defends against the **inflation attack**. In that attack, someone deposits a tiny amount into an empty vault, then donates a large amount directly to it so the next depositor's shares round down to zero. An offset of 6 gives shares 6 more decimals than USDT (12 instead of 6) and adds virtual shares to the exchange rate, so the attack costs the attacker far more than it can take. The [TRC-4626 page](/tron-contracts/trc4626#defending-with-a-virtual-offset) works through the math.
+`_decimalsOffset()` deepens the defence against the **inflation attack**, where someone deposits a tiny amount into an empty vault and then donates a large amount directly to it, so the next depositor's shares round down in the attacker's favour. `TRC4626` already blunts this with virtual shares. An offset of 6 gives shares 6 more decimals than USDT (12 instead of 6), which raises the cost of the attack by a factor of 10⁶. The [TRC-4626 page](/tron-contracts/trc4626#defending-with-a-virtual-offset) works through the math.
 
 <Callout>
 USDT-TRON has **6 decimals**, and so does TRX (1 TRX = 1,000,000 SUN). Write amounts as `ethers.parseUnits('10', 6)` in JavaScript, or `10 * 10**6` in Solidity. Never use `parseEther` or the `ether` unit: `1 ether` is 10¹⁸ base units, which is 10¹² TRX or a trillion USDT.
@@ -746,7 +746,7 @@ npx hardhat run scripts/deploy.js --network nile
 TODO(verify): paste real output from a Nile deploy.
 
 <Callout>
-TRON has no gas. Transactions use **bandwidth** (for transaction size) and **energy** (for contract execution). Your account gets some free bandwidth each day. Energy you haven't staked TRX for is paid by burning TRX. The plugin sets a fee limit of 1,000 TRX (`1_000_000_000` SUN) per transaction. That is a cap, not a charge: you pay only for the energy used. A deploy this size usually burns a few dozen to a few hundred TRX on Nile. TODO(verify): measure the actual energy and TRX cost of this deploy. To raise or lower the cap for a call, pass `{ gasLimit }`; the plugin converts it into a fee limit.
+TRON has no gas. Transactions use **bandwidth** (for transaction size) and **energy** (for contract execution). Your account gets some free bandwidth each day. Energy you haven't staked TRX for is paid by burning TRX. The plugin sets a fee limit of 1,000 TRX (`1_000_000_000` SUN) per transaction. That is a cap, not a charge: you pay only for the energy used. TODO(verify): measure the actual energy and TRX cost of this deploy. To raise or lower the cap for a call, pass `{ gasLimit }`; the plugin converts it into a fee limit.
 </Callout>
 
 ### Interact with the vault
@@ -796,7 +796,7 @@ main().catch((error) => {
 VAULT_ADDRESS=<T... address from deploy.js> npx hardhat run scripts/interact.js --network nile
 ```
 
-Your USDT balance ends a little lower than it started, by the entry and exit fees. Because the treasury is your own address in this tutorial, the fees come straight back to you. The redeem worked even though Nile's USDT returns `false` from `transfer`, because `TRC4626` paid it out with `safeTransferChecked`.
+Your USDT balance comes back close to where it started. The vault charged both fees, but the treasury is your own address in this tutorial, so they came straight back. What you actually spent is TRX for energy. Point the treasury at a different address and you would end up lower by the two fees. The redeem worked even though Nile's USDT returns `false` from `transfer`, because `TRC4626` paid it out with `safeTransferChecked`.
 
 TODO(verify): run against Nile and confirm `tx.hash` and `.wait()` behave as shown through the hardhat-tron bridge.
 
