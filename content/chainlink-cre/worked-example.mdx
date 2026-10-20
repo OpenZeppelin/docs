@@ -3,9 +3,7 @@ title: Worked Example
 description: Port OpenZeppelin's Defender governance alert to Chainlink CRE, then simulate, deploy, and verify it on Sepolia
 ---
 
-This is Part 2 of Adapting Defender Workflows to Chainlink CRE. Part 1 maps each kind of Defender workflow to CRE and explains what changes; this part puts that into practice with one complete port you can run yourself.
-
-**Part 1:** [Mapping Your Defender Setup](/chainlink-cre)
+This is Part 2. [Mapping Your Defender Setup](/chainlink-cre) maps each kind of Defender setup to CRE and explains what changes; this part puts that into practice with one complete port you can run yourself.
 
 <a id="what-youll-build"></a>
 ## What You'll Build
@@ -36,9 +34,9 @@ This walkthrough relies on a few ideas from Part 1. If any of them is new, read 
 
 **Tested with** CRE CLI 1.34.0, `@chainlink/cre-sdk` 1.19.1, and Bun 1.4.0. **Bun 1.4 or later is required:** on Bun 1.3.x, `bun install --frozen-lockfile` in Step 1 fails with `UnknownLockfileVersion`. Check with `bun --version`. Have these ready:
 
-- The example project, [`gov-alert` in OpenZeppelin/defender-to-cre-examples](https://github.com/OpenZeppelin/defender-to-cre-examples/tree/v1.0.1/gov-alert), plus [Bun](https://bun.sh/docs/installation) 1.4 or later, [Foundry](https://www.getfoundry.sh/introduction/installation) (for the fixture and [Step 7](#step-7)'s `cast send`), and the [CRE CLI](https://docs.chain.link/cre/getting-started/cli-installation), [logged in](https://docs.chain.link/cre/account/cli-login).
+- The example project, [`gov-alert` in OpenZeppelin/defender-to-cre-examples](https://github.com/OpenZeppelin/defender-to-cre-examples/tree/v1.0.2/gov-alert), plus [Bun](https://bun.sh/docs/installation) 1.4 or later, [Foundry](https://www.getfoundry.sh/introduction/installation) (for the fixture and [Step 7](#step-7)'s `cast send`), and the [CRE CLI](https://docs.chain.link/cre/getting-started/cli-installation), [logged in](https://docs.chain.link/cre/account/cli-login).
 - A Sepolia RPC endpoint.
-- A Governor on Sepolia that emits the standard `ProposalCreated` event, and an existing transaction from it to replay. Your own is best, because [Step 7](#step-7) needs you to create a new proposal on it. The repo's [`fixture`](https://github.com/OpenZeppelin/defender-to-cre-examples/tree/v1.0.1/gov-alert/fixture) folder deploys one with Foundry.
+- A Governor on Sepolia that emits the standard `ProposalCreated` event, and an existing transaction from it to replay. Your own is best, because [Step 7](#step-7) needs you to create a new proposal on it. The repo's [`fixture`](https://github.com/OpenZeppelin/defender-to-cre-examples/tree/v1.0.2/gov-alert/fixture) folder deploys one with Foundry.
 - An HTTP endpoint you control that accepts a POST, lets you read the incoming headers and body, and can be switched to return a non-2xx status ([Step 8](#step-8)), plus a second URL that returns non-2xx ([Step 5](#step-5)).
 - [`jq`](https://jqlang.org/download/), to read a transaction receipt in [Step 3](#step-3).
 - For [Steps 6 to 9](#step-6) only: [CRE deploy access](https://docs.chain.link/cre/account/deploy-access) (`cre account access` shows your status) **and** an enabled private registry, the Chainlink-hosted service that stores workflow registrations, which you can confirm with `cre registry list`.
@@ -67,10 +65,10 @@ Each step below is collapsible. Open a step to see its commands and what to chec
 <details>
 <summary><strong>Step 1: Prepare the Example</strong></summary>
 
-Clone [OpenZeppelin/defender-to-cre-examples](https://github.com/OpenZeppelin/defender-to-cre-examples/tree/v1.0.1) and move into its [`gov-alert`](https://github.com/OpenZeppelin/defender-to-cre-examples/tree/v1.0.1/gov-alert) folder:
+Clone [OpenZeppelin/defender-to-cre-examples](https://github.com/OpenZeppelin/defender-to-cre-examples/tree/v1.0.2) and move into its [`gov-alert`](https://github.com/OpenZeppelin/defender-to-cre-examples/tree/v1.0.2/gov-alert) folder:
 
 ```bash
-git clone --branch v1.0.1 https://github.com/OpenZeppelin/defender-to-cre-examples.git
+git clone --branch v1.0.2 https://github.com/OpenZeppelin/defender-to-cre-examples.git
 cd defender-to-cre-examples/gov-alert
 ```
 
@@ -109,7 +107,7 @@ Expected: `bun test` passes and `bun run typecheck` exits without errors. Nothin
 <details>
 <summary><strong>Step 2: Configure Your Governor and Notification Destination</strong></summary>
 
-Create `gov-alert/config.simulation-blog.json` with these fields. Replace the placeholder address and URL before running it:
+Copy `gov-alert/config.example.json` to `gov-alert/config.simulation-local.json`, then fill in the Governor address and your test endpoint:
 
 ```json
 {
@@ -170,7 +168,7 @@ cre workflow simulate ./gov-alert --non-interactive \
   --trigger-index 0 \
   --evm-tx-hash "$SEPOLIA_TX_HASH" \
   --evm-event-index "$EVENT_POSITION" \
-  --config config.simulation-blog.json \
+  --config config.simulation-local.json \
   --target staging-settings
 ```
 
@@ -188,7 +186,7 @@ At your endpoint, inspect the `text` field. For a proposal titled "Upgrade the t
 
 ```json
 {
-  "text": "**New Proposal** Upgrade the treasury by 0x1234 [TX](https://sepolia.etherscan.io/tx/TRANSACTION_HASH)"
+  "text": "**New Proposal** Upgrade the treasury by 0x1234 [TX](<https://sepolia.etherscan.io/tx/TRANSACTION_HASH>)"
 }
 ```
 
@@ -209,7 +207,7 @@ The log index in that header is the one CRE supplies with the decoded event, whi
 <details>
 <summary><strong>Step 5: Check the Failure Path</strong></summary>
 
-Point `notifyWebhookUrl` in `gov-alert/config.simulation-blog.json` at a fresh test endpoint URL that returns a non-2xx response (the example's request caches responses for up to 60 seconds via `cacheSettings`, so a fresh URL avoids reusing the cached success from [Step 3](#step-3)). Rerun the [Step 3](#step-3) `cre workflow simulate` command and confirm the run fails and its output includes `HTTP request failed with status: <status>`, the error thrown by the request code covered in Part 1, [section 05](/chainlink-cre#offchain-actions). Then restore the working URL.
+Point `notifyWebhookUrl` in `gov-alert/config.simulation-local.json` at a fresh test endpoint URL that returns a non-2xx response (the example's request caches responses for up to 60 seconds via `cacheSettings`, so a fresh URL avoids reusing the cached success from [Step 3](#step-3)). Rerun the [Step 3](#step-3) `cre workflow simulate` command and confirm the run fails and its output includes `HTTP request failed with status: <status>`, the error thrown by the request code covered in Part 1, [section 05](/chainlink-cre#offchain-actions). Then restore the working URL.
 
 </details>
 
@@ -230,7 +228,7 @@ staging-settings:
     secrets-path: ""
 ```
 
-Create `gov-alert/config.staging.json` with the same four fields as [Step 2](#step-2) (or edit it, if the example ships one), and set `notifyWebhookUrl` to an endpoint you can inspect. Then deploy from the project root and confirm the registration:
+Create `gov-alert/config.staging.json` from `config.example.json` with the same four fields as [Step 2](#step-2), and set `notifyWebhookUrl` to an endpoint you can inspect. Then deploy from the project root and confirm the registration:
 
 ```bash
 cre workflow deploy ./gov-alert --target staging-settings
