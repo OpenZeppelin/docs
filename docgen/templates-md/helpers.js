@@ -8,17 +8,31 @@ const API_DOCS_PATH = 'contracts/5.x/api';
 
 module.exports['oz-version'] = () => version;
 
-module.exports['readme-path'] = opts => {
-  const pageId = opts.data.root.id;
+// Page path without extension. The index page (root-level README.adoc) maps to the sources root.
+function pageBasePath(pageId) {
   const basePath = pageId.replace(/\.(adoc|mdx)$/, '');
-  return 'contracts/' + basePath + '/README.adoc';
+  return basePath === 'index' ? '' : basePath;
+}
+
+// Sources live under contracts/ (single-package repos) or src/ (e.g. monorepo packages published from src/)
+const SOURCES_DIRS = ['contracts', 'src'];
+
+module.exports['readme-path'] = opts => {
+  const basePath = pageBasePath(opts.data.root.id);
+  const candidates = SOURCES_DIRS.flatMap(dir =>
+    ['README.mdx', 'README.adoc'].map(readme => path.join(dir, basePath, readme)),
+  );
+  return candidates.find(candidate => fs.existsSync(candidate)) ?? candidates[0];
 };
 
 module.exports.readme = readmePath => {
   try {
     if (fs.existsSync(readmePath)) {
       const readmeContent = fs.readFileSync(readmePath, 'utf8');
-      return processAdocContent(readmeContent);
+      // Markdown page files are used as-is, minus the leading title (the page frontmatter provides it)
+      return readmePath.endsWith('.mdx')
+        ? readmeContent.replace(/^#[ \t]+.*\n+/, '')
+        : processAdocContent(readmeContent);
     }
   } catch (error) {
     console.warn(`Warning: Could not process README at ${readmePath}:`, error.message);
@@ -48,12 +62,12 @@ module.exports['reset-function-counts'] = function () {
 
 module.exports.eq = (a, b) => a === b;
 
-// Strip the leading "contracts/" segment from a path. Used to derive the npm
+// Strip the leading "contracts/" or "src/" segment from a path. Used to derive the npm
 // import specifier for non-`contracts` packages, where the file is published
 // at the package root (e.g. @openzeppelin/community-contracts/account/X.sol)
 // but the source lives at contracts/account/X.sol in the repo.
 module.exports['strip-contracts-prefix'] = function (p) {
-  return typeof p === 'string' ? p.replace(/^contracts\//, '') : p;
+  return typeof p === 'string' ? p.replace(/^(contracts|src)\//, '') : p;
 };
 module.exports['starts-with'] = (str, prefix) => str && str.startsWith(prefix);
 
@@ -150,8 +164,8 @@ function generateLinkPath(pagePath, currentPagePath, anchor) {
     return `#${anchor}`;
   }
 
-  // Cross-page: use absolute path with API_DOCS_PATH prefix
-  return `/${API_DOCS_PATH}/${pagePath}#${anchor}`;
+  // Cross-page: use absolute path with API_DOCS_PATH prefix (the index page is served at the API root)
+  return pagePath === 'index' ? `/${API_DOCS_PATH}#${anchor}` : `/${API_DOCS_PATH}/${pagePath}#${anchor}`;
 }
 
 // Process {REF} and other references
@@ -216,7 +230,7 @@ function processReferences(content, links) {
     return replacement || `\`${key}\``;
   });
 
-  result = cleanupContent(result);
+  result = cleanupContent(result, new Set(Object.values(links.__linkPages ?? {})));
 
   // Escape bare < that aren't HTML/JSX tags (e.g., "< 0x80", "< 128")
   // Must run after cleanupContent (which decodes &lt; to <) and before processCallouts
@@ -297,8 +311,14 @@ function findBestMatch(key, links) {
   return undefined;
 }
 
-function cleanupContent(content) {
+// Bare xrefs in NatSpec inherited from OpenZeppelin Contracts (e.g. `xref:access.adoc[...]`) point to its API
+// pages. Outside of OpenZeppelin Contracts, link them there unless the current library has a page with that name.
+const OZ_CONTRACTS_API_BASE = '/contracts/5.x/api';
+
+function cleanupContent(content, localPages) {
   const apiDocsBase = '/' + API_DOCS_PATH;
+  const bareXrefBase = file =>
+    localPages && !localPages.has(file) && !API_DOCS_PATH.startsWith('contracts/') ? OZ_CONTRACTS_API_BASE : apiDocsBase;
   const docsBase = apiDocsBase.replace(/\/api$/, '');
   return content
     .replace(/&lt;/g, '<')
@@ -330,7 +350,7 @@ function cleanupContent(content) {
     })
     // xref:filename.adoc#anchor[text] -> [text](apiDocsBase/filename#anchor) (bare, within API context)
     .replace(/xref:([^:[\s]+)\.adoc(?:#([^[]*))?\[([^\]]*)\]/g, (_, file, anchor, text) =>
-      `[${text}](${apiDocsBase}/${file}${anchor ? '#' + anchor : ''})`)
+      `[${text}](${bareXrefBase(file)}/${file}${anchor ? '#' + anchor : ''})`)
     // Strip /index from links
     .replace(/\/index([#)])/g, '$1');
 }
@@ -401,7 +421,22 @@ function processAdocContent(content) {
   }
 }
 
+// GitHub alert types mapped to Callout props
+const ALERT_TYPES = { NOTE: '', TIP: '', IMPORTANT: ' type="warn"', WARNING: ' type="warn"', CAUTION: ' type="warn"' };
+
+// Convert GitHub alerts (`> [!NOTE]` followed by `> ...` lines) to Callouts
+function processAlerts(content) {
+  return content.replace(
+    /^>[ \t]*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*\n((?:>.*(?:\n|$))*)/gm,
+    (_, type, body) => {
+      const text = body.replace(/^>[ \t]?/gm, '').trimEnd();
+      return `<Callout${ALERT_TYPES[type]}>\n${text}\n</Callout>\n`;
+    },
+  );
+}
+
 function processCallouts(content) {
+  content = processAlerts(content);
   // Convert AsciiDoc headings in natspec (==== heading -> #### heading)
   // Use [ \t]+ instead of \s+ so the regex does not consume the following
   // newline and pull the next line's text up — that bug was eating the
@@ -479,8 +514,8 @@ function processCallouts(content) {
 }
 
 module.exports.title = opts => {
-  const pageId = opts.data.root.id;
-  const basePath = pageId.replace(/\.(adoc|mdx)$/, '');
+  const basePath = pageBasePath(opts.data.root.id);
+  if (basePath === '') return 'API Reference';
   const parts = basePath.split('/');
   const dirName = parts[parts.length - 1] || 'Contracts';
   return dirName
@@ -490,8 +525,8 @@ module.exports.title = opts => {
 };
 
 module.exports.description = opts => {
-  const pageId = opts.data.root.id;
-  const basePath = pageId.replace(/\.(adoc|mdx)$/, '');
+  const basePath = pageBasePath(opts.data.root.id);
+  if (basePath === '') return 'Smart contract API reference';
   const parts = basePath.split('/');
   const dirName = parts[parts.length - 1] || 'contracts';
   return `Smart contract ${dirName.replace('-', ' ')} utilities and implementations`;
