@@ -24,11 +24,11 @@ sequenceDiagram
     U->>T: approve(vault, amount)
     U->>V: deposit(assets, receiver)
     V->>T: safeTransferFrom(user, vault)
-    V->>Tr: safeTransferChecked(entry fee)
     V-->>U: mint vUSDT shares
+    V->>Tr: safeTransferChecked(entry fee)
     U->>V: redeem(shares, receiver, owner)
-    V->>Tr: safeTransferChecked(exit fee)
     V->>T: safeTransferChecked(assets to user)
+    V->>Tr: safeTransferChecked(exit fee)
 `} />
 
 The deposit pulls assets in with `safeTransferFrom`, but every outbound transfer uses `safeTransferChecked`. That asymmetry is the heart of this guide.
@@ -83,10 +83,6 @@ module.exports = {
     settings: {
       optimizer: { enabled: true, runs: 200 },
       evmVersion: 'cancun',
-      viaIR: true,
-      // Embed the source as literal text in the metadata so Tronscan can
-      // reconstruct it deterministically when you verify.
-      metadata: { bytecodeHash: 'ipfs', useLiteralContent: true },
     },
   },
   tre: {
@@ -118,7 +114,7 @@ Three settings do the TRON-specific work:
 - `tron: true` on a network routes `hre.ethers` calls through TronWeb, so ethers-style tests and scripts work against the TVM.
 
 <Callout>
-The compiler is pinned to Solidity 0.8.26 with `evmVersion: 'cancun'` because that is what `tron-solc` and the current TVM support. Don't raise it to match your Ethereum projects.
+The compiler is pinned to Solidity 0.8.26 with `evmVersion: 'cancun'` because that is what OpenZeppelin Contracts for TRON is compiled and tested with. Don't raise it to match your Ethereum projects.
 </Callout>
 
 ## Write the vault
@@ -158,7 +154,7 @@ npx hardhat compile
 
 ## Add an entry and exit fee
 
-A common customization is a fee that goes to a treasury. The fee logic below is the example from the [TRC-4626 page](/tron-contracts/trc4626#custom-behavior-adding-fees-to-the-vault), unchanged. It lives in the library's `contracts/mocks/docs/` folder, which the npm package doesn't ship, so you can't import it. Add it to your project as `contracts/TRC4626Fees.sol`:
+A common customization is a fee that goes to a treasury. The fee logic below is the example from the [TRC-4626 page](/tron-contracts/trc4626#custom-behavior-adding-fees-to-the-vault), with only the comments and import paths changed. It lives in the library's `contracts/mocks/docs/` folder, which the npm package doesn't ship, so you can't import it. Add it to your project as `contracts/TRC4626Fees.sol`:
 
 <Callout type='warn'>
 `TRC4626Fees` is an example from the documentation. **It has not been audited.** Review it as part of your own code before you use it in production.
@@ -351,10 +347,10 @@ The fee payout is the one outbound transfer you write yourself, so you choose ho
 
 On Ethereum you would use `SafeERC20.safeTransfer`. It accepts a token that returns `true` or returns nothing, and reverts if the token returns `false`. USDT-TRON (`TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t`) returns `false` from `transfer` **even when the transfer succeeds**. With `SafeTRC20.safeTransfer`, every deposit that charges a fee would revert with `SafeTRC20FailedOperation`, and your vault would be unusable with the token it was built for.
 
-`SafeTRC20.safeTransferChecked` ignores the return value. It reads the vault's own balance before and after the call, and reverts unless the balance went down by at least `value`. A transfer that fails for real still reverts, because USDT-TRON reverts on failure. Use it for every outbound transfer of a token you don't control: fee payouts, rewards and sweeps. `TRC4626` already uses it for withdrawals.
+`SafeTRC20.safeTransferChecked` ignores the return value. It reads the vault's own balance before and after the call, and reverts unless the balance went down by at least `value`. A transfer that fails for real still reverts: USDT-TRON reverts on failure, and the balance check catches a token that returns `false` without moving anything. Use it for every outbound transfer of a token you don't control: fee payouts, rewards and sweeps. `TRC4626` already uses it for withdrawals.
 
 <Callout type='warn'>
-`safeTransferChecked` checks the **sender's debit**, not what the recipient received. That is correct for standard tokens and for fee-on-transfer tokens: the recipient may get less than `value`, and the transfer still counts as successful. It is **not** correct for rebasing or reflection tokens, or for tokens whose `transfer` calls back into the sender, such as TRC-777. If one of these credits the sender during the transfer, the check can reject a successful transfer or panic on underflow. Don't pay out those tokens with it.
+`safeTransferChecked` checks the **sender's debit**, not what the recipient received. That is correct for standard tokens and for fee-on-transfer tokens: the recipient may get less than `value`, and the transfer still counts as successful. It is **not** correct for rebasing or reflection tokens, or for tokens whose `transfer` calls back into the sender, such as TRC-777 (ERC-777-style tokens). If one of these credits the sender during the transfer, the check can reject a successful transfer or panic on underflow. Don't pay out those tokens with it.
 </Callout>
 
 `transferFrom` and `approve` on USDT-TRON return `true` as expected. That's why the deposit path keeps using `safeTransferFrom`.
@@ -427,7 +423,7 @@ const ENTRY_FEE_BPS = 50n; // 0.5%
 const EXIT_FEE_BPS = 50n; // 0.5%
 const BPS = 10_000n;
 
-// Fee math, mirrored from TRC4626Fees (both round up, in the vault's favour).
+// Fee math, mirrored from TRC4626Fees (both round up, against the user).
 const ceilDiv = (a, b) => (a + b - 1n) / b;
 const feeOnTotal = (assets, bps) => ceilDiv(assets * bps, bps + BPS);
 const feeOnRaw = (assets, bps) => ceilDiv(assets * bps, BPS);
@@ -541,7 +537,7 @@ describe('UsdtVault', function () {
   describe('rounding', function () {
     it('round-trips never return more than you put in', async function () {
       await vault.connect(alice).deposit(usdt('1000'), alice.address);
-      // Move the share price off 1:1 with a direct transfer to the vault.
+      // Move the share price off 1:1 with a direct mint to the vault.
       await token.mint(await vault.getAddress(), usdt('3.333333'));
 
       const assets = usdt('7.777777');
@@ -549,7 +545,7 @@ describe('UsdtVault', function () {
       expect(await vault.previewMint(shares)).to.be.lte(assets);
 
       const redeemable = await vault.previewRedeem(shares);
-      expect(redeemable).to.be.lt(assets); // fees + rounding stay in the vault
+      expect(redeemable).to.be.lt(assets); // fees went to the treasury, rounding stays in the vault
     });
   });
 
@@ -634,11 +630,10 @@ A few things in this test file are specific to TRON:
 - `revertedWithCustomError` decodes correctly here, including on the constructor revert in the fee-cap test. It doesn't hold on every path; see the callout below.
 
 <Callout type='warn'>
-Custom-error assertions are not always safe on the TVM. The library documents three paths where the payload doesn't survive:
+Custom-error assertions are not always safe on the TVM. The library documents two paths where the payload doesn't survive:
 
-- An **out-of-gas bubble**. The inner call burns the whole energy budget, and the custom error is dropped on the way out.
-- A **`CREATE2` collision**.
-- A **panic code**, whose selector doesn't reliably survive TVM's revert-data field.
+- An **out-of-gas bubble**. The inner call burns the whole energy budget, and the custom error is dropped on the way out. A `CREATE2` collision is the same case, since it burns almost all energy.
+- A **`Panic(uint256)` revert**, whose payload doesn't reliably survive TVM's revert-data field.
 
 `tron-contracts` loosens its own assertions to `.to.be.reverted` in each of these cases. If a revert assertion fails with no decoded error, check whether you are on one of these paths before concluding the contract is wrong.
 </Callout>
@@ -646,7 +641,7 @@ Custom-error assertions are not always safe on the TVM. The library documents th
 <Callout>
 To keep the node running between runs and skip the startup wait, set `tre.keepRunning: true`.
 
-Starting the container yourself with `tre.autoStart: false` is a sharper edge than it looks. The plugin mines one priming block when it spawns the container, and skips that step for a node it merely found already running. Without the priming block, the first deploy fails inside TronWeb with `Unable to get params: Cannot read properties of undefined (reading 'toString')`, because java-tron omits the zero-valued block number at height 0. Prefer `keepRunning` over managing the container by hand.
+Starting the container yourself with `tre.autoStart: false` is a sharper edge than it looks. The plugin mines one priming block before your tests, but only when it manages the node; with `autoStart: false` that step never runs. Without the priming block, the first deploy fails inside TronWeb with `Unable to get params: Cannot read properties of undefined (reading 'toString')`, because java-tron omits the zero-valued block number at height 0. Prefer `keepRunning` over managing the container by hand.
 </Callout>
 
 ## Deploy to Nile
@@ -735,7 +730,7 @@ main().catch((error) => {
 });
 ```
 
-TODO(verify): confirm `TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf` is the test USDT that the Nile faucet and TronFAQBot hand out, and that its `transfer` returns `false` like mainnet USDT.
+`TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf` is the test USDT on Nile. TODO(verify): confirm its `transfer` returns `false` like mainnet USDT.
 
 Deploy:
 
@@ -746,7 +741,7 @@ npx hardhat run scripts/deploy.js --network nile
 TODO(verify): paste real output from a Nile deploy.
 
 <Callout>
-TRON has no gas. Transactions use **bandwidth** (for transaction size) and **energy** (for contract execution). Your account gets some free bandwidth each day. Energy you haven't staked TRX for is paid by burning TRX. The plugin sets a fee limit of 1,000 TRX (`1_000_000_000` SUN) per transaction. That is a cap, not a charge: you pay only for the energy used. TODO(verify): measure the actual energy and TRX cost of this deploy. To raise or lower the cap for a call, pass `{ gasLimit }`; the plugin converts it into a fee limit.
+TRON has no gas. Transactions use **bandwidth** (for transaction size) and **energy** (for contract execution). Your account gets 600 free bandwidth points a day; beyond that, and for any energy you haven't staked TRX for, TRX is burned. The plugin sets a fee limit of 1,000 TRX (`1_000_000_000` SUN) per transaction. That is a cap on the energy you burn, not a charge: a transaction that succeeds or reverts pays only for the energy it used, while one that exhausts the cap fails and is charged up to it. Deploying this vault takes about 1.07M energy, roughly 107 TRX if none of it is staked. To lower the cap for a call, pass `{ gasLimit }`; the plugin converts it into a fee limit and never goes above 1,000 TRX.
 </Callout>
 
 ### Interact with the vault
@@ -796,7 +791,7 @@ main().catch((error) => {
 VAULT_ADDRESS=<T... address from deploy.js> npx hardhat run scripts/interact.js --network nile
 ```
 
-Your USDT balance comes back close to where it started. The vault charged both fees, but the treasury is your own address in this tutorial, so they came straight back. What you actually spent is TRX for energy. Point the treasury at a different address and you would end up lower by the two fees. The redeem worked even though Nile's USDT returns `false` from `transfer`, because `TRC4626` paid it out with `safeTransferChecked`.
+Your USDT balance comes back close to where it started. The vault charged both fees, but the treasury is your own address in this tutorial, so they came straight back. What you actually spent is TRX for energy and bandwidth. Point the treasury at a different address and you would end up lower by the two fees. The redeem worked even though Nile's USDT returns `false` from `transfer`, because `TRC4626` paid it out with `safeTransferChecked`.
 
 TODO(verify): run against Nile and confirm `tx.hash` and `.wait()` behave as shown through the hardhat-tron bridge.
 
@@ -809,7 +804,7 @@ Open the `tronscan:` link printed by the deploy script. On [Nile Tronscan](https
 - Each transaction's **Resources consumed**, showing the energy and bandwidth it used.
 
 <Callout>
-Tronscan source verification isn't automated by `hardhat-tron` yet. To verify the contract, upload the source on Tronscan's contract verification page with compiler `0.8.26`, optimizer on with 200 runs, and `viaIR` enabled. TODO(verify): Tronscan's current flow for `viaIR` / standard-JSON input.
+Tronscan source verification isn't automated by `hardhat-tron` yet. To verify the contract, flatten it into one file (`npx hardhat flatten contracts/UsdtVault.sol > UsdtVault.flat.sol`) and upload that on Tronscan's contract verification page with compiler `0.8.26` and optimizer on with 200 runs. Tronscan doesn't accept subdirectory layouts or a `viaIR` setting.
 </Callout>
 
 ## Optional: make it upgradeable
