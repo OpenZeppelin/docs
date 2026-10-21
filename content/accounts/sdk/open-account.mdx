@@ -1,0 +1,303 @@
+---
+title: toOpenAccount
+description: Detailed parameter reference for toOpenAccount
+---
+
+`toOpenAccount` creates a Viem `SmartAccount` instance configured for the `OpenAccount` contract. It is a thin wrapper around `toERC7579Account` that handles the account's address derivation, factory interaction, and on-chain identity validation.
+
+```typescript
+import { toOpenAccount } from '@openzeppelin-accounts/sdk';
+
+const account = await toOpenAccount({ client, signer, ...parameters });
+```
+
+The function accepts two mutually exclusive shapes of parameters depending on whether you are creating a new account or connecting to one that is already deployed.
+
+## Parameters
+
+### Shared parameters
+
+These parameters apply in both factory and existing-account modes.
+
+#### `client`
+
+A Viem public (or wallet) client connected to the target chain. Used to read on-chain state such as the entry point nonce and the account's `accountId` string.
+
+```typescript
+import { createPublicClient, http } from 'viem';
+import { mainnet } from 'viem/chains';
+
+const client = createPublicClient({ chain: mainnet, transport: http() });
+```
+
+#### `signer`
+
+The signing primitive used to authorize user operations, ERC-1271 signature requests, and typed data. The signer determines the on-chain validator that must be installed on the account.
+
+Two shapes are accepted:
+
+**ECDSA (`LocalAccount`)**
+
+```typescript
+import { privateKeyToAccount } from 'viem/accounts';
+
+const signer = privateKeyToAccount('0x<privateKey>');
+```
+
+The `address` property of the returned account must correspond to the signer address registered in the ECDSA validator module.
+
+**WebAuthn (`WebAuthnAccount`)**
+
+```typescript
+import { toWebAuthnAccount } from 'viem/account-abstraction';
+
+const signer = toWebAuthnAccount({
+  credential: { id: '<credentialId>', publicKey: '0x<compressedPublicKey>' },
+});
+```
+
+The public key coordinates must match those stored in the WebAuthn validator module's `initData`.
+
+<Callout type="info">
+  The `signer` field controls how signatures are _produced_ off-chain. The corresponding on-chain validator module
+  controls how they are _verified_. Both must be consistent: an ECDSA signer paired with a WebAuthn validator (or vice
+  versa) will produce signatures that the account cannot verify.
+</Callout>
+
+#### `validator`
+
+The address of the ERC-7579 validator module that authorises this signer. This is a **required** parameter that drives two automatic behaviors inside `toOpenAccount`:
+
+- **ERC-1271 routing**: `signMessage` and `signTypedData` prepend `validator` (20 bytes) to the raw signature so that the account's `isValidSignature` can extract and route to the correct module. You never need to prepend the validator address manually.
+- **UserOp nonce routing**: `getNonce` encodes `validator` in the upper 20 bytes of the 24-byte nonce key, matching the `_extractUserOpValidator` logic in `AccountERC7579`. The remaining 4 bytes of the key are available as an optional parallel-sequence counter via `getNonce({ key })`.
+
+```typescript
+validator: '0x<validatorAddress>'
+```
+
+Pass the same address that is in the `modules` array when creating a new account, or the address of the already-installed validator module when connecting to an existing one.
+
+<Callout type="warning">
+  The `validator` address must correspond to an installed module. Passing a wrong address will cause every user
+  operation and ERC-1271 check to fail on-chain, since the account will look for a module that is not installed.
+</Callout>
+
+#### `getStubSignature`
+
+Returns a dummy signature used during gas estimation. Bundlers call `eth_estimateUserOperationGas` before the real signature is available; `getStubSignature` provides a placeholder that passes signature length checks without needing to be cryptographically valid.
+
+`toOpenAccount` uses this value as the raw UserOp signature, which the validator module receives directly (no validator-address prefix that only applies to ERC-1271 calls). The stub must have the same byte length as a real inner signature for the installed validator. Providing a stub that is too short or too long will produce incorrect gas estimates.
+
+**ECDSA (65 bytes)**
+
+```typescript
+getStubSignature: async () => '0x' + 'ff'.repeat(65)
+```
+
+**WebAuthn**
+
+The expected encoding is larger because it packs the P-256 `r` and `s` values, authenticator data, and the clientDataJSON string. Use a randomized buffer of the correct size:
+
+```typescript
+getStubSignature: async () =>
+  bytesToHex(
+    crypto.getRandomValues(
+      new Uint8Array(
+        6 * 32 + // ABI offset words
+          2 * 32 + // r, s
+          37 +    // authenticatorData
+          81,     // clientDataJSON
+      ),
+    ),
+  )
+```
+
+---
+
+## Factory mode
+
+Use this mode when no account has been deployed yet. The account address is computed deterministically off-chain before any transaction is sent, so you can fund it in advance.
+
+```typescript
+import { getContract, encodePacked } from 'viem';
+import OpenAccountFactoryABI from '@openzeppelin-accounts/contracts/out/OpenAccountFactory.sol/OpenAccountFactory.json' assert { type: 'json' };
+
+const factory = getContract({
+  address: '0x9045eF209067701bE7b78AaC216C04Ffa6543330',
+  abi: OpenAccountFactoryABI.abi,
+  client,
+});
+
+const account = await toOpenAccount({
+  client,
+  signer,
+  validator: '0x<ecdsaValidatorAddress>',
+  factory,
+  moduleTypeIds: ['validator'],
+  modules: ['0x<ecdsaValidatorAddress>'],
+  initDatas: [encodePacked(['address'], [signer.address])],
+  getStubSignature: async () => '0x' + 'ff'.repeat(65),
+});
+```
+
+### `factory`
+
+A Viem contract instance pointing to the `OpenAccountFactory`. The canonical deployment is at `0x9045eF209067701bE7b78AaC216C04Ffa6543330` on all major EVM chains.
+
+### `moduleTypeIds`
+
+Parallel array of module type identifiers that declares what role each entry in `modules` plays. Values can be strings (`'validator'`, `'executor'`, `'fallback'`, `'hook'`) or their numeric equivalents (`1`–`4`).
+
+```typescript
+moduleTypeIds: ['validator', 'executor']
+```
+
+The array must be the same length as `modules` and `initDatas`.
+
+### `modules`
+
+Addresses of the module contracts to install during account initialization, in the same order as `moduleTypeIds`.
+
+```typescript
+modules: [
+  '0x<ecdsaValidatorAddress>',
+  '0x<spendingLimitExecutorAddress>',
+]
+```
+
+<Callout type="warning">
+  At least one validator module must be included. An account initialized without any validator will be permanently
+  locked: no user operation will pass the entry point's validation step.
+</Callout>
+
+### `initDatas`
+
+ABI-encoded initialization payloads passed to each module's `onInstall` function, in the same order as `modules`. The expected encoding varies by module:
+
+| Module | `initData` encoding |
+|---|---|
+| `ERC7579ECDSAValidator` | `encodePacked(['address'], [signerAddress])` (20 bytes) |
+| `ERC7579WebAuthnValidator` | `encodePacked(['bytes32', 'bytes32'], [qx, qy])` (64 bytes) (uncompressed P-256 public key coordinates) |
+| `ERC7579Multisig` | `abi.encode(signers, threshold)` where `signers` is `bytes[]` and `threshold` is `uint64` |
+
+Refer to the individual module pages under [Validators](/accounts/contracts/validators) and [Executors](/accounts/contracts/executors) for the exact encoding each module expects.
+
+### `salt`
+
+A 32-byte value mixed into the CREATE2 salt alongside the module configuration. Use a random salt when you need multiple distinct accounts for the same signer and module combination:
+
+```typescript
+import { bytesToHex } from 'viem';
+
+salt: bytesToHex(crypto.getRandomValues(new Uint8Array(32)))
+```
+
+The full CREATE2 salt is `keccak256(abi.encode(moduleTypeIds, modules, initDatas, configMode, configCalldata, salt))`, so changing any of those fields also changes the resulting address.
+
+### `configMode` and `configCalldata`
+
+An additional call executed _after_ all modules are installed, in the same initialization transaction. Useful when the account itself must call another contract as part of setup (e.g. to approve a token allowance).
+
+`configMode` is an `EncodeMode` object (same shape as passed to `encodeMode`) that describes how `configCalldata` should be executed. `configCalldata` follows the ERC-7579 `executionCalldata` format for the chosen mode.
+
+```typescript
+import { encodeMode } from '@openzeppelin-accounts/sdk';
+import { encodePacked } from 'viem';
+
+configMode: { callType: 'call', execType: 'default' },
+configCalldata: encodePacked(
+  ['address', 'uint256', 'bytes'],
+  ['0x<targetContract>', 0n, '0x<encodedCall>'],
+),
+```
+
+<Callout>
+  Because `configMode` and `configCalldata` are included in the CREATE2 salt computation, any change to these fields
+  will produce a different account address. Design the initialization calldata carefully before funding the predicted
+  address.
+</Callout>
+
+---
+
+## Existing account mode
+
+Use this mode when the `OpenAccount` contract is already deployed. Pass the on-chain address instead of factory arguments:
+
+```typescript
+const account = await toOpenAccount({
+  client,
+  signer,
+  validator: '0x<validatorAddress>',
+  address: '0x<deployedAccountAddress>',
+  getStubSignature: async () => '0x' + 'ff'.repeat(65),
+});
+```
+
+### `address`
+
+The address of the deployed `OpenAccount` contract. `toOpenAccount` reads the contract's `accountId()` function on construction and throws if the returned string does not start with `@openzeppelin/contracts.AccountERC7579.`, ensuring you do not accidentally point the SDK at a different contract type.
+
+---
+
+## Complete example
+
+The following example deploys an account with an ECDSA validator and immediately uses a second validator for a subsequent operation:
+
+```typescript
+import {
+  createPublicClient,
+  createWalletClient,
+  http,
+  getContract,
+  encodePacked,
+  bytesToHex,
+} from 'viem';
+import { mainnet } from 'viem/chains';
+import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
+import { createBundlerClient } from 'viem/account-abstraction';
+import { toOpenAccount, erc7579Actions } from '@openzeppelin-accounts/sdk';
+import OpenAccountFactoryABI from '@openzeppelin-accounts/contracts/out/OpenAccountFactory.sol/OpenAccountFactory.json' assert { type: 'json' };
+
+const client = createPublicClient({ chain: mainnet, transport: http() });
+const signer = privateKeyToAccount(generatePrivateKey());
+
+const factory = getContract({
+  address: '0x9045eF209067701bE7b78AaC216C04Ffa6543330',
+  abi: OpenAccountFactoryABI.abi,
+  client,
+});
+
+// Predict the address and fund it before deployment
+const account = await toOpenAccount({
+  client,
+  signer,
+  validator: '0x<ecdsaValidatorAddress>',
+  factory,
+  moduleTypeIds: ['validator'],
+  modules: ['0x<ecdsaValidatorAddress>'],
+  initDatas: [encodePacked(['address'], [signer.address])],
+  salt: bytesToHex(crypto.getRandomValues(new Uint8Array(32))),
+  getStubSignature: async () => '0x' + 'ff'.repeat(65),
+});
+
+console.log('Predicted address:', await account.getAddress());
+
+// The first user operation deploys the account automatically
+const bundlerClient = createBundlerClient({
+  account,
+  client,
+  transport: http('https://bundler.example.com'),
+}).extend(erc7579Actions());
+
+const hash = await bundlerClient.installModules({
+  modules: [
+    {
+      type: 'validator',
+      address: '0x<anotherValidatorAddress>',
+      initData: encodePacked(['address'], [signer.address]),
+    },
+  ],
+});
+
+await bundlerClient.waitForUserOperationReceipt({ hash });
+```

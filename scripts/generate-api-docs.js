@@ -22,6 +22,9 @@ function parseArgs() {
 		skipTemplateInject: false,
 		preGenerated: null,
 		guidesOutputDir: null,
+		guidesMdx: null,
+		sourcePackage: "",
+		packageName: null,
 	};
 
 	for (let i = 0; i < args.length; i++) {
@@ -63,6 +66,16 @@ function parseArgs() {
 			case "-g":
 				options.guidesOutputDir = args[++i];
 				break;
+			case "--guides-mdx":
+				options.guidesMdx = args[++i];
+				break;
+			case "--source-package":
+			case "-s":
+				options.sourcePackage = args[++i];
+				break;
+			case "--package-name":
+				options.packageName = args[++i];
+				break;
 			default:
 				console.error(`Unknown option: ${arg}`);
 				showHelp();
@@ -87,6 +100,9 @@ Options:
   -e, --examples-output <dir> Examples output directory (default: examples)
   -p, --pre-generated <path> Path within repo containing pre-generated MDX files (skips docgen)
   -g, --guides-output <dir>  Convert .adoc guides from docs/modules/ROOT/pages/ to MDX into <dir>
+  --guides-mdx <path>        Path within repo containing MDX guides to copy into --guides-output (skips .adoc conversion)
+  -s, --source-package <dir> Path within repo of the Solidity package to run docgen in (default: repo root)
+  --package-name <name>      npm package name used in import paths (default: derived from the repo name)
   --skip-template-inject     Skip injecting canonical templates (use source repo's own)
   -h, --help                 Show this help message
 
@@ -97,6 +113,9 @@ Modes:
 Examples:
   # Solidity repo (injects templates, runs docgen):
   node generate-api-docs.js --repo https://github.com/OpenZeppelin/openzeppelin-contracts.git --api-output content/contracts/5.x/api
+
+  # Solidity package in a monorepo, with MDX guides:
+  node generate-api-docs.js --repo https://github.com/OpenZeppelin/openzeppelin-accounts.git --api-output content/accounts/api --source-package packages/contracts --package-name @openzeppelin-accounts/contracts --guides-output content/accounts --guides-mdx docs
 
   # Non-Solidity repo (copies pre-generated MDX):
   node generate-api-docs.js --repo https://github.com/OpenZeppelin/cairo-contracts.git --api-output content/contracts-cairo/3.x/api --pre-generated docs/api
@@ -127,18 +146,20 @@ function derivePackageName(repoName) {
 }
 
 async function injectTemplates(tempDir, options) {
-	const { contractsRepo, contractsBranch, apiOutputDir } = options;
+	const { contractsRepo, contractsBranch, apiOutputDir, sourcePackage } =
+		options;
 	const repoInfo = extractRepoInfo(contractsRepo);
-	const packageName = derivePackageName(repoInfo.repo);
+	const packageName = options.packageName ?? derivePackageName(repoInfo.repo);
+	const packageDir = path.join(tempDir, sourcePackage);
 
 	console.log("📋 Injecting canonical MDX templates...");
 
-	const templatesTarget = path.join(tempDir, "docs", "templates-md");
+	const templatesTarget = path.join(packageDir, "docs", "templates-md");
 	// Overwrite the cloned repo's docs/config.js with our canonical config.
 	// The cloned repo's hardhat config and prepare-docs.sh scripts both load
 	// `./docs/config`, so this single overwrite covers both paths without
 	// needing a separate config-md.js write or a hardhat-config regex patch.
-	const configTarget = path.join(tempDir, "docs", "config.js");
+	const configTarget = path.join(packageDir, "docs", "config.js");
 
 	await fs.mkdir(templatesTarget, { recursive: true });
 	await copyDirRecursive(
@@ -177,16 +198,27 @@ async function injectTemplates(tempDir, options) {
 		`blob/${contractsBranch}`,
 	);
 
+	// Source paths are relative to the package, so prefix them with its location in the repo
+	if (sourcePackage) {
+		const prefix = sourcePackage.replace(/^\/+|\/+$/g, "");
+		contract = contract.replace(
+			/(blob\/[^"]*?\/)(\{\{__item_context\.file\.absolutePath\}\})/g,
+			`$1${prefix}/$2`,
+		);
+	}
+
 	// Canonical template has @openzeppelin/{{absolutePath}} with absolutePath
 	// starting "contracts/...". For openzeppelin-contracts that's correct
 	// (npm package is `@openzeppelin/contracts`, file path keeps the prefix).
 	// For other packages (community-contracts, confidential-contracts), the
 	// npm package is published with `contracts/` as the package root, so the
 	// import skips that prefix — strip it via the strip-contracts-prefix helper.
+	// An explicit --package-name is used verbatim (e.g. @openzeppelin-accounts/contracts).
+	const importPrefix = options.packageName ?? `@openzeppelin/${packageName}`;
 	if (packageName !== "contracts") {
 		contract = contract.replace(
 			/import "@openzeppelin\/\{\{__item_context\.file\.absolutePath\}\}";/g,
-			`import "@openzeppelin/${packageName}/{{strip-contracts-prefix __item_context.file.absolutePath}}";`,
+			`import "${importPrefix}/{{strip-contracts-prefix __item_context.file.absolutePath}}";`,
 		);
 	}
 	await fs.writeFile(contractPath, contract, "utf8");
@@ -194,7 +226,7 @@ async function injectTemplates(tempDir, options) {
 		`  ✓ GitHub link set to ${repoInfo.org}/${repoInfo.repo}`,
 	);
 	console.log(
-		`  ✓ Import path set to @openzeppelin/${packageName}/`,
+		`  ✓ Import path set to ${packageName === "contracts" ? "@openzeppelin/contracts" : importPrefix}/`,
 	);
 }
 
@@ -208,6 +240,8 @@ async function generateApiDocs(options) {
 		skipTemplateInject,
 		preGenerated,
 		guidesOutputDir,
+		guidesMdx,
+		sourcePackage,
 	} = options;
 
 	console.log("🔄 Generating OpenZeppelin API documentation...");
@@ -284,17 +318,31 @@ async function generateApiDocs(options) {
 			await injectTemplates(tempDir, options);
 		}
 
-		// Navigate to contracts directory and install dependencies
+		// Install dependencies at the repo root (pnpm workspaces) and run docgen in the package directory
 		console.log("📚 Installing dependencies...");
 		const originalDir = process.cwd();
-		process.chdir(tempDir);
+		const usePnpm = await fs
+			.access(path.join(tempDir, "pnpm-lock.yaml"))
+			.then(() => true)
+			.catch(() => false);
+		if (usePnpm) {
+			execSync("pnpm install --frozen-lockfile", {
+				cwd: tempDir,
+				stdio: "inherit",
+			});
+		}
+		process.chdir(path.join(tempDir, sourcePackage));
 
 		try {
-			execSync("npm install --silent", { stdio: "inherit" });
+			if (!usePnpm) {
+				execSync("npm install --silent", { stdio: "inherit" });
+			}
 
 			// Generate MDX documentation
 			console.log("🏗️  Generating MDX documentation...");
-			execSync("npm run prepare-docs", { stdio: "inherit" });
+			execSync(`${usePnpm ? "pnpm" : "npm"} run prepare-docs`, {
+				stdio: "inherit",
+			});
 
 			// Copy generated files
 			console.log("📋 Copying generated documentation...");
@@ -335,14 +383,20 @@ async function generateApiDocs(options) {
 			process.chdir(originalDir);
 		}
 
-		// Restore index.mdx if it was backed up
-		if (indexBackup) {
+		// Restore index.mdx if it was backed up, unless docgen generated one (root-level README.adoc)
+		const indexGenerated = await fs
+			.access(indexPath)
+			.then(() => true)
+			.catch(() => false);
+		if (indexBackup && !indexGenerated) {
 			console.log("♻️  Restoring index.mdx...");
 			await fs.writeFile(indexPath, indexBackup, "utf8");
 		}
 
-		// Convert AsciiDoc guides (docs/modules/ROOT/pages) to MDX
-		if (guidesOutputDir) {
+		// Copy MDX guides as-is, or convert AsciiDoc guides (docs/modules/ROOT/pages) to MDX
+		if (guidesOutputDir && guidesMdx) {
+			await copyGuides(tempDir, guidesMdx, guidesOutputDir);
+		} else if (guidesOutputDir) {
 			await convertGuides(tempDir, guidesOutputDir, apiOutputDir);
 		}
 
@@ -376,6 +430,22 @@ async function convertGuides(tempDir, guidesOutputDir, apiOutputDir) {
 		stdio: "inherit",
 	});
 
+	await fs.mkdir(guidesOutputDir, { recursive: true });
+	await copyMdxRecursive(guidesPath, guidesOutputDir);
+	console.log(`✅ Guides copied to ${guidesOutputDir}`);
+}
+
+async function copyGuides(tempDir, guidesMdx, guidesOutputDir) {
+	const guidesPath = path.join(tempDir, guidesMdx);
+
+	try {
+		await fs.access(guidesPath);
+	} catch {
+		console.log(`❌ Error: MDX guides not found at ${guidesMdx}`);
+		process.exit(1);
+	}
+
+	console.log("📖 Copying MDX guides...");
 	await fs.mkdir(guidesOutputDir, { recursive: true });
 	await copyMdxRecursive(guidesPath, guidesOutputDir);
 	console.log(`✅ Guides copied to ${guidesOutputDir}`);

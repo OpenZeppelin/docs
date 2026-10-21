@@ -1,0 +1,589 @@
+---
+title: "API Reference"
+description: "Smart contract API reference"
+---
+
+This package provides a production-ready ERC-4337 and ERC-7579 smart account and a set of ERC-7579 modules that can be installed on any ERC-7579 compliant account.
+
+- [`OpenAccount`](#OpenAccount): A modular smart account with ERC-7579 module support, ERC-1271 signature validation and ERC-721/ERC-1155 holder capabilities.
+- [`OpenAccountImplementation`](#OpenAccountImplementation): Upgradeable implementation of [`OpenAccount`](#OpenAccount) with ERC-8043 init mode, used by [`OpenAccountFactory`](#OpenAccountFactory).
+- [`OpenAccountFactory`](#OpenAccountFactory): A factory that deploys [`OpenAccountImplementation`](#OpenAccountImplementation) instances as ERC-1967 proxy clones at deterministic addresses.
+
+Modules, extensions and utilities are documented in their own pages:
+
+- [Modules](/accounts/api/modules): Validators, executors and the signer, multisig and session key primitives they are built from.
+- [Extensions](/accounts/api/extensions): Account extensions such as ERC-8043 init mode.
+- [Utilities](/accounts/api/utils): Libraries and helpers for multisignatures, crosschain signatures and FHE coordination.
+
+## Account
+
+[`OpenAccount`](#OpenAccount)
+
+[`OpenAccountImplementation`](#OpenAccountImplementation)
+
+## Factory
+
+[`OpenAccountFactory`](#OpenAccountFactory)
+
+<a id="OpenAccount"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `OpenAccount` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-accounts/blob/main/packages/contracts/src/OpenAccount.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin-accounts/contracts/OpenAccount.sol";
+```
+
+A modular smart account implementation.
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [initialize(moduleTypeIds, modules, initDatas, configMode, configCalldata)](#OpenAccount-initialize-uint256---address---bytes---Mode-bytes-)
+- [_validateUserOp(userOp, userOpHash, signature)](#OpenAccount-_validateUserOp-struct-PackedUserOperation-bytes32-bytes-)
+<details>
+<summary>ERC1155Holder</summary>
+
+- [supportsInterface(interfaceId)](#ERC1155Holder-supportsInterface-bytes4-)
+- [onERC1155Received(, , , , )](#ERC1155Holder-onERC1155Received-address-address-uint256-uint256-bytes-)
+- [onERC1155BatchReceived(, , , , )](#ERC1155Holder-onERC1155BatchReceived-address-address-uint256---uint256---bytes-)
+
+</details>
+<details>
+<summary>ERC721Holder</summary>
+
+- [onERC721Received(, , , )](#ERC721Holder-onERC721Received-address-address-uint256-bytes-)
+
+</details>
+<details>
+<summary>AccountERC7579Upgradeable</summary>
+
+- [__AccountERC7579_init()](#AccountERC7579Upgradeable-__AccountERC7579_init--)
+- [__AccountERC7579_init_unchained()](#AccountERC7579Upgradeable-__AccountERC7579_init_unchained--)
+- [fallback()](#AccountERC7579Upgradeable-fallback-bytes-)
+- [accountId()](#AccountERC7579Upgradeable-accountId--)
+- [supportsExecutionMode(encodedMode)](#AccountERC7579Upgradeable-supportsExecutionMode-bytes32-)
+- [supportsModule(moduleTypeId)](#AccountERC7579Upgradeable-supportsModule-uint256-)
+- [installModule(moduleTypeId, module, initData)](#AccountERC7579Upgradeable-installModule-uint256-address-bytes-)
+- [uninstallModule(moduleTypeId, module, deInitData)](#AccountERC7579Upgradeable-uninstallModule-uint256-address-bytes-)
+- [isModuleInstalled(moduleTypeId, module, additionalContext)](#AccountERC7579Upgradeable-isModuleInstalled-uint256-address-bytes-)
+- [execute(mode, executionCalldata)](#AccountERC7579Upgradeable-execute-bytes32-bytes-)
+- [executeFromExecutor(mode, executionCalldata)](#AccountERC7579Upgradeable-executeFromExecutor-bytes32-bytes-)
+- [isValidSignature(hash, signature)](#AccountERC7579Upgradeable-isValidSignature-bytes32-bytes-)
+- [_execute(mode, executionCalldata)](#AccountERC7579Upgradeable-_execute-Mode-bytes-)
+- [_installModule(moduleTypeId, module, initData)](#AccountERC7579Upgradeable-_installModule-uint256-address-bytes-)
+- [_uninstallModule(moduleTypeId, module, deInitData)](#AccountERC7579Upgradeable-_uninstallModule-uint256-address-bytes-)
+- [_fallback()](#AccountERC7579Upgradeable-_fallback--)
+- [_fallbackHandler(selector)](#AccountERC7579Upgradeable-_fallbackHandler-bytes4-)
+- [_checkModule(moduleTypeId, module, additionalContext)](#AccountERC7579Upgradeable-_checkModule-uint256-address-bytes-)
+- [_extractUserOpValidator(userOp)](#AccountERC7579Upgradeable-_extractUserOpValidator-struct-PackedUserOperation-)
+- [_extractSignatureValidator(signature)](#AccountERC7579Upgradeable-_extractSignatureValidator-bytes-)
+- [_decodeFallbackData(data)](#AccountERC7579Upgradeable-_decodeFallbackData-bytes-)
+- [_rawSignatureValidation(, )](#AccountERC7579Upgradeable-_rawSignatureValidation-bytes32-bytes-)
+
+</details>
+<details>
+<summary>EIP712</summary>
+
+- [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
+- [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
+- [eip712Domain()](#EIP712-eip712Domain--)
+- [_EIP712Name()](#EIP712-_EIP712Name--)
+- [_EIP712Version()](#EIP712-_EIP712Version--)
+
+</details>
+<details>
+<summary>Account</summary>
+
+- [entryPoint()](#Account-entryPoint--)
+- [getNonce()](#Account-getNonce--)
+- [getNonce(key)](#Account-getNonce-uint192-)
+- [validateUserOp(userOp, userOpHash, missingAccountFunds)](#Account-validateUserOp-struct-PackedUserOperation-bytes32-uint256-)
+- [_signableUserOpHash(, userOpHash)](#Account-_signableUserOpHash-struct-PackedUserOperation-bytes32-)
+- [_payPrefund(missingAccountFunds)](#Account-_payPrefund-uint256-)
+- [_checkEntryPoint()](#Account-_checkEntryPoint--)
+- [_checkEntryPointOrSelf()](#Account-_checkEntryPointOrSelf--)
+- [receive()](#Account-receive--)
+
+</details>
+<details>
+<summary>Initializable</summary>
+
+- [_checkInitializing()](#Initializable-_checkInitializing--)
+- [_disableInitializers()](#Initializable-_disableInitializers--)
+- [_getInitializedVersion()](#Initializable-_getInitializedVersion--)
+- [_isInitializing()](#Initializable-_isInitializing--)
+- [_initializableStorageSlot()](#Initializable-_initializableStorageSlot--)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+<details>
+<summary>IERC7579ModuleConfig</summary>
+
+- [ModuleInstalled(moduleTypeId, module)](#IERC7579ModuleConfig-ModuleInstalled-uint256-address-)
+- [ModuleUninstalled(moduleTypeId, module)](#IERC7579ModuleConfig-ModuleUninstalled-uint256-address-)
+
+</details>
+<details>
+<summary>Initializable</summary>
+
+- [Initialized(version)](#Initializable-Initialized-uint64-)
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
+- [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [OpenAccountModuleTypeIdsLengthMismatch()](#OpenAccount-OpenAccountModuleTypeIdsLengthMismatch--)
+- [OpenAccountNoValidatorOrExecutor()](#OpenAccount-OpenAccountNoValidatorOrExecutor--)
+<details>
+<summary>AccountERC7579Upgradeable</summary>
+
+- [ERC7579MissingFallbackHandler(selector)](#AccountERC7579Upgradeable-ERC7579MissingFallbackHandler-bytes4-)
+- [ERC7579CannotDecodeFallbackData()](#AccountERC7579Upgradeable-ERC7579CannotDecodeFallbackData--)
+
+</details>
+<details>
+<summary>Account</summary>
+
+- [AccountUnauthorized(sender)](#Account-AccountUnauthorized-address-)
+
+</details>
+<details>
+<summary>Initializable</summary>
+
+- [InvalidInitialization()](#Initializable-InvalidInitialization--)
+- [NotInitializing()](#Initializable-NotInitializing--)
+
+</details>
+</div>
+</div>
+
+<a id="OpenAccount-initialize-uint256---address---bytes---Mode-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">initialize(uint256[] moduleTypeIds, address[] modules, bytes[] initDatas, Mode configMode, bytes configCalldata)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#OpenAccount-initialize-uint256---address---bytes---Mode-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Initializes the account with a validator or executor module.
+
+It receives an array of `moduleTypeIds`, `modules`, and `initDatas` that are used
+to install modules during initialization. It also receives a `mode` and `executionCalldata`
+that are used to execute the account, these can be used to configure the account.
+
+Set the `configCalldata` to `bytes("")` to skip the configuration call.
+
+</div>
+</div>
+
+<a id="OpenAccount-_validateUserOp-struct-PackedUserOperation-bytes32-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_validateUserOp(struct PackedUserOperation userOp, bytes32 userOpHash, bytes signature) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#OpenAccount-_validateUserOp-struct-PackedUserOperation-bytes32-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Validates a user operation with `_signableUserOpHash` and returns the validation data
+if the module specified by the first 20 bytes of the nonce key is installed. Falls back to
+`Account-_validateUserOp` otherwise.
+
+See `_extractUserOpValidator` for the module extraction logic.
+
+</div>
+</div>
+
+<a id="OpenAccount-OpenAccountModuleTypeIdsLengthMismatch--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">OpenAccountModuleTypeIdsLengthMismatch()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#OpenAccount-OpenAccountModuleTypeIdsLengthMismatch--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Thrown when the length of the module type ids, modules, and init datas do not match during initialization.
+
+</div>
+</div>
+
+<a id="OpenAccount-OpenAccountNoValidatorOrExecutor--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">OpenAccountNoValidatorOrExecutor()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#OpenAccount-OpenAccountNoValidatorOrExecutor--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Thrown when the account is initialized without a validator or executor module.
+
+</div>
+</div>
+
+<a id="OpenAccountImplementation"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `OpenAccountImplementation` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-accounts/blob/main/packages/contracts/src/OpenAccountFactory.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin-accounts/contracts/OpenAccountFactory.sol";
+```
+
+Implementation contract for the OpenAccount factory.
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [constructor()](#OpenAccountImplementation-constructor--)
+- [_validateUserOp(userOp, userOpHash, signature)](#OpenAccountImplementation-_validateUserOp-struct-PackedUserOperation-bytes32-bytes-)
+- [_authorizeUpgrade(newImplementation)](#OpenAccountImplementation-_authorizeUpgrade-address-)
+<details>
+<summary>UUPSUpgradeable</summary>
+
+- [proxiableUUID()](#UUPSUpgradeable-proxiableUUID--)
+- [upgradeToAndCall(newImplementation, data)](#UUPSUpgradeable-upgradeToAndCall-address-bytes-)
+- [_checkProxy()](#UUPSUpgradeable-_checkProxy--)
+- [_checkNotDelegated()](#UUPSUpgradeable-_checkNotDelegated--)
+- [UPGRADE_INTERFACE_VERSION()](#UUPSUpgradeable-UPGRADE_INTERFACE_VERSION-string)
+
+</details>
+<details>
+<summary>OpenAccount</summary>
+
+- [initialize(moduleTypeIds, modules, initDatas, configMode, configCalldata)](#OpenAccount-initialize-uint256---address---bytes---Mode-bytes-)
+
+</details>
+<details>
+<summary>ERC1155Holder</summary>
+
+- [supportsInterface(interfaceId)](#ERC1155Holder-supportsInterface-bytes4-)
+- [onERC1155Received(, , , , )](#ERC1155Holder-onERC1155Received-address-address-uint256-uint256-bytes-)
+- [onERC1155BatchReceived(, , , , )](#ERC1155Holder-onERC1155BatchReceived-address-address-uint256---uint256---bytes-)
+
+</details>
+<details>
+<summary>ERC721Holder</summary>
+
+- [onERC721Received(, , , )](#ERC721Holder-onERC721Received-address-address-uint256-bytes-)
+
+</details>
+<details>
+<summary>AccountERC7579Upgradeable</summary>
+
+- [__AccountERC7579_init()](#AccountERC7579Upgradeable-__AccountERC7579_init--)
+- [__AccountERC7579_init_unchained()](#AccountERC7579Upgradeable-__AccountERC7579_init_unchained--)
+- [fallback()](#AccountERC7579Upgradeable-fallback-bytes-)
+- [accountId()](#AccountERC7579Upgradeable-accountId--)
+- [supportsExecutionMode(encodedMode)](#AccountERC7579Upgradeable-supportsExecutionMode-bytes32-)
+- [supportsModule(moduleTypeId)](#AccountERC7579Upgradeable-supportsModule-uint256-)
+- [installModule(moduleTypeId, module, initData)](#AccountERC7579Upgradeable-installModule-uint256-address-bytes-)
+- [uninstallModule(moduleTypeId, module, deInitData)](#AccountERC7579Upgradeable-uninstallModule-uint256-address-bytes-)
+- [isModuleInstalled(moduleTypeId, module, additionalContext)](#AccountERC7579Upgradeable-isModuleInstalled-uint256-address-bytes-)
+- [execute(mode, executionCalldata)](#AccountERC7579Upgradeable-execute-bytes32-bytes-)
+- [executeFromExecutor(mode, executionCalldata)](#AccountERC7579Upgradeable-executeFromExecutor-bytes32-bytes-)
+- [isValidSignature(hash, signature)](#AccountERC7579Upgradeable-isValidSignature-bytes32-bytes-)
+- [_execute(mode, executionCalldata)](#AccountERC7579Upgradeable-_execute-Mode-bytes-)
+- [_installModule(moduleTypeId, module, initData)](#AccountERC7579Upgradeable-_installModule-uint256-address-bytes-)
+- [_uninstallModule(moduleTypeId, module, deInitData)](#AccountERC7579Upgradeable-_uninstallModule-uint256-address-bytes-)
+- [_fallback()](#AccountERC7579Upgradeable-_fallback--)
+- [_fallbackHandler(selector)](#AccountERC7579Upgradeable-_fallbackHandler-bytes4-)
+- [_checkModule(moduleTypeId, module, additionalContext)](#AccountERC7579Upgradeable-_checkModule-uint256-address-bytes-)
+- [_extractUserOpValidator(userOp)](#AccountERC7579Upgradeable-_extractUserOpValidator-struct-PackedUserOperation-)
+- [_extractSignatureValidator(signature)](#AccountERC7579Upgradeable-_extractSignatureValidator-bytes-)
+- [_decodeFallbackData(data)](#AccountERC7579Upgradeable-_decodeFallbackData-bytes-)
+- [_rawSignatureValidation(, )](#AccountERC7579Upgradeable-_rawSignatureValidation-bytes32-bytes-)
+
+</details>
+<details>
+<summary>EIP712</summary>
+
+- [_domainSeparatorV4()](#EIP712-_domainSeparatorV4--)
+- [_hashTypedDataV4(structHash)](#EIP712-_hashTypedDataV4-bytes32-)
+- [eip712Domain()](#EIP712-eip712Domain--)
+- [_EIP712Name()](#EIP712-_EIP712Name--)
+- [_EIP712Version()](#EIP712-_EIP712Version--)
+
+</details>
+<details>
+<summary>Account</summary>
+
+- [entryPoint()](#Account-entryPoint--)
+- [getNonce()](#Account-getNonce--)
+- [getNonce(key)](#Account-getNonce-uint192-)
+- [validateUserOp(userOp, userOpHash, missingAccountFunds)](#Account-validateUserOp-struct-PackedUserOperation-bytes32-uint256-)
+- [_signableUserOpHash(, userOpHash)](#Account-_signableUserOpHash-struct-PackedUserOperation-bytes32-)
+- [_payPrefund(missingAccountFunds)](#Account-_payPrefund-uint256-)
+- [_checkEntryPoint()](#Account-_checkEntryPoint--)
+- [_checkEntryPointOrSelf()](#Account-_checkEntryPointOrSelf--)
+- [receive()](#Account-receive--)
+
+</details>
+<details>
+<summary>Initializable</summary>
+
+- [_checkInitializing()](#Initializable-_checkInitializing--)
+- [_disableInitializers()](#Initializable-_disableInitializers--)
+- [_getInitializedVersion()](#Initializable-_getInitializedVersion--)
+- [_isInitializing()](#Initializable-_isInitializing--)
+- [_initializableStorageSlot()](#Initializable-_initializableStorageSlot--)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+<details>
+<summary>IERC7579ModuleConfig</summary>
+
+- [ModuleInstalled(moduleTypeId, module)](#IERC7579ModuleConfig-ModuleInstalled-uint256-address-)
+- [ModuleUninstalled(moduleTypeId, module)](#IERC7579ModuleConfig-ModuleUninstalled-uint256-address-)
+
+</details>
+<details>
+<summary>Initializable</summary>
+
+- [Initialized(version)](#Initializable-Initialized-uint64-)
+
+</details>
+<details>
+<summary>IERC5267</summary>
+
+- [EIP712DomainChanged()](#IERC5267-EIP712DomainChanged--)
+
+</details>
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+<details>
+<summary>UUPSUpgradeable</summary>
+
+- [UUPSUnauthorizedCallContext()](#UUPSUpgradeable-UUPSUnauthorizedCallContext--)
+- [UUPSUnsupportedProxiableUUID(slot)](#UUPSUpgradeable-UUPSUnsupportedProxiableUUID-bytes32-)
+
+</details>
+<details>
+<summary>OpenAccount</summary>
+
+- [OpenAccountModuleTypeIdsLengthMismatch()](#OpenAccount-OpenAccountModuleTypeIdsLengthMismatch--)
+- [OpenAccountNoValidatorOrExecutor()](#OpenAccount-OpenAccountNoValidatorOrExecutor--)
+
+</details>
+<details>
+<summary>AccountERC7579Upgradeable</summary>
+
+- [ERC7579MissingFallbackHandler(selector)](#AccountERC7579Upgradeable-ERC7579MissingFallbackHandler-bytes4-)
+- [ERC7579CannotDecodeFallbackData()](#AccountERC7579Upgradeable-ERC7579CannotDecodeFallbackData--)
+
+</details>
+<details>
+<summary>Account</summary>
+
+- [AccountUnauthorized(sender)](#Account-AccountUnauthorized-address-)
+
+</details>
+<details>
+<summary>Initializable</summary>
+
+- [InvalidInitialization()](#Initializable-InvalidInitialization--)
+- [NotInitializing()](#Initializable-NotInitializing--)
+
+</details>
+</div>
+</div>
+
+<a id="OpenAccountImplementation-constructor--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">constructor()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#OpenAccountImplementation-constructor--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="OpenAccountImplementation-_validateUserOp-struct-PackedUserOperation-bytes32-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_validateUserOp(struct PackedUserOperation userOp, bytes32 userOpHash, bytes signature) → uint256</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#OpenAccountImplementation-_validateUserOp-struct-PackedUserOperation-bytes32-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+</div>
+</div>
+
+<a id="OpenAccountImplementation-_authorizeUpgrade-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_authorizeUpgrade(address newImplementation)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#OpenAccountImplementation-_authorizeUpgrade-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Function that should revert when `msg.sender` is not authorized to upgrade the contract. Called by
+`upgradeToAndCall`.
+
+Normally, this function will use an [access control](/contracts/5.x/api/access) modifier such as `Ownable-onlyOwner`.
+
+```solidity
+function _authorizeUpgrade(address) internal onlyOwner {}
+```
+
+</div>
+</div>
+
+<a id="OpenAccountFactory"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `OpenAccountFactory` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-accounts/blob/main/packages/contracts/src/OpenAccountFactory.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin-accounts/contracts/OpenAccountFactory.sol";
+```
+
+A factory contract to create OpenAccount instances on demand.
+
+Each account is created as a minimal ERC-1967 proxy clone that delegates to the implementation contract.
+The proxy follows the ERC-1967 standard for proxy storage slots, storing the implementation address at
+`bytes32(uint256(keccak256('eip1967.proxy.implementation')) - 1)`.
+
+See https://eips.ethereum.org/EIPS/eip-1967 for the full specification.
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [implementation()](#OpenAccountFactory-implementation--)
+- [predictAddress(moduleTypeIds, modules, initDatas, configMode, configCalldata, salt)](#OpenAccountFactory-predictAddress-uint256---address---bytes---Mode-bytes-bytes32-)
+- [createAndInitialize(moduleTypeIds, modules, initDatas, configMode, configCalldata, salt)](#OpenAccountFactory-createAndInitialize-uint256---address---bytes---Mode-bytes-bytes32-)
+</div>
+</div>
+
+<a id="OpenAccountFactory-implementation--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">implementation() → address</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#OpenAccountFactory-implementation--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the OpenAccount implementation contract address.
+
+This is the logic contract that all created proxy clones will delegate to.
+
+</div>
+</div>
+
+<a id="OpenAccountFactory-predictAddress-uint256---address---bytes---Mode-bytes-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">predictAddress(uint256[] moduleTypeIds, address[] modules, bytes[] initDatas, Mode configMode, bytes configCalldata, bytes32 salt) → address</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#OpenAccountFactory-predictAddress-uint256---address---bytes---Mode-bytes-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Predicts the address of an OpenAccount before it is created.
+
+The address is deterministically computed based on the initialization parameters and salt.
+Each account is deployed as an ERC-1967 proxy clone.
+
+</div>
+</div>
+
+<a id="OpenAccountFactory-createAndInitialize-uint256---address---bytes---Mode-bytes-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">createAndInitialize(uint256[] moduleTypeIds, address[] modules, bytes[] initDatas, Mode configMode, bytes configCalldata, bytes32 salt) → address</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#OpenAccountFactory-createAndInitialize-uint256---address---bytes---Mode-bytes-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Creates and initializes a new OpenAccount instance.
+
+Deploys a minimal ERC-1967 proxy clone using CREATE2 for deterministic addresses.
+The proxy delegates all calls to the implementation contract and maintains its own storage.
+If an account at the predicted address already exists, returns that address without redeploying.
+
+</div>
+</div>
+
