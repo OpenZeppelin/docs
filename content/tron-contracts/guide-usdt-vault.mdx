@@ -647,7 +647,7 @@ Starting the container yourself with `tre.autoStart: false` is a sharper edge th
 Nile is TRON's public testnet. You need a funded account and some test USDT.
 
 1. In TronLink, create a separate account for testing and switch the network to **Nile**. Export its private key.
-2. Get test TRX and test USDT. Use the [Nile faucet](https://nileex.io/join/getJoinPage), or send `!nile <address>` and `!nile_usdt <address>` to TronFAQBot in TRON's developer Telegram or Discord. TODO(verify): current faucet limits and links.
+2. Get test TRX and test USDT. Use the [Nile faucet](https://nileex.io/join/getJoinPage), or send `!nile <address>` and `!nile_usdt <address>` to TronFAQBot in TRON's developer Telegram or Discord. A single request returned 2,000 TRX and 2,000 test USDT, which is ample for this tutorial.
 3. Export the key for Hardhat:
 
 ```bash title="Shell"
@@ -736,10 +736,16 @@ Deploy:
 npx hardhat run scripts/deploy.js --network nile
 ```
 
-TODO(verify): paste real output from a Nile deploy.
+```console
+network : nile
+deployer: TXfreZ7XyAS9ymxiZg6UkjWP5rL792u9Ht
+balance : 2000 TRX
+vault   : TGmwKo2Tz46uPGsy75eAPNfTRtkZkeFNFg
+tronscan: https://nile.tronscan.org/#/contract/TGmwKo2Tz46uPGsy75eAPNfTRtkZkeFNFg
+```
 
 <Callout>
-TRON has no gas. Transactions use **bandwidth** (for transaction size) and **energy** (for contract execution). Your account gets 600 free bandwidth points a day; beyond that, and for any energy you haven't staked TRX for, TRX is burned. The plugin sets a fee limit of 1,000 TRX (`1_000_000_000` SUN) per transaction. That is a cap on the energy you burn, not a charge: a transaction that succeeds or reverts pays only for the energy it used, while one that exhausts the cap fails and is charged up to it. Deploying this vault takes about 1.07M energy, roughly 107 TRX if none of it is staked. To lower the cap for a call, pass `{ gasLimit }`; the plugin converts it into a fee limit and never goes above 1,000 TRX.
+TRON has no gas. Transactions use **bandwidth** (for transaction size) and **energy** (for contract execution). Your account gets 600 free bandwidth points a day; beyond that, and for any energy you haven't staked TRX for, TRX is burned. The plugin sets a fee limit of 1,000 TRX (`1_000_000_000` SUN) per transaction. That is a cap on the energy you burn, not a charge: a transaction that succeeds or reverts pays only for the energy it used, while one that exhausts the cap fails and is charged up to it. Deploying this vault used 1,145,938 energy, costing 114.59 TRX, plus 9.62 TRX of bandwidth once the free 600 points ran out: 124.22 TRX in total with nothing staked. To lower the cap for a call, pass `{ gasLimit }`; the plugin converts it into a fee limit and never goes above 1,000 TRX.
 </Callout>
 
 ### Interact with the vault
@@ -786,12 +792,24 @@ main().catch((error) => {
 ```
 
 ```bash title="Shell"
-VAULT_ADDRESS=<T... address from deploy.js> npx hardhat run scripts/interact.js --network nile
+export VAULT_ADDRESS=<T... address from deploy.js>
+npx hardhat run scripts/interact.js --network nile
 ```
+
+```console
+USDT before: 2000.0
+approved 10 USDT
+deposited 10 USDT -> 9.950248 vUSDT
+redeemed all shares, tx: https://nile.tronscan.org/#/transaction/4dbf939f3f9490e389c7e760d78a323e29d926c69f335f84b5567de585e45c44
+USDT after : 2000.0
+treasury fees are in TXfreZ7XyAS9ymxiZg6UkjWP5rL792u9Ht
+```
+
+`tx.hash` is the TVM transaction ID, the same 64-character hex string Tronscan indexes, and `.wait()` resolves once the transaction is in a block. Both behave as they do on Ethereum.
 
 Your USDT balance comes back close to where it started. The vault charged both fees, but the treasury is your own address in this tutorial, so they came straight back. What you actually spent is TRX for energy and bandwidth. Point the treasury at a different address and you would end up lower by the two fees. The redeem worked even though Nile's USDT returns `false` from `transfer`, because `TRC4626` paid it out with `safeTransferChecked`.
 
-TODO(verify): run against Nile and confirm `tx.hash` and `.wait()` behave as shown through the hardhat-tron bridge.
+The run above ended on exactly 2,000.000000 USDT, the balance it started with, because every fee went to the treasury and the treasury is the deployer. The 10 USDT deposit minted 9.950248 vUSDT: the 0.5% entry fee came off first.
 
 ### View it on Tronscan
 
