@@ -827,7 +827,24 @@ Open the `tronscan:` link printed by the deploy script. On [Nile Tronscan](https
 - Each transaction's **Resources consumed**, showing the energy and bandwidth it used.
 
 <Callout>
-Tronscan source verification isn't automated by `hardhat-tron` yet. To verify the contract, flatten it into one file (`npx hardhat flatten contracts/UsdtVault.sol > UsdtVault.flat.sol`) and upload that on Tronscan's contract verification page with compiler `0.8.26` and optimizer on with 200 runs. Tronscan doesn't accept subdirectory layouts or a `viaIR` setting.
+Tronscan source verification isn't automated by `hardhat-tron` yet, so you do it by hand. Tronscan recompiles from what you upload and doesn't accept a subdirectory layout, so flatten the contract into one file first:
+
+```bash title="Shell"
+npx hardhat flatten contracts/UsdtVault.sol > UsdtVault.flat.sol
+```
+
+Open the contract on Tronscan, go to the verification form, and upload that file with these settings:
+
+| Field | Value |
+| --- | --- |
+| Main Contract | `UsdtVault` |
+| Compiler | `0.8.26` |
+| Optimizer | Enabled, 200 runs |
+| ViaIR | Off |
+| VM version | `cancun` |
+| License | MIT |
+
+**Main Contract** is not a label. The flattened file holds every contract the vault inherits, and Tronscan uses this name to pick which one to compile and match against the deployed bytecode, so it must be the contract you deployed. **ViaIR** must be off because the config above doesn't use it: turning it on produces different bytecode and the match fails. These two are where verification usually goes wrong.
 </Callout>
 
 ## Optional: make it upgradeable
