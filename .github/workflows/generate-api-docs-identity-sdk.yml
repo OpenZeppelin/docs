@@ -1,0 +1,140 @@
+# Docs Repository Receiver - Non-Versioned Paths
+# Receives trigger from identity-sdk and copies its MDX guides (TypeScript package, no generated API reference)
+
+name: Generate API Docs - Identity SDK
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name or commit SHA to generate docs from'
+        required: true
+        type: string
+        default: 'main'
+      trigger_type:
+        description: 'Trigger type (tag or commit)'
+        required: false
+        type: string
+        default: 'tag'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  SOURCE_REPO: 'OpenZeppelin/identity-sdk'
+  SOURCE_REPO_URL: 'https://github.com/OpenZeppelin/identity-sdk.git'
+  GUIDES_MDX: 'docs'
+  OUTPUT_DIR: 'content/identity-sdk'
+
+jobs:
+  generate-docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Log trigger information
+        run: |
+          echo "🚀 API Documentation Generation Triggered"
+          echo "📦 Repository: ${{ env.SOURCE_REPO }}"
+          echo "🏷️  Tag/Ref: ${{ inputs.tag_name }}"
+          echo "📋 Trigger type: ${{ inputs.trigger_type }}"
+
+      - name: Checkout docs repository
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Copy guides
+        run: |
+          echo "🔄 Copying guides..."
+
+          node scripts/generate-api-docs.js \
+            --repo "${{ env.SOURCE_REPO_URL }}" \
+            --branch "${{ inputs.tag_name }}" \
+            --guides-only \
+            --guides-output "${{ env.OUTPUT_DIR }}" \
+            --guides-mdx "${{ env.GUIDES_MDX }}"
+
+      - name: Validate generated documentation
+        run: |
+          pnpm run postinstall
+          pnpm run lint:links
+
+      - name: Create Pull Request for documentation changes
+        id: create_pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config --local user.email "docs-automation@openzeppelin.com"
+          git config --local user.name "OpenZeppelin Docs Bot"
+
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "📝 Creating branch and committing documentation changes..."
+
+            BRANCH_NAME="docs/api-update-${{ env.SOURCE_REPO }}-${{ inputs.tag_name }}"
+            BRANCH_NAME=$(echo "$BRANCH_NAME" | sed 's/\//-/g' | sed 's/OpenZeppelin-//g')
+
+            git checkout -b "$BRANCH_NAME"
+            git add content/
+            git commit -m "Update API docs for ${{ env.SOURCE_REPO }} ${{ inputs.tag_name }}
+
+            - Repository: ${{ env.SOURCE_REPO }}
+            - Ref: ${{ inputs.tag_name }}
+            - Trigger: ${{ inputs.trigger_type }}
+            - Output: ${{ env.OUTPUT_DIR }}
+            - Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+
+            Auto-generated via workflow_dispatch"
+
+            git push origin "$BRANCH_NAME"
+
+            gh pr create --title "[CI] Update API docs for ${{ env.SOURCE_REPO }} ${{ inputs.tag_name }}" \
+                     --body "## API Documentation Update
+
+            This Pull Request updates the API documentation.
+
+            ### Source Information
+            - **Repository:** ${{ env.SOURCE_REPO }}
+            - **Reference:** ${{ inputs.tag_name }}
+            - **Trigger Type:** ${{ inputs.trigger_type }}
+            - **Output Directory:** ${{ env.OUTPUT_DIR }}
+            - **Timestamp:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+
+            Auto-generated via workflow_dispatch" \
+                     --base main \
+                     --head "$BRANCH_NAME" || {
+              echo "::error::Pull Request creation failed for ${{ env.SOURCE_REPO }} ${{ inputs.tag_name }}"
+              exit 1
+            }
+
+            echo "✅ Pull Request created successfully"
+            echo "pr-created=true" >> $GITHUB_OUTPUT
+          else
+            echo "ℹ️  No changes detected - documentation is up to date"
+            echo "pr-created=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create job summary
+        run: |
+          echo "## 📚 API Documentation Generation Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Source Information" >> $GITHUB_STEP_SUMMARY
+          echo "- **Repository:** ${{ env.SOURCE_REPO }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Reference:** ${{ inputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Trigger Type:** ${{ inputs.trigger_type }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Output" >> $GITHUB_STEP_SUMMARY
+          echo "- **Directory:** ${{ env.OUTPUT_DIR }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ✅ Complete" >> $GITHUB_STEP_SUMMARY

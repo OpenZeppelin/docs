@@ -25,6 +25,7 @@ function parseArgs() {
 		guidesMdx: null,
 		sourcePackage: "",
 		packageName: null,
+		guidesOnly: false,
 	};
 
 	for (let i = 0; i < args.length; i++) {
@@ -76,6 +77,9 @@ function parseArgs() {
 			case "--package-name":
 				options.packageName = args[++i];
 				break;
+			case "--guides-only":
+				options.guidesOnly = true;
+				break;
 			default:
 				console.error(`Unknown option: ${arg}`);
 				showHelp();
@@ -103,6 +107,7 @@ Options:
   --guides-mdx <path>        Path within repo containing MDX guides to copy into --guides-output (skips .adoc conversion)
   -s, --source-package <dir> Path within repo of the Solidity package to run docgen in (default: repo root)
   --package-name <name>      npm package name used in import paths (default: derived from the repo name)
+  --guides-only              Only copy the --guides-mdx guides into --guides-output (no API docs; --api-output is ignored)
   --skip-template-inject     Skip injecting canonical templates (use source repo's own)
   -h, --help                 Show this help message
 
@@ -116,6 +121,9 @@ Examples:
 
   # Solidity package in a monorepo, with MDX guides:
   node generate-api-docs.js --repo https://github.com/OpenZeppelin/openzeppelin-accounts.git --api-output content/accounts/api --source-package packages/contracts --package-name @openzeppelin-accounts/contracts --guides-output content/accounts --guides-mdx docs
+
+  # TypeScript package with hand-written MDX guides only:
+  node generate-api-docs.js --repo https://github.com/OpenZeppelin/identity-sdk.git --branch main --guides-only --guides-output content/identity-sdk --guides-mdx docs
 
   # Non-Solidity repo (copies pre-generated MDX):
   node generate-api-docs.js --repo https://github.com/OpenZeppelin/cairo-contracts.git --api-output content/contracts-cairo/3.x/api --pre-generated docs/api
@@ -243,6 +251,11 @@ async function generateApiDocs(options) {
 		guidesMdx,
 		sourcePackage,
 	} = options;
+
+	if (options.guidesOnly) {
+		await generateGuidesOnly(options);
+		return;
+	}
 
 	console.log("🔄 Generating OpenZeppelin API documentation...");
 	console.log(`📦 Repository: ${contractsRepo}`);
@@ -408,6 +421,42 @@ async function generateApiDocs(options) {
 		console.log(`📂 Documentation available in: ${apiOutputDir}`);
 	} catch (error) {
 		console.error("❌ Error generating API documentation:", error.message);
+		process.exit(1);
+	}
+}
+
+// Copy a repo's MDX guides with no API docs (e.g. TypeScript packages). The output directory
+// is owned by the guides, so it is cleared first to drop pages removed upstream.
+async function generateGuidesOnly(options) {
+	const { contractsRepo, contractsBranch, tempDir, guidesOutputDir, guidesMdx } =
+		options;
+
+	if (!guidesOutputDir || !guidesMdx) {
+		console.error("❌ --guides-only requires --guides-output and --guides-mdx");
+		process.exit(1);
+	}
+
+	console.log("📖 Copying MDX guides...");
+	console.log(`📦 Repository: ${contractsRepo}`);
+	console.log(`🌿 Branch: ${contractsBranch}`);
+	console.log(`📂 Guides Output: ${guidesOutputDir}`);
+
+	try {
+		await fs.rm(tempDir, { recursive: true, force: true });
+		await fs.rm(guidesOutputDir, { recursive: true, force: true });
+
+		execFileSync(
+			"git",
+			["clone", "--depth", "1", "--branch", contractsBranch, contractsRepo, tempDir],
+			{ stdio: "inherit" },
+		);
+
+		await copyGuides(tempDir, guidesMdx, guidesOutputDir);
+
+		await fs.rm(tempDir, { recursive: true, force: true });
+		console.log("🎉 Guides copy complete!");
+	} catch (error) {
+		console.error("❌ Error copying guides:", error.message);
 		process.exit(1);
 	}
 }
