@@ -1,0 +1,186 @@
+---
+title: Concepts
+description: Identities, keys, purposes, claims, wallet linking and the factory, as the SDK models them
+---
+
+This page describes the ONCHAINID model as the SDK sees it. The guides assume these terms.
+
+## Identities are smart accounts
+
+An ONCHAINID identity is a contract deployed by an `IdentityFactory` behind a beacon proxy. The `Identity` implementation extends OpenZeppelin's `AccountERC7579Upgradeable`, so every identity is an ERC-7579 modular account and an ERC-4337 account at the same time.
+
+Two modules matter for integrators:
+
+- `ERC734Validator`, the **registry module**. It holds both the ERC-734 key registry and the ERC-735 claim registry, and it answers `validateUserOp` for user operations. Its storage is keyed by the identity address.
+- `KeyApprovalModule`, which serves the ERC-734 execution queue (`execute` / `approve`). See [Execution queue](/identity-sdk/guides/execution).
+
+The identity routes ERC-734 and ERC-735 selectors (such as `getKey`, `addClaim`, `getClaim`) to these modules through its ERC-7579 fallback. That is why almost every SDK read and encoder targets the identity address itself, not the module.
+
+Each identity has two immutables set at construction, readable with `identityAccountAbi`:
+
+- `identityFactory()`: the factory that deployed it;
+- `registryModule()`: its `ERC734Validator`.
+
+There are two ways to make an identity act:
+
+- **User operations.** Connect with `toIdentity` and send through any ERC-4337 bundler. The identity is `msg.sender` at every target. See [Account abstraction](/identity-sdk/guides/account-abstraction).
+- **Direct transactions.** A wallet holding a suitable key on the identity sends a transaction to the identity (for example, `addClaim` from a key with `CLAIM_ADDER`). The identity sees the wallet as the caller and checks its key. Calls that must come _from_ the identity, such as linking a wallet at the factory, need the user operation path or the identity's ERC-734 `execute` ([Execution queue](/identity-sdk/guides/execution)).
+
+Some writes only work as direct transactions. They check the key of the address that called the identity, and in the identity's own user operation that caller is the identity itself, which holds no key. So holder-side `addClaim` / `removeClaim`, issuer-side `revokeClaimByDigest` / `addClaimTo`, and ERC-734 `execute` / `approve` must be direct transactions from a key holder. Key and module management also accept a call from the identity itself, so they work on both paths. Wallet linking must come from the identity itself: a user operation, or ERC-734 `execute`.
+
+All encoders return a `Call` (`{ to: Address; data: Hex }`), which fits both paths: pass it to a wallet client's `sendTransaction`, or put it in `sendUserOperation({ calls })`.
+
+## Keys
+
+A key is identified by its **signer data**: ERC-7913 signer bytes.
+
+- For an EOA (or an ERC-1271 contract) the signer data is its 20-byte address.
+- For any other signer (passkey, RSA, other ERC-7913 verifiers) it is `verifier (20 bytes) || key (rest)`. `encodeVerifierSigner` builds it; see [Passkeys](/identity-sdk/guides/passkeys).
+
+The registry accepts signer data between 20 and 1024 bytes. It stores every key under:
+
+```ts
+keyHash = keccak256(signerData);
+```
+
+The registry never trusts a caller-supplied `keyHash`, so the SDK always derives it locally (`toKeyParam`, `prepareAddKey`). Reads such as `getKeysByPurpose` return these hashes, and `getKeyData` maps a hash back to its signer data.
+
+Each key has a **key type** (`KeyTypes`) and one or more **purposes** (`KeyPurposes`). A key can hold several purposes at once.
+
+| `KeyPurposes`  | Value | Meaning                                                                           |
+| -------------- | ----- | --------------------------------------------------------------------------------- |
+| `MANAGEMENT`   | `1n`  | Manage the identity: keys, modules. Root of trust. Satisfies every purpose check. |
+| `ACTION`       | `2n`  | Act on behalf of the identity (signing, logins, transactions to other contracts). |
+| `CLAIM_SIGNER` | `3n`  | Sign claims about other identities (on an issuer identity).                       |
+| `ENCRYPTION`   | `4n`  | Off-chain encryption usage.                                                       |
+| `CLAIM_ADDER`  | `5n`  | Add claims to the identity, but not remove them.                                  |
+| `PROPOSER`     | `6n`  | Queue executions through `KeyApprovalModule`. Cannot auto-run or self-approve.    |
+
+| `KeyTypes`       | Value | Signer data                                                     |
+| ---------------- | ----- | --------------------------------------------------------------- |
+| `ECDSA`          | `1n`  | 20-byte address (secp256k1)                                     |
+| `RSA`            | `2n`  | RSA modulus and exponent per ERC-7913                           |
+| `WEBAUTHN`       | `3n`  | P-256 key verified through an ERC-7913 verifier                 |
+| `MODULE`         | `4n`  | ERC-7579 executor module; gates `executeFromExecutor`           |
+| `ACCESS_MANAGER` | `5n`  | OpenZeppelin AccessManager governing the identity through roles |
+
+Executor modules act through `executeFromExecutor` only while they hold a `MODULE` key; see [Modules](/identity-sdk/guides/modules).
+
+`keyHasPurpose` returns `true` for a key that holds `MANAGEMENT`, whatever purpose is asked, because the on-chain check treats MANAGEMENT as universal.
+
+A key may also carry **client data**: non-cryptographic metadata such as a WebAuthn credential id. It is stored per key and defaults to `0x`.
+
+## Claims
+
+A claim is a statement one identity (the **issuer**) makes about another (the **subject**). The subject stores it in its claim registry.
+
+| Field       | Meaning                                                                 |
+| ----------- | ----------------------------------------------------------------------- |
+| `issuer`    | The issuer identity address (not the signing key)                       |
+| `topic`     | ERC-735 topic, a `bigint` (for example a KYC or accreditation topic id) |
+| `scheme`    | ERC-735 signature scheme, a `bigint`                                    |
+| `signature` | `abi.encode(bytes signer, bytes signature)` (see below)                 |
+| `data`      | `ClaimData`                                                             |
+| `uri`       | Pointer to off-chain metadata; may be empty                             |
+
+ONCHAINID replaces ERC-735's raw `data` bytes with a struct:
+
+```ts
+type ClaimData = {
+  issuedAt: bigint; // must be > 0; the claim is not valid before it
+  validUntil: bigint; // 0n means no expiry
+  metadataHash: Hex; // binds scheme and uri to the signature
+  payload: Hex; // topic-specific contents
+};
+```
+
+`metadataHash` is the EIP-712 struct hash of `Metadata(uint256 scheme, string uri)`. `getMetadataHash({ scheme, uri })` computes it. `prepareAddClaim` derives it for you, which is why it takes `ClaimContents` (`ClaimData` without `metadataHash`).
+
+Issuers sign the claim as EIP-712 typed data (`CLAIM_TYPES`) under the **issuer identity's** EIP-712 domain. The signing key must hold `CLAIM_SIGNER` on the issuer. The stored signature is not the raw signature: it is `abi.encode(bytes signer, bytes signature)`, where `signer` is the key's signer data. The registry decodes `signer` to find the key, then checks the raw signature.
+
+An identity holds at most one claim per `(issuer, topic)`. The claim id is `keccak256(abi.encode(issuer, topic))` (`computeClaimId`). Adding a claim under an existing pair overwrites it, which is how renewals work.
+
+Issuers can revoke a claim by its EIP-712 digest (`prepareRevokeClaimByDigest`, read back with `isDigestRevoked`), and can store a claim on its subject themselves with `prepareAddClaimTo`. Holders can remove a claim from their own registry with `removeClaim`.
+
+See [Claims](/identity-sdk/guides/claims).
+
+## Wallet linking
+
+The `IdentityFactory` keeps a registry from wallets to identities. A wallet is not stored as a bare address but as an **ERC-7930 interoperable address** (a byte envelope that names the chain and the address). Build one for an EVM account with:
+
+```ts
+formatEvmV1({ chainId, address }); // 0x0001 || 0x0000 || len(chainRef) || chainRef || 0x14 || address
+```
+
+The factory keys wallets by a canonical form of the envelope, so differently padded encodings of the same wallet resolve to the same entry and share one nonce.
+
+Each wallet has an `AccountStatus`:
+
+| `AccountStatus` | Value | Meaning                                                        |
+| --------------- | ----- | -------------------------------------------------------------- |
+| `None`          | `0n`  | Never linked                                                   |
+| `Active`        | `1n`  | Linked to an identity                                          |
+| `Revoked`       | `2n`  | Was linked; **terminal**, the wallet can never be linked again |
+
+The wallet that deploys an identity (or the `account` named in `createIdentityFor`) is linked automatically. Further wallets are linked by the identity itself, with the wallet's consent as an EIP-712 `LinkAccount` signature under the factory's domain. A factory identity's own address resolves to itself and reports `Active`.
+
+Wallets on other chains propose a link through a trusted ERC-7786 gateway; the proposal waits at the factory until the identity accepts or declines it.
+
+See [Wallet linking](/identity-sdk/guides/wallet-linking).
+
+## The factory
+
+The `IdentityFactory`:
+
+- deploys identities with CREATE3 behind a beacon proxy, so addresses do not depend on the implementation bytecode;
+- assigns each identity an **identity type** (`IdentityTypes`: `ASSET`, `INDIVIDUAL`, `CORPORATE`, `IOT`, `CLAIM_ISSUER`, `SMART_CONTRACT`, `PUBLIC_AUTHORITY`, `AI_AGENT`);
+- applies a per-type **policy**: whether the type is self-deployable, which AccessManager role may deploy it for someone else, and whether it binds a single wallet;
+- installs the modules registered for the type;
+- holds the wallet linking registry.
+
+The deploy address depends on the factory, the identity type, the caller's salt string, the linked wallet and the initial keys:
+
+```text
+deploySalt = keccak256(abi.encode(identityType, salt, account, keccak256(abi.encode(keys))))
+address    = CREATE3(factory, deploySalt)
+```
+
+`computeDeploySalt` and `computeIdentityAddress` reproduce this off-chain. Modules are not part of the salt.
+
+`isFactoryIdentity` and `identityTypeOf` tell whether an address was deployed by a given factory and with which type. `getIdentityType` reads the type from the identity itself.
+
+See [Deploy an identity](/identity-sdk/guides/deploy-identity).
+
+## Which purpose a call needs
+
+When an identity executes calls (for example, the calls of a user operation), the signer needs:
+
+- **MANAGEMENT** if any call targets the identity itself, its factory, or its registry module;
+- **ACTION** otherwise.
+
+The identity publishes this rule as a view, and the SDK asks it rather than reimplementing it, since the factory and registry are per-identity and the rule can change with the beacon implementation:
+
+```ts
+import { isManagementTarget, purposeForTargets } from '@openzeppelin/identity-sdk';
+
+// One target.
+const needsManagement = await isManagementTarget(client, { identity, target });
+
+// A whole batch: MANAGEMENT if any target is management-grade, ACTION otherwise.
+const purpose = await purposeForTargets(client, { identity, targets: calls.map(c => c.to) });
+```
+
+The strictest purpose wins: one management-grade target makes the whole operation require MANAGEMENT. `purposeForTargets` asks about every distinct target in one multicall, so it needs Multicall3 at its canonical address (deployed on all major public chains; predeploy it on a local chain).
+
+This means that key and module writes (which target the identity) and wallet linking (which targets the factory) need a MANAGEMENT key when sent as user operations.
+
+The rule is the user operation's. Direct transactions are checked by the function they call (for example, `addClaim` accepts `CLAIM_ADDER`), and the ERC-734 execution queue has its own rules; see [Execution queue](/identity-sdk/guides/execution).
+
+To check whether the connected signer qualifies before sending:
+
+```ts
+import { keccak256 } from 'viem';
+import { keyHasPurpose } from '@openzeppelin/identity-sdk';
+
+const allowed = await keyHasPurpose(client, { identity, key: keccak256(account.signerData), purpose });
+```

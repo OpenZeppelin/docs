@@ -1,0 +1,144 @@
+---
+title: Modules
+description: Install, uninstall and check ERC-7579 modules on an identity
+---
+
+Every identity is an ERC-7579 modular account. The factory installs the modules registered for the identity's type at deployment (see [Concepts](/identity-sdk/concepts#the-factory)). These functions manage modules afterwards.
+
+Module writes target the identity itself, so they need **MANAGEMENT** or a call from the identity. They work both as a direct transaction from a wallet holding MANAGEMENT and from the identity's own user operation (`identityActions().installModule` / `uninstallModule`).
+
+Module types are ERC-7579 ids, exported as `ModuleTypes`:
+
+| `ModuleTypes` | Value |
+| ------------- | ----- |
+| `VALIDATOR`   | `1n`  |
+| `EXECUTOR`    | `2n`  |
+| `FALLBACK`    | `3n`  |
+| `HOOK`        | `4n`  |
+
+## Install a module
+
+```ts
+prepareInstallModule(params: {
+  identity: Address;
+  moduleType: bigint | ModuleType; // ModuleTypes.*
+  module: Address;
+  initData?: Hex; // passed to the module's onInstall; defaults to 0x
+}): Call
+```
+
+As a user operation:
+
+```ts
+import { ModuleTypes } from '@openzeppelin/identity-sdk';
+
+const hash = await bundler.installModule({
+  identity,
+  moduleType: ModuleTypes.EXECUTOR,
+  module: executorModule,
+  initData: '0x',
+});
+await bundler.waitForUserOperationReceipt({ hash });
+```
+
+As a direct transaction from a MANAGEMENT key:
+
+```ts
+import { ModuleTypes, prepareInstallModule } from '@openzeppelin/identity-sdk';
+
+const hash = await walletClient.sendTransaction(
+  prepareInstallModule({ identity, moduleType: ModuleTypes.EXECUTOR, module: executorModule }),
+);
+```
+
+Installing a module does not give it a key:
+
+- An **executor** acts through `executeFromExecutor` only once it also holds a key of type `MODULE` with a purpose. Register it with `prepareAddKey({ identity, signerData: module, purpose, keyType: KeyTypes.MODULE })`, in the same user operation if you like.
+- A **validator** lets its signers authorize user operations for the identity. Only install validators that scope their keys.
+
+```ts
+import { KeyPurposes, KeyTypes, ModuleTypes, prepareAddKey, prepareInstallModule } from '@openzeppelin/identity-sdk';
+
+await bundler.sendUserOperation({
+  calls: [
+    prepareInstallModule({ identity, moduleType: ModuleTypes.EXECUTOR, module: executorModule }),
+    prepareAddKey({ identity, signerData: executorModule, purpose: KeyPurposes.ACTION, keyType: KeyTypes.MODULE }),
+  ],
+});
+```
+
+## Fallback handlers
+
+A fallback handler serves specific function selectors on the identity. Its install and uninstall data start with the 4-byte selector to route or unroute, followed by any data for the module itself. `encodeFallbackInitData` builds it:
+
+```ts
+import { toFunctionSelector } from 'viem';
+import { encodeFallbackInitData, ModuleTypes } from '@openzeppelin/identity-sdk';
+
+const selector = toFunctionSelector('getCurrentNonce()');
+
+await bundler.installModule({
+  identity,
+  moduleType: ModuleTypes.FALLBACK,
+  module: handler,
+  initData: encodeFallbackInitData({ selector }), // { selector, data? }
+});
+```
+
+Each install or uninstall routes one selector. A handler that serves several selectors is installed once per selector.
+
+## Uninstall a module
+
+```ts
+prepareUninstallModule(params: {
+  identity: Address;
+  moduleType: bigint | ModuleType;
+  module: Address;
+  deInitData?: Hex; // passed to the module's onUninstall; defaults to 0x
+}): Call
+```
+
+```ts
+await bundler.uninstallModule({
+  identity,
+  moduleType: ModuleTypes.FALLBACK,
+  module: handler,
+  deInitData: encodeFallbackInitData({ selector }),
+});
+```
+
+What the identity does on uninstall:
+
+- For every module type except fallback handlers, it first strips every ERC-734 purpose the module's key holds.
+- A fallback uninstall removes one selector only and keeps the module's key, since the module may still serve other selectors. Remove the key with `prepareRemoveKey` when retiring the module.
+- Uninstalling any part of the `KeyApprovalModule` voids its pending executions (see [Execution queue](/identity-sdk/guides/execution)).
+
+<Callout type="warn">
+  The ERC-734 execution queue (`execute`, `approve`, `getCurrentNonce`) reaches the `KeyApprovalModule` through fallback
+  routes on the identity. Uninstalling one of those routes makes the matching SDK calls (`prepareExecute`,
+  `prepareApprove`, `getExecutionNonce`) revert on that identity until it is installed again.
+</Callout>
+
+## Check a module
+
+```ts
+import { isModuleInstalled, ModuleTypes } from '@openzeppelin/identity-sdk';
+
+const installed = await isModuleInstalled(client, {
+  identity,
+  moduleType: ModuleTypes.FALLBACK,
+  module: handler,
+  additionalContext: selector, // for a fallback handler, the selector to check; defaults to 0x
+});
+```
+
+## Reference
+
+| Function                  | Parameters                                                           | Returns             |
+| ------------------------- | -------------------------------------------------------------------- | ------------------- |
+| `prepareInstallModule`    | `{ identity, moduleType, module, initData? }`                        | `Call`              |
+| `prepareUninstallModule`  | `{ identity, moduleType, module, deInitData? }`                      | `Call`              |
+| `isModuleInstalled`       | `client, { identity, moduleType, module, additionalContext? }`       | `boolean`           |
+| `encodeFallbackInitData`  | `{ selector, data? }`                                                | `Hex`               |
+| `bundler.installModule`   | `prepareInstallModule` parameters plus `sendUserOperation` options   | user operation hash |
+| `bundler.uninstallModule` | `prepareUninstallModule` parameters plus `sendUserOperation` options | user operation hash |

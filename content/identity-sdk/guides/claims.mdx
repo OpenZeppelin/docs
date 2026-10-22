@@ -1,0 +1,314 @@
+---
+title: Claims
+description: Sign, store, revoke and verify ERC-735 claims
+---
+
+A claim flows through two parties:
+
+1. The **issuer** (an identity, usually of type `CLAIM_ISSUER`) signs the claim off-chain with a key that holds `CLAIM_SIGNER` on the issuer identity.
+2. The **holder** (the subject identity) stores the signed claim in its own registry.
+
+Anyone can then read the claim and ask the issuer whether it is still valid. See [Concepts](/identity-sdk/concepts#claims) for the claim fields.
+
+## Issuer side: sign a claim
+
+### Read the domain
+
+Claims are signed as EIP-712 typed data under the **issuer identity's** domain, not the subject's. Read it from the chain with `getClaimDomain`, which uses the issuer's ERC-5267 `eip712Domain()`:
+
+```ts
+import { getClaimDomain } from '@openzeppelin/identity-sdk';
+
+const domain = await getClaimDomain(client, { issuer: issuerIdentity });
+```
+
+It throws if the issuer publishes no domain. The result only contains the fields the contract declares, which matters: including an undeclared zero `salt` would change the digest.
+
+### Sign with an EOA key: `signClaim`
+
+```ts
+import { privateKeyToAccount } from 'viem/accounts';
+import { getClaimDomain, signClaim } from '@openzeppelin/identity-sdk';
+
+const claimSigner = privateKeyToAccount(process.env.CLAIM_SIGNER_KEY as `0x${string}`); // CLAIM_SIGNER on the issuer
+
+const topic = 1n;
+const scheme = 1n;
+const uri = 'https://issuer.example/claims/123';
+const data = {
+  issuedAt: BigInt(Math.floor(Date.now() / 1000)),
+  validUntil: 0n, // no expiry
+  payload: '0x', // topic-specific contents
+} as const;
+
+const signature = await signClaim(claimSigner, {
+  domain: await getClaimDomain(client, { issuer: issuerIdentity }),
+  subject: holderIdentity,
+  topic,
+  scheme,
+  uri,
+  data,
+});
+```
+
+`signClaim(signer: LocalAccount, params: ClaimSignatureParams)` takes:
+
+| Field     | Type              | Notes                                                   |
+| --------- | ----------------- | ------------------------------------------------------- |
+| `domain`  | `TypedDataDomain` | From `getClaimDomain`                                   |
+| `subject` | `Address`         | The holder identity                                     |
+| `topic`   | `bigint`          |                                                         |
+| `scheme`  | `bigint`          | Signed through the `Metadata` struct                    |
+| `uri`     | `string`          | Optional, defaults to `''`; signed through `Metadata`   |
+| `data`    | `ClaimContents`   | `{ issuedAt, validUntil, payload }` (no `metadataHash`) |
+
+The returned value is **not** the raw signature. It is the packed form the registry expects:
+
+```text
+abi.encode(bytes signer, bytes signature)
+```
+
+where `signer` is the key's 20-byte address. Pass it unchanged to the holder.
+
+`issuedAt` must be greater than zero, and the claim is not valid before it. `validUntil` of `0n` means no expiry.
+
+### Sign with any other key: `encodeClaimSignature`
+
+For passkeys, ERC-1271 wallets or other ERC-7913 signers, sign the typed data yourself and pack the result:
+
+```ts
+import { encodeClaimSignature, getClaimTypedData } from '@openzeppelin/identity-sdk';
+
+const typedData = getClaimTypedData({ domain, subject: holderIdentity, topic, scheme, uri, data });
+const rawSignature = await mySigner.signTypedData(typedData); // however your signer signs EIP-712
+
+const signature = encodeClaimSignature({
+  signer: issuerKeySignerData, // the key's signer data: an address, or verifier(20) || key
+  signature: rawSignature,
+});
+```
+
+`signer` must be the signer data of a key holding `CLAIM_SIGNER` on the issuer. `getClaimDigest(params)` returns the EIP-712 digest if your signer signs digests rather than typed data. `CLAIM_TYPES` holds the type map.
+
+### Metadata hash
+
+`ClaimData.metadataHash` binds `scheme` and `uri` to the signature. You do not need it for signing (the typed data carries `scheme` and `uri` directly) or for `prepareAddClaim` (which derives it). It is exported for building `ClaimData` by hand, for example to call `isClaimValid` on a claim that is not stored yet:
+
+```ts
+import { getMetadataHash } from '@openzeppelin/identity-sdk';
+
+const metadataHash = getMetadataHash({ scheme, uri });
+```
+
+## Holder side: store and remove claims
+
+### Add a claim
+
+`prepareAddClaim` encodes ERC-735 `addClaim` against the holder identity:
+
+```ts
+prepareAddClaim(params: {
+  identity: Address; // the holder (the claim's subject)
+  topic: bigint;
+  scheme: bigint;
+  issuer: Address; // the issuer identity
+  signature: Hex; // from signClaim or encodeClaimSignature
+  data: ClaimContents; // { issuedAt, validUntil, payload }
+  uri?: string; // must match the signed uri; defaults to ''
+}): Call
+```
+
+It derives `metadataHash` from `scheme` and `uri`, so the stored `ClaimData` always matches what was signed. The registry re-verifies the signature against the issuer before storing.
+
+Who may send it: a key on the holder with `CLAIM_SIGNER`, `CLAIM_ADDER` or `MANAGEMENT`, or the claim's own issuer if its reputation passes the registry's trusted-issuer check. The registry checks the address that called the holder identity.
+
+That means the holder adds claims with a **direct transaction** from a wallet holding one of those keys:
+
+```ts
+import { prepareAddClaim } from '@openzeppelin/identity-sdk';
+
+// From a wallet registered on the holder as CLAIM_ADDER, CLAIM_SIGNER or MANAGEMENT.
+const txHash = await walletClient.sendTransaction(
+  prepareAddClaim({ identity: holderIdentity, topic, scheme, issuer: issuerIdentity, signature, data, uri }),
+);
+```
+
+It does **not** work as a user operation from the holder identity itself (`identityActions().addClaim`): there the identity calls itself, so the registry sees the identity's own address as the caller. That address is not a key, and the add reverts with `SenderDoesNotHaveClaimSignerKey`. A user operation works when it comes from the **issuer** identity and targets the holder: the caller is then the claim's issuer, which the trusted-issuer check accepts if the issuer has enough reputation.
+
+The issuer can also store the claim on the holder itself, with no transaction from the holder: see [Push a claim to its subject](#push-a-claim-to-its-subject-addclaimto).
+
+Adding a claim with the same `(issuer, topic)` as an existing one overwrites it. That is how renewals work: the issuer signs a new claim with new dates and the holder adds it again.
+
+For the gas to send with `addClaim`, see [Gas](/identity-sdk/gas): claim verification runs nested inside the identity and is where the 63/64 pitfall was observed.
+
+### Remove a claim
+
+```ts
+import { computeClaimId, prepareRemoveClaim } from '@openzeppelin/identity-sdk';
+
+const claimId = computeClaimId({ issuer: issuerIdentity, topic }); // keccak256(abi.encode(issuer, topic))
+
+const txHash = await walletClient.sendTransaction(prepareRemoveClaim({ identity: holderIdentity, claimId }));
+```
+
+Who may send it: a key on the holder with `CLAIM_SIGNER` or `MANAGEMENT`, as a direct transaction for the same reason as adding (`identityActions().removeClaim` from the holder's own user operation reverts). `CLAIM_ADDER` cannot remove claims. The claim's issuer can also remove its own claim, subject to the trusted-issuer check. It reverts if no claim is stored under `claimId`.
+
+## Issuer side: revoke and push claims
+
+Both writes go to the **issuer** identity and check the key of the address that called it. Send them as a **direct transaction** from a wallet holding **MANAGEMENT** on the issuer. From the issuer identity's own user operation the caller is the identity, which holds no key, and the call reverts.
+
+### Revoke an issued claim
+
+`prepareRevokeClaimByDigest` revokes one claim by its EIP-712 digest under the issuer's domain:
+
+```ts
+import {
+  getClaimDigest,
+  getClaimDomain,
+  isDigestRevoked,
+  prepareRevokeClaimByDigest,
+} from '@openzeppelin/identity-sdk';
+
+const digest = getClaimDigest({
+  domain: await getClaimDomain(client, { issuer: issuerIdentity }),
+  subject: holderIdentity,
+  topic,
+  scheme,
+  uri,
+  data, // { issuedAt, validUntil, payload }, as signed
+});
+
+// From a wallet holding MANAGEMENT on the issuer identity.
+const txHash = await issuerWalletClient.sendTransaction(prepareRevokeClaimByDigest({ issuer: issuerIdentity, digest }));
+await client.waitForTransactionReceipt({ hash: txHash });
+
+await isDigestRevoked(client, { issuer: issuerIdentity, digest }); // true
+```
+
+The digest covers the subject, topic and claim data, so this revokes exactly one claim. A revoked claim stops validating (`getClaimStatus` reports `ClaimStatus.Revoked`), and `addClaim` refuses it, even if the holder already stored it. Revocation is permanent: revoking the same digest again reverts with `ClaimAlreadyRevoked`.
+
+### Push a claim to its subject: `addClaimTo`
+
+`prepareAddClaimTo` has the issuer identity store a claim on the subject. The issuer checks that the claim is currently `Valid`, then calls `addClaim` on the subject with itself as the issuer:
+
+```ts
+prepareAddClaimTo(params: {
+  issuer: Address; // the issuer identity; the transaction goes here
+  subject: Address; // the identity the claim is about, and where it is stored
+  topic: bigint;
+  scheme: bigint;
+  signature: Hex; // from signClaim or encodeClaimSignature
+  data: ClaimContents; // { issuedAt, validUntil, payload }
+  uri?: string; // must match the signed uri; defaults to ''
+}): Call
+```
+
+The subject accepts the claim when it granted the issuer identity a `CLAIM_SIGNER` or `CLAIM_ADDER` key, or when the issuer passes the registry's trusted-issuer check (a `CLAIM_ISSUER` identity with enough reputation). Granting the key is how a holder consents to receive claims from a given issuer:
+
+```ts
+import { getClaimDomain, KeyPurposes, KeyTypes, prepareAddClaimTo, signClaim } from '@openzeppelin/identity-sdk';
+
+// 1. The holder grants the issuer identity a CLAIM_ADDER key (a user operation from the holder works).
+await holderBundler.addKey({
+  identity: holderIdentity,
+  signerData: issuerIdentity,
+  purpose: KeyPurposes.CLAIM_ADDER,
+  keyType: KeyTypes.ECDSA,
+});
+
+// 2. The issuer signs the claim and pushes it, from a wallet holding MANAGEMENT on the issuer.
+const signature = await signClaim(claimSigner, {
+  domain: await getClaimDomain(client, { issuer: issuerIdentity }),
+  subject: holderIdentity,
+  topic,
+  scheme,
+  uri,
+  data,
+});
+const txHash = await issuerWalletClient.sendTransaction(
+  prepareAddClaimTo({ issuer: issuerIdentity, subject: holderIdentity, topic, scheme, signature, data, uri }),
+);
+```
+
+Like `prepareAddClaim`, it derives `metadataHash` from `scheme` and `uri`.
+
+## Read and verify claims
+
+### Stored claims
+
+```ts
+import { computeClaimId, getClaim, getClaimIdsByTopic, getClaimIdsByTopicPaginated } from '@openzeppelin/identity-sdk';
+
+// One claim. A missing id returns a zeroed record whose issuer is the zero address.
+const claim = await getClaim(client, {
+  identity: holderIdentity,
+  claimId: computeClaimId({ issuer: issuerIdentity, topic }),
+});
+// claim: { topic, scheme, issuer, signature, data: { issuedAt, validUntil, metadataHash, payload }, uri }
+
+// All claim ids under a topic.
+const ids = await getClaimIdsByTopic(client, { identity: holderIdentity, topic });
+
+// A page of them: positions [start, end), clamped to the number of ids.
+const page = await getClaimIdsByTopicPaginated(client, { identity: holderIdentity, topic, start: 0n, end: 20n });
+```
+
+`getClaimIdsByTopicPaginated` calls the registry module directly with `from` set to the identity, so it needs an RPC that honors `from` in `eth_call` (most do).
+
+### Validity
+
+A stored claim is not necessarily a valid one. Ask the issuer:
+
+```ts
+import { ClaimStatus, getClaimStatus, isClaimValid, isDigestRevoked, getClaimDigest } from '@openzeppelin/identity-sdk';
+
+const check = {
+  issuer: claim.issuer,
+  subject: holderIdentity,
+  topic: claim.topic,
+  signature: claim.signature,
+  data: claim.data, // includes metadataHash, as returned by getClaim
+};
+
+const valid = await isClaimValid(client, check); // boolean
+
+const status = await getClaimStatus(client, check);
+if (status === ClaimStatus.Expired) {
+  // ask the issuer for a renewal
+}
+```
+
+`isClaimValid` and `getClaimStatus` take `ClaimCheckParams`: `{ issuer, subject, topic, signature, data }`.
+
+`getClaimStatus` returns the first failing check, in this order:
+
+| Check                                     | `ClaimStatus`  |
+| ----------------------------------------- | -------------- |
+| `issuedAt == 0`                           | `BadSignature` |
+| before `issuedAt`                         | `NotYetValid`  |
+| after `validUntil` (when non-zero)        | `Expired`      |
+| digest revoked by the issuer              | `Revoked`      |
+| malformed signature                       | `BadSignature` |
+| signer lacks `CLAIM_SIGNER` on the issuer | `NotIssued`    |
+| signature does not verify                 | `BadSignature` |
+| all checks pass                           | `Valid`        |
+
+Like the paginated read, `getClaimStatus` calls the issuer's registry module with `from` set to the issuer.
+
+To check revocation alone, compute the digest and ask the issuer:
+
+```ts
+const digest = getClaimDigest({
+  domain: await getClaimDomain(client, { issuer: claim.issuer }),
+  subject: holderIdentity,
+  topic: claim.topic,
+  scheme: claim.scheme,
+  uri: claim.uri,
+  data: { issuedAt: claim.data.issuedAt, validUntil: claim.data.validUntil, payload: claim.data.payload },
+});
+const revoked = await isDigestRevoked(client, { issuer: claim.issuer, digest });
+```
+
+### Decoding payloads
+
+The meaning of `payload` depends on the topic. The `IdentityUtilities` contract keeps a schema per topic (field names and types); read it with `iidentityUtilitiesAbi` (`getSchema(topicId)`) and decode `payload` with viem's `decodeAbiParameters`.

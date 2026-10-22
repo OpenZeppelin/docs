@@ -1,0 +1,124 @@
+---
+title: Execution Queue
+description: Queue, approve and track ERC-734 executions with direct transactions from key holders
+---
+
+Besides user operations, an identity can make calls through the ERC-734 execution queue. A key holder asks the identity to call a target; the call either runs at once or waits for approval, depending on the key's purpose and the target. The queue is served by the `KeyApprovalModule`, which the identity reaches through its ERC-7579 fallback.
+
+Use the queue when a wallet holding a key should make the identity act with a plain transaction, or when a call needs a second key's approval (a `PROPOSER` key queues, a `MANAGEMENT` or `ACTION` key approves). Under account abstraction there is nothing to queue: a user operation calls the target directly. See [Account abstraction](/identity-sdk/guides/account-abstraction).
+
+<Callout type="warn">
+  `execute` and `approve` must be **direct transactions** from a wallet holding a key on the identity. The module checks
+  the key of the address that called the identity. Sent from the identity's own user operation, the caller is the
+  identity itself, which holds no key, and the call is refused. That is why `identityActions()` has no `execute` or
+  `approve` method.
+</Callout>
+
+## Queue a call: `prepareExecute`
+
+```ts
+prepareExecute(params: {
+  identity: Address; // the identity that will make the call
+  to: Address; // the call's target
+  value?: bigint; // wei the identity sends from its own balance; defaults to 0n
+  data?: Hex; // the call's calldata; defaults to 0x
+}): Call
+```
+
+Who may queue, and when the call runs:
+
+- Any key with `PROPOSER`, `ACTION`, `CLAIM_SIGNER`, `CLAIM_ADDER` or `MANAGEMENT` can queue.
+- The call runs immediately when the sender holds `MANAGEMENT`, or holds `ACTION` and `to` is an external target.
+- A management target (the identity itself, its factory or its registry module; see `isManagementTarget`) never runs immediately below `MANAGEMENT`.
+- Otherwise the call waits for [`prepareApprove`](#approve-or-reject-prepareapprove).
+
+`value` is paid from the identity's balance when the call runs. Wei attached to the `execute` transaction itself is returned to the identity, not forwarded.
+
+```ts
+import { createWalletClient, http, parseEther } from 'viem';
+import { getExecution, parseExecutionRequests, prepareExecute } from '@openzeppelin/identity-sdk';
+
+// `actor` holds ACTION on the identity, and `recipient` is an external address: the call runs at once.
+const walletClient = createWalletClient({ account: actor, chain, transport: http() });
+
+const hash = await walletClient.sendTransaction(prepareExecute({ identity, to: recipient, value: parseEther('1') }));
+const receipt = await client.waitForTransactionReceipt({ hash });
+
+const [request] = parseExecutionRequests(receipt.logs);
+// { identity, executionId, to, value, data, proposer }
+```
+
+### Execution ids
+
+Each queued call gets the identity's current execution nonce as its id. Ids start at 0.
+
+- `getExecutionNonce(client, { identity })` returns the id the next queued call will get.
+- `parseExecutionRequests(logs)` decodes the `ExecutionRequested` events in a set of logs, such as a receipt's, and returns `{ identity, executionId, to, value, data, proposer }` for each. This is the reliable way to learn the id a `prepareExecute` transaction used.
+
+### A failed call does not revert
+
+A call that runs and fails does not revert the `execute` transaction: the module records it with `succeeded: false` and emits `ExecutionFailed`. Check `getExecution` or the events, not the receipt status. The call runs nested inside the identity, so leave gas headroom; see [Gas](/identity-sdk/gas).
+
+## Approve or reject: `prepareApprove`
+
+```ts
+prepareApprove(params: {
+  identity: Address;
+  executionId: bigint;
+  approve: boolean; // true approves and runs the call, false rejects it
+}): Call
+```
+
+The sender needs `MANAGEMENT` when the queued target is a management target, and `ACTION` otherwise. Approving also requires the key that queued the request to still be allowed to queue; rejecting closes the request either way.
+
+A `PROPOSER` key queues, and a `MANAGEMENT` key approves:
+
+```ts
+import { parseEther } from 'viem';
+import { getExecution, parseExecutionRequests, prepareApprove, prepareExecute } from '@openzeppelin/identity-sdk';
+
+// 1. The proposer queues the call. A PROPOSER key cannot run it.
+const queued = await client.waitForTransactionReceipt({
+  hash: await proposerWallet.sendTransaction(prepareExecute({ identity, to: recipient, value: parseEther('1') })),
+});
+const { executionId } = parseExecutionRequests(queued.logs)[0];
+
+// 2. A MANAGEMENT key approves it, which runs the call.
+const approved = await client.waitForTransactionReceipt({
+  hash: await managerWallet.sendTransaction(prepareApprove({ identity, executionId, approve: true })),
+});
+
+// 3. Check the outcome.
+const execution = await getExecution(client, { module: keyApprovalModule, identity, executionId });
+execution.succeeded; // true if the call landed
+```
+
+## Read an execution: `getExecution`
+
+```ts
+getExecution(client, params: { module: Address; identity: Address; executionId: bigint }): Promise<ExecutionRecord>
+```
+
+The identity does not route this read through its fallback, so `getExecution` calls the `KeyApprovalModule` itself, which takes the identity as an argument. `module` is the `KeyApprovalModule` deployment the identity uses. The factory lists the modules it installs for each identity type (`getIdentityTypeModules` on `iidentityFactoryAbi`).
+
+`ExecutionRecord` is `{ to, value, data, proposer, approved, executed, succeeded }`:
+
+| State    | `approved` | `executed` | `succeeded`                    |
+| -------- | ---------- | ---------- | ------------------------------ |
+| Pending  | `false`    | `false`    | `false`                        |
+| Rejected | `false`    | `true`     | `false`                        |
+| Ran      | `true`     | `true`     | whether the call itself landed |
+
+An id that was never queued reads as a zeroed record. A zero `proposer` is the tell, since queueing requires a key.
+
+Uninstalling any part of the `KeyApprovalModule` voids its pending executions ([Modules](/identity-sdk/guides/modules#uninstall-a-module)). Voided requests still read as pending, and `approve` refuses them with `RequestInvalidated`.
+
+## Reference
+
+| Function                 | Parameters                                  | Returns              |
+| ------------------------ | ------------------------------------------- | -------------------- |
+| `prepareExecute`         | `{ identity, to, value?, data? }`           | `Call`               |
+| `prepareApprove`         | `{ identity, executionId, approve }`        | `Call`               |
+| `getExecutionNonce`      | `client, { identity }`                      | `bigint`             |
+| `getExecution`           | `client, { module, identity, executionId }` | `ExecutionRecord`    |
+| `parseExecutionRequests` | `logs`                                      | `ExecutionRequest[]` |

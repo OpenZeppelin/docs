@@ -1,0 +1,110 @@
+---
+title: Passkeys
+description: Register a WebAuthn passkey as an identity key and sign user operations with it
+---
+
+A WebAuthn passkey can hold a key on an identity like an EOA. The registry checks it through an ERC-7913 verifier contract: the key's signer data is `verifier (20 bytes) || qx || qy`, where `qx || qy` is the passkey's P-256 public key. See [Concepts](/identity-sdk/concepts#keys) for signer data.
+
+You need the address of the WebAuthn verifier the deployment trusts (`ERC7913WebAuthnVerifier`, logged by ONCHAINID's deploy script).
+
+## Register a passkey
+
+`prepareAddPasskeyKey` is `prepareAddKey` with `keyType: KeyTypes.WEBAUTHN` and the signer data built from the public key:
+
+```ts
+prepareAddPasskeyKey(params: {
+  identity: Address;
+  verifier: Address; // the ERC-7913 WebAuthn verifier
+  publicKey: Hex; // 64 bytes qx || qy, or 65 bytes uncompressed with the leading 0x04
+  purpose: bigint | KeyPurpose;
+  clientData?: Hex; // optional metadata stored with the key, such as the credential id
+}): Call
+```
+
+It throws for a public key of any other length. Like any key write, it needs MANAGEMENT on the identity, as a user operation or a direct transaction:
+
+```ts
+import { createWebAuthnCredential, toWebAuthnAccount } from 'viem/account-abstraction';
+import { KeyPurposes, prepareAddPasskeyKey } from '@openzeppelin/identity-sdk';
+
+const credential = await createWebAuthnCredential({ name: 'identity' });
+const passkey = toWebAuthnAccount({ credential });
+
+// `bundler` is signed by an existing MANAGEMENT key.
+const hash = await bundler.sendUserOperation({
+  calls: [
+    prepareAddPasskeyKey({
+      identity,
+      verifier: webAuthnVerifier,
+      publicKey: passkey.publicKey,
+      purpose: KeyPurposes.MANAGEMENT,
+    }),
+  ],
+});
+await bundler.waitForUserOperationReceipt({ hash });
+```
+
+## Build the signer data
+
+To sign with the passkey or read its key, you need the same signer data the registry stored. Build it with `encodeVerifierSigner` from the 64-byte `qx || qy` form of the public key:
+
+```ts
+import { keccak256, sliceHex, size } from 'viem';
+import { encodeVerifierSigner, getKeyData } from '@openzeppelin/identity-sdk';
+
+// Drop the leading 0x04 from a 65-byte uncompressed key.
+const rawKey = size(passkey.publicKey) === 65 ? sliceHex(passkey.publicKey, 1) : passkey.publicKey;
+const signerData = encodeVerifierSigner({ verifier: webAuthnVerifier, key: rawKey });
+
+const keyHash = keccak256(signerData);
+const { signerData: stored } = await getKeyData(client, { identity, key: keyHash }); // equals signerData
+```
+
+## Sign user operations with a passkey
+
+Pass the viem `WebAuthnAccount` to `toIdentity` as the signer, together with `signerData`. A `WebAuthnAccount` has no address, so `toIdentity` cannot derive the signer data on its own and throws without it.
+
+```ts
+import { createBundlerClient } from 'viem/account-abstraction';
+import { http } from 'viem';
+import { identityActions, toIdentity } from '@openzeppelin/identity-sdk';
+
+const account = await toIdentity(client, {
+  address: identity,
+  signer: passkey,
+  signerData,
+  userOperation: {
+    // The stub signature is ECDSA-sized, so the bundler under-estimates validation for a passkey.
+    estimateGas: async () => ({ verificationGasLimit: 2_000_000n, preVerificationGas: 300_000n }),
+  },
+});
+
+const passkeyBundler = createBundlerClient({
+  account,
+  client,
+  transport: http(process.env.BUNDLER_URL),
+}).extend(identityActions());
+```
+
+Set the gas limits explicitly. To estimate validation gas, the bundler runs it with the stub signature `toIdentity` provides, which is sized like a 65-byte ECDSA signature. A WebAuthn signature is much longer, and verifying it can cost far more, so the estimates for `verificationGasLimit` and `preVerificationGas` come out too low. The values above are the ones the SDK's live tests use on a chain without a P-256 precompile, where the curve is verified in Solidity. Size them for your chain and verifier. See [Gas](/identity-sdk/gas#user-operations).
+
+The passkey signs with the purposes its key holds, like any other key: a MANAGEMENT passkey can manage keys, modules and wallet links.
+
+```ts
+const hash = await passkeyBundler.addKey({
+  identity,
+  signerData: newKeyAddress,
+  purpose: KeyPurposes.ACTION,
+  keyType: KeyTypes.ECDSA,
+});
+await passkeyBundler.waitForUserOperationReceipt({ hash });
+```
+
+## Other ERC-7913 signers
+
+The same pattern works for any signer checked by an ERC-7913 verifier (RSA, for example):
+
+1. Register the key with `prepareAddKey`, `signerData: encodeVerifierSigner({ verifier, key })` and the matching `keyType`.
+2. Connect with `toIdentity`, passing an accounts SDK `Signer` (or pass `signerData` explicitly), and set the gas limits for the longer signature.
+
+See [Keys](/identity-sdk/guides/keys#non-eoa-keys).

@@ -1,0 +1,211 @@
+---
+title: Keys
+description: Add, remove and read ERC-734 keys on an identity
+---
+
+Keys live in the identity's ERC-734 registry. Each key is stored under `keyHash = keccak256(signerData)` and holds one or more purposes. See [Concepts](/identity-sdk/concepts#keys) for signer data, key types and purposes.
+
+Key writes target the identity itself, so the sender needs **MANAGEMENT** on the identity.
+
+## Add a key
+
+`prepareAddKey` registers a new key with one purpose. It encodes the account-level `addKeyWithData`, which carries the signer bytes; the plain ERC-734 `addKey(bytes32, uint256, uint256)` reverts for a key the registry has never seen.
+
+```ts
+prepareAddKey(params: {
+  identity: Address;
+  signerData: Hex; // 20-byte address, or verifier(20) || key
+  purpose: bigint | KeyPurpose;
+  keyType: bigint | KeyType;
+  clientData?: Hex; // optional metadata, defaults to 0x
+}): Call
+```
+
+The encoder computes `keyHash` from `signerData` itself, so the hash and bytes can never disagree.
+
+### As a user operation
+
+```ts
+import { createPublicClient, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { createBundlerClient } from 'viem/account-abstraction';
+import { baseSepolia } from 'viem/chains';
+import { identityActions, KeyPurposes, KeyTypes, toIdentity } from '@openzeppelin/identity-sdk';
+
+const client = createPublicClient({ chain: baseSepolia, transport: http() });
+const manager = privateKeyToAccount(process.env.MANAGER_KEY as `0x${string}`); // holds MANAGEMENT
+
+const bundler = createBundlerClient({
+  account: await toIdentity(client, { address: identity, signer: manager }),
+  client,
+  transport: http(process.env.BUNDLER_URL),
+}).extend(identityActions());
+
+const hash = await bundler.addKey({
+  identity,
+  signerData: '0x...', // the new key's address
+  purpose: KeyPurposes.ACTION,
+  keyType: KeyTypes.ECDSA,
+});
+await bundler.waitForUserOperationReceipt({ hash });
+```
+
+### As a direct transaction
+
+A wallet whose address is registered as a MANAGEMENT key on the identity can send the same `Call` itself:
+
+```ts
+import { createWalletClient } from 'viem';
+import { prepareAddKey } from '@openzeppelin/identity-sdk';
+
+const walletClient = createWalletClient({ account: manager, chain: baseSepolia, transport: http() });
+
+const hash = await walletClient.sendTransaction(
+  prepareAddKey({ identity, signerData: newKey, purpose: KeyPurposes.ACTION, keyType: KeyTypes.ECDSA }),
+);
+await client.waitForTransactionReceipt({ hash });
+```
+
+### Several purposes
+
+`prepareAddKey` grants one purpose per call. Calling it again for a key that is already registered adds the new purpose to that key. The `keyType` must match the stored one, the stored `clientData` is kept, and granting a purpose the key already holds reverts.
+
+To register a key with several purposes in one user operation, batch the calls:
+
+```ts
+await bundler.sendUserOperation({
+  calls: [
+    prepareAddKey({ identity, signerData: newKey, purpose: KeyPurposes.ACTION, keyType: KeyTypes.ECDSA }),
+    prepareAddKey({ identity, signerData: newKey, purpose: KeyPurposes.CLAIM_ADDER, keyType: KeyTypes.ECDSA }),
+  ],
+});
+```
+
+ERC-734's `addKey(bytes32, uint256, uint256)` also grants a purpose to an existing key (it looks up the stored signer data by hash, and reverts for an unknown key). The SDK has no encoder for it; encode it with the vendored ABI if you need that entry point:
+
+```ts
+import { encodeFunctionData, keccak256 } from 'viem';
+import { iidentityAbi, KeyPurposes, KeyTypes } from '@openzeppelin/identity-sdk';
+
+const grant = {
+  to: identity,
+  data: encodeFunctionData({
+    abi: iidentityAbi,
+    functionName: 'addKey',
+    args: [keccak256(existingKey), KeyPurposes.CLAIM_SIGNER, KeyTypes.ECDSA],
+  }),
+};
+```
+
+### Non-EOA keys
+
+For passkeys, RSA or other ERC-7913 signers, `signerData` is `verifier (20 bytes) || key`, and `keyType` names the scheme (`KeyTypes.WEBAUTHN`, `KeyTypes.RSA`). Use `clientData` for non-cryptographic metadata such as a WebAuthn credential id.
+
+`encodeVerifierSigner({ verifier, key })` builds the signer data. It throws when `key` is empty or the result exceeds the registry's 1024-byte limit:
+
+```ts
+import { encodeVerifierSigner, KeyPurposes, KeyTypes, prepareAddKey } from '@openzeppelin/identity-sdk';
+
+const signerData = encodeVerifierSigner({ verifier: rsaVerifier, key: rsaKey });
+const call = prepareAddKey({ identity, signerData, purpose: KeyPurposes.ACTION, keyType: KeyTypes.RSA });
+```
+
+For WebAuthn passkeys, `prepareAddPasskeyKey` does this from the P-256 public key. See [Passkeys](/identity-sdk/guides/passkeys).
+
+To let an ERC-7579 executor module act for the identity, register the module's address with `KeyTypes.MODULE`. See [Modules](/identity-sdk/guides/modules).
+
+## Remove a key
+
+`prepareRemoveKey` removes one purpose from a key:
+
+```ts
+prepareRemoveKey(params: { identity: Address; keyHash: Hex; purpose: bigint | KeyPurpose }): Call
+```
+
+- Removing the key's **last** purpose unregisters the key.
+- Removing the identity's **last** MANAGEMENT key reverts.
+- Removing a purpose the key does not hold reverts.
+
+```ts
+import { keccak256 } from 'viem';
+import { KeyPurposes } from '@openzeppelin/identity-sdk';
+
+const hash = await bundler.removeKey({
+  identity,
+  keyHash: keccak256(oldKey),
+  purpose: KeyPurposes.ACTION,
+});
+await bundler.waitForUserOperationReceipt({ hash });
+```
+
+`keyHash` is `keccak256(signerData)`. Reads such as `getKeysByPurpose` return these hashes directly.
+
+To rotate a key, batch the add and the remove in one user operation so the identity is never left without the purpose:
+
+```ts
+await bundler.sendUserOperation({
+  calls: [
+    prepareAddKey({ identity, signerData: newKey, purpose: KeyPurposes.MANAGEMENT, keyType: KeyTypes.ECDSA }),
+    prepareRemoveKey({ identity, keyHash: keccak256(oldKey), purpose: KeyPurposes.MANAGEMENT }),
+  ],
+});
+```
+
+If the old key is the one signing the operation, it can still sign this operation: validation happens before execution.
+
+## Read keys
+
+All key reads take `{ identity }` (`KeyReadParams`) and are sent to the identity. `getKeyData` is the exception: it reads the identity's `registryModule()` and then calls the module.
+
+```ts
+import { keccak256 } from 'viem';
+import {
+  getKey,
+  getKeyData,
+  getKeyPurposes,
+  getKeysByPurpose,
+  getKeysByPurposePaginated,
+  keyHasPurpose,
+  KeyPurposes,
+} from '@openzeppelin/identity-sdk';
+
+const key = keccak256(signerData);
+
+// Full record: { purposes, keyType, keyHash }. Reverts if the key is not registered.
+const record = await getKey(client, { identity, key });
+
+// Purposes the key holds.
+const purposes = await getKeyPurposes(client, { identity, key }); // readonly bigint[]
+
+// Key hashes registered under a purpose.
+const managers = await getKeysByPurpose(client, { identity, purpose: KeyPurposes.MANAGEMENT }); // readonly Hex[]
+
+// The same, one page at a time: positions [start, end), clamped to the number of keys.
+const page = await getKeysByPurposePaginated(client, {
+  identity,
+  purpose: KeyPurposes.ACTION,
+  start: 0n,
+  end: 50n,
+});
+
+// Purpose check. True if the key holds the purpose or holds MANAGEMENT.
+const canAct = await keyHasPurpose(client, { identity, key, purpose: KeyPurposes.ACTION });
+
+// The bytes the key was registered with. Both are 0x for an unknown hash.
+const { signerData: stored, clientData } = await getKeyData(client, { identity, key });
+```
+
+| Function                    | Parameters                          | Returns                                                                    |
+| --------------------------- | ----------------------------------- | -------------------------------------------------------------------------- |
+| `getKey`                    | `{ identity, key }`                 | `KeyRecord` (`{ purposes, keyType, keyHash }`); reverts for an unknown key |
+| `getKeyPurposes`            | `{ identity, key }`                 | `readonly bigint[]`                                                        |
+| `getKeyPurposesPaginated`   | `{ identity, key, start, end }`     | `readonly bigint[]`                                                        |
+| `getKeysByPurpose`          | `{ identity, purpose }`             | `readonly Hex[]` (key hashes)                                              |
+| `getKeysByPurposePaginated` | `{ identity, purpose, start, end }` | `readonly Hex[]` (key hashes)                                              |
+| `keyHasPurpose`             | `{ identity, key, purpose }`        | `boolean`                                                                  |
+| `getKeyData`                | `{ identity, key }`                 | `{ signerData, clientData }`; both `0x` for an unknown key                 |
+| `getIdentityType`           | `{ identity }`                      | `bigint` (`IdentityTypes`)                                                 |
+
+`key` is always a key hash, not the signer data. The paginated reads return positions `[start, end)`, clamped to the number of entries; use them for purposes with many keys.
+
+`getIdentityType` returns the type the factory recorded at deployment.

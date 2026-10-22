@@ -1,0 +1,197 @@
+---
+title: Wallet Linking
+description: Link, revoke and resolve wallets with ERC-7930 envelopes, including cross-chain links
+---
+
+The `IdentityFactory` maps wallets to identities. Integrators use it in two directions:
+
+- **Resolve**: given a wallet, find its identity (for example, to look up claims for the wallet that is about to receive tokens).
+- **Manage**: link further wallets to an identity, revoke them, and accept wallets proposed from other chains.
+
+Wallets are identified by ERC-7930 envelopes, not bare addresses. See [Concepts](/identity-sdk/concepts#wallet-linking).
+
+## Build the envelope
+
+```ts
+import { formatEvmV1 } from '@openzeppelin/identity-sdk';
+
+const envelope = formatEvmV1({ chainId: baseSepolia.id, address: wallet.address });
+```
+
+`chainId` accepts `number` or `bigint`. The factory canonicalizes envelopes, so differently padded encodings of the same wallet are the same entry.
+
+## Resolve a wallet
+
+All resolution reads take `AccountReadParams`: `{ factory, account }`, where `account` is the envelope.
+
+```ts
+import {
+  AccountStatus,
+  getAccountStatus,
+  getIdentity,
+  getIdentityIncludingRevoked,
+  getIdentityWithType,
+} from '@openzeppelin/identity-sdk';
+
+const params = { factory, account: envelope };
+
+// Active link only. Zero address when never linked or revoked.
+const identity = await getIdentity(client, params);
+
+// Identity and type in one read. Zero address and 0n when not Active.
+const { identity: id, identityType } = await getIdentityWithType(client, params);
+
+// Includes revoked links: a revoked wallet still names its former identity.
+const { identity: former, status } = await getIdentityIncludingRevoked(client, params);
+
+// Status only: AccountStatus.None, Active or Revoked.
+const current = await getAccountStatus(client, params);
+if (current === AccountStatus.Revoked) {
+  // this wallet can never be linked again
+}
+```
+
+A factory identity's own address resolves to itself with status `Active`.
+
+### List an identity's wallets
+
+```ts
+import { getAccounts, getAccountsCount } from '@openzeppelin/identity-sdk';
+
+const count = await getAccountsCount(client, { factory, identity });
+const wallets = await getAccounts(client, { factory, identity, start: 0n, end: count }); // readonly Hex[] (envelopes)
+```
+
+`getAccounts` returns positions `[start, end)`, clamped to the number of wallets. Only active wallets are listed, and never the identity's own address. Envelopes are unbounded bytes, so for identities with many wallets read in pages that fit your provider's `eth_call` gas cap.
+
+## Link a wallet
+
+Linking needs two parties:
+
+1. The **wallet** consents by signing an EIP-712 `LinkAccount` message under the factory's domain.
+2. The **identity** submits `linkAccount` to the factory. The factory binds the wallet to `msg.sender`, so the call must come from the identity itself: a user operation from `toIdentity`, or the identity's ERC-734 `execute`. Since the target is the identity's factory, the signer needs **MANAGEMENT**.
+
+Only identities deployed by the factory can link. The envelope must name an EVM account on the **current** chain; wallets on other chains use the [cross-chain path](#cross-chain-links).
+
+### Step 1: the wallet signs
+
+```ts
+import { privateKeyToAccount } from 'viem/accounts';
+import { formatEvmV1, getLinkAccountDomain, nonceForAccount, signLinkAccount } from '@openzeppelin/identity-sdk';
+
+const wallet = privateKeyToAccount(process.env.WALLET_KEY as `0x${string}`);
+const envelope = formatEvmV1({ chainId: baseSepolia.id, address: wallet.address });
+
+const domain = await getLinkAccountDomain(client, { factory });
+const nonce = await nonceForAccount(client, { factory, account: envelope });
+const expiry = BigInt(Math.floor(Date.now() / 1000) + 3600); // one hour; zero always reverts
+
+const signature = await signLinkAccount(wallet, {
+  domain,
+  account: envelope,
+  identity, // the identity being linked to
+  nonce,
+  expiry,
+});
+```
+
+`signLinkAccount(signer: LocalAccount, params: LinkAccountSignatureParams)` returns the **raw** 65-byte signature. Unlike claim signatures it is not wrapped in `abi.encode(bytes signer, bytes signature)`: the factory takes the signer from the envelope and checks the raw signature with `SignatureChecker.isValidSignatureNow`.
+
+For other wallets, sign `getLinkAccountTypedData(params)` (or the digest from `getLinkAccountDigest(params)`) with the wallet and pass the raw signature it produces:
+
+- ERC-1271 smart wallets: the envelope holds the wallet address, and the wallet's `isValidSignature` is called.
+- ERC-7913 signers (passkeys, for example): the envelope holds `verifier || key`. The verifier must be trusted by the factory (`isTrustedVerifier` on `iidentityFactoryAbi`).
+
+Each wallet has one nonce sequence, shared by all encodings of its envelope. Read it right before signing.
+
+`identity` can be a predicted address from `computeIdentityAddress`: the address is stable through deployment, so a wallet can sign before the identity exists. The link itself can only be submitted after deployment.
+
+### Step 2: the identity submits
+
+With the `identityActions()` extension:
+
+```ts
+const hash = await bundler.linkAccount({
+  factory,
+  wallet: envelope,
+  signature,
+  nonce,
+  expiry,
+});
+await bundler.waitForUserOperationReceipt({ hash });
+```
+
+With the encoder, for example to batch:
+
+```ts
+import { prepareLinkAccount } from '@openzeppelin/identity-sdk';
+
+const call = prepareLinkAccount({ factory, account: envelope, signature, nonce, expiry });
+const hash = await bundler.sendUserOperation({ calls: [call] });
+```
+
+### With `identityActions()`
+
+The encoders call the envelope `account`, matching the factory ABI. The `identityActions()` methods (`linkAccount`, `revokeAccount`, `settlePendingCrossChainLink`) call it **`wallet`** instead, because their parameters also accept every `sendUserOperation` parameter, and `account` there already means the sending smart account. Passing the envelope as `account` to an extension method would be read as the sender.
+
+| Function                                                                              | Envelope parameter |
+| ------------------------------------------------------------------------------------- | ------------------ |
+| `prepareLinkAccount`, `prepareRevokeAccount`, `prepareSettlePendingCrossChainLink`    | `account`          |
+| `bundler.linkAccount`, `bundler.revokeAccount`, `bundler.settlePendingCrossChainLink` | `wallet`           |
+| Reads (`getIdentity`, `nonceForAccount`, ...)                                         | `account`          |
+
+## Revoke a wallet
+
+```ts
+import { prepareRevokeAccount } from '@openzeppelin/identity-sdk';
+
+const hash = await bundler.revokeAccount({ factory, wallet: envelope });
+// or: bundler.sendUserOperation({ calls: [prepareRevokeAccount({ factory, account: envelope })] })
+```
+
+The call must come from the identity the wallet is linked to.
+
+**Revocation is terminal.** A revoked wallet can never be linked again, to this identity or any other. Revoking also reverts for identity types whose policy binds a single wallet (such as a token's `ASSET` identity), since they could not link a replacement.
+
+## Cross-chain links
+
+A wallet on another chain cannot prove control with a signature checked on this chain. Instead, it proposes the link on its own chain, and a trusted ERC-7786 gateway delivers the proposal to this factory. The proposal waits until the named identity accepts or declines it. The SDK does not cover the proposing side; it covers reading and settling the proposal.
+
+```ts
+import { formatEvmV1, getPendingCrossChainLink, prepareSettlePendingCrossChainLink } from '@openzeppelin/identity-sdk';
+
+const foreign = formatEvmV1({ chainId: 1, address: walletOnMainnet });
+
+const pending = await getPendingCrossChainLink(client, { factory, account: foreign });
+// { identity, expiry }, both zero when there is no proposal
+
+if (pending.identity === identity) {
+  const now = BigInt(Math.floor(Date.now() / 1000));
+  const hash = await bundler.settlePendingCrossChainLink({
+    factory,
+    wallet: foreign,
+    accept: now <= pending.expiry, // accepting reverts after expiry; declining works any time
+  });
+  await bundler.waitForUserOperationReceipt({ hash });
+}
+```
+
+The call must come from the identity the proposal names. `prepareSettlePendingCrossChainLink({ factory, account, accept })` is the encoder form.
+
+## Reference
+
+| Function                             | Parameters                                             | Returns                               |
+| ------------------------------------ | ------------------------------------------------------ | ------------------------------------- |
+| `getIdentity`                        | `{ factory, account }`                                 | `Address`                             |
+| `getIdentityIncludingRevoked`        | `{ factory, account }`                                 | `{ identity, status: AccountStatus }` |
+| `getIdentityWithType`                | `{ factory, account }`                                 | `{ identity, identityType: bigint }`  |
+| `getAccountStatus`                   | `{ factory, account }`                                 | `AccountStatus`                       |
+| `nonceForAccount`                    | `{ factory, account }`                                 | `bigint`                              |
+| `getPendingCrossChainLink`           | `{ factory, account }`                                 | `{ identity, expiry: bigint }`        |
+| `getAccounts`                        | `{ factory, identity, start, end }`                    | `readonly Hex[]`                      |
+| `getAccountsCount`                   | `{ factory, identity }`                                | `bigint`                              |
+| `getLinkAccountDomain`               | `{ factory }`                                          | `TypedDataDomain`                     |
+| `signLinkAccount`                    | `signer, { domain, account, identity, nonce, expiry }` | raw signature `Hex`                   |
+| `prepareLinkAccount`                 | `{ factory, account, signature, nonce, expiry }`       | `Call`                                |
+| `prepareRevokeAccount`               | `{ factory, account }`                                 | `Call`                                |
+| `prepareSettlePendingCrossChainLink` | `{ factory, account, accept }`                         | `Call`                                |

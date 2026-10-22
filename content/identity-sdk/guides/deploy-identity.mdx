@@ -1,0 +1,162 @@
+---
+title: Deploy an Identity
+description: Predict an identity address and deploy it through the IdentityFactory
+---
+
+Identities are deployed by the `IdentityFactory` with a plain transaction. The SDK builds the calldata and predicts the address; you send it with a viem wallet client.
+
+Deployment is always a separate step from connecting with `toIdentity`. See [Account abstraction](/identity-sdk/guides/account-abstraction#connect-only) for why an identity cannot be deployed from its own first user operation.
+
+## Build the initial keys
+
+The factory takes an array of `KeyParam`:
+
+```ts
+type KeyParam = {
+  keyHash: Hex; // keccak256(signerData)
+  purpose: bigint;
+  keyType: bigint;
+  signerData: Hex;
+  clientData: Hex;
+};
+```
+
+Build entries with `toKeyParam`, which derives `keyHash` from `signerData` and defaults `clientData` to `0x`:
+
+```ts
+import { KeyPurposes, KeyTypes, toKeyParam } from '@openzeppelin/identity-sdk';
+
+const keys = [
+  toKeyParam({ signerData: owner.address, purpose: KeyPurposes.MANAGEMENT, keyType: KeyTypes.ECDSA }),
+  toKeyParam({ signerData: owner.address, purpose: KeyPurposes.ACTION, keyType: KeyTypes.ECDSA }),
+];
+```
+
+One entry grants one purpose. To give the same key several purposes, add one entry per purpose with the same `keyType`. The keys must include at least one MANAGEMENT key.
+
+The whole array is hashed into the deploy salt, so the same keys in a different order produce a different address. Use the same array for prediction and deployment.
+
+## Predict the address
+
+`computeIdentityAddress` is pure (no chain reads). It reproduces the factory's derivation exactly:
+
+```ts
+import { computeIdentityAddress, IdentityTypes } from '@openzeppelin/identity-sdk';
+
+const predicted = computeIdentityAddress({
+  factory,
+  identityType: IdentityTypes.INDIVIDUAL,
+  salt: 'alice-v1',
+  account: owner.address, // the wallet the factory links to the identity
+  keys,
+});
+```
+
+`account` is the wallet the factory links to the new identity:
+
+- for `createIdentity`, the transaction sender;
+- for `createIdentityFor`, the `account` argument.
+
+`salt` is any non-empty string you choose. Use a different salt to deploy another identity with the same keys for the same wallet.
+
+The predicted address is stable through the deploy, so you can use it before deployment, for example to have another wallet sign a `LinkAccount` message for it in advance (see [Wallet linking](/identity-sdk/guides/wallet-linking)).
+
+`computeDeploySalt` (the inner salt) and `computeCreate3Address` (the generic CREATE3 derivation) are also exported if you need the intermediate steps.
+
+## Self-deploy: `prepareCreateIdentity`
+
+The sender deploys an identity for itself. The factory links `msg.sender` to the new identity, so send it from the wallet that should own it.
+
+Who may call it: anyone, for identity types whose factory policy is **self-deployable**. Other types revert.
+
+```ts
+import { createPublicClient, createWalletClient, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { baseSepolia } from 'viem/chains';
+import {
+  computeIdentityAddress,
+  IdentityTypes,
+  identityTypeOf,
+  isFactoryIdentity,
+  KeyPurposes,
+  KeyTypes,
+  prepareCreateIdentity,
+  toKeyParam,
+} from '@openzeppelin/identity-sdk';
+
+const factory = '0x...'; // IdentityFactory address
+const owner = privateKeyToAccount(process.env.OWNER_KEY as `0x${string}`);
+
+const publicClient = createPublicClient({ chain: baseSepolia, transport: http() });
+const walletClient = createWalletClient({ account: owner, chain: baseSepolia, transport: http() });
+
+const identityType = IdentityTypes.INDIVIDUAL;
+const salt = 'alice-v1';
+const keys = [toKeyParam({ signerData: owner.address, purpose: KeyPurposes.MANAGEMENT, keyType: KeyTypes.ECDSA })];
+
+const identity = computeIdentityAddress({ factory, identityType, salt, account: owner.address, keys });
+
+const call = prepareCreateIdentity({ factory, identityType, salt, keys });
+const hash = await walletClient.sendTransaction(call);
+await publicClient.waitForTransactionReceipt({ hash });
+
+// Confirm the deployment.
+console.log(await isFactoryIdentity(publicClient, { factory, identity })); // true
+console.log(await identityTypeOf(publicClient, { factory, identity })); // 2n (INDIVIDUAL)
+```
+
+The factory installs the modules registered for `identityType`; you do not pass them.
+
+## Deploy for someone else: `prepareCreateIdentityFor`
+
+An operator deploys an identity on behalf of `account`, and the factory links `account` to it.
+
+Who may call it: a sender holding the AccessManager role that the identity type's policy names, granted **without an execution delay**. The policy is readable with `getIdentityTypePolicy` on `iidentityFactoryAbi`.
+
+Key constraints:
+
+- For identity types that hold keys, every key must be `account`'s own (`signerData` is `account`'s address), and `account` must end up as the **sole** MANAGEMENT key.
+- Contract-backed types (single-binding policies, such as a token's `ASSET` identity) skip that check.
+
+```ts
+import {
+  computeIdentityAddress,
+  IdentityTypes,
+  KeyPurposes,
+  KeyTypes,
+  prepareCreateIdentityFor,
+  toKeyParam,
+} from '@openzeppelin/identity-sdk';
+
+const investor = '0x...'; // the wallet the identity is created for
+const keys = [toKeyParam({ signerData: investor, purpose: KeyPurposes.MANAGEMENT, keyType: KeyTypes.ECDSA })];
+
+const identity = computeIdentityAddress({
+  factory,
+  identityType: IdentityTypes.INDIVIDUAL,
+  salt: 'investor-001',
+  account: investor,
+  keys,
+});
+
+const hash = await operatorWalletClient.sendTransaction(
+  prepareCreateIdentityFor({
+    factory,
+    account: investor,
+    identityType: IdentityTypes.INDIVIDUAL,
+    salt: 'investor-001',
+    keys,
+  }),
+);
+await publicClient.waitForTransactionReceipt({ hash });
+```
+
+## Sending from a smart account
+
+`prepareCreateIdentity` returns a `Call`, so it can also be sent as a user operation from an existing smart account. In that case `msg.sender` at the factory is that smart account: it becomes the linked wallet and must be the `account` passed to `computeIdentityAddress`. This is different from deploying through the new identity's own `initCode`, which is not possible.
+
+## After deployment
+
+- Connect to the identity with `toIdentity` to send user operations: [Account abstraction](/identity-sdk/guides/account-abstraction).
+- Link more wallets: [Wallet linking](/identity-sdk/guides/wallet-linking).
+- Pass an explicit `gas` with headroom if the deployment runs near its estimate: [Gas](/identity-sdk/gas).
