@@ -1,0 +1,171 @@
+---
+title: Account Abstraction
+description: Drive an identity as an ERC-4337 account with toIdentity and identityActions
+---
+
+Every ONCHAINID identity is an ERC-4337 account. `toIdentity` turns a deployed identity into a viem `SmartAccount`, which any viem bundler client (or a compatible library) can use to send user operations.
+
+`toIdentity` requires `@openzeppelin-accounts/sdk` (see the [README](/identity-sdk#installation)).
+
+## Connect with `toIdentity`
+
+```ts
+import { createPublicClient, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { baseSepolia } from 'viem/chains';
+import { toIdentity } from '@openzeppelin/identity-sdk';
+
+const client = createPublicClient({ chain: baseSepolia, transport: http() });
+const signer = privateKeyToAccount(process.env.SIGNER_KEY as `0x${string}`);
+
+const account = await toIdentity(client, {
+  address: identity, // a deployed identity
+  signer, // must hold a key on the identity
+});
+
+account.address; // the identity
+account.signerData; // the ERC-7913 signer bytes the key is registered under
+```
+
+Parameters:
+
+- `client`: a viem `Client` **built with a `chain`**. `toIdentity` throws without one: user operations are signed as EIP-712 typed data, and a missing chain would silently produce a chain-1 signature that the EntryPoint rejects (`AA24 signature error`).
+- `address`: the identity. `toIdentity` reads its `identityFactory()` and checks `isFactoryIdentity` on that factory, so a wrong address or wrong chain fails here rather than at the bundler.
+- `signer`: a viem `LocalAccount`, a viem `WebAuthnAccount`, or an accounts SDK `Signer` (for passkeys, RSA or other ERC-7913 signers).
+- `signerData` (optional): the signer bytes the key is registered under. Defaults to the signer's address for a `LocalAccount`, or its `signerBytes` for an accounts SDK signer. A `WebAuthnAccount` has neither, so pass it explicitly (see [Passkeys](/identity-sdk/guides/passkeys)). Pass it also when the key was registered under different bytes. It must be 20 to 1024 bytes.
+- `userOperation` (optional): forwarded to the viem `SmartAccount`. Set `userOperation.estimateGas` to adjust the bundler's gas estimates, for example a floor on `verificationGasLimit`. Fields it returns are kept, and the bundler estimates the rest. See [Gas](/identity-sdk/gas#user-operations).
+
+It returns an `IdentityAccount`: a viem `SmartAccount` plus `signerData`. `keccak256(account.signerData)` is the signer's `keyHash`, which you can use to check its purposes before sending (see [Concepts](/identity-sdk/concepts#which-purpose-a-call-needs)).
+
+Internally, `toIdentity` encodes the registry module address into the user operation nonce key, which is how an ERC-7579 account picks its validator, and reads nonces from viem's EntryPoint v0.9 address (`entryPoint09Address`). Use a bundler that supports that EntryPoint.
+
+### Connect-only
+
+`toIdentity` only connects to identities that already exist. It cannot deploy one on the first user operation.
+
+The reason is in the factory: it binds `msg.sender` into the deploy salt and links that wallet as the identity's first account. A deployment through a user operation's `initCode` is sent by the **EntryPoint**, so the identity would land at a different address than predicted and would be permanently linked to the EntryPoint rather than to its owner.
+
+Deploy first with a plain factory transaction ([Deploy an identity](/identity-sdk/guides/deploy-identity)), then connect.
+
+## Create a bundler client
+
+Use viem's `createBundlerClient` from `viem/account-abstraction`:
+
+```ts
+import { http } from 'viem';
+import { createBundlerClient } from 'viem/account-abstraction';
+
+const bundler = createBundlerClient({
+  account,
+  client,
+  transport: http(process.env.BUNDLER_URL),
+});
+```
+
+## The `identityActions()` extension
+
+`identityActions()` adds one method per identity write. Each method encodes the call with the matching `prepareX` encoder and sends it with `sendUserOperation`, returning the user operation hash.
+
+```ts
+import { identityActions } from '@openzeppelin/identity-sdk';
+
+const bundler = createBundlerClient({ account, client, transport: http(process.env.BUNDLER_URL) }).extend(
+  identityActions(),
+);
+
+const hash = await bundler.addKey({ identity, signerData, purpose: KeyPurposes.ACTION, keyType: KeyTypes.ECDSA });
+const receipt = await bundler.waitForUserOperationReceipt({ hash });
+```
+
+| Method                        | Encoder                              | Guide                                                 |
+| ----------------------------- | ------------------------------------ | ----------------------------------------------------- |
+| `addKey`                      | `prepareAddKey`                      | [Keys](/identity-sdk/guides/keys)                     |
+| `removeKey`                   | `prepareRemoveKey`                   | [Keys](/identity-sdk/guides/keys)                     |
+| `addClaim` (see note)         | `prepareAddClaim`                    | [Claims](/identity-sdk/guides/claims)                 |
+| `removeClaim` (see note)      | `prepareRemoveClaim`                 | [Claims](/identity-sdk/guides/claims)                 |
+| `linkAccount`                 | `prepareLinkAccount`                 | [Wallet linking](/identity-sdk/guides/wallet-linking) |
+| `revokeAccount`               | `prepareRevokeAccount`               | [Wallet linking](/identity-sdk/guides/wallet-linking) |
+| `settlePendingCrossChainLink` | `prepareSettlePendingCrossChainLink` | [Wallet linking](/identity-sdk/guides/wallet-linking) |
+| `installModule`               | `prepareInstallModule`               | [Modules](/identity-sdk/guides/modules)               |
+| `uninstallModule`             | `prepareUninstallModule`             | [Modules](/identity-sdk/guides/modules)               |
+
+Note: `addClaim` and `removeClaim` revert when the bundler's account is the holder identity itself, because the registry then sees the identity's own address as the caller, which is not a key. Holders add and remove claims with a direct transaction from a key holder; see [Claims](/identity-sdk/guides/claims).
+
+The extension has no method for writes that only work as direct transactions from a key holder: the issuer-side `prepareRevokeClaimByDigest` and `prepareAddClaimTo` ([Claims](/identity-sdk/guides/claims#issuer-side-revoke-and-push-claims)) and the ERC-734 `prepareExecute` and `prepareApprove` ([Execution queue](/identity-sdk/guides/execution)).
+
+Every method also accepts the other `sendUserOperation` parameters (gas limits, fees, nonce, paymaster settings, an explicit `account`), so the gas overrides in [Gas](/identity-sdk/gas) apply here too.
+
+The same functions are exported standalone (`addKey(client, params)`, `removeKey(client, params)`, and so on) if you prefer not to extend the client.
+
+The wallet linking methods take the wallet envelope as `wallet` instead of `account`; see [Wallet linking](/identity-sdk/guides/wallet-linking#with-identityactions).
+
+## Batch several calls in one user operation
+
+The extension sends one call per user operation. To batch, collect `Call`s from the `prepareX` encoders and pass them to `sendUserOperation` directly. The identity executes them in order, and the whole operation reverts if one call fails.
+
+```ts
+import { keccak256 } from 'viem';
+import {
+  computeClaimId,
+  KeyPurposes,
+  KeyTypes,
+  prepareAddKey,
+  prepareRemoveClaim,
+  prepareRemoveKey,
+} from '@openzeppelin/identity-sdk';
+
+const calls = [
+  prepareAddKey({ identity, signerData: newKey, purpose: KeyPurposes.ACTION, keyType: KeyTypes.ECDSA }),
+  prepareRemoveKey({ identity, keyHash: keccak256(oldKey), purpose: KeyPurposes.ACTION }),
+  prepareRemoveClaim({ identity, claimId: computeClaimId({ issuer, topic: 1n }) }),
+];
+
+const hash = await bundler.sendUserOperation({ calls });
+await bundler.waitForUserOperationReceipt({ hash });
+```
+
+You can mix in calls to any other contract (`{ to, data }` or viem's `{ to, abi, functionName, args }` form). The signer needs the strictest purpose any call requires: use `purposeForTargets` to find it (see [Concepts](/identity-sdk/concepts#which-purpose-a-call-needs)).
+
+```ts
+import { purposeForTargets } from '@openzeppelin/identity-sdk';
+
+const purpose = await purposeForTargets(client, { identity, targets: calls.map(call => call.to) });
+```
+
+## Sponsor gas with a paymaster
+
+Paymasters are configured on the bundler client, not in the SDK. Use the `paymaster` option of `createBundlerClient`:
+
+```ts
+import { createBundlerClient, createPaymasterClient } from 'viem/account-abstraction';
+
+const paymaster = createPaymasterClient({ transport: http(process.env.PAYMASTER_URL) });
+
+const bundler = createBundlerClient({
+  account,
+  client,
+  paymaster,
+  transport: http(process.env.BUNDLER_URL),
+}).extend(identityActions());
+```
+
+`paymaster: true` uses the bundler's own transport as an ERC-7677 paymaster. You can also pass `{ getPaymasterData, getPaymasterStubData }` for a custom service. Per-operation paymaster parameters can be passed to `sendUserOperation` or any `identityActions()` method.
+
+## The identity is `msg.sender`
+
+When a user operation executes, the call reaches each target **from the identity address**, not from the key that signed it. The signer only authorizes the operation.
+
+Grant contract roles, allowances, allowlist entries and ownership to the **identity address**. A role granted to the signer's EOA does not apply to calls the identity makes, and a call that relies on it reverts inside the user operation.
+
+For the same reason, a target that checks `msg.sender` (for example the factory's `linkAccount`) sees the identity, which is what wallet linking relies on.
+
+## Check the outcome
+
+A bundle transaction can succeed while the user operation inside it fails. Check `receipt.success` on the user operation receipt rather than the bundle transaction status:
+
+```ts
+const receipt = await bundler.waitForUserOperationReceipt({ hash });
+if (!receipt.success) throw new Error(`user operation reverted: ${receipt.reason ?? 'unknown reason'}`);
+```
+
+If an operation fails on-chain but succeeds when re-simulated, read [Gas](/identity-sdk/gas).

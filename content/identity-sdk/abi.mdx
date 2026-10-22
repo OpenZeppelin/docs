@@ -1,0 +1,68 @@
+---
+title: ABIs
+description: The vendored ONCHAINID ABIs, their pin, and how to re-sync them
+---
+
+The SDK vendors the ABIs of the ONCHAINID contracts it talks to under `src/abi/`. They are exported from the package root and typed with viem's `parseAbi`, so `readContract`, `encodeFunctionData` and friends infer argument and return types from them.
+
+Use them directly for anything the SDK does not wrap (for example, the factory's policy views, reputation reads, or decoding custom errors).
+
+## Pin
+
+Every file is generated from **T-REX-Network/ONCHAINID at commit `2180c919`**. Each file's header names the commit and the source contract:
+
+```ts
+// Generated from T-REX-Network/ONCHAINID@2180c919: contracts/interface/IIdentity.sol
+// Do not hand-edit the ABI: rerun `scripts/sync-abi.mjs` against the new pin.
+```
+
+Integrate against contracts deployed from the same ONCHAINID version. A deployment from a different commit may have different selectors or struct layouts.
+
+## Exports
+
+| Export                   | Source                                              | Address to call                                                                                                     |
+| ------------------------ | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `ierc734Abi`             | `contracts/interface/IERC734.sol`                   | Identity                                                                                                            |
+| `ierc735Abi`             | `contracts/interface/IERC735.sol`                   | Identity                                                                                                            |
+| `iidentityAbi`           | `contracts/interface/IIdentity.sol`                 | Identity: keys, claims, `isClaimValid`, `getIdentityType`                                                           |
+| `ikeyExecutorAbi`        | `contracts/interface/IKeyExecutor.sol`              | Identity: ERC-734 `execute` / `approve` (served by `KeyApprovalModule`)                                             |
+| `iclaimIssuerAbi`        | `contracts/interface/IClaimIssuer.sol`              | Issuer identity: `revokeClaimByDigest`, `isDigestRevoked`, `addClaimTo`                                             |
+| `erc734ValidatorAbi`     | `contracts/modules/validators/ERC734Validator.sol`  | Registry module: explicit-`account` and paginated reads, `getKeyData`                                               |
+| `iidentityFactoryAbi`    | `contracts/factory/IIdentityFactory.sol`            | `IdentityFactory`                                                                                                   |
+| `ireputationRegistryAbi` | `contracts/reputation/IReputationRegistry.sol`      | `ReputationRegistry`: `reputationOf`, `entryOf`, `claimAddThreshold`                                                |
+| `iidentityUtilitiesAbi`  | `contracts/interface/IIdentityUtilities.sol`        | `IdentityUtilities`: topic schemas                                                                                  |
+| `identityAccountAbi`     | `contracts/Identity.sol` (curated subset)           | Identity: `registryModule`, `identityFactory`, `isManagementTarget`, `addKeyWithData`, paginated key reads, modules |
+| `keyApprovalModuleAbi`   | `contracts/modules/executors/KeyApprovalModule.sol` | `KeyApprovalModule`: `getExecutionData(account, executionId)`, the module's events and errors                       |
+
+`identityAccountAbi` is curated: it lists only the account-level functions and events that the interfaces above do not cover. The other files contain the full interface.
+
+Example, reading a reputation score (no SDK wrapper exists):
+
+```ts
+import { readContract } from 'viem/actions';
+import { ireputationRegistryAbi } from '@openzeppelin/identity-sdk';
+
+const score = await readContract(client, {
+  address: reputationRegistry,
+  abi: ireputationRegistryAbi,
+  functionName: 'reputationOf',
+  args: [identity],
+});
+```
+
+## Re-syncing to a new pin
+
+The ABIs are generated, not hand-written. To move to a new ONCHAINID commit:
+
+1. Check out T-REX-Network/ONCHAINID at the new commit and run `forge build`.
+2. From this repository, run:
+
+   ```bash
+   ONCHAINID_DIR=<path-to-onchainid-checkout> npm run sync-abi
+   ```
+
+   `sync-abi` runs `scripts/sync-abi.mjs` and then Prettier on `src/abi`. The script reads each artifact from `<checkout>/out/`, writes the new commit into every header, sorts entries (events, then errors, then functions, alphabetically) so diffs stay readable, and keeps each file's hand-written doc comment.
+
+3. Run `npm run compile && npm test` to catch shape changes downstream, then review the doc comments in `src/abi/` against what changed.
+
+To add a new ABI, add an entry to the `ABIS` list in `scripts/sync-abi.mjs` (output file, export name, artifact name, source path, and an optional `pick` list for curated subsets), then export it from `src/abi/index.ts`.

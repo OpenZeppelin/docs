@@ -1,0 +1,117 @@
+---
+title: Identity SDK
+description: Viem-native TypeScript SDK for the ONCHAINID identity stack
+---
+
+ONCHAINID gives a person, company, asset or agent an on-chain identity contract that holds keys (ERC-734) and signed claims about it from trusted issuers (ERC-735). In this version each identity is an ERC-7579 modular smart account deployed by an `IdentityFactory`, so it can be driven with ERC-4337 user operations as well as plain transactions.
+
+`@openzeppelin/identity-sdk` covers what an integrator needs on top of [viem](https://viem.sh):
+
+- address prediction and deployment through the `IdentityFactory`;
+- `toIdentity`, which turns a deployed identity into a viem `SmartAccount` for any ERC-4337 bundler;
+- call encoders and read actions for keys, claims, wallet linking, modules and the ERC-734 execution queue;
+- EIP-712 signing helpers for claims and `LinkAccount` messages;
+- passkey keys through ERC-7913 verifiers;
+- the vendored ONCHAINID ABIs.
+
+<Callout type="warn">
+  The SDK is in early development. Its public API is unstable through the ongoing ONCHAINID audit cycle (0.x semver).
+</Callout>
+
+## Installation
+
+```bash
+npm install @openzeppelin/identity-sdk viem
+```
+
+Requires Node.js 22 or later.
+
+`toIdentity` is built on [`@openzeppelin-accounts/sdk`](/accounts/sdk), declared as an optional peer dependency. That package is not on npm yet; until it is, consumers who use `toIdentity` need to provide it themselves. Only `toIdentity` uses it; everything else (encoders, reads, signing, addressing, ABIs) depends on viem alone. The package root re-exports `toIdentity`, so `@openzeppelin-accounts/sdk` must currently be resolvable for an `import ... from '@openzeppelin/identity-sdk'` to load.
+
+## Quickstart
+
+Resolve a wallet's identity, then add a key to it through a bundler:
+
+```ts
+import { createPublicClient, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { createBundlerClient } from 'viem/account-abstraction';
+import { baseSepolia } from 'viem/chains';
+import {
+  formatEvmV1,
+  getIdentity,
+  identityActions,
+  KeyPurposes,
+  KeyTypes,
+  toIdentity,
+} from '@openzeppelin/identity-sdk';
+
+const client = createPublicClient({ chain: baseSepolia, transport: http() });
+const owner = privateKeyToAccount(process.env.OWNER_KEY as `0x${string}`);
+
+// Resolve the owner's wallet to its identity.
+const factory = '0x...'; // IdentityFactory address
+const identity = await getIdentity(client, {
+  factory,
+  account: formatEvmV1({ chainId: baseSepolia.id, address: owner.address }),
+});
+
+// Drive the identity as an ERC-4337 account and add an ACTION key.
+const account = await toIdentity(client, { address: identity, signer: owner });
+const bundler = createBundlerClient({ account, client, transport: http(process.env.BUNDLER_URL) }).extend(
+  identityActions(),
+);
+const hash = await bundler.addKey({
+  identity,
+  signerData: '0x...', // 20-byte address of the new key
+  purpose: KeyPurposes.ACTION,
+  keyType: KeyTypes.ECDSA,
+});
+await bundler.waitForUserOperationReceipt({ hash });
+```
+
+## Next steps
+
+<Cards>
+  <Card
+    title="Concepts"
+    href="/identity-sdk/concepts"
+    description="Identities, keys, purposes, claims, wallet linking, the factory and purpose resolution"
+  />
+  <Card
+    title="Deploy an Identity"
+    href="/identity-sdk/guides/deploy-identity"
+    description="Predict the address and deploy with createIdentity or createIdentityFor"
+  />
+  <Card
+    title="Account Abstraction"
+    href="/identity-sdk/guides/account-abstraction"
+    description="toIdentity, bundler clients, identityActions(), batching and paymasters"
+  />
+  <Card title="Keys" href="/identity-sdk/guides/keys" description="Add, remove and read keys" />
+  <Card
+    title="Passkeys"
+    href="/identity-sdk/guides/passkeys"
+    description="Register a passkey and sign user operations with it"
+  />
+  <Card title="Claims" href="/identity-sdk/guides/claims" description="Sign, store, revoke and verify claims" />
+  <Card
+    title="Wallet Linking"
+    href="/identity-sdk/guides/wallet-linking"
+    description="Link, revoke and resolve wallets, including cross-chain links"
+  />
+  <Card
+    title="Modules"
+    href="/identity-sdk/guides/modules"
+    description="Install, uninstall and check ERC-7579 modules"
+  />
+  <Card
+    title="Execution Queue"
+    href="/identity-sdk/guides/execution"
+    description="Queue, approve and track ERC-734 executions"
+  />
+  <Card title="Gas" href="/identity-sdk/gas" description="The nested-call gas pitfall and how to size gas limits" />
+  <Card title="ABIs" href="/identity-sdk/abi" description="Vendored ABIs, the ONCHAINID pin and re-syncing" />
+</Cards>
+
+The source code is at [github.com/OpenZeppelin/identity-sdk](https://github.com/OpenZeppelin/identity-sdk).

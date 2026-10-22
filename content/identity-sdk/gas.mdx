@@ -1,0 +1,115 @@
+---
+title: Gas
+description: Why gas estimates for calls an identity forwards can fall short, and how to add headroom
+---
+
+Gas estimates for calls that an identity forwards can be just short of what the inner call needs. The symptom is confusing: the transaction succeeds, the intended effect does not happen, and re-simulating the same call later passes. This page explains why and how to size gas limits so it does not happen.
+
+## When it applies
+
+Any call that reaches its target **through** the identity:
+
+- a direct transaction to the identity's ERC-734 `execute(to, value, data)`, which forwards the call to `to`;
+- a user operation, where the EntryPoint calls the identity and the identity calls each target;
+- calls the identity makes to its own registry module, such as `addClaim`, which then verifies the issuer's signature in further nested calls.
+
+## Why it happens
+
+EIP-150 caps the gas a contract can pass to a sub-call at 63/64 of the gas it has left. Each level of nesting withholds 1/64.
+
+Gas estimation (`eth_estimateGas`) searches for the smallest gas limit with which the **outer** transaction does not revert. The identity catches a failed inner call and continues (ERC-734 `execute` emits `ExecutionFailed`; a user operation is marked failed inside a successful bundle). So a limit that starves the inner call still counts as a success for the outer transaction, and an estimate that is exactly enough for the whole transaction can leave the inner call short once 1/64 is withheld at each hop.
+
+The result:
+
+- the outer transaction (or the bundle) is mined with status `success`;
+- the inner execution ran out of gas and failed;
+- a later `eth_call` simulation of the same call passes, because it runs with a large gas allowance and does not reproduce the 63/64 split at the original limit.
+
+## Observed on Base Sepolia
+
+An `execute(addClaim)` transaction was estimated at **1,117,948** gas and used **1,107,987**. The transaction succeeded; the inner `addClaim` did not complete. Re-running the same call as an `eth_call` succeeded.
+
+## Guidance: add headroom
+
+The SDK has no gas helper. Every write is a viem `Call`, and the gas knobs are viem's.
+
+The T-REX integration adopted a **2x margin** over the estimate. The extra limit only affects the balance that must be available while the transaction is in flight: unused gas is refunded on a direct transaction. On the user operation path, the account (or paymaster) must cover the higher limit as prefund; see the note on EntryPoint penalties below.
+
+### Direct transactions
+
+Estimate, then pass an explicit `gas` above the estimate:
+
+```ts
+import { prepareExecute } from '@openzeppelin/identity-sdk';
+
+// Route a call through the identity's ERC-734 execute.
+const request = { account: wallet, ...prepareExecute({ identity, to: target, data: calldata }) };
+
+const estimate = await publicClient.estimateGas(request);
+const hash = await walletClient.sendTransaction({ ...request, gas: estimate * 2n });
+```
+
+The same applies to any `Call` from the SDK sent with `sendTransaction`, including `prepareCreateIdentity`.
+
+### User operations
+
+Estimate with the bundler, then pass `callGasLimit` (and, if validation also runs short, `verificationGasLimit`) to `sendUserOperation`:
+
+```ts
+const calls = [prepareAddClaim({ identity, topic, scheme, issuer, signature, data, uri })];
+
+const estimate = await bundler.estimateUserOperationGas({ calls });
+
+const hash = await bundler.sendUserOperation({
+  calls,
+  callGasLimit: estimate.callGasLimit * 2n,
+  verificationGasLimit: estimate.verificationGasLimit * 2n,
+  preVerificationGas: estimate.preVerificationGas,
+});
+```
+
+viem keeps any limit you pass and estimates the ones you leave out, so passing only `callGasLimit` also works.
+
+The `identityActions()` methods accept the same overrides:
+
+```ts
+await bundler.addKey({
+  identity,
+  signerData,
+  purpose: KeyPurposes.ACTION,
+  keyType: KeyTypes.ECDSA,
+  callGasLimit: estimate.callGasLimit * 2n,
+});
+```
+
+To apply a rule to every operation, pass `userOperation.estimateGas` to `toIdentity`. Fields it returns are kept, and the bundler estimates the rest:
+
+```ts
+const account = await toIdentity(client, {
+  address: identity,
+  signer,
+  userOperation: { estimateGas: async () => ({ verificationGasLimit: 200_000n }) },
+});
+```
+
+Validation can be under-estimated too. `toIdentity` gives the bundler a stub signature sized like an ECDSA signature, so for keys with longer signatures (passkeys, RSA) the bundler under-estimates `verificationGasLimit` and `preVerificationGas`. Set both with `userOperation.estimateGas`; see [Passkeys](/identity-sdk/guides/passkeys#sign-user-operations-with-a-passkey).
+
+Even for ECDSA keys, with the alto version used in the SDK's live tests, every operation after an account's first was estimated with too little `verificationGasLimit`, and the bundler dropped it with `AA26 over verificationGasLimit` after accepting it. The live tests use a floor of 200,000, as the accounts SDK's own tests do.
+
+EntryPoint v0.7 and later charge a penalty on a large unused share of the execution gas limit (10% of the unused amount above a small threshold). A 2x `callGasLimit` is therefore not entirely free on the user operation path; it is still far cheaper than a failed operation.
+
+## Detecting the failure
+
+Do not rely on the transaction status alone:
+
+- **Direct `execute`**: check the receipt logs for `ExecutionFailed` (in `ikeyExecutorAbi`) rather than `Executed`, or read the execution back with `getExecution` and check `succeeded` (see [Execution queue](/identity-sdk/guides/execution)).
+- **User operations**: check `success` on the receipt from `waitForUserOperationReceipt`, not the status of the bundle transaction.
+
+```ts
+import { parseEventLogs } from 'viem';
+import { ikeyExecutorAbi } from '@openzeppelin/identity-sdk';
+
+const receipt = await publicClient.waitForTransactionReceipt({ hash });
+const failed = parseEventLogs({ abi: ikeyExecutorAbi, eventName: 'ExecutionFailed', logs: receipt.logs });
+if (failed.length > 0) throw new Error('inner execution failed; retry with more gas');
+```
