@@ -223,7 +223,34 @@ contract V2 {
 }
 ```
 
-Docstring comments don’t yet work for struct members, due to a current Solidity limitation.
+Since `@openzeppelin/upgrades-core@1.47.0`, these docstring comments can also be used on struct members, including members of [namespaced storage](/upgrades-plugins/writing-upgradeable#namespaced-storage-layout) structs, for example:
+
+```solidity
+contract V1 {
+    /// @custom:storage-location erc7201:example.main
+    struct MainStorage {
+        uint x;
+        bool f;
+    }
+
+    ...
+}
+contract V2 {
+    /// @custom:storage-location erc7201:example.main
+    struct MainStorage {
+        /// @custom:oz-renamed-from x
+        uint y;
+        /// @custom:oz-retyped-from bool
+        uint8 f;
+    }
+
+    ...
+}
+```
+
+<Callout>
+When validating with the [OpenZeppelin Upgrades CLI](/upgrades-plugins/api-core), which [Foundry Upgrades](/upgrades-plugins/foundry/foundry-upgrades) also uses, the storage slots of namespaced struct members are not available. As a result, a `@custom:oz-retyped-from` annotation on a namespaced struct member is only accepted for type changes known to keep the same layout, such as between `bool` and `uint8`.
+</Callout>
 
 ## How can I use internal functions in storage variables?
 
