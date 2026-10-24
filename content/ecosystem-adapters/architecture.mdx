@@ -31,20 +31,20 @@ flowchart TD
     style Core fill:#fff3e0,stroke:#ef6c00,color:#000
 ```
 
-- **`@openzeppelin/ui-types`** defines all 13 capability interfaces. It is the single source of truth.
+- **`@openzeppelin/ui-types`** defines all 17 capability interfaces. It is the single source of truth.
 - **`adapter-runtime-utils`** provides profile composition, lazy capability instantiation, and staged disposal.
 - **`adapter-evm-core`** centralizes reusable EVM implementations shared by `adapter-evm` and `adapter-polkadot`.
 - Each public adapter exposes an `ecosystemDefinition` conforming to `EcosystemExport`.
 
 ## Capability Tiers
 
-Adapter functionality is decomposed into **13 capability interfaces** organized across **3 tiers**. The tiers reflect increasing levels of runtime requirements: stateless metadata, network-aware schema operations, and stateful wallet-dependent interactions.
+Adapter functionality is decomposed into **17 capability interfaces** organized across **3 tiers**. The tiers reflect increasing levels of runtime requirements: stateless metadata, network-aware operations (schema parsing, read-only queries, and name resolution), and stateful wallet-dependent interactions.
 
 | Tier | Category | Network | Wallet | Capabilities |
 | --- | --- | --- | --- | --- |
 | **1** | Lightweight | No | No | `Addressing`, `Explorer`, `NetworkCatalog`, `UiLabels` |
-| **2** | Schema | Yes | No | `ContractLoading`, `Schema`, `TypeMapping`, `Query` |
-| **3** | Runtime | Yes | Yes | `Execution`, `Wallet`, `UiKit`, `Relayer`, `AccessControl` |
+| **2** | Network-Aware | Yes | No | `NameResolution`, `ContractLoading`, `Schema`, `TypeMapping`, `Query` |
+| **3** | Runtime | Yes | Yes | `Execution`, `Wallet`, `UiKit`, `Relayer`, `AccessControl`, `ERC3643`, `ERC4626`, `IRS` |
 
 ### Tier Import Rules
 
@@ -64,6 +64,7 @@ This means importing `@openzeppelin/adapter-evm/addressing` will never pull in w
 | Explorer | `ExplorerCapability` | 1 | `getExplorerUrl`, `getExplorerTxUrl` |
 | NetworkCatalog | `NetworkCatalogCapability` | 1 | `getNetworks` |
 | UiLabels | `UiLabelsCapability` | 1 | `getUiLabels` |
+| NameResolution | `NameResolutionCapability` | 2 | `isValidName`, `resolveName`, `resolveAddress` |
 | ContractLoading | `ContractLoadingCapability` | 2 | `loadContract`, `getContractDefinitionInputs` |
 | Schema | `SchemaCapability` | 2 | `isViewFunction`, `getWritableFunctions` |
 | TypeMapping | `TypeMappingCapability` | 2 | `mapParameterTypeToFieldType`, `getTypeMappingInfo` |
@@ -73,6 +74,13 @@ This means importing `@openzeppelin/adapter-evm/addressing` will never pull in w
 | UiKit | `UiKitCapability` | 3 | `getAvailableUiKits`, `configureUiKit` |
 | Relayer | `RelayerCapability` | 3 | `getRelayers`, `getNetworkServiceForms` |
 | AccessControl | `AccessControlCapability` | 3 | `registerContract`, `grantRole`, and 17 more |
+| ERC3643 | `ERC3643Capability` | 3 | `balanceOf`, `isVerified`, `simulateTransfer`, `mint`, `transfer`, `freeze`, and more |
+| ERC4626 | `ERC4626Capability` | 3 | `convertToAssets`, `convertToShares`, `totalAssets`, `deposit`, `withdraw` |
+| IRS | `IRSCapability` | 3 | `getOnchainId`, `isVerified`, `buildClaimPayload`, `deployOnchainId`, `registerIdentity`, and more |
+
+<Callout type="info">
+**Optional capabilities.** `NameResolution` is gated on factory presence and surfaces on every profile when the adapter provides it — it is not a profile requirement. `ERC3643`, `ERC4626`, and `IRS` are EVM-only, opt-in capabilities imported via dedicated sub-path exports (`@openzeppelin/adapter-evm/erc3643`, etc.); they are not assembled into standard profile runtimes.
+</Callout>
 
 ## Profiles
 
@@ -88,6 +96,7 @@ Each profile is a strict superset of Declarative. Higher profiles add capabiliti
 | `Explorer` | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `NetworkCatalog` | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `UiLabels` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `NameResolution` | ✅* | ✅* | ✅* | ✅* | ✅* |
 | `ContractLoading` | | ✅ | ✅ | ✅ | ✅ |
 | `Schema` | | ✅ | ✅ | ✅ | ✅ |
 | `TypeMapping` | | ✅ | ✅ | ✅ | ✅ |
@@ -97,6 +106,8 @@ Each profile is a strict superset of Declarative. Higher profiles add capabiliti
 | `UiKit` | | | | ✅ | ✅ |
 | `Relayer` | | | | ✅ | |
 | `AccessControl` | | | | | ✅ |
+
+\* `NameResolution` is optional and adapter-gated. When the adapter's `CapabilityFactoryMap` includes `nameResolution`, the capability is exposed on every profile; adapters without it leave `runtime.nameResolution` undefined.
 
 ### Profile Selection Guide
 

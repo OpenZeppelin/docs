@@ -45,7 +45,7 @@ OpenZeppelin UIKit ships two categories of components: **UI primitives** from `@
 | `NetworkStatusBadge` | Colored badge showing network status (e.g. connected, syncing) |
 | `EcosystemDropdown` | Ecosystem selection with chain icons |
 | `EcosystemIcon` | Chain-specific icons (Ethereum, Stellar, Polkadot, etc.) |
-| `AddressDisplay` | Formatted address with optional alias labels and edit controls |
+| `AddressDisplay` | Formatted address with optional ENS reverse resolution and alias labels |
 | `ViewContractStateButton` | Quick-action button to open the contract state widget |
 | `OverflowMenu` | Compact "..." dropdown for secondary actions |
 
@@ -77,7 +77,8 @@ The field components are designed for use with [react-hook-form](https://react-h
 
 | Field | Input Type | Use Case |
 | --- | --- | --- |
-| `AddressField` | Blockchain address | Contract addresses, recipient addresses; validates format per ecosystem |
+| `AddressField` | Blockchain address | Contract addresses, recipient addresses; validates format per ecosystem; resolves ENS names when `NameResolverProvider` is mounted |
+| `AddressFieldWithResolvedPreview` | Blockchain address + preview card | Same as `AddressField` with a reverse-lookup preview slot (see [Name Resolution](/tools/uikit/name-resolution)) |
 | `AmountField` | Token amounts | Token transfers; handles decimals and BigInt formatting |
 | `BigIntField` | Large integers | Raw `uint256` values, timestamps, token IDs |
 | `BytesField` | Hex byte strings | Calldata, hashes, signatures |
@@ -132,11 +133,15 @@ function TransferForm() {
 
 ### Address Label & Suggestion Contexts
 
-UIKit provides context-driven address resolution that works automatically with `AddressField` and `AddressDisplay`:
+UIKit provides context-driven **address-book aliases** that work automatically with `AddressField` and `AddressDisplay`:
 
 - **`AddressLabelProvider`**: When mounted, all `AddressDisplay` instances in the subtree auto-resolve human-readable labels (e.g. "Treasury Multisig" instead of `0x1234...abcd`).
 - **`AddressSuggestionProvider`**: When mounted, all `AddressField` instances show autocomplete suggestions as the user types.
 - **`useAddressLabel(address, networkId?)`**: Hook to resolve a label from the nearest provider.
+
+<Callout type="info">
+Address-book aliases are **not** ENS. For on-chain name resolution (forward/reverse), mount `NameResolverProvider` instead — see [Name Resolution (ENS)](/tools/uikit/name-resolution).
+</Callout>
 
 ## Renderer Widgets
 
