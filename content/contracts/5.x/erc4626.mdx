@@ -12,8 +12,8 @@ We provide a base implementation of ERC-4626 that includes a simple vault. This 
 
 In exchange for the assets deposited into an ERC-4626 vault, a user receives shares. These shares can later be burned to redeem the corresponding underlying assets. The number of shares a user gets depends on the amount of assets they put in and on the exchange rate of the vault. This exchange rate is defined by the current liquidity held by the vault.
 
-* If a vault has 100 tokens to back 200 shares, then each share is worth 0.5 assets.
-* If a vault has 200 tokens to back 100 shares, then each share is worth 2.0 assets.
+- If a vault has 100 tokens to back 200 shares, then each share is worth 0.5 assets.
+- If a vault has 200 tokens to back 100 shares, then each share is worth 2.0 assets.
 
 In other words, the exchange rate can be defined as the slope of the line that passes through the origin and the current number of assets and shares in the vault. Deposits and withdrawals move the vault in this line.
 
@@ -53,15 +53,15 @@ An attacker would typically wait for a user to do the first deposit into the vau
 
 In math that gives:
 
-* $a_0$ the attacker deposit
-* $a_1$ the attacker donation
-* $u$ the user deposit
+- $a_0$ the attacker deposit
+- $a_1$ the attacker donation
+- $u$ the user deposit
 
-|  |
-| --- | --- | --- | --- |
-| Assets | Shares | Rate | initial |
-| $0$ | $0$ | - | after attacker’s deposit |
-| $a_0$ | $a_0$ | $1$ | after attacker’s donation |
+|                           | Assets      | Shares | Rate                    |
+| ------------------------- | ----------- | ------ | ----------------------- |
+| initial                   | $0$         | $0$    | -                       |
+| after attacker’s deposit  | $a_0$       | $a_0$  | $1$                     |
+| after attacker’s donation | $a_0 + a_1$ | $a_0$  | $\frac{a_0}{a_0 + a_1}$ |
 
 This means a deposit of $u$ will give $\frac{u \times a_0}{a_0 + a_1}$ shares.
 
@@ -85,23 +85,23 @@ In this scenario, the attack is $n$ times less powerful (in how much it is steal
 
 The defense we propose is based on the approach used in [YieldBox](https://github.com/boringcrypto/YieldBox). It consists of two parts:
 
-* Use an offset between the "precision" of the representation of shares and assets. Said otherwise, we use more decimal places to represent the shares than the underlying token does to represent the assets.
-* Include virtual shares and virtual assets in the exchange rate computation. These virtual assets enforce the conversion rate when the vault is empty.
+- Use an offset between the "precision" of the representation of shares and assets. Said otherwise, we use more decimal places to represent the shares than the underlying token does to represent the assets.
+- Include virtual shares and virtual assets in the exchange rate computation. These virtual assets enforce the conversion rate when the vault is empty.
 
 These two parts work together in enforcing the security of the vault. First, the increased precision corresponds to a high rate, which we saw is safer as it reduces the rounding error when computing the amount of shares. Second, the virtual assets and shares (in addition to simplifying a lot of the computations) capture part of the donation, making it unprofitable for a developer to perform an attack.
 
 Following the previous math definitions, we have:
 
-* $\delta$ the vault offset
-* $a_0$ the attacker deposit
-* $a_1$ the attacker donation
-* $u$ the user deposit
+- $\delta$ the vault offset
+- $a_0$ the attacker deposit
+- $a_1$ the attacker donation
+- $u$ the user deposit
 
-|  |
-| --- | --- | --- | --- |
-| Assets | Shares | Rate | initial |
-| $1$ | $10^\delta$ | $10^\delta$ | after attacker’s deposit |
-| $1+a_0$ | $10^\delta \times (1+a_0)$ | $10^\delta$ | after attacker’s donation |
+|                           | Assets          | Shares                     | Rate                                       |
+| ------------------------- | --------------- | -------------------------- | ------------------------------------------ |
+| initial                   | $1$             | $10^\delta$                | $10^\delta$                                |
+| after attacker’s deposit  | $1 + a_0$       | $10^\delta \times (1+a_0)$ | $10^\delta$                                |
+| after attacker’s donation | $1 + a_0 + a_1$ | $10^\delta \times (1+a_0)$ | $10^\delta \times \frac{1+a_0}{1+a_0+a_1}$ |
 
 One important thing to note is that the attacker only owns a fraction $\frac{a_0}{1 + a_0}$ of the shares, so when doing the donation, he will only be able to recover that fraction $\frac{a_1 \times a_0}{1 + a_0}$ of the donation. The remaining $\frac{a_1}{1+a_0}$ are captured by the vault.
 
@@ -133,8 +133,8 @@ For the attacker to dilute that deposit to 0 shares, causing the user to lose al
 \iff 10^\delta \times u \le \mathit{loss}
 ```
 
-* If the offset is 0, the attacker’s loss is at least equal to the user’s deposit.
-* If the offset is greater than 0, the attacker will have to suffer losses that are orders of magnitude bigger than the amount of value that can hypothetically be stolen from the user.
+- If the offset is 0, the attacker’s loss is at least equal to the user’s deposit.
+- If the offset is greater than 0, the attacker will have to suffer losses that are orders of magnitude bigger than the amount of value that can hypothetically be stolen from the user.
 
 This shows that even with an offset of 0, the virtual shares and assets make this attack non profitable for the attacker. Bigger offsets increase the security even further by making any attack on the user extremely wasteful.
 
@@ -165,4 +165,6 @@ The consequence of this design is that both the `Deposit` and `Withdraw` events 
 
 The following example describes how fees proportional to the deposited/withdrawn amount can be implemented:
 
-<include cwd lang='solidity'>./examples/ERC4626Fees.sol</include>
+<include cwd lang="solidity">
+  ./examples/ERC4626Fees.sol
+</include>
