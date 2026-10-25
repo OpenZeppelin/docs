@@ -1,0 +1,194 @@
+---
+title: Agent Wallet (testnet)
+---
+
+This walkthrough builds a smart account that an AI agent can spend from, **capped per period and scoped to one
+token**, and lets the agent pay on testnet. It uses [context rules](/stellar-contracts/accounts/context-rules), the
+`ed25519` verifier and the [spending-limit policy](/stellar-contracts/accounts/policies#spending-limit).
+
+<Callout type="warning">
+v0.8.0 changed the digest that smart-account signers sign. Until your client supports it (for example
+[`smart-account-kit`](https://github.com/stellar/smart-account-kit)), sign with your own code, as in step 4. The signer
+below is a minimal demo for testnet, not a reviewed wallet.
+</Callout>
+
+## 1. Deploy the verifier, the policy and a token
+
+```bash
+git clone https://github.com/OpenZeppelin/stellar-contracts && cd stellar-contracts && git checkout v0.8.0
+stellar network use testnet
+stellar keys generate feepayer --fund && stellar keys use feepayer
+
+for p in multisig-ed25519-verifier-example multisig-spending-limit-policy-example fungible-pausable-example; do
+  stellar contract build --package $p
+done
+R=target/wasm32v1-none/release
+stellar contract deploy --alias ed25519_verifier --wasm $R/multisig_ed25519_verifier_example.wasm
+stellar contract deploy --alias spending_limit   --wasm $R/multisig_spending_limit_policy_example.wasm
+stellar contract deploy --alias ausd --wasm $R/fungible_pausable_example.wasm -- \
+  --name "Agent USD" --symbol AUSD --owner feepayer --initial_supply 1000000000000
+```
+
+Any SEP-41 token works; `ausd` is a test token you control. Verifiers and policies can be shared by many accounts.
+
+## 2. Give the account an owner rule and a scoped agent rule
+
+The spending-limit policy can only be installed on a `CallContract` rule, so the agent's rule names the token it may
+spend. Copy `examples/multisig-smart-account/account` to `examples/multisig-smart-account/agent-account`, rename the
+package to `agent-account-example`, and replace its constructor:
+
+```rust
+use soroban_sdk::IntoVal;
+use stellar_accounts::policies::spending_limit::SpendingLimitAccountParams;
+
+/// Rule 0 (`Default`, "owner"): the owner signer, no policy.
+/// Rule 1 (`CallContract(token)`, "agent"): the agent signer, valid for
+/// `valid_for_ledgers`, capped at `spending_limit` per `period_ledgers`.
+#[allow(clippy::too_many_arguments)]
+pub fn __constructor(
+    e: &Env,
+    owner: Signer,
+    agent: Signer,
+    token: Address,
+    spending_limit_policy: Address,
+    spending_limit: i128,
+    period_ledgers: u32,
+    valid_for_ledgers: u32,
+) {
+    smart_account::add_context_rule(
+        e,
+        &ContextRuleType::Default,
+        &String::from_str(e, "owner"),
+        None,
+        &Vec::from_array(e, [owner]),
+        &Map::new(e),
+    );
+
+    let params = SpendingLimitAccountParams { spending_limit, period_ledgers };
+    let mut policies = Map::new(e);
+    policies.set(spending_limit_policy, params.into_val(e));
+    smart_account::add_context_rule(
+        e,
+        &ContextRuleType::CallContract(token),
+        &String::from_str(e, "agent"),
+        Some(e.ledger().sequence() + valid_for_ledgers),
+        &Vec::from_array(e, [agent]),
+        &policies,
+    );
+}
+```
+
+The agent can only call the token, only until `valid_until`, and only up to the limit. It can't change the account's
+rules. The owner rule lets a human do anything, including recovering funds.
+
+## 3. Deploy and fund the account
+
+```bash
+stellar contract build --package agent-account-example
+stellar keys generate agent
+stellar keys generate owner
+stellar keys generate merchant --fund
+hexpub() { python3 -c "import base64,sys;print(base64.b32decode(sys.argv[1])[1:33].hex())" "$(stellar keys public-key "$1")"; }
+
+stellar contract deploy --alias agent_wallet --wasm $R/agent_account_example.wasm -- \
+  --owner "{\"External\": [\"$(stellar contract alias show ed25519_verifier)\", \"$(hexpub owner)\"]}" \
+  --agent "{\"External\": [\"$(stellar contract alias show ed25519_verifier)\", \"$(hexpub agent)\"]}" \
+  --token $(stellar contract alias show ausd) \
+  --spending_limit_policy $(stellar contract alias show spending_limit) \
+  --spending_limit 500000000 \
+  --period_ledgers 17280 \
+  --valid_for_ledgers 120960
+
+stellar contract invoke --id ausd --source feepayer -- transfer \
+  --from feepayer --to $(stellar contract alias show agent_wallet) --amount 1000000000
+```
+
+## 4. Sign and pay as the agent
+
+The account checks a signature over its v0.8.0 auth digest,
+`sha256(XDR(AuthDigestPreimage { account, context_rule_ids, signature_payload }))`, and reads the signature from an
+`AuthPayload` that names the context rule. This Node script (`@stellar/stellar-sdk` ^14) builds both, checks the digest
+against the account's `auth_digest` view, submits, and waits for the result:
+
+```js title="pay.mjs"
+import { rpc, TransactionBuilder, Operation, Address, nativeToScVal, xdr, Keypair, hash, Networks, BASE_FEE } from "@stellar/stellar-sdk";
+
+const E = process.env; // WALLET, TOKEN, PAY_TO, AMOUNT, RULE_ID, VERIFIER, AGENT_SEED_HEX, FEE_SECRET
+const server = new rpc.Server("https://soroban-testnet.stellar.org");
+const fee = Keypair.fromSecret(E.FEE_SECRET);
+const agent = Keypair.fromRawEd25519Seed(Buffer.from(E.AGENT_SEED_HEX, "hex"));
+const op = (auth) => Operation.invokeContractFunction({
+  contract: E.TOKEN, function: "transfer",
+  args: [new Address(E.WALLET).toScVal(), new Address(E.PAY_TO).toScVal(), nativeToScVal(BigInt(E.AMOUNT), { type: "i128" })],
+  ...(auth ? { auth } : {}),
+});
+const build = async (o) => new TransactionBuilder(await server.getAccount(fee.publicKey()), { fee: BASE_FEE, networkPassphrase: Networks.TESTNET })
+  .addOperation(o).setTimeout(120).build();
+
+// 1. The wallet's authorization entry, from a recording simulation
+const sim1 = await server.simulateTransaction(await build(op()));
+const entry = sim1.result.auth.find((a) => a.credentials().switch().name === "sorobanCredentialsAddress"
+  && Address.fromScAddress(a.credentials().address().address()).toString() === E.WALLET);
+const creds = entry.credentials().address();
+creds.signatureExpirationLedger((await server.getLatestLedger()).sequence + 60);
+
+// 2. The v0.8.0 auth digest
+const signaturePayload = hash(xdr.HashIdPreimage.envelopeTypeSorobanAuthorization(new xdr.HashIdPreimageSorobanAuthorization({
+  networkId: hash(Buffer.from(Networks.TESTNET)), nonce: creds.nonce(),
+  signatureExpirationLedger: creds.signatureExpirationLedger(), invocation: entry.rootInvocation(),
+})).toXDR());
+const ruleIds = xdr.ScVal.scvVec([xdr.ScVal.scvU32(Number(E.RULE_ID))]);
+const preimage = xdr.ScVal.scvMap([
+  new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol("account"), val: new Address(E.WALLET).toScVal() }),
+  new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol("context_rule_ids"), val: ruleIds }),
+  new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol("signature_payload"), val: xdr.ScVal.scvBytes(signaturePayload) }),
+]);
+const digest = hash(preimage.toXDR());
+const view = await server.simulateTransaction(await build(Operation.invokeContractFunction({ contract: E.WALLET, function: "auth_digest", args: [preimage] })));
+if (!Buffer.from(view.result.retval.bytes()).equals(digest)) throw new Error("digest mismatch");
+
+// 3. AuthPayload { context_rule_ids, signers: { External(verifier, agent key) => signature } }
+const signer = xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("External"), new Address(E.VERIFIER).toScVal(), xdr.ScVal.scvBytes(agent.rawPublicKey())]);
+creds.signature(xdr.ScVal.scvMap([
+  new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol("context_rule_ids"), val: ruleIds }),
+  new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol("signers"), val: xdr.ScVal.scvMap([new xdr.ScMapEntry({ key: signer, val: xdr.ScVal.scvBytes(agent.sign(digest)) })]) }),
+]));
+
+// 4. Simulate with the signature (runs __check_auth and the policy), submit, wait
+const tx = await build(op([entry]));
+const sim2 = await server.simulateTransaction(tx);
+if (rpc.Api.isSimulationError(sim2)) { console.log("REJECTED:", sim2.error.match(/Error\(Contract, #\d+\)/g)?.pop() ?? sim2.error.split("\n")[0]); process.exit(2); }
+const ready = rpc.assembleTransaction(tx, sim2).build();
+ready.sign(fee);
+const sent = await server.sendTransaction(ready);
+const res = await server.pollTransaction(sent.hash, { attempts: 30 });
+console.log(res.status, sent.hash);
+```
+
+```bash
+hexseed() { python3 -c "import base64,sys;print(base64.b32decode(sys.argv[1])[1:33].hex())" "$(stellar keys show "$1")"; }
+export WALLET=$(stellar contract alias show agent_wallet) TOKEN=$(stellar contract alias show ausd) \
+  VERIFIER=$(stellar contract alias show ed25519_verifier) PAY_TO=$(stellar keys address merchant) \
+  RULE_ID=1 AGENT_SEED_HEX=$(hexseed agent) FEE_SECRET=$(stellar keys show feepayer)
+
+AMOUNT=200000000 node pay.mjs   # SUCCESS <hash>
+AMOUNT=400000000 node pay.mjs   # REJECTED: Error(Contract, #3221)
+```
+
+The second payment would take the total over the limit, so the policy rejects it inside the account's
+`__check_auth` with `SpendingLimitExceeded` (`#3221`). The agent signs; `feepayer` only pays the network fee. Check
+what's been spent:
+
+```bash
+stellar contract invoke --id spending_limit -- get_spending_limit_data \
+  --context_rule_id 1 --smart_account $(stellar contract alias show agent_wallet)
+```
+
+## Next steps
+
+- Switch to a maintained client once it supports v0.8.0. The rules and policies stay the same.
+- Pay for APIs with the [x402 facilitator on Channels](https://docs.openzeppelin.com/relayer/1.8.x/guides/stellar-x402-facilitator-guide).
+  Smart-account payers need far more resource fee than classic accounts, so check that your facilitator's fee cap
+  allows them.
+- Before real funds, review the [policy caveats](/stellar-contracts/accounts/policies#best-practices) and keep an owner
+  or recovery rule, as above.
