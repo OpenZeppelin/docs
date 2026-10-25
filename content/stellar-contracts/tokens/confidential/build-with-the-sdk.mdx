@@ -14,15 +14,16 @@ is in active development, is not on npm, and is not production-ready. Use it on 
 
 Every holder operation goes through a client: `deposit` needs a registered account, and `register` needs a proof. The
 Stellar CLI covers deployment and administration only. The SDK covers the holder flow, balance recovery, auditor
-decryption and selective disclosure. It doesn't yet cover spender proving (`set_spender`,
-`confidential_transfer_from`) or clawback proving.
+decryption, selective disclosure and the spender flow (`set_spender`, `confidential_transfer_from`). It doesn't
+yet cover clawback proving.
 
 ## 1. Deploy the contracts
 
 Follow the [testnet deployment guide](https://github.com/OpenZeppelin/stellar-contracts/blob/v0.8.0/examples/confidential/README.md),
 steps 1–8, from the repository root at tag `v0.8.0`, with stellar-cli 28.1.0 or later. It deploys the verifier (with
 all six verification keys), the auditor registry, the factory, then the allowlist and the compliant token, and
-onboards each holder.
+onboards each holder. The verifier and the auditor registry are shared across tokens, so deploy them once per
+network and point each new token at them.
 
 Use your own auditor key rather than the guide's example key. Auditor public keys are `K_aud = k·H`
 ([Compliance](/stellar-contracts/tokens/confidential/compliance)). Generate a key pair with the SDK and register the
@@ -46,11 +47,11 @@ their exact tarball URL, so pin a commit:
 
 ```yaml title="pnpm-workspace.yaml"
 onlyBuiltDependencies:
-  - "stellar-confidential-token-sdk@https://codeload.github.com/brozorec/stellar-confidential-token-sdk/tar.gz/df18b71b68b2eeeb230cb8ac07eb86bb9d24a9df"
+  - "stellar-confidential-token-sdk@https://codeload.github.com/brozorec/stellar-confidential-token-sdk/tar.gz/aad17069714713bcb36fa376d0f2a87743e8e2a7"
 ```
 
 ```bash
-pnpm add "github:brozorec/stellar-confidential-token-sdk#df18b71b68b2eeeb230cb8ac07eb86bb9d24a9df" "@stellar/stellar-sdk@^14.2.0"
+pnpm add "github:brozorec/stellar-confidential-token-sdk#aad17069714713bcb36fa376d0f2a87743e8e2a7" "@stellar/stellar-sdk@^14.2.0"
 ```
 
 Pin `@stellar/stellar-sdk` to the SDK's range (`^14`) so that only one copy is installed.
@@ -169,6 +170,9 @@ for (const ev of events.filter((e) => e.type === "transfer")) {
 
 - Proofs take about 1 s (register) to 2 s (transfer) in Node on a laptop. Create each `CircuitProver` once and reuse it.
 - The SDK's circuits and VKs are pinned to v0.8.0. Register exactly those VKs on your verifier.
+- Proofs must use the keccak transcript and the non-ZK UltraHonk flavour, with `@aztec/bb.js` exactly `0.87.0`
+  and circuits compiled by nargo `1.0.0-beta.11`. The SDK pins all three. A proof built any other way does not
+  verify on-chain.
 - Back-to-back transactions from one account on testnet can fail with `txBadSeq`. Wait for each transaction and
   retry.
 - Browser apps: see the SDK README's "Browser usage" (bb.js served unbundled, cross-origin isolation).
