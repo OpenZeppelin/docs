@@ -74,7 +74,9 @@ The module never resolves the caller; the consuming contract passes an identity 
   kind="ledger"
   id="Signer-_isInitialized"
 >
-  Records whether [initialize](#Signer-initialize) has run. It gates re-entry into `initialize` and nothing else; no other circuit consults it.
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
 </APIItemCompact>
 
 ### Witnesses [toc] [#Signer-Witnesses]
@@ -92,16 +94,16 @@ None.
   kind="circuit"
   id="Signer-initialize"
 >
-  Registers each entry of `signers` and sets the threshold to `thresh`.
-  If used, it MUST only be called from the contract's constructor; a contract may instead configure signers through its own gated flow with [_addSigner](#Signer-_addSigner) and [_setThreshold](#Signer-_setThreshold).
-  The signer identities and the threshold are disclosed to the ledger.
+  Initializes the signer module with the given threshold
+  and an initial set of signers.
+  If used, it should only be called in the contract's constructor.
 
   Requirements:
 
-  * Contract is not initialized.
-  * `thresh` is not zero.
-  * `thresh` does not exceed the number of `signers`.
-  * `signers` contains no duplicates.
+  - If used, can only be called once (in the constructor).
+  - `thresh` must not be zero.
+  - `thresh` must not exceed the number of `signers`.
+  - `signers` must not contain duplicates.
 </APIItemCompact>
 
 #### assertSigner [toc] [#Signer-assertSigner]
@@ -111,12 +113,11 @@ None.
   kind="circuit"
   modulePrefix="Signer"
 >
-  Asserts that `caller` is a registered signer. Does not check initialization: an empty registry rejects every caller.
-  `caller` is disclosed as the key of the set lookup.
+  Asserts that the given caller is an active signer.
 
   Requirements:
 
-  * `caller` is a member of the signer registry.
+  - `caller` must be a member of the signers registry.
 </APIItemCompact>
 
 #### assertThresholdMet [toc] [#Signer-assertThresholdMet]
@@ -127,15 +128,24 @@ None.
   complexity="k=9, rows=54"
   modulePrefix="Signer"
 >
-  Asserts that `approvalCount` meets the threshold.
-  The count is supplied by the consuming contract and compared against the threshold only; the registry is never consulted,
-  so the contract's approval accounting must itself be gated by [assertSigner](#Signer-assertSigner) and count distinct signers.
-  The count is not bounded by `_signerCount`, so approvals collected before a signer was removed still count.
+  Asserts that the given approval count meets the threshold.
+
+  `approvalCount` is supplied by the consuming contract and is
+  compared against the threshold only. This circuit never consults the signer
+  registry. Ensuring the count reflects distinct, currently-registered signers
+  is the consuming contract's responsibility, and a contract whose approval
+  accounting is not itself gated by `assertSigner` gets no protection here.
+
+  The count is deliberately left unbounded by `_signerCount`: approvals
+  collected before a signer was removed must still count toward a threshold
+  the remaining signers satisfy, and bounding the count would reject those.
+  See the stale-signer-set guidance in the module header.
 
   Requirements:
 
-  * The threshold is set (not zero).
-  * `approvalCount` is greater than or equal to the threshold.
+  - Ledger threshold must be set (not be zero). An unconfigured module has a
+    zero threshold, so this rejects before any approval count is compared.
+  - `approvalCount` must be >= threshold.
 </APIItemCompact>
 
 #### getSignerCount [toc] [#Signer-getSignerCount]
@@ -146,7 +156,8 @@ None.
   complexity="k=6, rows=26"
   modulePrefix="Signer"
 >
-  Returns the number of registered signers. Returns zero when none have been registered.
+  Returns the current signer count. Returns zero when no
+  signers have been registered.
 </APIItemCompact>
 
 #### getThreshold [toc] [#Signer-getThreshold]
@@ -157,7 +168,8 @@ None.
   complexity="k=6, rows=26"
   modulePrefix="Signer"
 >
-  Returns the approval threshold. Returns zero when it has not been set.
+  Returns the approval threshold. Returns zero when the
+  threshold has not been set.
 </APIItemCompact>
 
 #### isSigner [toc] [#Signer-isSigner]
@@ -167,7 +179,7 @@ None.
   kind="circuit"
   modulePrefix="Signer"
 >
-  Returns true if `account` is a registered signer. `account` is disclosed as the key of the set lookup.
+  Returns whether the given account is an active signer.
 </APIItemCompact>
 
 #### _addSigner [toc] [#Signer-_addSigner]
@@ -177,13 +189,15 @@ None.
   kind="circuit"
   modulePrefix="Signer"
 >
-  Adds `signer` to the registry and increments the signer count. `signer` is disclosed.
+  Adds a new signer to the registry.
 
-  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+  Access control is NOT enforced here.
+  The consuming contract must gate this behind its own
+  authorization policy.
 
   Requirements:
 
-  * `signer` is not already a registered signer.
+  - `signer` must not already be an active signer.
 </APIItemCompact>
 
 #### _removeSigner [toc] [#Signer-_removeSigner]
@@ -193,14 +207,16 @@ None.
   kind="circuit"
   modulePrefix="Signer"
 >
-  Removes `signer` from the registry and decrements the signer count. `signer` is disclosed.
+  Removes a signer from the registry.
 
-  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+  Access control is NOT enforced here.
+  The consuming contract must gate this behind its own
+  authorization policy.
 
   Requirements:
 
-  * `signer` is a registered signer.
-  * The signer count after removal is greater than or equal to the threshold.
+  - `signer` must be an active signer.
+  - Removal must not drop signer count below threshold.
 </APIItemCompact>
 
 #### _changeThreshold [toc] [#Signer-_changeThreshold]
@@ -211,14 +227,16 @@ None.
   complexity="k=9, rows=53"
   modulePrefix="Signer"
 >
-  Updates the approval threshold, checking it against the current signer count. `newThreshold` is disclosed.
+  Updates the approval threshold.
 
-  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+  Access control is NOT enforced here.
+  The consuming contract must gate this behind its own
+  authorization policy.
 
   Requirements:
 
-  * `newThreshold` is not zero.
-  * `newThreshold` does not exceed the current signer count.
+  - `newThreshold` must not be zero.
+  - `newThreshold` must not exceed the current signer count.
 </APIItemCompact>
 
 #### _setThreshold [toc] [#Signer-_setThreshold]
@@ -229,17 +247,30 @@ None.
   complexity="k=6, rows=40"
   modulePrefix="Signer"
 >
-  Sets the approval threshold without checking it against the signer count. `newThreshold` is disclosed.
-  Intended for construction or custom setup flows where signers are not yet registered.
-  A threshold above the signer count is permitted mid-setup and is not self-enforcing:
-  the contract must not gate operations on [assertThresholdMet](#Signer-assertThresholdMet) while setup is incomplete.
-  Use [_changeThreshold](#Signer-_changeThreshold) for operational changes.
+  Sets the approval threshold without checking
+  against the current signer count.
 
-  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+  <Callout type='warn'>
+    This is intended for use during contract construction
+    or custom setup flows where signers may not yet be registered.
+
+    Leaving `newThreshold` above the signer count is permitted and expected
+    mid-setup, and is not self-enforcing: `assertThresholdMet` compares
+    `approvalCount` against the threshold alone, so a caller supplying a matching
+    count satisfies it even against an empty registry. Contracts must not gate
+    operations on `assertThresholdMet` while setup is incomplete. Lower the
+    threshold with `_setThreshold`; `_changeThreshold` cannot lower one while the
+    signer count is zero, because that would require a zero threshold.
+  </Callout>
+
+  Access control is NOT enforced here.
+  The consuming contract must gate this behind its own
+  authorization policy. Use `_changeThreshold` for
+  operational threshold changes with signer count validation.
 
   Requirements:
 
-  * `newThreshold` is not zero.
+  - `newThreshold` must not be zero.
 </APIItemCompact>
 
 ---
@@ -266,8 +297,10 @@ import "./node_modules/@openzeppelin/compact-contracts/multisig/ProposalManager"
   kind="enum"
   id="ProposalManager-ProposalStatus"
 >
-  Proposal lifecycle states. `Inactive` is the zero value and is never stored:
-  [_createProposal](#ProposalManager-_createProposal) writes `Active`, and every view asserts the proposal exists before reading.
+  Proposal lifecycle states. `Inactive` is the zero value and is
+  never stored: `_createProposal` writes `Active`, and every view asserts the
+  proposal exists before reading, so a stored proposal can never read
+  `Inactive`.
 </APIItemCompact>
 
 #### RecipientKind [toc] [#ProposalManager-RecipientKind]
@@ -340,7 +373,7 @@ None.
   kind="circuit"
   modulePrefix="ProposalManager"
 >
-  Constructs a `ShieldedUser` recipient from a coin public key.
+  Constructs a shielded user recipient.
 </APIItemCompact>
 
 #### unshieldedUserRecipient [toc] [#ProposalManager-unshieldedUserRecipient]
@@ -350,7 +383,7 @@ None.
   kind="circuit"
   modulePrefix="ProposalManager"
 >
-  Constructs an `UnshieldedUser` recipient from a user address.
+  Constructs an unshielded user recipient.
 </APIItemCompact>
 
 #### contractRecipient [toc] [#ProposalManager-contractRecipient]
@@ -360,7 +393,7 @@ None.
   kind="circuit"
   modulePrefix="ProposalManager"
 >
-  Constructs a `Contract` recipient from a contract address.
+  Constructs a contract recipient.
 </APIItemCompact>
 
 #### toShieldedRecipient [toc] [#ProposalManager-toShieldedRecipient]
@@ -370,11 +403,12 @@ None.
   kind="circuit"
   modulePrefix="ProposalManager"
 >
-  Converts a recipient into the form a shielded send accepts: `left` for a `ShieldedUser`, `right` for a `Contract`.
+  Converts a Recipient to a shielded send recipient.
+  Handles both ShieldedUser and Contract kinds.
 
   Requirements:
 
-  * `r.kind` is `ShieldedUser` or `Contract`.
+  - Recipient kind must be ShieldedUser or Contract.
 </APIItemCompact>
 
 #### toUnshieldedRecipient [toc] [#ProposalManager-toUnshieldedRecipient]
@@ -384,11 +418,12 @@ None.
   kind="circuit"
   modulePrefix="ProposalManager"
 >
-  Converts a recipient into the form an unshielded send accepts: `left` for a `Contract`, `right` for an `UnshieldedUser`.
+  Converts a Recipient to an unshielded send recipient.
+  Handles both UnshieldedUser and Contract kinds.
 
   Requirements:
 
-  * `r.kind` is `UnshieldedUser` or `Contract`.
+  - Recipient kind must be UnshieldedUser or Contract.
 </APIItemCompact>
 
 #### assertProposalExists [toc] [#ProposalManager-assertProposalExists]
@@ -398,11 +433,11 @@ None.
   kind="circuit"
   modulePrefix="ProposalManager"
 >
-  Asserts that a proposal with `id` has been created. `id` is disclosed.
+  Asserts that a proposal exists.
 
   Requirements:
 
-  * A proposal with `id` exists.
+  - Proposal with `id` must have been created.
 </APIItemCompact>
 
 #### assertProposalActive [toc] [#ProposalManager-assertProposalActive]
@@ -412,12 +447,12 @@ None.
   kind="circuit"
   modulePrefix="ProposalManager"
 >
-  Asserts that a proposal with `id` exists and is `Active`. `id` is disclosed.
+  Asserts that a proposal exists and is active.
 
   Requirements:
 
-  * A proposal with `id` exists.
-  * Its status is `Active`.
+  - Proposal must exist.
+  - Proposal status must be Active.
 </APIItemCompact>
 
 #### _createProposal [toc] [#ProposalManager-_createProposal]
@@ -432,18 +467,30 @@ None.
   modulePrefix="ProposalManager"
   stackParams="true"
 >
-  Increments the proposal counter, stores a new `Active` proposal under the new id, and returns the id.
-  The whole proposal (recipient, color, amount, status) is disclosed to the ledger.
-  The counter is incremented and read back as the map key, so concurrent creations against the same state conflict.
+  Creates a new proposal.
 
-  The recipient is not validated beyond being well-typed: a kind the execution rail cannot accept creates a proposal that stays `Active` until cancelled,
-  and an unspendable address is accepted.
+  <Callout type='warn'>
+    The recipient is NOT validated beyond being well-typed. Two
+    consequences the consumer must handle:
 
-  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+    - A `kind` the execution rail cannot accept (an `UnshieldedUser` recipient
+    on a shielded treasury, say) creates a proposal that passes here and then
+    reverts in `toShieldedRecipient` at execution. It stays `Active` and
+    unexecutable on that rail until `_cancelProposal` retires it.
+    - A zero or otherwise unspendable `address` is accepted, and funds sent to
+    it on execution are unrecoverable.
+  </Callout>
+
+  `_nextProposalId` is incremented and then read back for the map key,
+  making this a pinned read-modify-write.
+
+  Access control is NOT enforced here.
+  The consuming contract must gate this behind its own
+  authorization policy.
 
   Requirements:
 
-  * `amount` is greater than zero.
+  - `amount` must be greater than 0.
 </APIItemCompact>
 
 #### _cancelProposal [toc] [#ProposalManager-_cancelProposal]
@@ -453,13 +500,15 @@ None.
   kind="circuit"
   modulePrefix="ProposalManager"
 >
-  Sets the proposal's status to `Cancelled`. `id` is disclosed.
+  Cancels a proposal.
 
-  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+  Access control is NOT enforced here.
+  The consuming contract must gate this behind its own
+  authorization policy.
 
   Requirements:
 
-  * The proposal exists and is `Active`.
+  - Proposal must be active.
 </APIItemCompact>
 
 #### _markExecuted [toc] [#ProposalManager-_markExecuted]
@@ -469,13 +518,15 @@ None.
   kind="circuit"
   modulePrefix="ProposalManager"
 >
-  Sets the proposal's status to `Executed`. `id` is disclosed.
+  Marks a proposal as executed.
 
-  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+  Access control is NOT enforced here.
+  The consuming contract must gate this behind its own
+  authorization policy.
 
   Requirements:
 
-  * The proposal exists and is `Active`.
+  - Proposal must be active.
 </APIItemCompact>
 
 #### getProposal [toc] [#ProposalManager-getProposal]
@@ -485,11 +536,7 @@ None.
   kind="circuit"
   modulePrefix="ProposalManager"
 >
-  Returns the full proposal. `id` is disclosed.
-
-  Requirements:
-
-  * A proposal with `id` exists.
+  Returns the full proposal data.
 </APIItemCompact>
 
 #### getProposalRecipient [toc] [#ProposalManager-getProposalRecipient]
@@ -499,11 +546,7 @@ None.
   kind="circuit"
   modulePrefix="ProposalManager"
 >
-  Returns the proposal's recipient. `id` is disclosed.
-
-  Requirements:
-
-  * A proposal with `id` exists.
+  Returns the recipient of a proposal.
 </APIItemCompact>
 
 #### getProposalAmount [toc] [#ProposalManager-getProposalAmount]
@@ -513,11 +556,7 @@ None.
   kind="circuit"
   modulePrefix="ProposalManager"
 >
-  Returns the proposal's amount. `id` is disclosed.
-
-  Requirements:
-
-  * A proposal with `id` exists.
+  Returns the amount of a proposal.
 </APIItemCompact>
 
 #### getProposalColor [toc] [#ProposalManager-getProposalColor]
@@ -527,11 +566,7 @@ None.
   kind="circuit"
   modulePrefix="ProposalManager"
 >
-  Returns the proposal's token color. `id` is disclosed.
-
-  Requirements:
-
-  * A proposal with `id` exists.
+  Returns the token color of a proposal.
 </APIItemCompact>
 
 #### getProposalStatus [toc] [#ProposalManager-getProposalStatus]
@@ -541,11 +576,7 @@ None.
   kind="circuit"
   modulePrefix="ProposalManager"
 >
-  Returns the proposal's status. `id` is disclosed.
-
-  Requirements:
-
-  * A proposal with `id` exists.
+  Returns the status of a proposal.
 </APIItemCompact>
 
 ---
@@ -610,16 +641,28 @@ None.
   kind="circuit"
   modulePrefix="ShieldedTreasury"
 >
-  Claims `coin` with `receiveShielded`, then merges it into the stored coin of the same color (`mergeCoinImmediate`) or inserts it when the color is new,
-  and adds its value to the received total.
-  The coin and the updated total are disclosed to the ledger.
-  Zero-value deposits are permitted: on a new color the zero coin occupies that color's slot until a later deposit merges into it.
+  Receives a shielded coin into the treasury.
 
-  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+  The coin is first claimed at the protocol level via `receiveShielded`,
+  which allocates the Merkle tree index required by `insertCoin`.
+  The coin is then merged with any existing coin of the same color,
+  or inserted as a new entry if no coin of that color exists.
+
+  Zero-value deposits are permitted and are not always a no-op. On a color the
+  treasury does not yet hold, a zero-value coin is inserted and occupies that
+  color's single slot until a later deposit merges into it; if a coin of that
+  color already exists, the zero merges into it via `mergeCoinImmediate` and
+  the stored value is unchanged. They may serve as signaling mechanisms when
+  events are supported. They are not useful as privacy decoys, this
+  treasury's holdings are public (see the module header).
+
+  Access control is NOT enforced here.
+  The consuming contract must gate this behind its own
+  authorization policy.
 
   Requirements:
 
-  * The received total for `coin.color` plus `coin.value` does not overflow `Uint<128>`.
+  - Deposit must not cause received total overflow.
 </APIItemCompact>
 
 #### _send [toc] [#ShieldedTreasury-_send]
@@ -634,22 +677,31 @@ None.
   modulePrefix="ShieldedTreasury"
   stackParams="true"
 >
-  Looks up the stored coin for `color`, sends `amount` of it to `recipient` with `sendShielded`, and adds `amount` to the sent total.
-  Any change is routed back to the contract as a self-owned output and retained in `_coins` for the next spend;
-  when the send leaves no change, the color's entry is removed.
-  The color, recipient, amount, and retained change coin are disclosed to the ledger.
+  Sends shielded tokens from the treasury.
 
-  The returned `ShieldedSendResult` carries the sent and change coins in plaintext; returning it from an entry point, writing it to the ledger,
-  or passing it to another contract discloses them.
-  The change coin belongs to the treasury and must not be spent again by the caller.
+  Looks up the stored coin by color, verifies sufficient value,
+  and executes the shielded send. `sendShielded` already routes any
+  change back to this contract as a self-owned output. Unlike the
+  stateless variant, this treasury RETAINS the change: it is recorded in
+  the UTXO map for the next spend. The returned `result.change` therefore
+  belongs to the treasury and must not be re-spent by the caller (doing
+  so would double-spend the recorded coin).
 
-  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+  The returned `ShieldedSendResult` carries the sent and change coins
+  in plaintext, so sinking it (returning it from an entry point, writing it
+  to ledger, passing it cross-contract) discloses them. `_coins` publishes only
+  the retained change coin, and nothing at all when the send leaves no change,
+  so the sent coin's plaintext is disclosed beyond anything in public state.
+
+  Access control is NOT enforced here.
+  The consuming contract must gate this behind its own
+  authorization policy.
 
   Requirements:
 
-  * A coin of `color` exists in the treasury.
-  * The stored coin's value is greater than or equal to `amount`.
-  * The sent total for `color` plus `amount` does not overflow `Uint<128>`.
+  - A coin of the given `color` must exist in the treasury.
+  - The coin's value must be >= `amount`.
+  - Send must not cause sent total overflow.
 </APIItemCompact>
 
 #### getTokenBalance [toc] [#ShieldedTreasury-getTokenBalance]
@@ -659,7 +711,8 @@ None.
   kind="circuit"
   modulePrefix="ShieldedTreasury"
 >
-  Returns the value of the stored coin for `color`, or zero when none is held. `color` is disclosed.
+  Returns the current token balance for a color.
+  Reads the actual coin value from the UTXO map.
 </APIItemCompact>
 
 #### getReceivedTotal [toc] [#ShieldedTreasury-getReceivedTotal]
@@ -669,7 +722,7 @@ None.
   kind="circuit"
   modulePrefix="ShieldedTreasury"
 >
-  Returns the cumulative value received for `color`, or zero. `color` is disclosed.
+  Returns the cumulative received total for a color.
 </APIItemCompact>
 
 #### getSentTotal [toc] [#ShieldedTreasury-getSentTotal]
@@ -679,7 +732,7 @@ None.
   kind="circuit"
   modulePrefix="ShieldedTreasury"
 >
-  Returns the cumulative value sent for `color`, or zero. `color` is disclosed.
+  Returns the cumulative sent total for a color.
 </APIItemCompact>
 
 #### getReceivedMinusSent [toc] [#ShieldedTreasury-getReceivedMinusSent]
@@ -689,8 +742,16 @@ None.
   kind="circuit"
   modulePrefix="ShieldedTreasury"
 >
-  Returns the received total minus the sent total for `color`, which equals [getTokenBalance](#ShieldedTreasury-getTokenBalance) when all value moved through `_deposit` and `_send`.
-  The subtraction is unguarded: a consumer that writes `_coins` directly can make it fail as a range violation.
+  Returns the difference between cumulative received
+  and cumulative sent totals for a color. Should equal
+  `getTokenBalance` if accounting is consistent.
+
+  The subtraction is unguarded. `_send` cannot drive the sent total
+  past the received total. Change re-insertion never increments `_received`
+  so the invariant holds for any consumer that goes through `_deposit` and
+  `_send`. A consumer that writes the exported `_coins` directly can break
+  it, and this circuit then fails as an unprovable range violation rather
+  than a named assert.
 </APIItemCompact>
 
 ---
@@ -727,9 +788,7 @@ None.
   kind="circuit"
   modulePrefix="ShieldedTreasuryStateless"
 >
-  Claims `coin` with `receiveShielded`. Nothing is written to the ledger; the coin is disclosed to the protocol.
-
-  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+  Receives a shielded coin into the treasury.
 </APIItemCompact>
 
 #### _send [toc] [#ShieldedTreasuryStateless-_send]
@@ -744,21 +803,40 @@ None.
   modulePrefix="ShieldedTreasuryStateless"
   stackParams="true"
 >
-  Sends `amount` of the caller-supplied `coin` to `recipient` with `sendShielded` and returns the result untouched.
-  The coin, recipient, and amount are disclosed.
-  Any change is routed back to the contract as a self-owned output and returned in `result.change` as a live, spendable coin:
-  keep it off-chain as the `coin` of a later spend, or route it onward in the same transaction with `sendImmediateShielded`.
-  The change must never be spent again and still treated as held.
+  Sends shielded tokens using a caller-provided coin.
 
-  The returned `ShieldedSendResult` holds the sent and change coins in plaintext.
-  Consuming it in-circuit is safe; returning it from an entry point, writing it to the ledger, or passing it to another contract publishes those coins,
-  and the compiler does not require a `disclose` at that point.
+  The coin is supplied by the caller rather than looked up from
+  on-chain state; the token color is derived from `coin.color`.
+  Executes the shielded send and returns the result untouched.
+  `sendShielded` already routes any change back to this contract as a
+  self-owned output, so `result.change` is a live, spendable coin. The
+  implementing contract chooses what to do with it: retain it off-chain and
+  pass it back as the `coin` for a later spend, or spend it onward to a
+  different recipient in the same transaction via `sendImmediateShielded`.
+  (Re-spending change is only meaningful when it goes somewhere other than
+  self — `sendShielded` already routes it to self.) No balance or
+  received/sent accounting is tracked on the ledger.
 
-  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+  <Callout type='warn'>
+    The returned `ShieldedSendResult` holds the sent and change coins
+    in plaintext (`nonce`, `color`, `value`). Consuming it in-circuit is safe
+    (passing `result.change` to `sendImmediateShielded`, for instance). Returning
+    it from your entry point, writing it to ledger, or passing it to another
+    contract publishes those coin details, including the amount left over from
+    the coin that was spent. Note the compiler will NOT stop you: the
+    `disclose` calls below clear the witness taint, so such a return compiles
+    with no `disclose` of your own and no marker at the disclosure site. If you
+    do not need in-circuit change handling, ignore the result. The change is
+    recoverable off-chain from the transaction's private proving state.
+  </Callout>
+
+  Access control is NOT enforced here.
+  The consuming contract must gate this behind its own
+  authorization policy.
 
   Requirements:
 
-  * `coin.value` is greater than or equal to `amount` (enforced by `sendShielded`).
+  - `coin.value` must be >= `amount`.
 </APIItemCompact>
 
 ---
@@ -803,15 +881,24 @@ None.
   kind="circuit"
   modulePrefix="UnshieldedTreasury"
 >
-  Receives `amount` of `color` with `receiveUnshielded` and adds it to the tracked balance.
-  The color, amount, and new balance are disclosed.
-  Zero-value deposits are permitted and create a zero-valued balance entry on a new color.
+  Receives unshielded tokens into the treasury.
 
-  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+  The token receive is executed at the protocol level first via
+  `receiveUnshielded`. The balance map is then updated.
+
+  Zero-value deposits are permitted. While currently a no-op
+  economically, they may serve as signaling mechanisms when events
+  are supported. On a color the treasury has not held, a zero-value
+  operation creates a zero-valued `_balances` entry, which
+  `getTokenBalance` reports the same as absence.
+
+  Access control is NOT enforced here.
+  The consuming contract must gate this behind its own
+  authorization policy.
 
   Requirements:
 
-  * The tracked balance for `color` plus `amount` does not overflow `Uint<128>`.
+  - Deposit must not cause balance overflow.
 </APIItemCompact>
 
 #### _send [toc] [#UnshieldedTreasury-_send]
@@ -826,17 +913,32 @@ None.
   modulePrefix="UnshieldedTreasury"
   stackParams="true"
 >
-  Subtracts `amount` from the tracked balance and sends it to `recipient` with `sendUnshielded`.
-  The color, amount, recipient, and new balance are disclosed.
-  Zero-amount sends are permitted.
-  Recipients are not validated: an unspendable recipient permanently removes the funds,
-  and a send to the contract's own address zeroes the tracked balance while the funds stay held at the protocol level.
+  Sends unshielded tokens from the treasury. Zero-amount sends
+  are permitted and are value-preserving no-ops.
 
-  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+  <Callout type='warn'>
+    Recipients are not validated. An unspendable recipient (such as a
+    zero address) is accepted and permanently removes the funds from the
+    contract. This is not a sanctioned burn — no unshielded equivalent of
+    `shieldedBurnAddress` is exposed to contracts — so treat recipient
+    validation as the consuming contract's responsibility.
+  </Callout>
+
+  <Callout type='warn'>
+    Sending to this contract's own address zeroes the tracked balance
+    while the funds stay held and spendable at the protocol level, after which
+    `_send` will refuse to touch them. Recovery is only possible outside this
+    module: a consumer may reconcile the exported `_balances`, or spend the
+    funds through its own `sendUnshielded` call.
+  </Callout>
+
+  Access control is NOT enforced here.
+  The consuming contract must gate this behind its own
+  authorization policy.
 
   Requirements:
 
-  * The tracked balance for `color` is greater than or equal to `amount`.
+  - The treasury must hold sufficient balance for the given token color.
 </APIItemCompact>
 
 #### getTokenBalance [toc] [#UnshieldedTreasury-getTokenBalance]
@@ -846,7 +948,7 @@ None.
   kind="circuit"
   modulePrefix="UnshieldedTreasury"
 >
-  Returns the tracked balance for `color`, or zero. `color` is disclosed.
+  Returns the balance for a given token color.
 </APIItemCompact>
 
 ---
@@ -883,7 +985,9 @@ import "./node_modules/@openzeppelin/compact-contracts/multisig/ForwarderPrivate
   kind="ledger"
   id="ForwarderPrivate-_isInitialized"
 >
-  Boolean indicating if initialized.
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
 </APIItemCompact>
 
 ### Witnesses [toc] [#ForwarderPrivate-Witnesses]
@@ -901,12 +1005,17 @@ None.
   kind="circuit"
   modulePrefix="ForwarderPrivate"
 >
-  Stores the parent commitment, computed off-chain with [_calculateParentCommitment](#ForwarderPrivate-_calculateParentCommitment). The commitment is disclosed.
+  Initializes the forwarder with a parent commitment.
+  Called once from the preset constructor. The commitment is
+  immutable after init.
 
   Requirements:
 
-  * Contract is not initialized.
-  * `parentCommitment` is not the zero bytes.
+  - Contract must not be initialized.
+  - `parentCommitment` must not be the zero bytes. A zero commitment
+    is the sole drain gate and would leave every deposited coin
+    permanently unrecoverable (no preimage exists for `default<Bytes<32>>`
+    under the domain-tagged hash).
 </APIItemCompact>
 
 #### _deposit [toc] [#ForwarderPrivate-_deposit]
@@ -917,11 +1026,12 @@ None.
   complexity="k=13, rows=6538"
   modulePrefix="ForwarderPrivate"
 >
-  Claims `coin` with `receiveShielded`. Nothing is written to the ledger; the coin dwells at the contract address until drained. The coin is disclosed to the protocol.
+  Receives a shielded coin into the forwarder's custody.
+  No ledger write — coins dwell at the contract address until drained.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract must be initialized.
 </APIItemCompact>
 
 #### _drain [toc] [#ForwarderPrivate-_drain]
@@ -938,20 +1048,37 @@ None.
   modulePrefix="ForwarderPrivate"
   stackParams="true"
 >
-  Sends `value` of a previously deposited `coin` to `parent` with `sendShielded`, after checking that `(parent, opSecret)` hashes to the stored commitment.
-  The coin and value are disclosed; the parent is a coin public key, which is encrypted inside the Zswap output and does not appear on the public transcript.
-  `opSecret` never leaves the circuit.
-  Any change is routed back to the contract and returned untouched in `result.change`, to leave dwelling for a future drain or to route onward with `sendImmediateShielded`.
-  The change must never be spent again and still treated as held.
+  Spends a previously-deposited shielded coin to the parent,
+  a coin public key. The caller proves knowledge of `(parent, opSecret)`
+  matching the stored commitment; the coin is sent as a plain shielded note,
+  so the parent stays hidden on-chain. If `coin.value` exceeds `value`,
+  `sendShielded` routes the change back to this contract as a self-owned
+  output; `_drain` returns it untouched via `result.change`. The
+  implementing contract chooses what to do with it: leave it dwelling at
+  the contract for a future drain, or spend it onward to a different
+  recipient in the same transaction via `sendImmediateShielded`.
 
-  Knowledge of the preimage is the only authorization; losing the operational secret makes every coin at the contract permanently inaccessible.
+  The parent is a `ZswapCoinPublicKey`, never a `ContractAddress`: a shielded
+  send to a contract publishes that contract's address in cleartext on the
+  transaction (the protocol must route the coin to a named contract), which
+  would defeat the private-parent guarantee. A coin public key is encrypted
+  inside the Zswap output and never appears on the public transcript.
 
   Requirements:
 
-  * Contract is initialized.
-  * `parent` is not the zero key.
-  * `_calculateParentCommitment(parent.bytes, opSecret)` equals `_parentCommitment`.
-  * `coin.value` is greater than or equal to `value` (enforced by `sendShielded`).
+  - Contract must be initialized.
+  - `parent` must not be the zero key.
+  - `_calculateParentCommitment(parent.bytes, opSecret) == _parentCommitment`.
+  - `coin.value` must be >= `value` (enforced by `sendShielded`).
+
+  <Callout type='warn'>
+    **Losing the operational secret is permanent fund loss.** It
+    is the sole drain authorization, with no rotation, revocation, or
+    recovery path. If the operator misplaces it, every shielded coin
+    accumulated at this contract is forever inaccessible, equivalent to
+    losing a hot-wallet private key. Back it up offline before the first
+    deposit and treat it with the same hygiene as a signing key.
+  </Callout>
 </APIItemCompact>
 
 #### _calculateParentCommitment [toc] [#ForwarderPrivate-_calculateParentCommitment]
@@ -961,8 +1088,16 @@ None.
   kind="pure"
   modulePrefix="ForwarderPrivate"
 >
-  Returns `H(pad(32, "ForwarderPrivate:commitment") || parentAddr || opSecret)` using `persistentHash`.
-  Used off-chain by the deployer to compute the constructor argument and inside [_drain](#ForwarderPrivate-_drain) for the preimage check. Callable without initialization.
+  Computes the parent commitment from `(parentAddr, opSecret)`.
+  Pure circuit — used off-chain by the deployer to compute the
+  constructor argument, and inside `_drain` for the preimage check.
+  Callable without initialization.
+
+  The first hash input is a fixed domain tag
+  (`pad(32, "ForwarderPrivate:commitment")`). The tag prevents
+  preimage collisions with other `persistentHash` users in the
+  system that hash two `Bytes<32>` values — a colliding preimage
+  crafted under a different domain cannot satisfy this commitment.
 </APIItemCompact>
 
 ---
@@ -989,7 +1124,10 @@ import "./node_modules/@openzeppelin/compact-contracts/multisig/ForwarderShielde
   kind="ledger"
   id="ForwarderShielded-_parent"
 >
-  The parent recipient. Stored as a generic `Either` for forward compatibility; `initialize` only ever writes the `left` (coin public key) arm.
+  The parent recipient, stored generically as
+  `Either<ZswapCoinPublicKey, ContractAddress>` for forward compatibility.
+  `initialize` only ever writes the `left` (coin public key) arm today. See
+  the module header.
 </APIItemCompact>
 
 #### _isInitialized [toc] [#ForwarderShielded-_isInitialized]
@@ -999,7 +1137,9 @@ import "./node_modules/@openzeppelin/compact-contracts/multisig/ForwarderShielde
   kind="ledger"
   id="ForwarderShielded-_isInitialized"
 >
-  Boolean indicating if initialized.
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
 </APIItemCompact>
 
 ### Witnesses [toc] [#ForwarderShielded-Witnesses]
@@ -1017,13 +1157,19 @@ None.
   kind="circuit"
   modulePrefix="ForwarderShielded"
 >
-  Stores `parent` in the `left` arm of `_parent`. The parent is disclosed.
-  Beyond the zero-key check, the caller must ensure `parent` can spend forwarded coins; an unspendable parent strands every deposit.
+  Initializes the forwarder with a parent recipient.
+  Called once from the preset constructor. The coin public key is
+  stored in the `left` arm of the generic `_parent` ledger field.
 
   Requirements:
 
-  * Contract is not initialized.
-  * `parent` is not the zero key.
+  - Contract must not be initialized.
+  - `parent` must not be the zero key. A zero parent would forward
+    every deposit to an unspendable key with no recovery path.
+
+  Beyond the zero-key check, the caller must ensure `parent` can
+  spend forwarded coins. An unspendable parent strands every deposit with
+  no recovery path.
 </APIItemCompact>
 
 #### _deposit [toc] [#ForwarderShielded-_deposit]
@@ -1034,11 +1180,15 @@ None.
   complexity="k=15, rows=24446"
   modulePrefix="ForwarderShielded"
 >
-  Claims `coin` with `receiveShielded` and immediately re-sends its full value to `_parent` with `sendImmediateShielded`. The coin is disclosed.
+  Receives a shielded coin and atomically forwards it to
+  `_parent`. The coin is claimed at the protocol level via
+  `receiveShielded`, then immediately re-sent via
+  `sendImmediateShielded` to the stored parent recipient (always the
+  `left` / coin-public-key arm today).
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract must be initialized.
 </APIItemCompact>
 
 ---
@@ -1065,7 +1215,10 @@ import "./node_modules/@openzeppelin/compact-contracts/multisig/ForwarderUnshiel
   kind="ledger"
   id="ForwarderUnshielded-_parent"
 >
-  The parent recipient. Stored as a generic `Either` for forward compatibility; `initialize` only ever writes the `right` (user address) arm.
+  The parent recipient, stored generically as
+  `Either<ContractAddress, UserAddress>` for forward compatibility.
+  `initialize` only ever writes the `right` (user address) arm today. See
+  the module header.
 </APIItemCompact>
 
 #### _isInitialized [toc] [#ForwarderUnshielded-_isInitialized]
@@ -1075,7 +1228,9 @@ import "./node_modules/@openzeppelin/compact-contracts/multisig/ForwarderUnshiel
   kind="ledger"
   id="ForwarderUnshielded-_isInitialized"
 >
-  Boolean indicating if initialized.
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
 </APIItemCompact>
 
 ### Witnesses [toc] [#ForwarderUnshielded-Witnesses]
@@ -1093,13 +1248,19 @@ None.
   kind="circuit"
   modulePrefix="ForwarderUnshielded"
 >
-  Stores `parent` in the `right` arm of `_parent`. The parent is disclosed.
-  Beyond the zero-address check, the caller must ensure `parent` can spend forwarded amounts; an unspendable parent strands every deposit.
+  Initializes the forwarder with a parent recipient.
+  Called once from the preset constructor. The user address is stored
+  in the `right` arm of the generic `_parent` ledger field.
 
   Requirements:
 
-  * Contract is not initialized.
-  * `parent` is not the zero address.
+  - Contract must not be initialized.
+  - `parent` must not be the zero address. A zero parent would forward
+    every deposit to an unspendable address with no recovery path.
+
+  Beyond the zero-address check, the caller must ensure `parent`
+  can spend forwarded amounts. An unspendable parent strands every
+  deposit with no recovery path.
 </APIItemCompact>
 
 #### _deposit [toc] [#ForwarderUnshielded-_deposit]
@@ -1110,11 +1271,12 @@ None.
   complexity="k=10, rows=565"
   modulePrefix="ForwarderUnshielded"
 >
-  Receives `amount` of `color` with `receiveUnshielded` and immediately forwards it to `_parent` with `sendUnshielded`.
-  Depositor, recipient, color, and amount all appear on the public transcript.
+  Receives an unshielded amount of `color` and atomically
+  forwards it to `_parent` via `sendUnshielded` (always the `right` /
+  user-address arm today).
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract must be initialized.
 </APIItemCompact>
 

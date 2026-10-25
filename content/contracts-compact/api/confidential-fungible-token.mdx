@@ -36,11 +36,9 @@ import "./node_modules/@openzeppelin/compact-contracts/token/ConfidentialFungibl
   kind="struct"
   id="ConfidentialFungibleToken-EscrowEntry"
 >
-  The encrypted allowance an owner granted a spender. `spenderCt` and `ownerCt` are two
-  [ElGamal ciphertexts](./crypto#ElGamal-Ciphertext) of the same remaining amount, one under each party's key.
-  `ownerMemo` is an [EcdhMask ciphertext](./crypto#EcdhMask-Ciphertext) that lets the owner read the current
-  remaining allowance directly with its encryption secret; it is set to the cap on `approve` and refreshed to the
-  reduced remainder on every spend. There is no public cap.
+  Per-(owner, spender) encrypted escrow. Stored as two
+  ciphertexts of the same value: one to the spender, one to the owner.
+  No public cap.
 </APIItemCompact>
 
 ### Ledger [toc] [#ConfidentialFungibleToken-Ledger]
@@ -53,7 +51,12 @@ import "./node_modules/@openzeppelin/compact-contracts/token/ConfidentialFungibl
   kind="ledger"
   id="ConfidentialFungibleToken-_balances"
 >
-  Mapping from account identifiers to their spendable balance ciphertext. Debits draw from this cell.
+  Dual-balance grief fix. `_balances` is the SPENDABLE (confirmed) balance that
+  debits draw from; `_pending` is the incoming pool that credits land in. Only
+  the owner moves pending -> spendable, via `sweep()`. So a third party spamming
+  dust credits cannot churn a victim's spendable ciphertext and invalidate the
+  victim's in-flight spend proofs (a liveness grief). A wallet's total balance
+  is `balanceOf` (spendable) + `pendingOf` (pending).
 </APIItemCompact>
 
 #### _pending [toc] [#ConfidentialFungibleToken-_pending]
@@ -106,9 +109,16 @@ import "./node_modules/@openzeppelin/compact-contracts/token/ConfidentialFungibl
   kind="ledger"
   id="ConfidentialFungibleToken-_escrowSpendEpochs"
 >
-  Mapping from owner accounts to spender accounts to the number of times that escrow has been spent from.
-  The counter is folded into the randomness of each spend and never resets, so the per-pair spend count is
-  public and permanent.
+  Per-(owner, spender) escrow-spend counter, folded into the randomness
+  `_spendEscrow` derives so repeat spends by one spender against one owner
+  never share a one-time pad. It restarts for each pair, which is why both
+  counterparties are bound in too; see `SpendRandomnessPreimage`.
+
+  Kept out of `EscrowEntry`: `approve` replaces that entry wholesale, so a
+  counter living there would restart on every re-approve.
+
+  Note that this exposes a per-pair spend count which is already derivable
+  from tx history.
 </APIItemCompact>
 
 #### _creditEpochs [toc] [#ConfidentialFungibleToken-_creditEpochs]
@@ -118,9 +128,17 @@ import "./node_modules/@openzeppelin/compact-contracts/token/ConfidentialFungibl
   kind="ledger"
   id="ConfidentialFungibleToken-_creditEpochs"
 >
-  Mapping from account identifiers to the lifetime number of credits received. The counter is folded into the
-  randomness of each credit and never resets (it is not cleared by [clearMemos](#ConfidentialFungibleToken-clearMemos)),
-  so an account's credit count is public and permanent.
+  Per-account credit counter. `_credit` uses it as the nonce that keeps each
+  credit's randomness distinct, so it MUST only ever increase. No circuit
+  resets it. It is kept out of `_memos` for that reason: the memo list is
+  prunable by its owner, and a nonce that could be walked back would let a
+  reused seed repeat an earlier credit's randomness. The cost is that an
+  account's lifetime credit count is now permanently readable from state.
+
+  `Counter` is chosen for no-reset monotonicity, not commutativity. Its
+  `increment` emits no pinned read, but `_credit` reads the value back to
+  derive the nonce, and that read pins the recipient's key. Credits to one
+  recipient still serialize; see the Concurrency note above.
 </APIItemCompact>
 
 #### _isInitialized [toc] [#ConfidentialFungibleToken-_isInitialized]
@@ -175,10 +193,8 @@ The TypeScript witnesses in the repository are test-only and are not published; 
   kind="witness"
   id="ConfidentialFungibleToken-wit_ConfidentialTokenSK"
 >
-  Returns the caller's account secret. Verified in-circuit: `accountId = H(SK)` is used for every ledger lookup,
-  so a wrong secret resolves to a different account and the call fails.
-
-  The same secret produces the same account identifier across all contracts.
+  Returns the caller's account secret. Verified in-circuit by
+  matching `persistentHash(SK)` against the public accountId.
 </APIItemCompact>
 
 #### wit_ConfidentialTokenEK [toc] [#ConfidentialFungibleToken-wit_ConfidentialTokenEK]
@@ -188,9 +204,9 @@ The TypeScript witnesses in the repository are test-only and are not published; 
   kind="witness"
   id="ConfidentialFungibleToken-wit_ConfidentialTokenEK"
 >
-  Returns the caller's ElGamal encryption secret. Verified in-circuit by re-deriving the public key and comparing it
-  against the key stored at registration. May share key material with `wit_ConfidentialTokenSK`; the two derivations
-  are domain-separated.
+  Returns the caller's ElGamal secret. Verified in-circuit by
+  `ElGamal_assertDecryptsTo`, which re-derives the pk and compares
+  against the stored pk.
 </APIItemCompact>
 
 #### wit_PlaintextBalance [toc] [#ConfidentialFungibleToken-wit_PlaintextBalance]
@@ -200,9 +216,18 @@ The TypeScript witnesses in the repository are test-only and are not published; 
   kind="witness"
   id="ConfidentialFungibleToken-wit_PlaintextBalance"
 >
-  Returns the wallet's cached plaintext for `ct`. The ciphertext is passed explicitly so the wallet can route by
-  ciphertext identity rather than by call order. Verified in-circuit by `ElGamal_assertDecryptsTo`; a wrong value
-  fails the proof. The claim is `Uint<248>` so a balance accumulated past the per-operation bound stays spendable.
+  Returns the wallet's cached plaintext for the given
+  ciphertext. Called whenever the circuit needs to verify a ciphertext's
+  plaintext value (sender's main balance, escrow ciphertext during spend,
+  prior escrow during refund, etc.).
+
+  The ciphertext is passed explicitly so the wallet can route to the right
+  cached plaintext by ciphertext identity. This avoids call-order
+  conventions (which would be brittle to circuit refactors) and lets the
+  wallet maintain a `Map<ElGamal_Ciphertext, Uint248>` lookup.
+
+  Verified in-circuit by `ElGamal_assertDecryptsTo`: a wrong plaintext
+  fails the assertion `Dec(ct, EK) == claimedValue`.
 </APIItemCompact>
 
 #### wit_RandomnessSeed [toc] [#ConfidentialFungibleToken-wit_RandomnessSeed]
@@ -212,15 +237,18 @@ The TypeScript witnesses in the repository are test-only and are not published; 
   kind="witness"
   id="ConfidentialFungibleToken-wit_RandomnessSeed"
 >
-  Returns the 32-byte seed from which all per-operation randomness and every memo ephemeral is derived in-circuit.
-  Not verified in-circuit.
+  Returns a single 32-byte seed from which all per-operation
+  randomness (and each memo's ephemeral) is derived in-circuit.
 
-  <Callout type='warn'>
-    The seed must be fresh, high-entropy, and secret on every invocation. The derivation is deterministic and public,
-    so anyone who knows a seed can read the amounts it masked, and reusing a seed across two operations leaks the
-    difference between their amounts. On `transferFrom` and `_burnFrom` the seed is the spender's but the values it
-    protects are the owner's.
-  </Callout>
+  Seed freshness is load-bearing for confidentiality on EVERY path (see the
+  module header). The derivation is deterministic and public, so an observer
+  who knows the seed can strip a memo's mask and read the delivered amount, and
+  recover balance/escrow amounts from the public ciphertexts. Seed REUSE leaks
+  plaintext differences and the circuit does NOT prevent it on most paths.
+  `_spendEscrow` is an exception (its randomness folds the spend epoch and both
+  counterparties); the credit path folds the recipient's `_creditEpochs`
+  counter as defense in depth, and that covers credits alone. The seed MUST be
+  fresh, high-entropy, and secret for every invocation.
 </APIItemCompact>
 
 ### Circuits [toc] [#ConfidentialFungibleToken-Circuits]
@@ -233,7 +261,16 @@ The TypeScript witnesses in the repository are test-only and are not published; 
   kind="pure"
   modulePrefix="ConfidentialFungibleToken"
 >
-  Returns the maximum value accepted by a single transfer, mint, burn, or approve: the `Uint<128>` maximum.
+  Maximum allowed value per single transfer / mint / burn /
+  approve: the `Uint<128>` maximum. The prior `2^48` cap existed only to keep
+  wallet-side discrete-log recovery tractable; with the ECDH memo delivering
+  values directly (see `crypto/EcdhMask`), that constraint is gone. Values stay
+  well under the Jubjub scalar-field order, so homomorphic sums do not wrap.
+
+  This equals the argument type's own maximum, so the per-op check is
+  redundant today. KEEP IT: it compares against a hard constant rather than
+  the argument type, so it still catches a later widening of the transfer
+  type — which is what the balance-claim width is sized against.
 </APIItemCompact>
 
 #### initialize [toc] [#ConfidentialFungibleToken-initialize]
@@ -248,14 +285,12 @@ The TypeScript witnesses in the repository are test-only and are not published; 
   modulePrefix="ConfidentialFungibleToken"
   stackParams="true"
 >
-  Initializes the contract by setting the name, symbol, and decimals.
-
-  This MUST be called in the implementing contract's constructor.
-  Failure to do so can lead to an irreparable contract.
+  Initializes the token's name, symbol, and decimals. Intended to
+  be called once, from the deploying contract's constructor.
 
   Requirements:
 
-  * Contract is not initialized.
+  - Contract is not already initialized.
 </APIItemCompact>
 
 #### balanceOf [toc] [#ConfidentialFungibleToken-balanceOf]
@@ -266,12 +301,13 @@ The TypeScript witnesses in the repository are test-only and are not published; 
   complexity="k=10, rows=989"
   modulePrefix="ConfidentialFungibleToken"
 >
-  Returns `account`'s spendable balance ciphertext, or a well-formed encryption of zero if the account is unregistered.
-  The amount is encrypted; only the account holder can decrypt it.
+  Returns `account`'s balance ciphertext, or the default (zero)
+  ciphertext if the account is unregistered. The amount is encrypted; only the
+  account (or an authorized viewer) can decrypt it.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### pendingOf [toc] [#ConfidentialFungibleToken-pendingOf]
@@ -282,12 +318,14 @@ The TypeScript witnesses in the repository are test-only and are not published; 
   complexity="k=10, rows=986"
   modulePrefix="ConfidentialFungibleToken"
 >
-  Returns `account`'s pending balance ciphertext (incoming credits not yet swept), or a well-formed encryption of zero
-  if the account is unregistered. An account's total is `balanceOf` plus `pendingOf`.
+  Returns `account`'s PENDING balance ciphertext (incoming credits
+  not yet swept into spendable), or Enc(0) if unregistered. The spendable
+  balance is `balanceOf`; a wallet's total is the sum of the two. See the
+  dual-balance note on the ledger declarations.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### allowance [toc] [#ConfidentialFungibleToken-allowance]
@@ -298,11 +336,18 @@ The TypeScript witnesses in the repository are test-only and are not published; 
   complexity="k=10, rows=938"
   modulePrefix="ConfidentialFungibleToken"
 >
-  Returns the [EscrowEntry](#ConfidentialFungibleToken-EscrowEntry) that `owner` granted `spender`.
-  When no allowance exists, returns a well-formed entry whose ciphertexts encrypt zero, so the result is always safe
-  to prove against and to decrypt. "No allowance" and "an allowance of zero" read the same; a caller that must
-  distinguish them reads `_escrow` membership off chain. The getter grants nothing: the spend path gates on escrow
-  membership independently.
+  Returns the escrow entry (the encrypted allowance) that `owner`
+  granted `spender`. When no allowance exists, returns a well-formed
+  encrypted-zero entry (its encrypted amounts decrypt to 0, analogous to an
+  ERC-20 zero allowance) rather than `default<EscrowEntry>`: the returned
+  Jubjub points are on-curve, so the view is safe to prove (e.g. through a
+  contract-to-contract call) and safe for a wallet to decrypt, whereas a zeroed
+  default holds off-curve points. The cap is encrypted, not public.
+
+  "No allowance" and "an allowance of 0" both read as encrypted-zero;
+  a caller that must distinguish them reads `_escrow` membership off-chain. This
+  getter grants nothing, the spend path (`transferFrom`/`burnFrom`) gates on
+  `_escrow` membership independently, so a non-existent allowance is unspendable.
 </APIItemCompact>
 
 #### isRegistered [toc] [#ConfidentialFungibleToken-isRegistered]
@@ -324,16 +369,18 @@ The TypeScript witnesses in the repository are test-only and are not published; 
   complexity="k=13, rows=8100"
   modulePrefix="ConfidentialFungibleToken"
 >
-  Registers the caller: derives their ElGamal public key from `wit_ConfidentialTokenEK`, stores it, and initializes
-  their spendable and pending balances to an encryption of zero. Registration is a prerequisite for sending or receiving.
-  Discloses the caller's `accountId` and public key.
+  Registers the caller: derives their encryption public key from
+  `wit_ConfidentialTokenEK` and initializes their balance to an encryption of
+  zero. Registration is a prerequisite for sending or receiving.
 
-  Returns the caller's `accountId`, so a composing contract can gate on who may register.
+  Returns the caller's `accountId`. A composing contract can gate on
+  the returned value (e.g. assert it is KYC-approved) to restrict who may
+  register. See the module header note on caller-identity gating.
 
   Requirements:
 
-  * Contract is initialized.
-  * The caller is not already registered.
+  - Contract is initialized.
+  - The caller is not already registered.
 </APIItemCompact>
 
 #### _mint [toc] [#ConfidentialFungibleToken-_mint]
@@ -344,22 +391,17 @@ The TypeScript witnesses in the repository are test-only and are not published; 
   complexity="k=15, rows=27179"
   modulePrefix="ConfidentialFungibleToken"
 >
-  Credits `value` to `account`: homomorphically adds it to the account's pending ciphertext, pushes a memo carrying
-  `value` encrypted to the recipient's key, and increments the recipient's credit counter. Performs no supply accounting;
-  pair it with a supply tracker such as [_addSupply](#ConfidentialFungibleTokenPublicSupply-_addSupply).
-  Discloses `account`, the new pending ciphertext, and the memo; the amount is not disclosed.
-
-  <Callout type='warn'>
-    A building block for a gated `mint` wrapper. Never re-export it from a deployed contract: a raw `_mint` is a
-    permissionless mint.
-  </Callout>
+  Mints `value` to `account`: `_credit` under its intent name.
+  The building block for a composing contract's gated `mint`; it performs no
+  supply accounting. Pair it with a supply tracker (see
+  `extensions/ConfidentialFungibleTokenPublicSupply`) if the deployment tracks
+  `totalSupply`.
 
   Requirements:
 
-  * Contract is initialized.
-  * `value` is at most `MAX_TRANSFER_VALUE()`.
-  * `account` is not the zero account.
-  * `account` is registered.
+  - Contract is initialized.
+  - `value` is within `MAX_TRANSFER_VALUE()`.
+  - `account` is registered.
 </APIItemCompact>
 
 #### _burn [toc] [#ConfidentialFungibleToken-_burn]
@@ -370,23 +412,17 @@ The TypeScript witnesses in the repository are test-only and are not published; 
   complexity="k=15, rows=16720"
   modulePrefix="ConfidentialFungibleToken"
 >
-  Debits `value` from the caller's spendable balance: the caller proves the balance plaintext, and the ciphertext is
-  replaced by a homomorphic subtraction of `value`. Performs no supply accounting; pair it with
-  [_subSupply](#ConfidentialFungibleTokenPublicSupply-_subSupply). Discloses the caller's `accountId` and the new
-  balance ciphertext; the amount is not disclosed.
-
-  Returns the caller's `accountId` for caller-side gating.
-
-  <Callout type='warn'>
-    A building block for a `burn` wrapper. Never re-export it raw from a deployed contract.
-  </Callout>
+  Burns `value` from the caller's own balance: `_debit` under
+  its intent name. The building block for a composing contract's `burn`; it
+  performs no supply accounting. Pair it with a supply tracker (see
+  `extensions/ConfidentialFungibleTokenPublicSupply`) if the deployment tracks
+  `totalSupply`.
 
   Requirements:
 
-  * Contract is initialized.
-  * `value` is at most `MAX_TRANSFER_VALUE()`.
-  * The caller is registered and holds the encryption secret registered for their account.
-  * The caller's spendable balance is at least `value`.
+  - Contract is initialized.
+  - `value` is within `MAX_TRANSFER_VALUE()`.
+  - The caller is registered and has a balance of at least `value`.
 </APIItemCompact>
 
 #### transfer [toc] [#ConfidentialFungibleToken-transfer]
@@ -397,19 +433,20 @@ The TypeScript witnesses in the repository are test-only and are not published; 
   complexity="k=16, rows=43701"
   modulePrefix="ConfidentialFungibleToken"
 >
-  Moves `value` from the caller to `to`: debits the caller's spendable balance, credits `to`'s pending balance, and
-  pushes a memo to `to`. Discloses the (sender, recipient) pair, both new ciphertexts, and the memo; the amount is not
-  disclosed.
+  Transfers `value` from the caller to `to`: debits the caller,
+  credits `to`, and pushes an encrypted memo to `to`. The amount is hidden;
+  the (sender, recipient) pair is public.
 
   Returns the caller's (sender's) `accountId` for caller-side gating.
+  The sender is derived from the same authentication `_debit` performs, so the
+  returned id is exactly the account whose funds moved.
 
   Requirements:
 
-  * Contract is initialized.
-  * `value` is at most `MAX_TRANSFER_VALUE()`.
-  * The caller is registered, holds their encryption secret, and has a spendable balance of at least `value`.
-  * `to` is not the caller.
-  * `to` is not the zero account and is registered.
+  - Contract is initialized.
+  - `value` is within `MAX_TRANSFER_VALUE()`.
+  - The caller is registered with a balance of at least `value`.
+  - `to` is registered and is not the caller (no self-transfer).
 </APIItemCompact>
 
 #### _move [toc] [#ConfidentialFungibleToken-_move]
@@ -420,19 +457,31 @@ The TypeScript witnesses in the repository are test-only and are not published; 
   complexity="k=16, rows=43690"
   modulePrefix="ConfidentialFungibleToken"
 >
-  The conserving value-movement primitive: debits the caller and credits `to` by the same `value`, net zero, and never
-  changes supply. Equivalent to [transfer](#ConfidentialFungibleToken-transfer) without the self-transfer guard, so a
-  self-move (spendable into the caller's own pending) is permitted; add a `to != caller` check in the wrapper to reject it.
-  Discloses the same values as `transfer`.
+  The conserving value-movement primitive: debits the caller and
+  credits `to` by the same `value`, net zero. It NEVER changes supply, so it is
+  the safe surface for composition and the primitive this supply-free base
+  exposes. `transfer` is `_move` plus a self-transfer guard; supply-changing
+  operations (`mint`/`burn`) live in a separate layer outside this conserving
+  surface, and only they may break conservation.
 
-  Returns the caller's `accountId` for caller-side gating.
+  Like `transfer`, the credit lands in the recipient's pending pool
+  (see the dual-balance note); the caller sweeps their own incoming value.
+
+  Self-move (`to` == caller) is PERMITTED here, unlike `transfer`, which
+  rejects it. A self-move is conserving and safe: it debits the caller's
+  spendable and credits the caller's own pending (net zero, distinct ledger
+  cells; the value is recovered with `sweep`). `transfer`'s self-transfer guard
+  is therefore a UX choice, not a safety requirement: it spares users a
+  self-transfer with no foreseeable benefit (a shuffle of spendable into
+  pending plus a self-memo). This primitive stays permissive so a composer can
+  set its own policy; add a `to != caller` check in the wrapper to reject a
+  self-move.
 
   Requirements:
 
-  * Contract is initialized.
-  * `value` is at most `MAX_TRANSFER_VALUE()`.
-  * The caller is registered, holds their encryption secret, and has a spendable balance of at least `value`.
-  * `to` is not the zero account and is registered.
+  - Contract is initialized.
+  - The caller is registered with a spendable balance of at least `value`.
+  - `to` is registered.
 </APIItemCompact>
 
 #### sweep [toc] [#ConfidentialFungibleToken-sweep]
@@ -443,17 +492,24 @@ The TypeScript witnesses in the repository are test-only and are not published; 
   complexity="k=13, rows=7585"
   modulePrefix="ConfidentialFungibleToken"
 >
-  Moves the caller's pending balance into their spendable balance: homomorphically adds the two ciphertexts and resets
-  pending to an encryption of zero. No plaintext is needed. This is the only path from pending into spendable, and only
-  the owner can take it. Discloses the caller's `accountId` and the two new ciphertexts.
+  Sweeps the caller's incoming `pending` pool into their
+  `spendable` balance. Credits land in `pending` (see the dual-balance note);
+  this `sweep` is the ONLY path from pending into spendable, and only the owner
+  can invoke it (the caller proves BOTH witness secrets: the account secret
+  identifies the account, the encryption secret proves the caller can read it).
+  So a third party spamming credits cannot force a victim's spendable ciphertext
+  to change, which is what would otherwise invalidate the victim's in-flight
+  spend proofs (a liveness grief).
 
-  Returns the caller's `accountId` for caller-side gating.
+  Purely homomorphic: adds the two ciphertexts (same key) and resets
+  pending to Enc(0). No plaintext is needed; the wallet already learned the
+  pending amounts from its memos.
 
   Requirements:
 
-  * Contract is initialized.
-  * The caller is registered.
-  * The caller holds the encryption secret registered for their account.
+  - Contract is initialized.
+  - The caller is registered.
+  - The caller holds the encryption secret registered for their account.
 </APIItemCompact>
 
 #### approve [toc] [#ConfidentialFungibleToken-approve]
@@ -464,22 +520,27 @@ The TypeScript witnesses in the repository are test-only and are not published; 
   complexity="k=16, rows=45114"
   modulePrefix="ConfidentialFungibleToken"
 >
-  Sets `spender`'s allowance over the caller's balance to `value` via an escrow: any prior escrow for `spender` is
-  first refunded to the caller's spendable balance (a homomorphic add, no plaintext needed), then the caller's balance
-  is debited by `value` and an [EscrowEntry](#ConfidentialFungibleToken-EscrowEntry) holding two encryptions of `value`
-  plus an owner-readable memo of the remaining allowance is stored. Allowances replace rather than stack; `value` of
-  zero revokes. Discloses the (owner, spender) pair, the owner's new balance ciphertext, and the entry; the cap is not
-  disclosed.
+  Sets `spender`'s allowance over the caller's balance to `value`
+  via an escrow: the caller's main balance is debited by `value`, and matching
+  encryptions are stored for the spender and the owner. Re-approving first
+  refunds any prior escrow, so allowances replace rather than stack. The cap
+  is not public.
 
   Returns the caller's (approver's) `accountId` for caller-side gating.
 
+  Also stores an owner-readable `ownerMemo` (ECDH one-time pad; see
+  `crypto/EcdhMask`) in the escrow entry, carrying the current remaining
+  allowance (= `value` here, refreshed to the reduced remaining on every
+  spend). This is what lets the owner prove the post-refund balance on a later
+  re-approve or revoke after a partial spend; without it a partial spend would
+  strand the escrow. See the `EscrowEntry` field doc.
+
   Requirements:
 
-  * Contract is initialized.
-  * `value` is at most `MAX_TRANSFER_VALUE()`.
-  * `spender` is not the zero account, is not the caller, and is registered.
-  * The caller is registered, holds their encryption secret, and (after any prior escrow is refunded) has a spendable
-    balance of at least `value`.
+  - Contract is initialized.
+  - `value` is within `MAX_TRANSFER_VALUE()`.
+  - `spender` is registered, is not the zero account, and is not the caller.
+  - The caller is registered with a balance of at least `value`.
 </APIItemCompact>
 
 #### transferFrom [toc] [#ConfidentialFungibleToken-transferFrom]
@@ -495,21 +556,18 @@ The TypeScript witnesses in the repository are test-only and are not published; 
   modulePrefix="ConfidentialFungibleToken"
   stackParams="true"
 >
-  Spends `value` from the escrow that `fromAddress` granted the caller and credits it to `to`. The caller proves the
-  plaintext of the spender copy, both escrow copies are reduced by `value`, the entry's `ownerMemo` is refreshed with the
-  new remaining amount, the (owner, spender) spend counter is incremented, and `to` is credited with a memo. Discloses
-  the owner, spender, and recipient ids, the new escrow entry, the recipient's new pending ciphertext, and the memo;
-  the amount is not disclosed.
+  Spends `value` from `fromAddress`'s escrow (granted to the
+  caller via `approve`) and credits it to `to`, reducing both escrow copies by
+  `value`. The amount is hidden.
 
   Returns the caller's (spender's) `accountId` for caller-side gating.
 
   Requirements:
 
-  * Contract is initialized.
-  * `value` is at most `MAX_TRANSFER_VALUE()`.
-  * `to` is not the zero account and is registered.
-  * An escrow from `fromAddress` to the caller exists, the caller holds their encryption secret, and the escrow holds
-    at least `value`.
+  - Contract is initialized.
+  - `value` is within `MAX_TRANSFER_VALUE()`.
+  - `to` is registered and is not the zero account.
+  - An escrow from `fromAddress` to the caller exists with at least `value`.
 </APIItemCompact>
 
 #### clearMemos [toc] [#ConfidentialFungibleToken-clearMemos]
@@ -520,21 +578,35 @@ The TypeScript witnesses in the repository are test-only and are not published; 
   complexity="k=13, rows=7053"
   modulePrefix="ConfidentialFungibleToken"
 >
-  Empties the caller's memo list. `expectedEpoch` is the caller's view of its `_creditEpochs` value when it read the
-  list; the call is rejected if a credit has landed since, so a memo the caller has not seen is never discarded.
+  Clears the caller's memo list, letting a wallet that has folded
+  its memos into its local balance cache prune on-chain memo storage.
+
+  `expectedEpoch` is the caller's view of its `_creditEpochs` value at the
+  moment it read the list. The call is rejected unless that still matches, so
+  a credit landing between the read and this transaction is never silently
+  discarded. The wallet retries against the memos it has now seen. A wallet
+  therefore reads its memo list and its epoch together, folds the memos into
+  its cache, and passes that epoch back here.
 
   <Callout type='warn'>
-    Destructive. Spending requires proving the balance plaintext, which a wallet reconstructs from its memos or its
-    cache. Clear only memos already folded into a durable, backed-up cache; otherwise the funds become unspendable.
+    Clearing memos is destructive and can permanently lock funds. The
+    on-chain balance ciphertext is not directly decryptable (discrete-log
+    bound), so a wallet reconstructs its balance by replaying memos. Clearing
+    them without a durable off-chain record of the balance loses the ability to
+    recover it; and because spending requires proving the balance plaintext, the
+    funds become unspendable, not merely undisplayable. Clear only memos already
+    folded into a durable cache/backup. The epoch check only rules out a credit
+    the caller has not seen; it does not make clearing safe for memos the caller
+    never folded in.
   </Callout>
 
   Requirements:
 
-  * Contract is initialized.
-  * The caller is registered.
-  * The caller holds the encryption secret registered for their account.
-  * The caller has a memo list.
-  * `expectedEpoch` equals the caller's current credit epoch.
+  - Contract is initialized.
+  - The caller is registered.
+  - The caller holds the encryption secret registered for their account.
+  - The caller has a memo list.
+  - `expectedEpoch` equals the caller's current credit epoch.
 </APIItemCompact>
 
 #### computeAccountId [toc] [#ConfidentialFungibleToken-computeAccountId]
@@ -544,14 +616,13 @@ The TypeScript witnesses in the repository are test-only and are not published; 
   kind="pure"
   modulePrefix="ConfidentialFungibleToken"
 >
-  Derives the public `accountId` from a secret key as `H(sk)`, so a wallet can compute its own account identifier
-  off chain before transacting. Delegates to `Utils_computeAccountId`; the identifier is global, and the same key
-  material yields the same id in every module that derives it.
+  Derives the public `accountId` from a secret key, as
+  `persistentHash(sk)`. Pure, so a wallet can compute its own account
+  identifier off-chain (no proof) before transacting.
 
-  <Callout type='warn'>
-    The `sk` parameter is a sensitive secret. Never log or persist it in plaintext, generate it from cryptographically
-    secure randomness, and treat key loss as identity loss.
-  </Callout>
+  Delegates to `Utils.computeAccountId` rather than reimplementing the
+  hash. The identifier is deliberately GLOBAL. The same key material yields
+  the same id in every module that derives it.
 </APIItemCompact>
 
 #### _burnFrom [toc] [#ConfidentialFungibleToken-_burnFrom]
@@ -562,25 +633,16 @@ The TypeScript witnesses in the repository are test-only and are not published; 
   complexity="k=16, rows=45376"
   modulePrefix="ConfidentialFungibleToken"
 >
-  Consumes `value` from the escrow that `fromAddress` granted the caller, with no recipient credit: the same escrow
-  spend as [transferFrom](#ConfidentialFungibleToken-transferFrom) (both copies reduced, `ownerMemo` refreshed, spend
-  counter incremented) and nothing else. Performs no supply accounting; pair it with
-  [_subSupply](#ConfidentialFungibleTokenPublicSupply-_subSupply). Discloses the owner and spender ids and the new
-  escrow entry; the amount is not disclosed.
-
-  Returns the caller's (spender's) `accountId` for caller-side gating.
-
-  <Callout type='warn'>
-    A building block for a `burnFrom` wrapper. Never re-export it raw from a deployed contract: an approved spender
-    could destroy escrowed value with no supply decrement.
-  </Callout>
+  Burns `value` from `fromAddress` by consuming an escrow that
+  owner granted to the caller: `_spendEscrow` under its intent name, with no
+  recipient credit. The building block for a composing contract's
+  `burnFrom`; it performs no supply accounting (see `_burn`).
 
   Requirements:
 
-  * Contract is initialized.
-  * `value` is at most `MAX_TRANSFER_VALUE()`.
-  * An escrow from `fromAddress` to the caller exists, the caller holds their encryption secret, and the escrow holds
-    at least `value`.
+  - Contract is initialized.
+  - `value` is within `MAX_TRANSFER_VALUE()`.
+  - An escrow from `fromAddress` to the caller exists with at least `value`.
 </APIItemCompact>
 
 ---
@@ -612,7 +674,8 @@ with the matching token operation.
   kind="ledger"
   id="ConfidentialFungibleTokenPublicSupply-_totalSupply"
 >
-  The public circulating supply.
+  The public circulating supply. Mint and burn disclose their amounts
+  through the delta on this value.
 </APIItemCompact>
 
 ### Witnesses [toc] [#ConfidentialFungibleTokenPublicSupply-Witnesses]
@@ -631,12 +694,12 @@ None.
   complexity="k=9, rows=401"
   modulePrefix="ConfidentialFungibleTokenPublicSupply"
 >
-  Increases the total supply by `value`. Call alongside the token module's
-  [_mint](#ConfidentialFungibleToken-_mint). The added amount is disclosed through the supply delta.
+  Increases `totalSupply` by `value`. Call alongside the token
+  module's `_mint`. The added amount is disclosed via the supply delta.
 
   Requirements:
 
-  * `_totalSupply + value` does not overflow `Uint<128>`.
+  - `totalSupply + value` does not overflow `Uint<128>`.
 </APIItemCompact>
 
 #### _subSupply [toc] [#ConfidentialFungibleTokenPublicSupply-_subSupply]
@@ -647,13 +710,13 @@ None.
   complexity="k=9, rows=256"
   modulePrefix="ConfidentialFungibleTokenPublicSupply"
 >
-  Decreases the total supply by `value`. Call alongside the token module's
-  [_burn](#ConfidentialFungibleToken-_burn) or [_burnFrom](#ConfidentialFungibleToken-_burnFrom).
-  The removed amount is disclosed through the supply delta.
+  Decreases `totalSupply` by `value`. Call alongside the token
+  module's `_burn` or `_burnFrom`. The removed amount is disclosed via the
+  supply delta.
 
   Requirements:
 
-  * `_totalSupply` is at least `value`.
+  - `totalSupply` is at least `value`.
 </APIItemCompact>
 
 #### totalSupply [toc] [#ConfidentialFungibleTokenPublicSupply-totalSupply]

@@ -20,11 +20,6 @@ import "./node_modules/@openzeppelin/compact-contracts/utils/Utils";
 
 ---
 
-<Callout>
-  The circuits below are helpers that are compiled into the circuit that calls them,
-  so no standalone complexity is listed for them.
-</Callout>
-
 ### Ledger [toc] [#Utils-Ledger]
 ### Ledger [!toc] [#Utils-Ledger]
 
@@ -48,10 +43,8 @@ None.
 >
   Returns whether `keyOrAddress` is the zero address.
 
-  <Callout>
-    Midnight's burn address is represented as `left<ZswapCoinPublicKey, ContractAddress>(default<ZswapCoinPublicKey>)` in Compact,
-    so the zero address is represented as this structure as well.
-  </Callout>
+  Midnight's burn address is represented as left\<ZswapCoinPublicKey, ContractAddress>(default\<ZswapCoinPublicKey>)
+  in Compact, so we've chosen to represent the zero address as this structure as well.
 </APIItemCompact>
 
 #### isKeyZero [toc] [#Utils-isKeyZero]
@@ -72,8 +65,8 @@ None.
   stackParams
   modulePrefix="Utils"
 >
-  Returns whether `keyOrAddress` is equal to `other`.
-  Assumes that a `ZswapCoinPublicKey` and a `ContractAddress` can never be equal.
+  Returns whether `keyOrAddress` is equal to `other`. Assumes that a ZswapCoinPublicKey
+  and a ContractAddress can never be equal
 </APIItemCompact>
 
 #### isContractAddress [toc] [#Utils-isContractAddress]
@@ -84,7 +77,7 @@ None.
   stackParams
   modulePrefix="Utils"
 >
-  Returns whether `keyOrAddress` is a `ContractAddress` type.
+  Returns whether `keyOrAddress` is a ContractAddress type.
 </APIItemCompact>
 
 #### emptyString [toc] [#Utils-emptyString]
@@ -94,7 +87,7 @@ None.
   kind="pure"
   modulePrefix="Utils"
 >
-  A helper function that returns the empty string: `""`.
+  A helper function that returns the empty string: "".
 </APIItemCompact>
 
 #### canonicalize [toc] [#Utils-canonicalize]
@@ -104,7 +97,9 @@ None.
   kind="pure"
   modulePrefix="Utils"
 >
-  Zeroes out the unused side of an `Either` value. Prevents crafted inputs where both `left` and `right` fields carry data from bypassing checks that only inspect the active side.
+  Zeroes out the unused side of an `Either` value. Prevents crafted
+  inputs where both `left` and `right` fields carry data from bypassing checks that
+  only inspect the active side.
 </APIItemCompact>
 
 #### zeroAccount [toc] [#Utils-zeroAccount]
@@ -114,12 +109,14 @@ None.
   kind="pure"
   modulePrefix="Utils"
 >
-  Returns the canonical zero `Either<Bytes<32>, ContractAddress>` value: the left variant (`Bytes<32>`) set to zero.
-  Used as the sentinel for mint and burn operations (a zero `from` signals a mint, a zero `to` signals a burn)
-  and for cleared approvals.
+  Returns the canonical zero `Either<Bytes<32>, ContractAddress>` value: the
+  left variant (`Bytes<32>`) set to zero. Used as the sentinel for mint/burn operations
+  (a zero `from` signals a mint, a zero `to` signals a burn) and for cleared approvals.
 
-  The left variant is returned so that `isTargetZero` compares against `default<Bytes<32>>`
-  and so that the value does not trigger contract-address guards.
+  The left variant is chosen so that `isTargetZero` checks against `default<Bytes<32>>`,
+  and to avoid triggering contract-address guards (e.g. circuits that check `!to.is_left`
+  before delegating to an `_unsafe` variant). A right variant with `default<ContractAddress>`
+  would also pass `isTargetZero`, but the left variant keeps guards and error messages consistent.
 </APIItemCompact>
 
 #### isTargetZero [toc] [#Utils-isTargetZero]
@@ -129,7 +126,8 @@ None.
   kind="pure"
   modulePrefix="Utils"
 >
-  Returns `true` if the active branch of `target` (as indicated by `is_left`) holds the zero value.
+  Returns `true` if `target`'s active branch (as indicated by `is_left`)
+  holds the zero value.
 </APIItemCompact>
 
 #### computeAccountId [toc] [#Utils-computeAccountId]
@@ -142,27 +140,34 @@ None.
   Computes an account identifier without on-chain state, allowing a user to derive
   their identity commitment before submitting an operation.
 
-  Derivation: `accountId = persistentHash(secretKey)`, with no domain-separation tag.
-
-  The absence of a tag is deliberate. The identifier is global by design: the same key material yields the same
-  identity in every module deriving one, so a user who wishes to carry one identity across modules can.
-  Modules wanting a per-deployment, unlinkable identity should not use this circuit.
-
-  Not for private derivation. This returns an identifier, not a secret, and the construction is untagged.
-  A circuit deriving a private value from a secret must use its own domain-separation tag.
-
   <Callout type='warn'>
-    `secretKey` is a sensitive secret. Never log or persist it in plaintext (browser devtools, application logs,
-    analytics pipelines, or any observable side-channel). Prefer offline storage or secure enclaves (HSMs,
-    air-gapped devices, encrypted vaults) over hot storage. Generate it with `crypto.getRandomValues()` or equivalent;
-    weak or predictable keys can be brute-forced to reveal the identity. Treat key loss as identity loss: a lost key
-    cannot be recovered. Avoid evaluating this circuit in untrusted environments (an unverified browser extension,
-    a compromised runtime, or a shared machine) where the key may be exposed to a malicious observer.
+    OpSec: The `secretKey` parameter is a sensitive secret. Mishandling it can
+    permanently compromise the security of this system:
+
+    - **Never log or persist** the `secretKey` in plaintext — avoid browser devtools,
+    application logs, analytics pipelines, or any observable side-channel.
+    - **Store offline or in secure enclaves** — hardware security modules (HSMs),
+    air-gapped devices, or encrypted vaults are strongly preferred over hot storage.
+    - **Use cryptographically secure randomness** — generate keys with `crypto.getRandomValues()`
+    or equivalent; weak or predictable keys can be brute-forced to reveal your identity.
+    - **Treat key loss as identity loss** — a lost key cannot be recovered.
+    - **Avoid calling this circuit in untrusted environments** — executing this in an
+    unverified browser extension, compromised runtime, or shared machine may expose
+    the key to a malicious observer.
+
+    ## ID Derivation
+    `accountId = persistentHash(secretKey)`
   </Callout>
 
-  Requirements:
+  The absence of a domain-separation tag is DELIBERATE. This identifier
+  is global by design: the same key material yields the same identity in
+  every module deriving one, so a user who wishes to carry one identity
+  across modules can. Modules wanting a per-deployment, unlinkable identity
+  should not use this circuit.
 
-  * `secretKey` is a 32-byte cryptographically secure random value.
+  NOT FOR PRIVATE DERIVATION. This returns an identifier, not a secret,
+  and the construction is untagged. A circuit deriving a PRIVATE value from a
+  secret MUST use its own domain-separation tag.
 </APIItemCompact>
 
 #### selfAsRecipient [toc] [#Utils-selfAsRecipient]
@@ -172,8 +177,9 @@ None.
   kind="circuit"
   modulePrefix="Utils"
 >
-  Returns the current contract's address as an `Either<ZswapCoinPublicKey, ContractAddress>`
-  for use as a recipient in shielded send operations (deposits and receiving change).
+  Returns the current contract's address as an
+  `Either<ZswapCoinPublicKey, ContractAddress>` for use as a
+  recipient in shielded send operations (deposits and receiving change).
 </APIItemCompact>
 
 #### UINT128_MAX [toc] [#Utils-UINT128_MAX]
@@ -183,5 +189,7 @@ None.
   kind="pure"
   modulePrefix="Utils"
 >
-  The maximum value representable by a `Uint<128>`: `2^128 - 1`.
+  The maximum value representable by a `Uint<128>`.
+
+  TODO: Remove once a math module providing this constant is available.
 </APIItemCompact>

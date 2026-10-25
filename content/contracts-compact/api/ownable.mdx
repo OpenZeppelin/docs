@@ -35,8 +35,9 @@ import "./node_modules/@openzeppelin/compact-contracts/access/Ownable";
   kind="ledger"
   id="Ownable-_isInitialized"
 >
-  Boolean indicating whether [initialize](#Ownable-initialize) has been called.
-  Every other circuit in the module requires it to be `true`.
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
 </APIItemCompact>
 
 #### _owner [toc] [#Ownable-_owner]
@@ -64,8 +65,7 @@ The TypeScript witnesses in the repository are test-only and are not published w
   kind="witness"
   id="Ownable-wit_OwnableSK"
 >
-  Returns the caller's secret key used in deriving the account identifier `H(secretKey)`.
-  The key never reaches the ledger; only the derived identifier is compared against `_owner`.
+  Returns the caller's secret key used in deriving the account identifier.
 
   The same key produces the same account identifier across all contracts. Users who
   desire cross-contract unlinkability should use different keys per contract.
@@ -85,13 +85,11 @@ The TypeScript witnesses in the repository are test-only and are not published w
   Initializes the contract by setting the `initialOwner`.
   This must be called in the contract's constructor.
 
-  Discloses: the canonicalized `initialOwner`, written to `_owner`.
-
   Requirements:
 
-  * Contract is not already initialized.
-  * `initialOwner` is not a ContractAddress.
-  * `initialOwner` is not the zero address.
+  - Contract is not already initialized.
+  - `initialOwner` is not a ContractAddress.
+  - `initialOwner` is not the zero address.
 </APIItemCompact>
 
 #### owner [toc] [#Ownable-owner]
@@ -106,7 +104,7 @@ The TypeScript witnesses in the repository are test-only and are not published w
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### transferOwnership [toc] [#Ownable-transferOwnership]
@@ -119,19 +117,16 @@ The TypeScript witnesses in the repository are test-only and are not published w
 >
   Transfers ownership of the contract to `newOwner`.
 
-  <Callout type='info'>
-    Ownership transfers to contract addresses are currently disallowed until contract-to-contract interactions are supported in Compact.
-    This restriction prevents permanently disabling access to a circuit.
-  </Callout>
-
-  Discloses: the canonicalized `newOwner`, written to `_owner`.
+  Ownership transfers to contract addresses are currently disallowed until contract-to-contract
+  interactions are supported in Compact.
+  This restriction prevents permanently disabling access to a circuit.
 
   Requirements:
 
-  * Contract is initialized.
-  * The caller is the current contract owner.
-  * `newOwner` is not a ContractAddress.
-  * `newOwner` is not the zero address.
+  - Contract is initialized.
+  - The caller is the current contract owner.
+  - `newOwner` is not a ContractAddress.
+  - `newOwner` is not the zero address.
 </APIItemCompact>
 
 #### _unsafeTransferOwnership [toc] [#Ownable-_unsafeTransferOwnership]
@@ -142,21 +137,20 @@ The TypeScript witnesses in the repository are test-only and are not published w
   complexity="k=13, rows=2956"
   modulePrefix="Ownable"
 >
-  Unsafe variant of [`transferOwnership`](#Ownable-transferOwnership).
+  Unsafe variant of `transferOwnership`.
 
   <Callout type='warn'>
-    Ownership transfers to contract addresses are considered unsafe because contract-to-contract calls are not currently supported.
+    Ownership transfers to contract addresses are considered unsafe because contract-to-contract
+    calls are not currently supported.
     Ownership privileges sent to a contract address may become uncallable.
     Once contract-to-contract calls are supported, this circuit may be deprecated.
   </Callout>
 
-  Discloses: the canonicalized `newOwner`, written to `_owner`.
-
   Requirements:
 
-  * Contract is initialized.
-  * The caller is the current contract owner.
-  * `newOwner` is not the zero address.
+  - Contract is initialized.
+  - The caller is the current contract owner.
+  - `newOwner` is not the zero address.
 </APIItemCompact>
 
 #### renounceOwnership [toc] [#Ownable-renounceOwnership]
@@ -167,14 +161,14 @@ The TypeScript witnesses in the repository are test-only and are not published w
   complexity="k=13, rows=2364"
   modulePrefix="Ownable"
 >
-  Leaves the contract without an owner by writing the zero `Bytes<32>` identifier to `_owner`.
-  It will not be possible to call [`assertOnlyOwner`](#Ownable-assertOnlyOwner) circuits anymore.
+  Leaves the contract without an owner.
+  It will not be possible to call `assertOnlyOwner` circuits anymore.
   Can only be called by the current owner.
 
   Requirements:
 
-  * Contract is initialized.
-  * The caller is the current contract owner.
+  - Contract is initialized.
+  - The caller is the current contract owner.
 </APIItemCompact>
 
 #### assertOnlyOwner [toc] [#Ownable-assertOnlyOwner]
@@ -187,15 +181,14 @@ The TypeScript witnesses in the repository are test-only and are not published w
 >
   Throws if called by any account other than the owner.
   Use this to restrict access of specific circuits to the owner.
-  The caller's identity is derived from the `wit_OwnableSK` witness as `H(secretKey)`,
-  the same derivation as [`Utils.computeAccountId`](./utils#Utils-computeAccountId),
-  and compared against `_owner`.
+
+  In the case of an external (non-contract) caller, the caller’s identity is
+  derived from the `wit_OwnableSK` witness as `persistentHash(secretKey)`.
 
   Requirements:
 
-  * Contract is initialized.
-  * `_owner` holds a `Bytes<32>` account identifier (a contract-address owner cannot authenticate).
-  * The caller is the current contract owner.
+  - Contract is initialized.
+  - The caller is the current contract owner.
 </APIItemCompact>
 
 #### _transferOwnership [toc] [#Ownable-_transferOwnership]
@@ -206,19 +199,17 @@ The TypeScript witnesses in the repository are test-only and are not published w
   complexity="k=10, rows=600"
   modulePrefix="Ownable"
 >
-  Transfers ownership of the contract to a `newOwner` without enforcing permission checks on the caller.
+  Transfers ownership of the contract to `newOwner` without
+  enforcing permission checks on the caller.
 
-  <Callout type='info'>
-    Ownership transfers to contract addresses are currently disallowed until contract-to-contract interactions are supported in Compact.
-    This restriction prevents circuits from being inadvertently locked in contracts.
-  </Callout>
-
-  Discloses: the canonicalized `newOwner`, written to `_owner`.
+  Ownership transfers to contract addresses are currently disallowed until contract-to-contract
+  interactions are supported in Compact.
+  This restriction prevents circuits from being inadvertently locked in contracts.
 
   Requirements:
 
-  * Contract is initialized.
-  * `newOwner` is not a ContractAddress.
+  - Contract is initialized.
+  - `newOwner` is not a ContractAddress.
 </APIItemCompact>
 
 #### _unsafeUncheckedTransferOwnership [toc] [#Ownable-_unsafeUncheckedTransferOwnership]
@@ -229,20 +220,18 @@ The TypeScript witnesses in the repository are test-only and are not published w
   complexity="k=10, rows=597"
   modulePrefix="Ownable"
 >
-  Unsafe variant of [`_transferOwnership`](#Ownable-_transferOwnership).
-  This is the single write point for `_owner`: every ownership change flows through it.
+  Unsafe variant of `_transferOwnership`.
 
   <Callout type='warn'>
-    Ownership transfers to contract addresses are considered unsafe because contract-to-contract calls are not currently supported.
+    Ownership transfers to contract addresses are considered unsafe because contract-to-contract
+    calls are not currently supported.
     Ownership privileges sent to a contract address may become uncallable.
     Once contract-to-contract calls are supported, this circuit may be deprecated.
   </Callout>
 
-  Discloses: the canonicalized `newOwner`, written to `_owner`.
-
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 ---
@@ -269,8 +258,9 @@ import "./node_modules/@openzeppelin/compact-contracts/access/ZOwnablePK";
   kind="ledger"
   id="ZOwnablePK-_isInitialized"
 >
-  Boolean indicating whether [initialize](#ZOwnablePK-initialize) has been called.
-  Every other non-pure circuit in the module requires it to be `true`.
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
 </APIItemCompact>
 
 #### _ownerCommitment [toc] [#ZOwnablePK-_ownerCommitment]
@@ -281,10 +271,10 @@ import "./node_modules/@openzeppelin/compact-contracts/access/ZOwnablePK";
   id="ZOwnablePK-_ownerCommitment"
 >
   Stores the current hashed commitment representing the owner.
-  This commitment is derived from the owner identifier `SHA256(pk || nonce)`,
+  This commitment is derived from the public identifier (e.g., `SHA256(pk, nonce)`),
   the `instanceSalt`, the transfer `counter`, and a domain separator.
 
-  A commitment of `default<Bytes<32>>` (i.e. zero) indicates the contract is unowned.
+  A commitment of `default<Bytes<32>>` (i.e., zero) indicates the contract is unowned.
 </APIItemCompact>
 
 #### _counter [toc] [#ZOwnablePK-_counter]
@@ -296,8 +286,8 @@ import "./node_modules/@openzeppelin/compact-contracts/access/ZOwnablePK";
 >
   Internal transfer counter used to prevent commitment reuse.
 
-  Increments by 1 on every successful ownership transfer.
-  Combined with `id` and `instanceSalt` to compute unique owner commitments over time.
+  Increments by 1 on every successful ownership transfer. Combined with `id` and
+  `instanceSalt` to compute unique owner commitments over time.
 </APIItemCompact>
 
 #### _instanceSalt [toc] [#ZOwnablePK-_instanceSalt]
@@ -307,11 +297,11 @@ import "./node_modules/@openzeppelin/compact-contracts/access/ZOwnablePK";
   kind="sealed ledger"
   id="ZOwnablePK-_instanceSalt"
 >
-  A per-instance value provided at initialization used to namespace commitments for this contract instance.
+  A per-instance value provided at initialization used to namespace
+  commitments for this contract instance.
 
-  This salt prevents commitment collisions across contracts that might otherwise use the same owner identifiers or domain parameters.
-  Use a fresh random value per deployment: a reused salt links the same owner across deployments.
-  It is immutable after initialization.
+  This salt prevents commitment collisions across contracts that might otherwise use
+  the same owner identifiers or domain parameters. It is immutable after initialization.
 </APIItemCompact>
 
 ### Witnesses [toc] [#ZOwnablePK-Witnesses]
@@ -329,15 +319,8 @@ The TypeScript witnesses in the repository are test-only and are not published w
 >
   A private per-user nonce used in deriving the shielded owner identifier.
 
-  Combined with the user's public key as `SHA256(pk || nonce)` to produce an obfuscated,
+  Combined with the user's public key as `SHA256(pk, nonce)` to produce an obfuscated,
   unlinkable identity commitment. Users are encouraged to rotate this value on ownership changes.
-
-  <Callout type='warn'>
-    `ownPublicKey()` is itself a witness: it returns the caller's Zswap coin public key, and nothing proves the caller
-    holds the matching private key. The secret nonce is therefore the owner credential. Anyone holding the nonce and
-    the owner's public key can pass `assertOnlyOwner`. Generate it as 32 bytes from a CSPRNG and keep it private;
-    losing it prevents the owner from proving ownership or transferring it.
-  </Callout>
 </APIItemCompact>
 
 ### Circuits [toc] [#ZOwnablePK-Circuits]
@@ -352,23 +335,19 @@ The TypeScript witnesses in the repository are test-only and are not published w
   modulePrefix="ZOwnablePK"
 >
   Initializes the contract by setting the initial owner via `ownerId`
-  and storing the `instanceSalt` that acts as a privacy additive
-  for preventing duplicate commitments among other contracts implementing ZOwnablePK.
+  and storing the `instanceSalt` that acts as a privacy additive for preventing
+  duplicate commitments among other contracts implementing ZOwnablePK.
 
   <Callout type='warn'>
     The `ownerId` must be calculated prior to contract deployment using the SHA256 hashing algorithm.
     Using any other algorithm will result in a permanent loss of contract access.
-    See [_computeOwnerId](#ZOwnablePK-_computeOwnerId).
   </Callout>
-
-  Discloses: `instanceSalt`, written to `_instanceSalt`, and the resulting owner commitment, written to `_ownerCommitment`.
-  The `ownerId` itself is not disclosed.
 
   Requirements:
 
-  * Contract is not initialized.
-  * `ownerId` is not zero.
-  * `instanceSalt` is not zero.
+  - Contract is not initialized.
+  - `ownerId` is not zero.
+  - `instanceSalt` is not zero.
 </APIItemCompact>
 
 #### owner [toc] [#ZOwnablePK-owner]
@@ -380,11 +359,11 @@ The TypeScript witnesses in the repository are test-only and are not published w
   modulePrefix="ZOwnablePK"
 >
   Returns the current commitment representing the contract owner.
-  The full commitment is `SHA256(SHA256(pk || nonce) || instanceSalt || counter || domain)`.
+  The full commitment is: `SHA256(SHA256(pk, nonce), instanceSalt, counter, domain)`.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### transferOwnership [toc] [#ZOwnablePK-transferOwnership]
@@ -398,13 +377,11 @@ The TypeScript witnesses in the repository are test-only and are not published w
   Transfers ownership to `newOwnerId`.
   `newOwnerId` must be precalculated and given to the current owner off chain.
 
-  Discloses: the new owner commitment, written to `_ownerCommitment`. The `newOwnerId` itself is not disclosed.
-
   Requirements:
 
-  * Contract is initialized.
-  * Caller is the current owner.
-  * `newOwnerId` is not zero.
+  - Contract is initialized.
+  - Caller is the current owner.
+  - `newOwnerId` is not an empty array.
 </APIItemCompact>
 
 #### renounceOwnership [toc] [#ZOwnablePK-renounceOwnership]
@@ -415,14 +392,14 @@ The TypeScript witnesses in the repository are test-only and are not published w
   complexity="k=15, rows=24442"
   modulePrefix="ZOwnablePK"
 >
-  Leaves the contract without an owner by resetting `_ownerCommitment` to zero.
+  Leaves the contract without an owner.
   It will not be possible to call `assertOnlyOwner` circuits anymore.
   Can only be called by the current owner.
 
   Requirements:
 
-  * Contract is initialized.
-  * Caller is the current owner.
+  - Contract is initialized.
+  - Caller is the current owner.
 </APIItemCompact>
 
 #### assertOnlyOwner [toc] [#ZOwnablePK-assertOnlyOwner]
@@ -433,17 +410,15 @@ The TypeScript witnesses in the repository are test-only and are not published w
   complexity="k=15, rows=24437"
   modulePrefix="ZOwnablePK"
 >
-  Throws if called by any account whose id hash `SHA256(pk || nonce)` does not match
+  Throws if called by any account whose id hash `SHA256(pk, nonce)` does not match
   the stored owner commitment.
   Use this to only allow the owner to call specific circuits.
 
-  The `pk` is read from `ownPublicKey()` and the `nonce` from `wit_secretNonce`; both are witness values.
-  Neither reaches the ledger: the check compares the recomputed commitment against `_ownerCommitment` inside the proof.
-
   Requirements:
 
-  * Contract is initialized.
-  * Caller's id (`SHA256(pk || nonce)`) when used in `_computeOwnerCommitment` equals the stored `_ownerCommitment`.
+  - Contract is initialized.
+  - Caller's id (`SHA256(pk, nonce)`) when used in `_computeOwnerCommitment` equals
+  the stored `_ownerCommitment`, thus verifying themselves as the owner.
 </APIItemCompact>
 
 #### _computeOwnerCommitment [toc] [#ZOwnablePK-_computeOwnerCommitment]
@@ -456,18 +431,27 @@ The TypeScript witnesses in the repository are test-only and are not published w
 >
   Computes the owner commitment from the given `id` and `counter`.
 
-  The commitment derivation follows:
-  `commitment = SHA256(id || instanceSalt || counter || "ZOwnablePK:shield:")`
+  ## Owner ID (`id`)
+  The `id` is expected to be computed off-chain as:
+  `id = SHA256(pk, nonce)`
 
-  Where:
-  - `id`: The unique identifier `SHA256(pk || nonce)`.
-  - `instanceSalt`: Per-deployment salt to prevent collisions.
-  - `counter`: Incremented with each transfer for uniqueness. Cast to `Field` then `Bytes<32>` for hashing.
-  - Domain separator: `"ZOwnablePK:shield:"` padded to 32 bytes.
+  - `pk`: The owner's public key.
+  - `nonce`: A secret nonce scoped to the instance, ideally rotated with each transfer.
+
+  ## Commitment Derivation
+  `commitment = SHA256(id, instanceSalt, counter, domain)`
+
+  - `id`: See above.
+  - `instanceSalt`: A unique per-deployment salt, stored during initialization.
+  This prevents commitment collisions across deployments.
+  - `counter`: Incremented with each ownership transfer, ensuring uniqueness
+  even with repeated `id` values. Cast to `Field` then `Bytes<32>` for hashing.
+  - `domain`: Domain separator `"ZOwnablePK:shield:"` (padded to 32 bytes) to prevent
+  hash collisions when extending the module or using similar commitment schemes.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### _computeOwnerId [toc] [#ZOwnablePK-_computeOwnerId]
@@ -477,17 +461,32 @@ The TypeScript witnesses in the repository are test-only and are not published w
   kind="pure"
   modulePrefix="ZOwnablePK"
 >
-  Computes the unique identifier (`id`) of the owner from their public key and a secret nonce.
+  Computes the unique identifier (`id`) of the owner from their
+  public key and a secret nonce.
 
-  The ID derivation follows: `id = SHA256(pk || nonce)`
+  ## ID Derivation
+  `id = SHA256(pk, nonce)`
 
-  <Callout type='info'>
-    Currently only supports `ZswapCoinPublicKey`. Contract address owners are not yet supported.
-  </Callout>
+  - `pk`: The public key of the caller. This is passed explicitly to allow
+  for off-chain derivation, testing, or scenarios where the caller is
+  different from the subject of the computation.
+  We recommend using an Air-Gapped Public Key.
+  - `nonce`: A secret nonce tied to the identity. The generation strategy is
+  left to the user, offering different security/convenience trade-offs.
+
+  The result is a 32-byte commitment that uniquely identifies the owner.
+  This value is later used in owner commitment hashing,
+  and acts as a privacy-preserving alternative to a raw public key.
+
+  This module allows ownership to be tied to an identity commitment derived
+  from a public key and secret nonce.
+  While typically used with user public keys, this mechanism may also
+  support contract addresses as identifiers in future contract-to-contract
+  interactions. Both are treated as 32-byte values (`Bytes<32>`).
 
   Requirements:
 
-  * `pk` is not a ContractAddress.
+  - `pk` is not a ContractAddress.
 </APIItemCompact>
 
 #### _transferOwnership [toc] [#ZOwnablePK-_transferOwnership]
@@ -498,13 +497,10 @@ The TypeScript witnesses in the repository are test-only and are not published w
   complexity="k=14, rows=14823"
   modulePrefix="ZOwnablePK"
 >
-  Transfers ownership to owner id `newOwnerId` without enforcing permission checks on the caller.
-
-  This is an internal circuit that increments the counter and updates the owner commitment.
-
-  Discloses: the new owner commitment, written to `_ownerCommitment`. The `newOwnerId` itself is not disclosed.
+  Transfers ownership to owner id `newOwnerId` without
+  enforcing permission checks on the caller.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>

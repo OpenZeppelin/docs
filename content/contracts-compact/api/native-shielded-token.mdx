@@ -49,7 +49,8 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NativeShieldedToken
   kind="sealed ledger"
   id="NativeShieldedToken-_domain"
 >
-  Domain separator fixed at construction. Together with the contract address it determines this token's color.
+  Domain separator fixed at construction; with the contract
+  address it determines this token's color.
 </APIItemCompact>
 
 #### _name [toc] [#NativeShieldedToken-_name]
@@ -89,7 +90,9 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NativeShieldedToken
   kind="ledger"
   id="NativeShieldedToken-_isInitialized"
 >
-  Boolean indicating if initialized. Re-exported from `NativeShieldedTokenCore`.
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
 </APIItemCompact>
 
 ### Witnesses [toc] [#NativeShieldedToken-Witnesses]
@@ -113,17 +116,11 @@ None.
   modulePrefix="NativeShieldedToken"
   stackParams="true"
 >
-  Initializes the token's domain and metadata.
-
-  This MUST be called in the implementing contract's constructor, and it must be the only token operation
-  performed there. Failure to call it can lead to an irreparable contract. Perform mints, burns, and `tokenColor`
-  only in post-deployment circuits.
-
-  Discloses `domainSep`, `name_`, `symbol_`, and `decimals_` to the ledger.
-
-  Requirements:
-
-  * Contract is not initialized.
+  Initializes the module's domain and metadata.
+  This MUST be called in the implementing contract's constructor, and it
+  MUST be the only token operation performed there. Failure to call it can
+  lead to an irreparable contract; perform mint, burn, and `tokenColor` only
+  in post-deployment circuits, never in the constructor.
 </APIItemCompact>
 
 #### isInitialized [toc] [#NativeShieldedToken-isInitialized]
@@ -134,7 +131,7 @@ None.
   complexity="k=6, rows=26"
   modulePrefix="NativeShieldedToken"
 >
-  Returns whether the contract has been initialized. Safe to call before `initialize`.
+  Returns whether the contract has been initialized.
 </APIItemCompact>
 
 #### name [toc] [#NativeShieldedToken-name]
@@ -149,7 +146,7 @@ None.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### symbol [toc] [#NativeShieldedToken-symbol]
@@ -160,11 +157,11 @@ None.
   complexity="k=6, rows=28"
   modulePrefix="NativeShieldedToken"
 >
-  Returns the token symbol.
+  Returns the symbol of the token.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### decimals [toc] [#NativeShieldedToken-decimals]
@@ -175,12 +172,11 @@ None.
   complexity="k=6, rows=28"
   modulePrefix="NativeShieldedToken"
 >
-  Returns the number of decimals used to get the user representation.
-  This is a display convention only; the protocol operates on integer values.
+  Returns the number of decimals used to get its user representation.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### tokenColor [toc] [#NativeShieldedToken-tokenColor]
@@ -191,11 +187,12 @@ None.
   complexity="k=13, rows=3971"
   modulePrefix="NativeShieldedToken"
 >
-  Returns this token's coin color, `tokenType(_domain, kernel.self())`, computed at call time.
+  Returns this token's coin color:
+  `tokenType(_domain, kernel.self())`, computed at call time.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### _mint [toc] [#NativeShieldedToken-_mint]
@@ -211,21 +208,24 @@ None.
   modulePrefix="NativeShieldedToken"
   stackParams="true"
 >
-  Mints `amount` of the token to `recipient` using the caller-supplied `nonce`, and returns the new coin's info.
+  Mints `amount` of the token to `recipient`, using a
+  caller-supplied nonce.
 
-  The caller is responsible for nonce uniqueness: reusing a nonce for the same (value, recipient) produces a
-  duplicate commitment, which the ledger rejects. With a secret, random nonce the mint is recipient-private;
-  for mints without a caller-managed nonce, compose `NativeShieldedTokenDerivedNonce` and pass its `_deriveNonce()` output.
+  The caller is fully responsible for nonce uniqueness. Reusing a
+  nonce for the same (value, recipient) produces a duplicate commitment,
+  which the protocol rejects. With a secret random nonce this is the
+  recipient-private mint. For mints that require no caller-managed nonce,
+  compose the `NativeShieldedTokenDerivedNonce` extension and pass its
+  `_deriveNonce()` output.
 
-  The returned coin info is the only copy available to the recipient, so callers should deliver it out of band;
-  wallets cannot detect contract-minted coins by scanning the chain.
-
-  Puts the coin color, the amount, and the coin commitment on the ledger. The recipient and the nonce are not posted.
+  The returned coin info is the only copy available to the
+  recipient; callers SHOULD deliver it out of band. Wallets cannot detect
+  contract-minted coins by scanning the chain.
 
   Requirements:
 
-  * Contract is initialized.
-  * `recipient` is not the zero key.
+  - Contract is initialized.
+  - `recipient` is not zero.
 </APIItemCompact>
 
 #### _mintToSelf [toc] [#NativeShieldedToken-_mintToSelf]
@@ -236,17 +236,20 @@ None.
   complexity="k=14, rows=16070"
   modulePrefix="NativeShieldedToken"
 >
-  Mints `amount` to this contract itself and claims the coin in the same call.
-  Nonce uniqueness is the caller's responsibility, as in `_mint`.
+  Mints `amount` to this contract itself, claiming the coin in
+  the same call. Forwards to `NativeShieldedTokenCore._mint` with
+  `right(kernel.self())`.
 
-  The consumer should persist the returned coin info in its own ledger state: it is the contract's holding and
-  is not otherwise recoverable. Spend it later with `_burnFromSelf`, once it carries a Merkle-tree index.
+  Nonce uniqueness is the caller's responsibility, as in `_mint`. Spend
+  the coin later with `_burnFromSelf`, once it carries an `mt_index`.
 
-  Puts the coin color, the amount, and the coin commitment on the ledger.
+  The consumer SHOULD persist the returned coin info in its own
+  ledger state: it is the contract's holding and is not otherwise
+  recoverable.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### _burn [toc] [#NativeShieldedToken-_burn]
@@ -262,24 +265,30 @@ None.
   modulePrefix="NativeShieldedToken"
   stackParams="true"
 >
-  Burns `amount` from `coin`, a coin provided within the current transaction (for example paid in by the
-  caller's wallet), and routes the remaining change to `refundTo`.
+  Burns `amount` from `coin`, a coin provided within the
+  current transaction (e.g. paid in by the caller's wallet), and routes the
+  remaining change to `refundTo`.
 
-  Returns the refund coin created for `refundTo` as `some`, or `none` if the coin was burned in full.
-  To burn the coin in full, pass `coin.value` as `amount`; `refundTo` is inert in that case but must still be
-  supplied and non-zero. For coins the contract already holds, use `_burnFromSelf` instead.
+  To destroy `coin` in full, pass `coin.value` as `amount`; the change
+  branch will not fire and `none` is returned. The `refundTo` value is
+  inert in that case but must still be supplied and non-zero.
 
-  The returned refund coin info is the only copy available to `refundTo`; callers should deliver it out of band.
+  The coin is received by the contract and spent in the same
+  transaction, so the spend goes through `sendImmediateShielded` (the
+  transient path). For coins the contract already holds, use
+  `_burnFromSelf` instead.
 
-  Puts the spent coin's nullifier and the output commitments on the ledger. The amount is not posted; a change
-  output reveals that the burn was partial.
+  The returned refund coin info is the only copy available to
+  `refundTo`; callers SHOULD deliver it out of band. Wallets cannot detect
+  contract-sent coins by scanning the chain.
 
   Requirements:
 
-  * Contract is initialized.
-  * `coin.color` is this contract's token color.
-  * `amount` is less than or equal to `coin.value`.
-  * `refundTo` is not the zero key (the zero key is the burn address; a zero `refundTo` would burn the change as well).
+  - Contract is initialized.
+  - `coin.color` is this contract's token color.
+  - `amount` is less than or equal to `coin.value`.
+  - `refundTo` is not zero (the zero key is the burn address; a zero
+    `refundTo` would silently burn the change as well).
 </APIItemCompact>
 
 #### _burnFromSelf [toc] [#NativeShieldedToken-_burnFromSelf]
@@ -290,19 +299,19 @@ None.
   complexity="k=15, rows=23307"
   modulePrefix="NativeShieldedToken"
 >
-  Burns `amount` from `coin`, a coin this contract already holds (a Merkle-tree entry with a valid `mt_index`).
-  Any change is received by the contract automatically and returned as `some`; `none` means the coin was burned in full.
+  Burns `amount` from `coin`, a coin this contract already
+  holds (a Merkle-tree entry with a valid `mt_index`). Any change is
+  auto-received by the contract and returned.
 
-  The consumer should persist the returned change coin info in its own ledger state: the change replaces `coin`
-  as the contract's holding, and its info is not otherwise recoverable.
-
-  Puts the spent coin's nullifier and the output commitments on the ledger. The amount is not posted.
+  The consumer SHOULD persist the returned change coin info in its own
+  ledger state: the change replaces `coin` as the contract's holding, and
+  its info is not otherwise recoverable.
 
   Requirements:
 
-  * Contract is initialized.
-  * `coin.color` is this contract's token color.
-  * `amount` is less than or equal to `coin.value`.
+  - Contract is initialized.
+  - `coin.color` is this contract's token color.
+  - `amount` is less than or equal to `coin.value`.
 </APIItemCompact>
 
 ---
@@ -359,7 +368,9 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NativeShieldedToken
   kind="ledger"
   id="NativeShieldedTokenFamily-_isInitialized"
 >
-  Boolean indicating if initialized. Re-exported from `NativeShieldedTokenCore`.
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
 </APIItemCompact>
 
 ### Witnesses [toc] [#NativeShieldedTokenFamily-Witnesses]
@@ -382,17 +393,11 @@ None.
   modulePrefix="NativeShieldedTokenFamily"
   stackParams="true"
 >
-  Initializes the family metadata shared by every token type.
-
-  This MUST be called in the implementing contract's constructor, and it must be the only token operation
-  performed there. Failure to call it can lead to an irreparable contract. Perform mints, burns, and `tokenColor`
-  only in post-deployment circuits.
-
-  Discloses `name_`, `symbol_`, and `decimals_` to the ledger.
-
-  Requirements:
-
-  * Contract is not initialized.
+  Initializes the module's family metadata.
+  This MUST be called in the implementing contract's constructor, and it
+  MUST be the only token operation performed there. Failure to call it can
+  lead to an irreparable contract; perform mint, burn, and `tokenColor` only
+  in post-deployment circuits, never in the constructor.
 </APIItemCompact>
 
 #### isInitialized [toc] [#NativeShieldedTokenFamily-isInitialized]
@@ -403,7 +408,7 @@ None.
   complexity="k=6, rows=26"
   modulePrefix="NativeShieldedTokenFamily"
 >
-  Returns whether the contract has been initialized. Safe to call before `initialize`.
+  Returns whether the contract has been initialized.
 </APIItemCompact>
 
 #### name [toc] [#NativeShieldedTokenFamily-name]
@@ -414,12 +419,13 @@ None.
   complexity="k=6, rows=28"
   modulePrefix="NativeShieldedTokenFamily"
 >
-  Returns the family name shared by all token types of this contract.
-  Per-type identity belongs in the consumer's own state.
+  Returns the family name shared by all token types of this
+  contract. Per-type identity belongs in the consumer's own state; see the
+  module notes.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### symbol [toc] [#NativeShieldedTokenFamily-symbol]
@@ -430,11 +436,12 @@ None.
   complexity="k=6, rows=28"
   modulePrefix="NativeShieldedTokenFamily"
 >
-  Returns the family symbol shared by all token types of this contract.
+  Returns the family symbol shared by all token types of this
+  contract.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### decimals [toc] [#NativeShieldedTokenFamily-decimals]
@@ -445,12 +452,12 @@ None.
   complexity="k=6, rows=28"
   modulePrefix="NativeShieldedTokenFamily"
 >
-  Returns the family-wide number of decimals used to get the user representation.
-  Issuers with heterogeneous decimals need their own per-domain handling.
+  Returns the family-wide number of decimals used to get the
+  user representation.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### tokenColor [toc] [#NativeShieldedTokenFamily-tokenColor]
@@ -461,14 +468,12 @@ None.
   complexity="k=13, rows=4248"
   modulePrefix="NativeShieldedTokenFamily"
 >
-  Returns the coin color (token type) for `domain` under this contract's address,
-  `tokenType(domain, kernel.self())`, computed at call time.
-
-  Discloses `domain` to the ledger.
+  Returns the coin color (token type) for `domain` under this
+  contract's address, so integrators do not have to re-derive it by hand.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### _mint [toc] [#NativeShieldedTokenFamily-_mint]
@@ -485,23 +490,24 @@ None.
   modulePrefix="NativeShieldedTokenFamily"
   stackParams="true"
 >
-  Mints `amount` of the token identified by `domain` to `recipient` using the caller-supplied `nonce`,
-  and returns the new coin's info. The same domain under the same contract address always produces the same color.
+  Mints `amount` of the token identified by `domain` to
+  `recipient`, using a caller-supplied nonce.
 
-  The caller is responsible for nonce uniqueness: reusing a nonce for the same (domain, value, recipient)
-  produces a duplicate commitment, which the ledger rejects. With a secret, random nonce the mint is
-  recipient-private; for mints without a caller-managed nonce, compose `NativeShieldedTokenDerivedNonce`
-  and pass its `_deriveNonce()` output.
+  The caller is fully responsible for nonce uniqueness. Reusing a
+  nonce for the same (domain, value, recipient) produces a duplicate
+  commitment, which the protocol rejects. With a secret random nonce this
+  is the recipient-private mint. For mints that require no caller-managed
+  nonce, compose the `NativeShieldedTokenDerivedNonce` extension and pass
+  its `_deriveNonce()` output.
 
-  The returned coin info is the only copy available to the recipient, so callers should deliver it out of band;
-  wallets cannot detect contract-minted coins by scanning the chain.
-
-  Puts `domain`, the coin color, the amount, and the coin commitment on the ledger. The recipient and the nonce are not posted.
+  The returned coin info is the only copy available to the
+  recipient; callers SHOULD deliver it out of band. Wallets cannot detect
+  contract-minted coins by scanning the chain.
 
   Requirements:
 
-  * Contract is initialized.
-  * `recipient` is not the zero key.
+  - Contract is initialized.
+  - `recipient` is not zero.
 </APIItemCompact>
 
 #### _mintToSelf [toc] [#NativeShieldedTokenFamily-_mintToSelf]
@@ -517,17 +523,20 @@ None.
   modulePrefix="NativeShieldedTokenFamily"
   stackParams="true"
 >
-  Mints `amount` of the token identified by `domain` to this contract itself and claims the coin in the same call.
-  Nonce uniqueness is the caller's responsibility, as in `_mint`.
+  Mints `amount` of the token identified by `domain` to this
+  contract itself, claiming the coin in the same call. Forwards to
+  `NativeShieldedTokenCore._mint` with `right(kernel.self())`.
 
-  The consumer should persist the returned coin info in its own ledger state: it is the contract's holding and
-  is not otherwise recoverable. Spend it later with `_burnFromSelf`, once it carries a Merkle-tree index.
+  Nonce uniqueness is the caller's responsibility, as in `_mint`. Spend
+  the coin later with `_burnFromSelf`, once it carries an `mt_index`.
 
-  Puts `domain`, the coin color, the amount, and the coin commitment on the ledger.
+  The consumer SHOULD persist the returned coin info in its own
+  ledger state: it is the contract's holding and is not otherwise
+  recoverable.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### _burn [toc] [#NativeShieldedTokenFamily-_burn]
@@ -544,24 +553,30 @@ None.
   modulePrefix="NativeShieldedTokenFamily"
   stackParams="true"
 >
-  Burns `amount` from `coin`, a coin of the `domain` token type provided within the current transaction
-  (for example paid in by the caller's wallet), and routes the remaining change to `refundTo`.
+  Burns `amount` from `coin`, a coin provided within the
+  current transaction (e.g. paid in by the caller's wallet), and routes the
+  remaining change to `refundTo`.
 
-  Returns the refund coin created for `refundTo` as `some`, or `none` if the coin was burned in full.
-  To burn the coin in full, pass `coin.value` as `amount`; `refundTo` is inert in that case but must still be
-  supplied and non-zero. For coins the contract already holds, use `_burnFromSelf` instead.
+  To destroy `coin` in full, pass `coin.value` as `amount`; the change
+  branch will not fire and `none` is returned. The `refundTo` value is
+  inert in that case but must still be supplied and non-zero.
 
-  The returned refund coin info is the only copy available to `refundTo`; callers should deliver it out of band.
+  The coin is received by the contract and spent in the same
+  transaction, so the spend goes through `sendImmediateShielded` (the
+  transient path). For coins the contract already holds, use
+  `_burnFromSelf` instead.
 
-  Puts `domain`, the spent coin's nullifier, and the output commitments on the ledger. The amount is not posted;
-  a change output reveals that the burn was partial.
+  The returned refund coin info is the only copy available to
+  `refundTo`; callers SHOULD deliver it out of band. Wallets cannot detect
+  contract-sent coins by scanning the chain.
 
   Requirements:
 
-  * Contract is initialized.
-  * `coin.color` is this contract's token type for `domain`.
-  * `amount` is less than or equal to `coin.value`.
-  * `refundTo` is not the zero key (the zero key is the burn address; a zero `refundTo` would burn the change as well).
+  - Contract is initialized.
+  - `coin.color` is this contract's token type for `domain`.
+  - `amount` is less than or equal to `coin.value`.
+  - `refundTo` is not zero (the zero key is the burn address; a zero
+    `refundTo` would silently burn the change as well).
 </APIItemCompact>
 
 #### _burnFromSelf [toc] [#NativeShieldedTokenFamily-_burnFromSelf]
@@ -577,20 +592,19 @@ None.
   modulePrefix="NativeShieldedTokenFamily"
   stackParams="true"
 >
-  Burns `amount` from `coin`, a coin of the `domain` token type that this contract already holds
-  (a Merkle-tree entry with a valid `mt_index`). Any change is received by the contract automatically and
-  returned as `some`; `none` means the coin was burned in full.
+  Burns `amount` from `coin`, a coin this contract already
+  holds (a Merkle-tree entry with a valid `mt_index`). Any change is
+  auto-received by the contract and returned.
 
-  The consumer should persist the returned change coin info in its own ledger state: the change replaces `coin`
-  as the contract's holding, and its info is not otherwise recoverable.
-
-  Puts `domain`, the spent coin's nullifier, and the output commitments on the ledger. The amount is not posted.
+  The consumer SHOULD persist the returned change coin info in its own
+  ledger state: the change replaces `coin` as the contract's holding, and
+  its info is not otherwise recoverable.
 
   Requirements:
 
-  * Contract is initialized.
-  * `coin.color` is this contract's token type for `domain`.
-  * `amount` is less than or equal to `coin.value`.
+  - Contract is initialized.
+  - `coin.color` is this contract's token type for `domain`.
+  - `amount` is less than or equal to `coin.value`.
 </APIItemCompact>
 
 ---
@@ -607,11 +621,6 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NativeShieldedToken
 
 ---
 
-The shared, domain-parameterized core behind `NativeShieldedToken` and `NativeShieldedTokenFamily`.
-It is not meant to be composed directly: compose one of the two flavors instead.
-Every token operation takes the `domain` separator as a parameter, and the assertion messages use the generic
-`NativeShieldedToken:` prefix.
-
 ### Ledger [toc] [#NativeShieldedTokenCore-Ledger]
 ### Ledger [!toc] [#NativeShieldedTokenCore-Ledger]
 
@@ -622,7 +631,9 @@ Every token operation takes the `domain` separator as a parameter, and the asser
   kind="ledger"
   id="NativeShieldedTokenCore-_isInitialized"
 >
-  Boolean indicating if initialized.
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
 </APIItemCompact>
 
 #### _name [toc] [#NativeShieldedTokenCore-_name]
@@ -676,15 +687,9 @@ None.
   stackParams="true"
 >
   Initializes the contract-wide metadata.
-
-  This MUST be called in the implementing contract's constructor, through the wrapping flavor's `initialize`.
-  Failure to do so can lead to an irreparable contract.
-
-  Discloses `name_`, `symbol_`, and `decimals_` to the ledger.
-
-  Requirements:
-
-  * Contract is not initialized.
+  This MUST be called in the implementing contract's constructor (via
+  the wrapping flavor's `initialize`). Failure to do so can lead to an
+  irreparable contract.
 </APIItemCompact>
 
 #### assertInitialized [toc] [#NativeShieldedTokenCore-assertInitialized]
@@ -694,11 +699,12 @@ None.
   kind="circuit"
   modulePrefix="NativeShieldedTokenCore"
 >
-  Asserts that the contract has been initialized, throwing an error if not.
+  Asserts that the contract has been initialized, throwing an
+  error if not.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract must be initialized.
 </APIItemCompact>
 
 #### assertNotInitialized [toc] [#NativeShieldedTokenCore-assertNotInitialized]
@@ -708,11 +714,12 @@ None.
   kind="circuit"
   modulePrefix="NativeShieldedTokenCore"
 >
-  Asserts that the contract has not been initialized, throwing an error if it has.
+  Asserts that the contract has not been initialized, throwing
+  an error if it has.
 
   Requirements:
 
-  * Contract is not initialized.
+  - Contract must not be initialized.
 </APIItemCompact>
 
 #### isInitialized [toc] [#NativeShieldedTokenCore-isInitialized]
@@ -723,7 +730,9 @@ None.
   complexity="k=6, rows=26"
   modulePrefix="NativeShieldedTokenCore"
 >
-  Returns whether the contract has been initialized. Safe to call before `initialize`.
+  Returns whether the contract has been initialized.
+  Does not gate on init (it reports it), so it is safe to call before
+  `initialize`.
 </APIItemCompact>
 
 #### name [toc] [#NativeShieldedTokenCore-name]
@@ -738,7 +747,7 @@ None.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### symbol [toc] [#NativeShieldedTokenCore-symbol]
@@ -749,11 +758,11 @@ None.
   complexity="k=6, rows=28"
   modulePrefix="NativeShieldedTokenCore"
 >
-  Returns the token symbol.
+  Returns the symbol of the token.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### decimals [toc] [#NativeShieldedTokenCore-decimals]
@@ -764,12 +773,13 @@ None.
   complexity="k=6, rows=28"
   modulePrefix="NativeShieldedTokenCore"
 >
-  Returns the number of decimals used to get the user representation.
-  This is a display convention only; the protocol operates on integer values.
+  Returns the number of decimals used to get its user representation.
+  This is a display convention only. The protocol stores and operates
+  on integer values without reference to decimals.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### tokenColor [toc] [#NativeShieldedTokenCore-tokenColor]
@@ -780,14 +790,12 @@ None.
   complexity="k=13, rows=4248"
   modulePrefix="NativeShieldedTokenCore"
 >
-  Returns the coin color for `domain` under this contract's address, `tokenType(domain, kernel.self())`,
-  computed at call time.
-
-  Discloses `domain` to the ledger.
+  Returns the coin color for `domain` under this contract's
+  address: `tokenType(domain, kernel.self())`, computed at call time.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### _mint [toc] [#NativeShieldedTokenCore-_mint]
@@ -804,25 +812,25 @@ None.
   modulePrefix="NativeShieldedTokenCore"
   stackParams="true"
 >
-  Mints `amount` of the token identified by `domain` to `recipient` using the caller-supplied `nonce`,
-  and returns the new coin's info.
+  Mints `amount` of the token identified by `domain` to
+  `recipient`, using a caller-supplied nonce.
 
-  `recipient` may be any coin public key, or this contract's own address. A contract-addressed coin is
-  claimed with `receiveShielded` in the same call, so the consumer should persist the returned coin info:
-  it is the contract's holding and is not otherwise recoverable. Any other contract address is rejected.
+  The caller is fully responsible for nonce uniqueness. Reusing a
+  nonce for the same (domain, value, recipient) produces a duplicate
+  commitment, which the protocol rejects. A `right(kernel.self())` recipient
+  is claimed via `receiveShielded` in this same call, so the consumer SHOULD
+  persist the returned coin info: it is the contract's holding and is not
+  otherwise recoverable.
 
-  The caller is responsible for nonce uniqueness: reusing a nonce for the same (domain, value, recipient)
-  produces a duplicate commitment, which the ledger rejects. The returned coin info is the only copy available
-  to the recipient; wallets cannot detect contract-minted coins by scanning the chain.
-
-  Puts `domain`, the coin color, the amount, and the coin commitment on the ledger, and discloses whether the
-  recipient is a contract address.
+  The returned coin info is the only copy available to the
+  recipient; callers SHOULD deliver it out of band. Wallets cannot detect
+  contract-minted coins by scanning the chain.
 
   Requirements:
 
-  * Contract is initialized.
-  * `recipient` is not zero.
-  * `recipient`, if a contract address, is this contract's own address.
+  - Contract is initialized.
+  - `recipient` is not zero.
+  - `recipient`, if a contract address, is this contract's own address.
 </APIItemCompact>
 
 #### _burn [toc] [#NativeShieldedTokenCore-_burn]
@@ -839,27 +847,32 @@ None.
   modulePrefix="NativeShieldedTokenCore"
   stackParams="true"
 >
-  Burns `amount` from `coin`, a coin of the `domain` token type provided within the current transaction,
-  and routes the remaining change to `refundTo`.
+  Burns `amount` from `coin`, a coin provided within the
+  current transaction (e.g. paid in by the caller's wallet), and routes the
+  remaining change to `refundTo`.
 
-  Returns the refund coin created for `refundTo` as `some`, or `none` if the coin was burned in full.
-  To burn the coin in full, pass `coin.value` as `amount`; `refundTo` is inert in that case but must still be
-  supplied and non-zero. `refundTo` may be any coin public key, or this contract's own address, in which case
-  the refund is claimed with `receiveShielded` in the same call. For coins the contract already holds,
-  use `_burnFromSelf` instead.
+  To destroy `coin` in full, pass `coin.value` as `amount`; the change
+  branch will not fire and `none` is returned. The `refundTo` value is
+  inert in that case but must still be supplied and non-zero.
 
-  The returned refund coin info is the only copy available to `refundTo`; callers should deliver it out of band.
+  The coin is received by the contract and spent in the same
+  transaction, so the spend goes through `sendImmediateShielded` (the
+  transient path). For coins the contract already holds, use
+  `_burnFromSelf` instead. A `right(kernel.self())` refund is claimed via
+  `receiveShielded` in this same call.
 
-  Puts `domain`, the spent coin's nullifier, and the output commitments on the ledger, and discloses whether a
-  change output exists and whether `refundTo` is a contract address. The amount is not posted.
+  The returned refund coin info is the only copy available to
+  `refundTo`; callers SHOULD deliver it out of band. Wallets cannot detect
+  contract-sent coins by scanning the chain.
 
   Requirements:
 
-  * Contract is initialized.
-  * `coin.color` is this contract's token type for `domain`.
-  * `amount` is less than or equal to `coin.value`.
-  * `refundTo` is not zero (the zero key is the burn address; a zero `refundTo` would burn the change as well).
-  * `refundTo`, if a contract address, is this contract's own address.
+  - Contract is initialized.
+  - `coin.color` is this contract's token type for `domain`.
+  - `amount` is less than or equal to `coin.value`.
+  - `refundTo` is not zero (the zero key is the burn address; a zero
+    `refundTo` would silently burn the change as well).
+  - `refundTo`, if a contract address, is this contract's own address.
 </APIItemCompact>
 
 #### _burnFromSelf [toc] [#NativeShieldedTokenCore-_burnFromSelf]
@@ -875,20 +888,19 @@ None.
   modulePrefix="NativeShieldedTokenCore"
   stackParams="true"
 >
-  Burns `amount` from `coin`, a coin of the `domain` token type that this contract already holds
-  (a Merkle-tree entry with a valid `mt_index`). Any change is received by the contract automatically and
-  returned as `some`; `none` means the coin was burned in full.
+  Burns `amount` from `coin`, a coin this contract already
+  holds (a Merkle-tree entry with a valid `mt_index`). Any change is
+  auto-received by the contract and returned.
 
-  The consumer should persist the returned change coin info in its own ledger state: the change replaces `coin`
-  as the contract's holding, and its info is not otherwise recoverable.
-
-  Puts `domain`, the spent coin's nullifier, and the output commitments on the ledger. The amount is not posted.
+  The consumer SHOULD persist the returned change coin info in its own
+  ledger state: the change replaces `coin` as the contract's holding, and
+  its info is not otherwise recoverable.
 
   Requirements:
 
-  * Contract is initialized.
-  * `coin.color` is this contract's token type for `domain`.
-  * `amount` is less than or equal to `coin.value`.
+  - Contract is initialized.
+  - `coin.color` is this contract's token type for `domain`.
+  - `amount` is less than or equal to `coin.value`.
 </APIItemCompact>
 
 ---
@@ -905,14 +917,6 @@ import "./node_modules/@openzeppelin/compact-contracts/token/extensions/NativeSh
 
 ---
 
-Optional extension that adds on-chain supply accounting to a `NativeShieldedToken`.
-It imports no token module and needs no initialization: the consuming contract calls `_addMinted` alongside
-every `_mint` / `_mintToSelf` and `_addBurned` alongside every `_burn` / `_burnFromSelf`.
-All accounting lives under a single fixed key in the core maps.
-
-Composing this extension makes contract-mediated burn amounts public; mint amounts are already public through
-the protocol's shielded-mint effect.
-
 ### Ledger [toc] [#NativeShieldedTokenPublicSupply-Ledger]
 ### Ledger [!toc] [#NativeShieldedTokenPublicSupply-Ledger]
 
@@ -923,8 +927,7 @@ the protocol's shielded-mint effect.
   kind="ledger"
   id="NativeShieldedTokenPublicSupply-_totalMinted"
 >
-  Exact amount minted, stored under the single fixed key `default<Bytes<32>>`.
-  Re-exported from `NativeShieldedTokenPublicSupplyCore`.
+  Exact amount minted per domain. See "Accounting guarantees".
 </APIItemCompact>
 
 #### _totalBurned [toc] [#NativeShieldedTokenPublicSupply-_totalBurned]
@@ -934,8 +937,7 @@ the protocol's shielded-mint effect.
   kind="ledger"
   id="NativeShieldedTokenPublicSupply-_totalBurned"
 >
-  Contract-mediated amount burned (a lower bound), stored under the single fixed key `default<Bytes<32>>`.
-  Re-exported from `NativeShieldedTokenPublicSupplyCore`.
+  Contract-mediated amount burned per domain (lower bound).
 </APIItemCompact>
 
 ### Witnesses [toc] [#NativeShieldedTokenPublicSupply-Witnesses]
@@ -954,13 +956,8 @@ None.
   complexity="k=9, rows=375"
   modulePrefix="NativeShieldedTokenPublicSupply"
 >
-  Adds `amount` to the exact minted total. Call once per successful `NativeShieldedToken._mint` or `_mintToSelf`.
-
-  Puts the new minted total on the ledger.
-
-  Requirements:
-
-  * The minted total plus `amount` does not overflow `Uint<128>`.
+  Adds `amount` to the exact minted total. Call once per
+  successful `NativeShieldedToken._mint`.
 </APIItemCompact>
 
 #### _addBurned [toc] [#NativeShieldedTokenPublicSupply-_addBurned]
@@ -971,15 +968,9 @@ None.
   complexity="k=9, rows=477"
   modulePrefix="NativeShieldedTokenPublicSupply"
 >
-  Adds `amount` to the contract-mediated burned total. Call once per successful `NativeShieldedToken._burn`
-  or `_burnFromSelf`. Enforces `burned <= minted`, so an unpaired or duplicate burn reverts.
-
-  Puts the new burned total on the ledger, which makes the burned amount public.
-
-  Requirements:
-
-  * The burned total does not already exceed the minted total.
-  * The burned total plus `amount` does not exceed the minted total.
+  Adds `amount` to the contract-mediated burned total. Call once
+  per successful `NativeShieldedToken._burn` / `_burnFromSelf`.
+  Enforces `burned <= minted`; an unpaired or duplicate burn reverts.
 </APIItemCompact>
 
 #### totalMinted [toc] [#NativeShieldedTokenPublicSupply-totalMinted]
@@ -990,7 +981,7 @@ None.
   complexity="k=7, rows=65"
   modulePrefix="NativeShieldedTokenPublicSupply"
 >
-  Returns the exact amount ever minted. Reads as 0 before the first `_addMinted`.
+  Returns the exact amount ever minted.
 </APIItemCompact>
 
 #### totalBurned [toc] [#NativeShieldedTokenPublicSupply-totalBurned]
@@ -1001,7 +992,8 @@ None.
   complexity="k=7, rows=62"
   modulePrefix="NativeShieldedTokenPublicSupply"
 >
-  Returns the contract-mediated amount burned. This is a lower bound: coins sent directly to the burn address
+  Returns the contract-mediated amount burned.
+  This is a lower bound: coins sent directly to the burn address
   without going through the contract are not counted.
 </APIItemCompact>
 
@@ -1013,8 +1005,9 @@ None.
   complexity="k=9, rows=160"
   modulePrefix="NativeShieldedTokenPublicSupply"
 >
-  Returns `totalMinted() - totalBurned()`. This is an upper bound on circulating supply, not an exact value:
-  burns that bypass the contract are invisible.
+  Returns `totalMinted() - totalBurned()`.
+  This is an UPPER BOUND on circulating supply, not an exact value:
+  burns that bypass the contract are invisible. See the module notes.
 </APIItemCompact>
 
 ---
@@ -1031,13 +1024,6 @@ import "./node_modules/@openzeppelin/compact-contracts/token/extensions/NativeSh
 
 ---
 
-Optional extension that adds per-domain on-chain supply accounting to a `NativeShieldedTokenFamily`.
-It imports no token module and needs no initialization: the consuming contract calls `_addMinted` alongside
-every `_mint` / `_mintToSelf` and `_addBurned` alongside every `_burn` / `_burnFromSelf`, under the matching domain.
-
-Composing this extension makes contract-mediated burn amounts public; mint amounts are already public through
-the protocol's shielded-mint effect.
-
 ### Ledger [toc] [#NativeShieldedTokenFamilyPublicSupply-Ledger]
 ### Ledger [!toc] [#NativeShieldedTokenFamilyPublicSupply-Ledger]
 
@@ -1048,7 +1034,7 @@ the protocol's shielded-mint effect.
   kind="ledger"
   id="NativeShieldedTokenFamilyPublicSupply-_totalMinted"
 >
-  Exact amount minted per domain. Re-exported from `NativeShieldedTokenPublicSupplyCore`.
+  Exact amount minted per domain. See "Accounting guarantees".
 </APIItemCompact>
 
 #### _totalBurned [toc] [#NativeShieldedTokenFamilyPublicSupply-_totalBurned]
@@ -1058,7 +1044,7 @@ the protocol's shielded-mint effect.
   kind="ledger"
   id="NativeShieldedTokenFamilyPublicSupply-_totalBurned"
 >
-  Contract-mediated amount burned per domain (a lower bound). Re-exported from `NativeShieldedTokenPublicSupplyCore`.
+  Contract-mediated amount burned per domain (lower bound).
 </APIItemCompact>
 
 ### Witnesses [toc] [#NativeShieldedTokenFamilyPublicSupply-Witnesses]
@@ -1077,14 +1063,8 @@ None.
   complexity="k=10, rows=653"
   modulePrefix="NativeShieldedTokenFamilyPublicSupply"
 >
-  Adds `amount` to the exact minted total for `domain`. Call once per successful
-  `NativeShieldedTokenFamily._mint` or `_mintToSelf`.
-
-  Puts `domain` and its new minted total on the ledger.
-
-  Requirements:
-
-  * The minted total for `domain` plus `amount` does not overflow `Uint<128>`.
+  Adds `amount` to the exact minted total for `domain`. Call
+  once per successful `NativeShieldedTokenFamily._mint`.
 </APIItemCompact>
 
 #### _addBurned [toc] [#NativeShieldedTokenFamilyPublicSupply-_addBurned]
@@ -1095,16 +1075,11 @@ None.
   complexity="k=10, rows=755"
   modulePrefix="NativeShieldedTokenFamilyPublicSupply"
 >
-  Adds `amount` to the contract-mediated burned total for `domain`. Call once per successful
-  `NativeShieldedTokenFamily._burn` or `_burnFromSelf`. Enforces per-domain `burned <= minted`,
-  so an unpaired, duplicate, or wrong-domain burn reverts.
-
-  Puts `domain` and its new burned total on the ledger, which makes the burned amount public.
-
-  Requirements:
-
-  * The burned total for `domain` does not already exceed its minted total.
-  * The burned total for `domain` plus `amount` does not exceed its minted total.
+  Adds `amount` to the contract-mediated burned total for
+  `domain`. Call once per successful `NativeShieldedTokenFamily._burn` /
+  `_burnFromSelf`.
+  Enforces per-domain `burned <= minted`; an unpaired, duplicate, or
+  wrong-domain burn reverts.
 </APIItemCompact>
 
 #### totalMinted [toc] [#NativeShieldedTokenFamilyPublicSupply-totalMinted]
@@ -1115,9 +1090,7 @@ None.
   complexity="k=9, rows=344"
   modulePrefix="NativeShieldedTokenFamilyPublicSupply"
 >
-  Returns the exact amount ever minted for `domain`. An absent domain reads as 0.
-
-  Discloses `domain` to the ledger.
+  Returns the exact amount ever minted for `domain`.
 </APIItemCompact>
 
 #### totalBurned [toc] [#NativeShieldedTokenFamilyPublicSupply-totalBurned]
@@ -1128,10 +1101,9 @@ None.
   complexity="k=9, rows=341"
   modulePrefix="NativeShieldedTokenFamilyPublicSupply"
 >
-  Returns the contract-mediated amount burned for `domain`. This is a lower bound: coins sent directly to the
-  burn address without going through the contract are not counted.
-
-  Discloses `domain` to the ledger.
+  Returns the contract-mediated amount burned for `domain`.
+  This is a lower bound: coins sent directly to the burn address
+  without going through the contract are not counted.
 </APIItemCompact>
 
 #### totalSupply [toc] [#NativeShieldedTokenFamilyPublicSupply-totalSupply]
@@ -1142,10 +1114,9 @@ None.
   complexity="k=9, rows=439"
   modulePrefix="NativeShieldedTokenFamilyPublicSupply"
 >
-  Returns `totalMinted(domain) - totalBurned(domain)`. This is an upper bound on circulating supply,
-  not an exact value: burns that bypass the contract are invisible.
-
-  Discloses `domain` to the ledger.
+  Returns `totalMinted(domain) - totalBurned(domain)`.
+  This is an UPPER BOUND on circulating supply, not an exact value:
+  burns that bypass the contract are invisible. See the module notes.
 </APIItemCompact>
 
 ---
@@ -1162,11 +1133,6 @@ import "./node_modules/@openzeppelin/compact-contracts/token/extensions/NativeSh
 
 ---
 
-The shared, domain-keyed core behind `NativeShieldedTokenPublicSupply` and `NativeShieldedTokenFamilyPublicSupply`.
-It is not meant to be composed directly: compose one of the two flavors instead.
-It owns the per-domain minted and burned maps and needs no initialization; an absent domain reads as 0.
-The assertion messages use the generic `NativeShieldedTokenPublicSupply:` prefix.
-
 ### Ledger [toc] [#NativeShieldedTokenPublicSupplyCore-Ledger]
 ### Ledger [!toc] [#NativeShieldedTokenPublicSupplyCore-Ledger]
 
@@ -1177,7 +1143,7 @@ The assertion messages use the generic `NativeShieldedTokenPublicSupply:` prefix
   kind="ledger"
   id="NativeShieldedTokenPublicSupplyCore-_totalMinted"
 >
-  Exact amount minted per domain.
+  Exact amount minted per domain. See "Accounting guarantees".
 </APIItemCompact>
 
 #### _totalBurned [toc] [#NativeShieldedTokenPublicSupplyCore-_totalBurned]
@@ -1187,7 +1153,7 @@ The assertion messages use the generic `NativeShieldedTokenPublicSupply:` prefix
   kind="ledger"
   id="NativeShieldedTokenPublicSupplyCore-_totalBurned"
 >
-  Contract-mediated amount burned per domain (a lower bound).
+  Contract-mediated amount burned per domain (lower bound).
 </APIItemCompact>
 
 ### Witnesses [toc] [#NativeShieldedTokenPublicSupplyCore-Witnesses]
@@ -1206,13 +1172,9 @@ None.
   complexity="k=10, rows=653"
   modulePrefix="NativeShieldedTokenPublicSupplyCore"
 >
-  Adds `amount` to the exact minted total for `domain`. Call once per successful token mint.
-
-  Puts `domain` and its new minted total on the ledger.
-
-  Requirements:
-
-  * The minted total for `domain` plus `amount` does not overflow `Uint<128>`.
+  Adds `amount` to the exact minted total for `domain`. Call
+  once per successful token `_mint`.
+  Checks for overflow in order to output a readable error message.
 </APIItemCompact>
 
 #### _addBurned [toc] [#NativeShieldedTokenPublicSupplyCore-_addBurned]
@@ -1223,16 +1185,12 @@ None.
   complexity="k=10, rows=755"
   modulePrefix="NativeShieldedTokenPublicSupplyCore"
 >
-  Adds `amount` to the contract-mediated burned total for `domain`. Call once per successful token burn.
-  Enforces per-domain `burned <= minted`, so an unpaired, duplicate, or wrong-domain burn reverts rather than
-  pushing `totalSupply(domain)` negative.
-
-  Puts `domain` and its new burned total on the ledger, which makes the burned amount public.
-
-  Requirements:
-
-  * The burned total for `domain` does not already exceed its minted total.
-  * The burned total for `domain` plus `amount` does not exceed its minted total.
+  Adds `amount` to the contract-mediated burned total for
+  `domain`. Call once per successful token `_burn` / `_burnFromSelf`.
+  Enforces the per-domain `burned <= minted` invariant: a wrong-domain,
+  duplicate, or unpaired burn reverts rather than corrupting `totalSupply`.
+  The guard also keeps the add and the `totalSupply` subtraction within
+  bounds, so no separate overflow/underflow check is needed.
 </APIItemCompact>
 
 #### totalMinted [toc] [#NativeShieldedTokenPublicSupplyCore-totalMinted]
@@ -1243,9 +1201,7 @@ None.
   complexity="k=9, rows=344"
   modulePrefix="NativeShieldedTokenPublicSupplyCore"
 >
-  Returns the exact amount ever minted for `domain`. An absent domain reads as 0.
-
-  Discloses `domain` to the ledger.
+  Returns the exact amount ever minted for `domain`.
 </APIItemCompact>
 
 #### totalBurned [toc] [#NativeShieldedTokenPublicSupplyCore-totalBurned]
@@ -1256,10 +1212,9 @@ None.
   complexity="k=9, rows=341"
   modulePrefix="NativeShieldedTokenPublicSupplyCore"
 >
-  Returns the contract-mediated amount burned for `domain`. This is a lower bound: coins sent directly to the
-  burn address without going through the contract are not counted.
-
-  Discloses `domain` to the ledger.
+  Returns the contract-mediated amount burned for `domain`.
+  This is a lower bound: coins sent directly to the burn address
+  without going through the contract are not counted.
 </APIItemCompact>
 
 #### totalSupply [toc] [#NativeShieldedTokenPublicSupplyCore-totalSupply]
@@ -1270,10 +1225,14 @@ None.
   complexity="k=9, rows=439"
   modulePrefix="NativeShieldedTokenPublicSupplyCore"
 >
-  Returns `totalMinted(domain) - totalBurned(domain)`, or 0 if the burned total somehow exceeds the minted total.
-  This is an upper bound on circulating supply, not an exact value: burns that bypass the contract are invisible.
-
-  Discloses `domain` to the ledger.
+  Returns `totalMinted(domain) - totalBurned(domain)`, or 0 if
+  `totalBurned` somehow exceeds `totalMinted`.
+  This is an UPPER BOUND on circulating supply, not an exact value:
+  burns that bypass the contract are invisible. See the module notes.
+  The `burned <= minted` invariant enforced by `_addBurned` already makes
+  `burned > minted` unreachable through the accounting API, so the clamp never
+  fires in normal operation. It is kept so the getter is a total function that
+  reads cleanly (returning 0) rather than reverting on an out-of-bound state.
 </APIItemCompact>
 
 ---
@@ -1290,13 +1249,6 @@ import "./node_modules/@openzeppelin/compact-contracts/token/extensions/NativeSh
 
 ---
 
-Optional extension that derives coin nonces for native shielded token mints from a monotonic counter,
-so callers need not manage nonces themselves. It imports no token module and needs no initialization,
-and pairs with either `NativeShieldedToken` or `NativeShieldedTokenFamily`.
-
-Derived nonces are predictable from public state, so mints that use them are recipient-public.
-For recipient privacy, call the token's `_mint` with a secret, cryptographically random nonce instead.
-
 ### Ledger [toc] [#NativeShieldedTokenDerivedNonce-Ledger]
 ### Ledger [!toc] [#NativeShieldedTokenDerivedNonce-Ledger]
 
@@ -1307,8 +1259,7 @@ For recipient privacy, call the token's `_mint` with a secret, cryptographically
   kind="ledger"
   id="NativeShieldedTokenDerivedNonce-_counter"
 >
-  Monotonic index feeding the nonce derivation. One counter serves the whole contract, so derived nonces never
-  repeat across token types.
+  Monotonic index feeding the derived-nonce derivation.
 </APIItemCompact>
 
 ### Witnesses [toc] [#NativeShieldedTokenDerivedNonce-Witnesses]
@@ -1328,14 +1279,10 @@ None.
   modulePrefix="NativeShieldedTokenDerivedNonce"
 >
   Advances the counter and returns the next derived coin nonce,
-  `evolveNonce(_counter, pad(32, "NativeShieldedToken:nonce"))`, for use as the `nonce` argument of a token mint.
-  Uniqueness comes from the counter; the fixed tag keeps these nonces separate from any other `evolveNonce`
-  use in the implementing contract.
+  for use as the `nonce` argument of a native token mint.
 
-  A reverted mint does not advance the counter, so retrying an identical mint after a collision collides again;
-  a mint with different inputs advances the counter.
-
-  Puts the incremented counter on the ledger.
+  The derivation input is public ledger state, so mints using this
+  nonce are recipient-public; see the module notes.
 </APIItemCompact>
 
 ---
@@ -1352,17 +1299,6 @@ import "./node_modules/@openzeppelin/compact-contracts/token/presets/ZOwnableNat
 
 ---
 
-A native shielded token with a single shielded owner. Only the owner mints (to a coin public key, with a
-caller-supplied nonce) and burns (a coin the owner's wallet pays into the transaction). Minted amounts are
-counted on-chain; burned amounts are not, so burns stay amount-private.
-
-The preset composes `ZOwnablePK` (the owner commitment), `NativeShieldedToken` (one token color), and
-`NativeShieldedTokenPublicSupply` (the minted total). Implementing contracts call `initialize` from their
-constructor and must not import the composed modules directly.
-
-Holders transfer through Zswap directly. There are no roles, freeze, seize, contract-held coins,
-burned total, or total supply.
-
 ### Ledger [toc] [#ZOwnableNativeShieldedToken-Ledger]
 ### Ledger [!toc] [#ZOwnableNativeShieldedToken-Ledger]
 
@@ -1373,8 +1309,11 @@ burned total, or total supply.
   kind="ledger"
   id="ZOwnableNativeShieldedToken-_ownerCommitment"
 >
-  The current owner commitment, `H(id || instanceSalt || counter || pad(32, "ZOwnablePK:shield:"))`.
-  Zero means the contract is unowned. Re-exported from `ZOwnablePK`.
+  Stores the current hashed commitment representing the owner.
+  This commitment is derived from the public identifier (e.g., `SHA256(pk, nonce)`),
+  the `instanceSalt`, the transfer `counter`, and a domain separator.
+
+  A commitment of `default<Bytes<32>>` (i.e., zero) indicates the contract is unowned.
 </APIItemCompact>
 
 #### _counter [toc] [#ZOwnableNativeShieldedToken-_counter]
@@ -1384,7 +1323,10 @@ burned total, or total supply.
   kind="ledger"
   id="ZOwnableNativeShieldedToken-_counter"
 >
-  The number of ownership changes. Re-exported from `ZOwnablePK`.
+  Internal transfer counter used to prevent commitment reuse.
+
+  Increments by 1 on every successful ownership transfer. Combined with `id` and
+  `instanceSalt` to compute unique owner commitments over time.
 </APIItemCompact>
 
 #### _instanceSalt [toc] [#ZOwnableNativeShieldedToken-_instanceSalt]
@@ -1394,7 +1336,11 @@ burned total, or total supply.
   kind="sealed ledger"
   id="ZOwnableNativeShieldedToken-_instanceSalt"
 >
-  Per-deployment salt for the owner commitment. Re-exported from `ZOwnablePK`.
+  A per-instance value provided at initialization used to namespace
+  commitments for this contract instance.
+
+  This salt prevents commitment collisions across contracts that might otherwise use
+  the same owner identifiers or domain parameters. It is immutable after initialization.
 </APIItemCompact>
 
 #### _ownableIsInitialized [toc] [#ZOwnableNativeShieldedToken-_ownableIsInitialized]
@@ -1404,8 +1350,9 @@ burned total, or total supply.
   kind="ledger"
   id="ZOwnableNativeShieldedToken-_ownableIsInitialized"
 >
-  Boolean indicating if the owner is initialized. This is `ZOwnablePK`'s `_isInitialized`, aliased because the
-  token module already owns `_isInitialized`.
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
 </APIItemCompact>
 
 #### _domain [toc] [#ZOwnableNativeShieldedToken-_domain]
@@ -1415,7 +1362,8 @@ burned total, or total supply.
   kind="sealed ledger"
   id="ZOwnableNativeShieldedToken-_domain"
 >
-  Domain separator of this contract's token color. Re-exported from `NativeShieldedToken`.
+  Domain separator fixed at construction; with the contract
+  address it determines this token's color.
 </APIItemCompact>
 
 #### _name [toc] [#ZOwnableNativeShieldedToken-_name]
@@ -1455,7 +1403,9 @@ burned total, or total supply.
   kind="ledger"
   id="ZOwnableNativeShieldedToken-_isInitialized"
 >
-  Boolean indicating if the token is initialized. Re-exported from `NativeShieldedToken`.
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
 </APIItemCompact>
 
 #### _totalMinted [toc] [#ZOwnableNativeShieldedToken-_totalMinted]
@@ -1465,8 +1415,7 @@ burned total, or total supply.
   kind="ledger"
   id="ZOwnableNativeShieldedToken-_totalMinted"
 >
-  Exact amount minted, under the single fixed key `default<Bytes<32>>`.
-  Re-exported from `NativeShieldedTokenPublicSupply`.
+  Exact amount minted per domain. See "Accounting guarantees".
 </APIItemCompact>
 
 #### _totalBurned [toc] [#ZOwnableNativeShieldedToken-_totalBurned]
@@ -1476,7 +1425,7 @@ burned total, or total supply.
   kind="ledger"
   id="ZOwnableNativeShieldedToken-_totalBurned"
 >
-  Never written by this preset, so it stays empty. Re-exported from `NativeShieldedTokenPublicSupply`.
+  Contract-mediated amount burned per domain (lower bound).
 </APIItemCompact>
 
 ### Witnesses [toc] [#ZOwnableNativeShieldedToken-Witnesses]
@@ -1507,20 +1456,21 @@ test-only and are not published.
 >
   Sets the owner and the token's domain and metadata.
 
-  Call from the implementing contract's constructor only. It writes sealed fields, so implementing contracts
-  must not expose it as a post-deploy circuit.
+  Call from the implementing contract's constructor only. It writes
+  sealed fields, so implementing contracts MUST NOT expose it as a
+  post-deploy circuit.
 
-  `ownerId` must be `_computeOwnerId(pk, secretNonce)` for the coin public key the owner's wallet will supply
-  as `ownPublicKey()`. The circuit cannot check this at deploy; any other value leaves the contract with no
-  usable owner and no recovery.
-
-  Puts the owner commitment, `instanceSalt`, `tokenDomain`, `name_`, `symbol_`, and `decimals_` on the ledger.
+  <Callout type='warn'>
+    `ownerId` must be `_computeOwnerId(pk, secretNonce)` for the coin
+    public key the owner's wallet will supply as `ownPublicKey()`. The circuit
+    cannot check this at deploy; any other key leaves the contract with no
+    usable owner and no recovery.
+  </Callout>
 
   Requirements:
 
-  * Contract is not initialized.
-  * `ownerId` is not zero.
-  * `instanceSalt` is not zero.
+  - Contract is not initialized.
+  - `ownerId` is not zero.
 </APIItemCompact>
 
 #### mint [toc] [#ZOwnableNativeShieldedToken-mint]
@@ -1536,16 +1486,13 @@ test-only and are not published.
   modulePrefix="ZOwnableNativeShieldedToken"
   stackParams="true"
 >
-  Mints `amount` to `recipient` and adds it to the minted total. Owner only.
-  `nonce` must be fresh random bytes per mint. Persist the returned coin: it is the only copy.
-
-  Puts the coin color, the amount, the coin commitment, and the new minted total on the ledger.
-  The recipient and the nonce are not posted.
+  Mints `amount` to `recipient` and adds it to the minted total.
+  Owner only.
 
   Requirements:
 
-  * Caller is the owner.
-  * `recipient` is not the zero key.
+  - Caller is the owner.
+  - `recipient` is not zero.
 </APIItemCompact>
 
 #### burn [toc] [#ZOwnableNativeShieldedToken-burn]
@@ -1561,18 +1508,15 @@ test-only and are not published.
   modulePrefix="ZOwnableNativeShieldedToken"
   stackParams="true"
 >
-  Burns `amount` of `coin`, paid into the transaction by the caller's wallet, and refunds the rest to `refundTo`.
-  Owner only. Returns the refund coin, or `none` on a full burn. Persist the returned coin: it is the only copy.
-
-  Puts the spent coin's nullifier and the output commitments on the ledger. The amount is not posted;
-  a change output reveals that the burn was partial.
+  Burns `amount` of `coin`, paid into the tx by the caller's
+  wallet, and refunds the rest to `refundTo`. Owner only.
 
   Requirements:
 
-  * Caller is the owner.
-  * `coin.color` is this token's color.
-  * `amount` is less than or equal to `coin.value`.
-  * `refundTo` is not the zero key.
+  - Caller is the owner.
+  - `coin.color` is this token's color.
+  - `amount` \<= `coin.value`.
+  - `refundTo` is not zero.
 </APIItemCompact>
 
 #### transferOwnership [toc] [#ZOwnableNativeShieldedToken-transferOwnership]
@@ -1583,18 +1527,19 @@ test-only and are not published.
   complexity="k=15, rows=17096"
   modulePrefix="ZOwnableNativeShieldedToken"
 >
-  Transfers ownership to `newOwnerId` in one step. Owner only.
+  Transfers ownership to `newOwnerId`. Owner only.
 
-  `newOwnerId` must be `_computeOwnerId(pk, secretNonce)` for the coin public key the new owner's wallet will
-  supply as `ownPublicKey()`. The circuit cannot check this; any other value leaves the contract with no usable
-  owner and no recovery.
-
-  Puts the new owner commitment and the incremented counter on the ledger.
+  <Callout type='warn'>
+    `newOwnerId` must be `_computeOwnerId(pk, secretNonce)` for the
+    coin public key the new owner's wallet will supply as `ownPublicKey()`.
+    The circuit cannot check this; any other key leaves the contract with no
+    usable owner and no recovery.
+  </Callout>
 
   Requirements:
 
-  * Caller is the owner.
-  * `newOwnerId` is not zero.
+  - Caller is the owner.
+  - `newOwnerId` is not zero.
 </APIItemCompact>
 
 #### renounceOwnership [toc] [#ZOwnableNativeShieldedToken-renounceOwnership]
@@ -1605,13 +1550,15 @@ test-only and are not published.
   complexity="k=14, rows=10622"
   modulePrefix="ZOwnableNativeShieldedToken"
 >
-  Clears the owner. Owner only. Irreversible: `mint` and `burn` stop forever.
+  Clears the owner. Owner only.
 
-  Puts the zero owner commitment on the ledger.
+  <Callout type='warn'>
+    Irreversible: mint and burn stop forever.
+  </Callout>
 
   Requirements:
 
-  * Caller is the owner.
+  - Caller is the owner.
 </APIItemCompact>
 
 #### owner [toc] [#ZOwnableNativeShieldedToken-owner]
@@ -1626,7 +1573,7 @@ test-only and are not published.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### _computeOwnerId [toc] [#ZOwnableNativeShieldedToken-_computeOwnerId]
@@ -1636,12 +1583,11 @@ test-only and are not published.
   kind="pure"
   modulePrefix="ZOwnableNativeShieldedToken"
 >
-  Returns the owner id `H(pk || nonce)`. Compute it off-chain to produce the `ownerId` passed to `initialize`
-  and `transferOwnership`.
+  Returns the owner id `H(pk, nonce)`.
 
   Requirements:
 
-  * `pk` is a coin public key, not a contract address.
+  - `pk` is a coin public key.
 </APIItemCompact>
 
 #### totalMinted [toc] [#ZOwnableNativeShieldedToken-totalMinted]
@@ -1667,7 +1613,7 @@ test-only and are not published.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### symbol [toc] [#ZOwnableNativeShieldedToken-symbol]
@@ -1682,7 +1628,7 @@ test-only and are not published.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### decimals [toc] [#ZOwnableNativeShieldedToken-decimals]
@@ -1697,7 +1643,7 @@ test-only and are not published.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### tokenColor [toc] [#ZOwnableNativeShieldedToken-tokenColor]
@@ -1708,9 +1654,10 @@ test-only and are not published.
   complexity="k=13, rows=3971"
   modulePrefix="ZOwnableNativeShieldedToken"
 >
-  Returns this contract's token color, `tokenType(tokenDomain, kernel.self())`.
+  Returns this contract's token color,
+  `tokenType(tokenDomain, kernel.self())`.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>

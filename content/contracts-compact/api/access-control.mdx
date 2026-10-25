@@ -69,7 +69,6 @@ import "./node_modules/@openzeppelin/compact-contracts/access/AccessControl";
   id="AccessControl-_operatorRoles"
 >
   Mapping from a role identifier -> account -> its permissions.
-  Account keys are stored canonicalized (the inactive branch of the `Either` is zeroed).
 </APIItemCompact>
 
 #### _adminRoles [toc] [#AccessControl-_adminRoles]
@@ -95,8 +94,7 @@ The TypeScript witnesses in the repository are test-only and are not published w
   kind="witness"
   id="AccessControl-wit_AccessControlSK"
 >
-  Returns the caller's secret key used in deriving the account identifier `H(secretKey)`.
-  The key never reaches the ledger; only the derived identifier is used as a map key.
+  Returns the caller's secret key used in deriving the account identifier.
 
   The same key produces the same account identifier across all contracts. Users who
   desire cross-contract unlinkability should use different keys per contract.
@@ -112,9 +110,8 @@ The TypeScript witnesses in the repository are test-only and are not published w
   kind="pure"
   modulePrefix="AccessControl"
 >
-  The default admin role for all roles. Returns zero bytes (`default<Bytes<32>>`).
-  Only accounts with this role will be able to grant or revoke other roles
-  unless custom admin roles are created via [_setRoleAdmin](#AccessControl-_setRoleAdmin).
+  The default admin role for all roles. Only accounts with this role will be able
+  to grant or revoke other roles unless custom admin roles are created via `_setRoleAdmin`.
 </APIItemCompact>
 
 #### hasRole [toc] [#AccessControl-hasRole]
@@ -126,9 +123,6 @@ The TypeScript witnesses in the repository are test-only and are not published w
   modulePrefix="AccessControl"
 >
   Returns `true` if `account` has been granted `roleId`.
-  `account` is canonicalized before the lookup.
-
-  Discloses: `roleId` and the canonicalized `account` (map lookup keys).
 </APIItemCompact>
 
 #### assertOnlyRole [toc] [#AccessControl-assertOnlyRole]
@@ -140,14 +134,12 @@ The TypeScript witnesses in the repository are test-only and are not published w
   modulePrefix="AccessControl"
 >
   Reverts if the caller cannot prove ownership of `roleId`.
-  The caller's identity is derived from the `wit_AccessControlSK` witness as `H(secretKey)`,
-  the same derivation as [`Utils.computeAccountId`](./utils#Utils-computeAccountId).
-
-  Discloses: `roleId` and the caller's account identifier (map lookup keys).
+  In the case of an external (non-contract) caller, the caller’s identity is
+  derived from the `wit_AccessControlSK` witness as `persistentHash(secretKey)`.
 
   Requirements:
 
-  * The caller must have `roleId`.
+  - The caller must have `roleId`.
 </APIItemCompact>
 
 #### _checkRole [toc] [#AccessControl-_checkRole]
@@ -160,11 +152,9 @@ The TypeScript witnesses in the repository are test-only and are not published w
 >
   Reverts if `account` is missing `roleId`.
 
-  Discloses: `roleId` and the canonicalized `account` (map lookup keys).
-
   Requirements:
 
-  * `account` must have `roleId`.
+  - `account` must have `roleId`.
 </APIItemCompact>
 
 #### getRoleAdmin [toc] [#AccessControl-getRoleAdmin]
@@ -175,12 +165,10 @@ The TypeScript witnesses in the repository are test-only and are not published w
   complexity="k=9, rows=373"
   modulePrefix="AccessControl"
 >
-  Returns the admin role that controls `roleId` or a byte array with all zero bytes if `roleId` doesn't exist.
-  See [grantRole](#AccessControl-grantRole) and [revokeRole](#AccessControl-revokeRole).
+  Returns the admin role that controls `roleId` or
+  a byte array with all zero bytes if `roleId` doesn't exist. See `grantRole` and `revokeRole`.
 
-  To change a role's admin use [_setRoleAdmin](#AccessControl-_setRoleAdmin).
-
-  Discloses: `roleId`.
+  To change a role's admin use `_setRoleAdmin`.
 </APIItemCompact>
 
 #### grantRole [toc] [#AccessControl-grantRole]
@@ -193,17 +181,10 @@ The TypeScript witnesses in the repository are test-only and are not published w
 >
   Grants `roleId` to `account`.
 
-  <Callout type='info'>
-    Granting roles to contract addresses is currently disallowed until contract-to-contract interactions are supported in Compact.
-    This restriction prevents permanently disabling access to a circuit.
-  </Callout>
-
-  Discloses: `roleId`, the caller's account identifier, and the canonicalized `account`, which is written into `_operatorRoles`.
-
   Requirements:
 
-  * `account` must not be a ContractAddress.
-  * The caller must have `roleId`'s admin role.
+  - `account` must not be a ContractAddress.
+  - The caller must have `roleId`'s admin role.
 </APIItemCompact>
 
 #### revokeRole [toc] [#AccessControl-revokeRole]
@@ -216,11 +197,9 @@ The TypeScript witnesses in the repository are test-only and are not published w
 >
   Revokes `roleId` from `account`.
 
-  Discloses: `roleId`, the caller's account identifier, and the canonicalized `account`.
-
   Requirements:
 
-  * The caller must have `roleId`'s admin role.
+  - The caller must have `roleId`'s admin role.
 </APIItemCompact>
 
 #### renounceRole [toc] [#AccessControl-renounceRole]
@@ -234,25 +213,18 @@ The TypeScript witnesses in the repository are test-only and are not published w
 >
   Revokes `roleId` from the calling account.
 
-  Roles are often managed via [grantRole](#AccessControl-grantRole) and [revokeRole](#AccessControl-revokeRole):
-  this circuit's purpose is to provide a mechanism for accounts to lose their privileges
+  Roles are often managed via `grantRole` and `revokeRole`: this circuit's
+  purpose is to provide a mechanism for accounts to lose their privileges
   if they are compromised (such as when a trusted device is misplaced).
 
   The caller's identity is derived from the `wit_AccessControlSK` witness as
-  `H(secretKey)`. The `callerConfirmation` parameter must match
+  `persistentHash(secretKey)`. The `callerConfirmation` parameter must match
   the caller's computed account identifier to prevent accidental renunciation.
-
-  <Callout type='info'>
-    We do not provide functionality for smart contracts to renounce roles because self-executing transactions are not supported on Midnight at this time.
-    We may revisit this in future if this feature is made available in Compact.
-  </Callout>
-
-  Discloses: `roleId` and `callerConfirmation`.
 
   Requirements:
 
-  * The caller's computed account identifier must match `callerConfirmation`.
-  * The caller must not be a `ContractAddress`.
+  - The caller's computed account identifier must match `callerConfirmation`.
+  - The caller must not be a `ContractAddress`.
 </APIItemCompact>
 
 #### _setRoleAdmin [toc] [#AccessControl-_setRoleAdmin]
@@ -264,9 +236,6 @@ The TypeScript witnesses in the repository are test-only and are not published w
   modulePrefix="AccessControl"
 >
   Sets `adminRole` as `roleId`'s admin role.
-  Internal circuit without access restriction.
-
-  Discloses: `roleId` and `adminRole`, written to `_adminRoles`.
 </APIItemCompact>
 
 #### _grantRole [toc] [#AccessControl-_grantRole]
@@ -277,21 +246,12 @@ The TypeScript witnesses in the repository are test-only and are not published w
   complexity="k=11, rows=1143"
   modulePrefix="AccessControl"
 >
-  Attempts to grant `roleId` to `account` and returns a boolean indicating if `roleId` was granted
-  (`false` when `account` already holds it).
-
+  Attempts to grant `roleId` to `account` and returns a boolean indicating if `roleId` was granted.
   Internal circuit without access restriction.
-
-  <Callout type='info'>
-    Granting roles to contract addresses is currently disallowed in this circuit until contract-to-contract interactions are supported in Compact.
-    This restriction prevents permanently disabling access to a circuit.
-  </Callout>
-
-  Discloses: `roleId` and the canonicalized `account`, written into `_operatorRoles`.
 
   Requirements:
 
-  * `account` must not be a ContractAddress.
+  - `account` must not be a ContractAddress.
 </APIItemCompact>
 
 #### _unsafeGrantRole [toc] [#AccessControl-_unsafeGrantRole]
@@ -302,16 +262,11 @@ The TypeScript witnesses in the repository are test-only and are not published w
   complexity="k=11, rows=1142"
   modulePrefix="AccessControl"
 >
-  Unsafe variant of [_grantRole](#AccessControl-_grantRole).
-  It does not check whether `account` is a ContractAddress.
+  Attempts to grant `roleId` to `account` and returns a boolean indicating if `roleId` was granted.
+  Internal circuit without access restriction. It does NOT check if the role is granted to a ContractAddress.
 
-  <Callout type='warn'>
-    Granting roles to contract addresses is considered unsafe because contract-to-contract calls are not currently supported.
-    Granting a role to a smart contract may render a circuit permanently inaccessible.
-    Once contract-to-contract calls are supported, this circuit may be deprecated.
-  </Callout>
-
-  Discloses: `roleId` and the canonicalized `account`, written into `_operatorRoles`.
+  External smart contracts cannot call the access control contract at this time, so granting a role to a ContractAddress may
+  render a circuit permanently inaccessible.
 </APIItemCompact>
 
 #### _revokeRole [toc] [#AccessControl-_revokeRole]
@@ -322,10 +277,6 @@ The TypeScript witnesses in the repository are test-only and are not published w
   complexity="k=11, rows=1073"
   modulePrefix="AccessControl"
 >
-  Attempts to revoke `roleId` from `account` and returns a boolean indicating if `roleId` was revoked
-  (`false` when `account` did not hold it).
-
+  Attempts to revoke `roleId` from `account` and returns a boolean indicating if `roleId` was revoked.
   Internal circuit without access restriction.
-
-  Discloses: `roleId` and the canonicalized `account`.
 </APIItemCompact>

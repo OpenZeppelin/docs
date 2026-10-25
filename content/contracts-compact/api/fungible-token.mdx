@@ -30,8 +30,9 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   kind="ledger"
   id="FungibleToken-_isInitialized"
 >
-  Initialization flag, owned by this module. Set to `true` by [initialize](#FungibleToken-initialize);
-  every other circuit asserts it is set.
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
 </APIItemCompact>
 
 #### _balances [toc] [#FungibleToken-_balances]
@@ -51,7 +52,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   kind="ledger"
   id="FungibleToken-_allowances"
 >
-  Mapping from owner accounts to spender accounts to their allowances.
+  Mapping from owner accounts to spender accounts and their allowances.
 </APIItemCompact>
 
 #### _totalSupply [toc] [#FungibleToken-_totalSupply]
@@ -105,7 +106,6 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   id="FungibleToken-wit_FungibleTokenSK"
 >
   Returns the caller's secret key used in deriving the account identifier.
-  The key stays private; only `persistentHash(secretKey)` reaches the ledger.
 
   The same key produces the same account identifier across all contracts. Users who
   desire cross-contract unlinkability should use different keys per contract.
@@ -127,14 +127,9 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   modulePrefix="FungibleToken"
   stackParams="true"
 >
-  Initializes the contract by setting the name, symbol, and decimals, and marks the module initialized.
-
-  This MUST be called in the implementing contract's constructor.
-  Failure to do so can lead to an irreparable contract.
-
-  Requirements:
-
-  * Contract is not initialized.
+  Initializes the contract by setting the name, symbol, and decimals.
+  This MUST be called in the implementing contract's constructor. Failure to do so
+  can lead to an irreparable contract.
 </APIItemCompact>
 
 #### name [toc] [#FungibleToken-name]
@@ -149,7 +144,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### symbol [toc] [#FungibleToken-symbol]
@@ -164,7 +159,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### decimals [toc] [#FungibleToken-decimals]
@@ -179,7 +174,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### totalSupply [toc] [#FungibleToken-totalSupply]
@@ -194,7 +189,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### balanceOf [toc] [#FungibleToken-balanceOf]
@@ -207,9 +202,11 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 >
   Returns the value of tokens owned by `account`.
 
+  Manually checks if `account` is a key in the map and returns 0 if it is not.
+
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### transfer [toc] [#FungibleToken-transfer]
@@ -221,19 +218,17 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   modulePrefix="FungibleToken"
 >
   Moves a `value` amount of tokens from the caller's account to `to`.
-  The caller's identity is derived from the `wit_FungibleTokenSK` witness as `persistentHash(secretKey)`.
 
-  <Callout type='info'>
-    Transfers to contract addresses are currently disallowed until contract-to-contract interactions are supported in Compact.
-    This restriction prevents assets from being inadvertently locked in contracts that cannot currently handle token receipt.
-  </Callout>
+  Transfers to contract addresses are currently disallowed until contract-to-contract
+  interactions are supported in Compact. This restriction prevents assets from
+  being inadvertently locked in contracts that cannot currently handle token receipt.
 
   Requirements:
 
-  * Contract is initialized.
-  * `to` is not a ContractAddress.
-  * `to` is not the zero address.
-  * The caller has a balance of at least `value`.
+  - Contract is initialized.
+  - `to` is not a ContractAddress.
+  - `to` is not the zero address.
+  - The caller has a balance of at least `value`.
 </APIItemCompact>
 
 #### _unsafeTransfer [toc] [#FungibleToken-_unsafeTransfer]
@@ -244,19 +239,19 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   complexity="k=13, rows=3982"
   modulePrefix="FungibleToken"
 >
-  Unsafe variant of [transfer](#FungibleToken-transfer) which allows transfers to contract addresses.
+  Unsafe variant of `transfer` which allows transfers to contract addresses.
 
   <Callout type='warn'>
-    Transfers to contract addresses are considered unsafe because contract-to-contract calls are not currently supported.
-    Tokens sent to a contract address may become irretrievable.
+    Transfers to contract addresses are considered unsafe because contract-to-contract
+    calls are not currently supported. Tokens sent to a contract address may become irretrievable.
     Once contract-to-contract calls are supported, this circuit may be deprecated.
   </Callout>
 
   Requirements:
 
-  * Contract is initialized.
-  * `to` is not the zero address.
-  * The caller has a balance of at least `value`.
+  - Contract is initialized.
+  - `to` is not the zero address.
+  - The caller has a balance of at least `value`.
 </APIItemCompact>
 
 #### allowance [toc] [#FungibleToken-allowance]
@@ -268,13 +263,14 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   modulePrefix="FungibleToken"
   stackParams="true"
 >
-  Returns the remaining number of tokens that `spender` will be allowed to spend on behalf of `owner` through [transferFrom](#FungibleToken-transferFrom).
-  This value changes when [approve](#FungibleToken-approve) or [transferFrom](#FungibleToken-transferFrom) are called.
-  Returns zero when no allowance entry exists.
+  Returns the remaining number of tokens that `spender` will be allowed to spend on behalf of `owner`
+  through `transferFrom`. This value changes when `approve` or `transferFrom` are called.
+
+  Manually checks if `owner` and `spender` are keys in the map and returns 0 if they are not.
 
   Requirements:
 
-  * Contract is initialized.
+  - Contract is initialized.
 </APIItemCompact>
 
 #### approve [toc] [#FungibleToken-approve]
@@ -286,12 +282,11 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   modulePrefix="FungibleToken"
 >
   Sets a `value` amount of tokens as allowance of `spender` over the caller's tokens.
-  The caller's identity is derived from the `wit_FungibleTokenSK` witness as `persistentHash(secretKey)`.
 
   Requirements:
 
-  * Contract is initialized.
-  * `spender` is not the zero address.
+  - Contract is initialized.
+  - `spender` is not the zero address.
 </APIItemCompact>
 
 #### transferFrom [toc] [#FungibleToken-transferFrom]
@@ -308,22 +303,20 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   modulePrefix="FungibleToken"
 >
   Moves `value` tokens from `fromAddress` to `to` using the allowance mechanism.
-  `value` is then deducted from the caller's allowance.
-  The caller's identity is derived from the `wit_FungibleTokenSK` witness as `persistentHash(secretKey)`.
+  `value` is the deducted from the caller's allowance.
 
-  <Callout type='info'>
-    Transfers to contract addresses are currently disallowed until contract-to-contract interactions are supported in Compact.
-    This restriction prevents assets from being inadvertently locked in contracts that cannot currently handle token receipt.
-  </Callout>
+  Transfers to contract addresses are currently disallowed until contract-to-contract
+  interactions are supported in Compact. This restriction prevents assets from
+  being inadvertently locked in contracts that cannot currently handle token receipt.
 
   Requirements:
 
-  * Contract is initialized.
-  * `fromAddress` is not the zero address.
-  * `fromAddress` must have a balance of at least `value`.
-  * `to` is not the zero address.
-  * `to` is not a ContractAddress.
-  * The caller has an allowance of `fromAddress`'s tokens of at least `value`.
+  - Contract is initialized.
+  - `fromAddress` is not the zero address.
+  - `fromAddress` must have a balance of at least `value`.
+  - `to` is not the zero address.
+  - `to` is not a ContractAddress.
+  - The caller has an allowance of `fromAddress`'s tokens of at least `value`.
 </APIItemCompact>
 
 #### _unsafeTransferFrom [toc] [#FungibleToken-_unsafeTransferFrom]
@@ -339,21 +332,21 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   stackParams="true"
   modulePrefix="FungibleToken"
 >
-  Unsafe variant of [transferFrom](#FungibleToken-transferFrom) which allows transfers to contract addresses.
+  Unsafe variant of `transferFrom` which allows transfers to contract addresses.
 
   <Callout type='warn'>
-    Transfers to contract addresses are considered unsafe because contract-to-contract calls are not currently supported.
-    Tokens sent to a contract address may become irretrievable.
+    Transfers to contract addresses are considered unsafe because contract-to-contract
+    calls are not currently supported. Tokens sent to a contract address may become irretrievable.
     Once contract-to-contract calls are supported, this circuit may be deprecated.
   </Callout>
 
   Requirements:
 
-  * Contract is initialized.
-  * `fromAddress` is not the zero address.
-  * `fromAddress` must have a balance of at least `value`.
-  * `to` is not the zero address.
-  * The caller has an allowance of `fromAddress`'s tokens of at least `value`.
+  - Contract is initialized.
+  - `fromAddress` is not the zero address.
+  - `fromAddress` must have a balance of at least `value`.
+  - `to` is not the zero address.
+  - The caller has an allowance of `fromAddress`'s tokens of at least `value`.
 </APIItemCompact>
 
 #### _transfer [toc] [#FungibleToken-_transfer]
@@ -370,21 +363,20 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   modulePrefix="FungibleToken"
 >
   Moves a `value` amount of tokens from `fromAddress` to `to`.
-  This circuit is equivalent to [transfer](#FungibleToken-transfer), and can be used to e.g.
-  implement automatic token fees, slashing mechanisms, etc.
+  This circuit is equivalent to `transfer`, and can be used to
+  e.g. implement automatic token fees, slashing mechanisms, etc.
 
-  <Callout type='info'>
-    Transfers to contract addresses are currently disallowed until contract-to-contract interactions are supported in Compact.
-    This restriction prevents assets from being inadvertently locked in contracts that cannot currently handle token receipt.
-  </Callout>
+  Transfers to contract addresses are currently disallowed until contract-to-contract
+  interactions are supported in Compact. This restriction prevents assets from
+  being inadvertently locked in contracts that cannot currently handle token receipt.
 
   Requirements:
 
-  * Contract is initialized.
-  * `fromAddress` is not the zero address.
-  * `fromAddress` must have at least a balance of `value`.
-  * `to` must not be the zero address.
-  * `to` must not be a ContractAddress.
+  - Contract is initialized.
+  - `fromAddress` is not be the zero address.
+  - `fromAddress` must have at least a balance of `value`.
+  - `to` must not be the zero address.
+  - `to` must not be a ContractAddress.
 </APIItemCompact>
 
 #### _unsafeUncheckedTransfer [toc] [#FungibleToken-_unsafeUncheckedTransfer]
@@ -400,40 +392,19 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   modulePrefix="FungibleToken"
   stackParams="true"
 >
-  Unsafe variant of [_transfer](#FungibleToken-_transfer) which allows transfers to contract addresses.
+  Unsafe variant of `transferFrom` which allows transfers to contract addresses.
 
   <Callout type='warn'>
-    Transfers to contract addresses are considered unsafe because contract-to-contract calls are not currently supported.
-    Tokens sent to a contract address may become irretrievable.
+    Transfers to contract addresses are considered unsafe because contract-to-contract
+    calls are not currently supported. Tokens sent to a contract address may become irretrievable.
     Once contract-to-contract calls are supported, this circuit may be deprecated.
   </Callout>
 
   Requirements:
 
-  * Contract is initialized.
-  * `fromAddress` is not the zero address.
-  * `to` is not the zero address.
-</APIItemCompact>
-
-#### _update [toc] [#FungibleToken-_update]
-#### [!toc] [#FungibleToken-_update]
-<APIItemCompact
-  circuitSig="_update(
-    fromAddress: Either<Bytes<32>, ContractAddress>,
-    to: Either<Bytes<32>, ContractAddress>,
-    value: Uint<128>
-  ) → []"
-  kind="internal"
-  complexity="k=11, rows=1305"
-  modulePrefix="FungibleToken"
-  stackParams="true"
->
-  Transfers a `value` amount of tokens from `fromAddress` to `to`,
-  or alternatively mints (or burns) if `fromAddress` (or `to`) is the zero address.
-
-  Requirements:
-
-  * Contract is initialized.
+  - Contract is initialized.
+  - `fromAddress` is not the zero address.
+  - `to` is not the zero address.
 </APIItemCompact>
 
 #### _mint [toc] [#FungibleToken-_mint]
@@ -444,19 +415,18 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   complexity="k=11, rows=1437"
   modulePrefix="FungibleToken"
 >
-  Creates a `value` amount of tokens and assigns them to `account`, by transferring it from the zero address.
-  Relies on the `_update` mechanism.
+  Creates a `value` amount of tokens and assigns them to `account`,
+  by transferring it from the zero address. Relies on the `update` mechanism.
 
-  <Callout type='info'>
-    Transfers to contract addresses are currently disallowed until contract-to-contract interactions are supported in Compact.
-    This restriction prevents assets from being inadvertently locked in contracts that cannot currently handle token receipt.
-  </Callout>
+  Transfers to contract addresses are currently disallowed until contract-to-contract
+  interactions are supported in Compact. This restriction prevents assets from
+  being inadvertently locked in contracts that cannot currently handle token receipt.
 
   Requirements:
 
-  * Contract is initialized.
-  * `account` is not a ContractAddress.
-  * `account` is not the zero address.
+  - Contract is initialized.
+  - `account` is not a ContractAddress.
+  - `account` is not the zero address.
 </APIItemCompact>
 
 #### _unsafeMint [toc] [#FungibleToken-_unsafeMint]
@@ -467,18 +437,18 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   complexity="k=11, rows=1434"
   modulePrefix="FungibleToken"
 >
-  Unsafe variant of [_mint](#FungibleToken-_mint) which allows transfers to contract addresses.
+  Unsafe variant of `_mint` which allows transfers to contract addresses.
 
   <Callout type='warn'>
-    Transfers to contract addresses are considered unsafe because contract-to-contract calls are not currently supported.
-    Tokens sent to a contract address may become irretrievable.
+    Transfers to contract addresses are considered unsafe because contract-to-contract
+    calls are not currently supported. Tokens sent to a contract address may become irretrievable.
     Once contract-to-contract calls are supported, this circuit may be deprecated.
   </Callout>
 
   Requirements:
 
-  * Contract is initialized.
-  * `account` is not the zero address.
+  - Contract is initialized.
+  - `account` is not the zero address.
 </APIItemCompact>
 
 #### _burn [toc] [#FungibleToken-_burn]
@@ -494,9 +464,9 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 
   Requirements:
 
-  * Contract is initialized.
-  * `account` is not the zero address.
-  * `account` must have at least a balance of `value`.
+  - Contract is initialized.
+  - `account` is not the zero address.
+  - `account` must have at least a balance of `value`.
 </APIItemCompact>
 
 #### _approve [toc] [#FungibleToken-_approve]
@@ -513,13 +483,14 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   stackParams="true"
 >
   Sets `value` as the allowance of `spender` over the `owner`'s tokens.
-  This circuit is equivalent to `approve`, and can be used to e.g. set automatic allowances for certain subsystems, etc.
+  This circuit is equivalent to `approve`, and can be used to
+  e.g. set automatic allowances for certain subsystems, etc.
 
   Requirements:
 
-  * Contract is initialized.
-  * `owner` is not the zero address.
-  * `spender` is not the zero address.
+  - Contract is initialized.
+  - `owner` is not the zero address.
+  - `spender` is not the zero address.
 </APIItemCompact>
 
 #### _spendAllowance [toc] [#FungibleToken-_spendAllowance]
@@ -538,28 +509,9 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   Updates `owner`'s allowance for `spender` based on spent `value`.
   Does not update the allowance value in case of infinite allowance.
 
-  A missing allowance entry is treated as a zero allowance, mirroring [allowance](#FungibleToken-allowance).
-  A zero `value` is a no-op: no allowance is read and no entry is written.
-  Whether `value` is zero is disclosed.
-
   Requirements:
 
-  * Contract is initialized.
-  * If `value` is non-zero, `spender` must have an allowance of at least `value` from `owner`.
+  - Contract is initialized.
+  - `spender` must have at least an allowance of `value` from `owner`.
 </APIItemCompact>
 
-#### _computeAccountId [toc] [#FungibleToken-_computeAccountId]
-#### [!toc] [#FungibleToken-_computeAccountId]
-<APIItemCompact
-  circuitSig="_computeAccountId() → Bytes<32>"
-  kind="internal"
-  modulePrefix="FungibleToken"
->
-  Computes the caller's account identifier from the `wit_FungibleTokenSK` witness
-  by delegating to [Utils computeAccountId](./utils#Utils-computeAccountId).
-
-  ID Derivation: `accountId = persistentHash(secretKey)`
-
-  The result is a 32-byte commitment that uniquely identifies the caller.
-  The same derivation is available off-chain through `Utils_computeAccountId`.
-</APIItemCompact>
