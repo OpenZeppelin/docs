@@ -1,0 +1,949 @@
+---
+title: "Build a USDT vault on TRON with Hardhat"
+---
+
+In this tutorial you build a [TRC-4626](/tron-contracts/trc4626) vault that accepts USDT on TRON, charges a small entry and exit fee, and pays out safely even though USDT-TRON's `transfer` returns `false` when it succeeds. You test it on a local TRON node and deploy it to the Nile testnet.
+
+You will learn the parts of TRON that differ from Ethereum as you hit them: 6-decimal amounts, three address formats, and energy instead of gas. The same workflow applies to any other contract in [OpenZeppelin Contracts for TRON](/tron-contracts).
+
+## What you'll build
+
+- `UsdtVault`: a TRC-4626 vault over USDT. Deposits mint `vUSDT` shares, and redemptions return USDT.
+- An entry/exit fee sent to a treasury with `SafeTRC20.safeTransferChecked`.
+- A test suite that runs on a local TRON node (TRE) against a mock USDT that returns `false` on success.
+- A deployment on Nile that you approve, deposit into and redeem from, then inspect on Tronscan.
+
+<Mermaid chart={`
+sequenceDiagram
+    participant U as User
+    participant T as USDT (TRC-20)
+    participant V as UsdtVault
+    participant Tr as Treasury
+    U->>T: approve(vault, amount)
+    U->>V: deposit(assets, receiver)
+    V->>T: safeTransferFrom(user, vault)
+    V-->>U: mint vUSDT shares
+    V->>Tr: safeTransferChecked(entry fee)
+    U->>V: redeem(shares, receiver, owner)
+    V->>T: safeTransferChecked(assets to user)
+    V->>Tr: safeTransferChecked(exit fee)
+`} />
+
+The deposit pulls assets in with `safeTransferFrom`, but every outbound transfer uses `safeTransferChecked`. That asymmetry is the heart of this guide.
+
+You build the project from scratch as you go. Every file appears here in full, so there is nothing to clone. Follow the steps in order and you end up with a working project.
+
+## Prerequisites
+
+- [Node.js](https://nodejs.org/en/download) 22 or newer. `@openzeppelin/hardhat-tron` declares `engines.node: ">=22"`.
+- [Docker](https://docs.docker.com/get-docker/), running. The Hardhat plugin starts a TRON node in a container for your tests.
+- For the testnet part: a TRON wallet such as [TronLink](https://www.tronlink.org/), switched to Nile.
+- Some Solidity and JavaScript. Hardhat experience on Ethereum helps but isn't required.
+
+## Set up the project
+
+Create a folder and install Hardhat 2 with the TRON plugin and the contracts library:
+
+```bash title="Shell"
+mkdir tron-usdt-vault && cd tron-usdt-vault
+npm init -y
+npm install --save-dev hardhat@hh2 @nomicfoundation/hardhat-ethers@hh2 \
+  @nomicfoundation/hardhat-chai-matchers@hh2 ethers@6 chai@4 tronweb@6 \
+  @openzeppelin/hardhat-tron
+npm install @openzeppelin/tron-contracts
+```
+
+<Callout type='warn'>
+`@openzeppelin/hardhat-tron` requires **Hardhat 2**. npm's default `hardhat` is a later major that the plugin doesn't support, so keep the `@hh2` tags shown above rather than simplifying the install command.
+</Callout>
+
+This installs the audited `latest` release of the library (5.6.0 at the time of writing). See [Release Tags](/tron-contracts#release-tags) for the `dev` and `next` channels.
+
+Tested with `@openzeppelin/tron-contracts` 5.6.0, `@openzeppelin/hardhat-tron` 0.1.0, `@openzeppelin/hardhat-tron-upgrades` 0.1.1, Hardhat 2.29.1, ethers 6.17.0, tronweb 6.5.1, Node.js 24.13.0, and the `tronbox/tre:dev` image at digest `sha256:f4332e11…`.
+
+Create `hardhat.config.cjs`:
+
+```js title="hardhat.config.cjs"
+require('@nomicfoundation/hardhat-ethers');
+require('@nomicfoundation/hardhat-chai-matchers');
+require('@openzeppelin/hardhat-tron');
+
+// Testnet key comes from the environment only. There is no fallback, so a
+// public network can never be signed for with the well-known TRE dev key.
+function testnetAccounts() {
+  const key = process.env.TRON_TESTNET_KEY;
+  return key ? ['0x' + key.trim().replace(/^0x/, '')] : [];
+}
+
+module.exports = {
+  solidity: {
+    version: '0.8.26',
+    settings: {
+      optimizer: { enabled: true, runs: 200 },
+      evmVersion: 'cancun',
+    },
+  },
+  tre: {
+    autoStart: true,
+    image: 'tronbox/tre:dev',
+    compiler: { target: 'tron' },
+  },
+  defaultNetwork: 'tre',
+  networks: {
+    tre: {
+      url: 'http://127.0.0.1:9090/jsonrpc',
+      tron: true,
+      // Well-known TRE dev key: local node only, never a real network.
+      accounts: ['0xdd23ca549a97cb330b011aebb674730df8b14acaee42d211ab45692699ab8ba5'],
+    },
+    nile: {
+      url: 'https://nile.trongrid.io/jsonrpc',
+      tron: true,
+      accounts: testnetAccounts(),
+    },
+  },
+};
+```
+
+Three settings do the TRON-specific work:
+
+- `tre.compiler.target: 'tron'` compiles with `tron-solc`, TRON's fork of `solc`, instead of the standard compiler. The first compile downloads it and checks its SHA-256.
+- `tre.autoStart` makes `npx hardhat test` start a TRON node (TRE, the TRON Runtime Environment) in Docker and remove it afterwards.
+- `tron: true` on a network routes `hre.ethers` calls through TronWeb, so ethers-style tests and scripts work against the TVM.
+
+<Callout>
+The compiler is pinned to Solidity 0.8.26 with `evmVersion: 'cancun'` because that is what OpenZeppelin Contracts for TRON is compiled and tested with. Don't raise it to match your Ethereum projects.
+</Callout>
+
+## Write the vault
+
+Create `contracts/UsdtVault.sol`:
+
+```solidity title="contracts/UsdtVault.sol"
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {ITRC20} from "@openzeppelin/tron-contracts/token/TRC20/ITRC20.sol";
+import {TRC20} from "@openzeppelin/tron-contracts/token/TRC20/TRC20.sol";
+import {TRC4626} from "@openzeppelin/tron-contracts/token/TRC20/extensions/TRC4626.sol";
+
+contract UsdtVault is TRC4626 {
+    constructor(ITRC20 usdt) TRC20("USDT Vault Share", "vUSDT") TRC4626(usdt) {}
+
+    function _decimalsOffset() internal pure override returns (uint8) {
+        return 6;
+    }
+}
+```
+
+That's a complete, standard-compliant vault. `TRC4626` handles share accounting, the preview functions and rounding. You don't write transfer code: deposits pull USDT with `SafeTRC20.safeTransferFrom`, and withdrawals pay out through `SafeTRC20.safeTransferChecked`, which works with USDT-TRON (more on that below).
+
+`_decimalsOffset()` deepens the defence against the **inflation attack**, where someone deposits a tiny amount into an empty vault and then donates a large amount directly to it, so the next depositor's shares round down in the attacker's favour. `TRC4626` already blunts this with virtual shares. An offset of 6 gives shares 6 more decimals than USDT (12 instead of 6), which raises the cost of the attack by a factor of 10⁶. The [TRC-4626 page](/tron-contracts/trc4626#defending-with-a-virtual-offset) works through the math.
+
+<Callout>
+USDT-TRON has **6 decimals**, and so does TRX (1 TRX = 1,000,000 SUN). Write amounts as `ethers.parseUnits('10', 6)` in JavaScript, or `10 * 10**6` in Solidity. Never use `parseEther` or the `ether` unit: `1 ether` is 10¹⁸ base units, which is 10¹² TRX or a trillion USDT.
+</Callout>
+
+Compile:
+
+```bash title="Shell"
+npx hardhat compile
+```
+
+## Add an entry and exit fee
+
+A common customization is a fee that goes to a treasury. The fee logic below is the example from the [TRC-4626 page](/tron-contracts/trc4626#custom-behavior-adding-fees-to-the-vault), with only the comments and import paths changed. It lives in the library's `contracts/mocks/docs/` folder, which the npm package doesn't ship, so you can't import it. Add it to your project as `contracts/TRC4626Fees.sol`:
+
+<Callout type='warn'>
+`TRC4626Fees` is an example from the documentation. **It has not been audited.** Review it as part of your own code before you use it in production.
+</Callout>
+
+```solidity title="contracts/TRC4626Fees.sol"
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {ITRC20} from "@openzeppelin/tron-contracts/token/TRC20/ITRC20.sol";
+import {TRC4626} from "@openzeppelin/tron-contracts/token/TRC20/extensions/TRC4626.sol";
+import {SafeTRC20} from "@openzeppelin/tron-contracts/token/TRC20/utils/SafeTRC20.sol";
+import {Math} from "@openzeppelin/tron-contracts/utils/math/Math.sol";
+
+/// @dev TRC-4626 vault with entry/exit fees expressed in basis points (bp).
+///
+/// Adapted from the fee example on the TRC-4626 docs page
+/// (contracts/mocks/docs/TRC4626Fees.sol in OpenZeppelin/tron-contracts).
+///
+/// NOTE: Fees are charged in terms of assets, not shares.
+///
+/// WARNING: This contract has not been audited and shouldn't be considered production ready.
+abstract contract TRC4626Fees is TRC4626 {
+    using Math for uint256;
+
+    uint256 private constant _BASIS_POINT_SCALE = 1e4;
+
+    // === Overrides ===
+
+    /// @dev Preview taking an entry fee on deposit. See {ITRC4626-previewDeposit}.
+    function previewDeposit(uint256 assets) public view virtual override returns (uint256) {
+        uint256 fee = _feeOnTotal(assets, _entryFeeBasisPoints());
+        return super.previewDeposit(assets - fee);
+    }
+
+    /// @dev Preview adding an entry fee on mint. See {ITRC4626-previewMint}.
+    function previewMint(uint256 shares) public view virtual override returns (uint256) {
+        uint256 assets = super.previewMint(shares);
+        return assets + _feeOnRaw(assets, _entryFeeBasisPoints());
+    }
+
+    /// @dev Preview adding an exit fee on withdrawal. See {ITRC4626-previewWithdraw}.
+    function previewWithdraw(uint256 assets) public view virtual override returns (uint256) {
+        uint256 fee = _feeOnRaw(assets, _exitFeeBasisPoints());
+        return super.previewWithdraw(assets + fee);
+    }
+
+    /// @dev Preview taking an exit fee on redeem. See {ITRC4626-previewRedeem}.
+    function previewRedeem(uint256 shares) public view virtual override returns (uint256) {
+        uint256 assets = super.previewRedeem(shares);
+        return assets - _feeOnTotal(assets, _exitFeeBasisPoints());
+    }
+
+    /// @dev Send entry fee to {_entryFeeRecipient}. See {TRC4626-_deposit}.
+    function _deposit(address caller, address receiver, uint256 assets, uint256 shares) internal virtual override {
+        uint256 fee = _feeOnTotal(assets, _entryFeeBasisPoints());
+        address recipient = _entryFeeRecipient();
+
+        super._deposit(caller, receiver, assets, shares);
+
+        if (fee > 0 && recipient != address(this)) {
+            // Outbound transfer written by you, not by TRC4626: use safeTransferChecked so it
+            // works with TRON USDT, whose `transfer` returns `false` on success.
+            SafeTRC20.safeTransferChecked(ITRC20(asset()), recipient, fee);
+        }
+    }
+
+    /// @dev Send exit fee to {_exitFeeRecipient}. See {TRC4626-_withdraw}.
+    function _withdraw(
+        address caller,
+        address receiver,
+        address owner,
+        uint256 assets,
+        uint256 shares
+    ) internal virtual override {
+        uint256 fee = _feeOnRaw(assets, _exitFeeBasisPoints());
+        address recipient = _exitFeeRecipient();
+
+        super._withdraw(caller, receiver, owner, assets, shares);
+
+        if (fee > 0 && recipient != address(this)) {
+            SafeTRC20.safeTransferChecked(ITRC20(asset()), recipient, fee);
+        }
+    }
+
+    // === Fee configuration ===
+
+    function _entryFeeBasisPoints() internal view virtual returns (uint256) {
+        return 0;
+    }
+
+    function _exitFeeBasisPoints() internal view virtual returns (uint256) {
+        return 0;
+    }
+
+    function _entryFeeRecipient() internal view virtual returns (address) {
+        return address(0);
+    }
+
+    function _exitFeeRecipient() internal view virtual returns (address) {
+        return address(0);
+    }
+
+    // === Fee operations ===
+
+    /// @dev Fee to add to an amount `assets` that does not already include fees.
+    /// Used in {ITRC4626-mint} and {ITRC4626-withdraw}.
+    function _feeOnRaw(uint256 assets, uint256 feeBasisPoints) private pure returns (uint256) {
+        return assets.mulDiv(feeBasisPoints, _BASIS_POINT_SCALE, Math.Rounding.Ceil);
+    }
+
+    /// @dev Fee part of an amount `assets` that already includes fees.
+    /// Used in {ITRC4626-deposit} and {ITRC4626-redeem}.
+    function _feeOnTotal(uint256 assets, uint256 feeBasisPoints) private pure returns (uint256) {
+        return assets.mulDiv(feeBasisPoints, feeBasisPoints + _BASIS_POINT_SCALE, Math.Rounding.Ceil);
+    }
+}
+```
+
+The fee is charged in assets. The preview functions include it, so `previewDeposit`, `previewMint`, `previewWithdraw` and `previewRedeem` still return exactly what the matching call does, as TRC-4626 requires.
+
+Now replace `contracts/UsdtVault.sol` so the vault inherits the fees and takes its settings in the constructor:
+
+```solidity title="contracts/UsdtVault.sol"
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {ITRC20} from "@openzeppelin/tron-contracts/token/TRC20/ITRC20.sol";
+import {TRC20} from "@openzeppelin/tron-contracts/token/TRC20/TRC20.sol";
+import {TRC4626} from "@openzeppelin/tron-contracts/token/TRC20/extensions/TRC4626.sol";
+import {TRC4626Fees} from "./TRC4626Fees.sol";
+
+/// @title UsdtVault
+/// @notice A TRC-4626 vault over USDT-TRON that charges entry and exit fees to a treasury.
+contract UsdtVault is TRC4626Fees {
+    uint256 private constant _MAX_FEE_BASIS_POINTS = 500; // 5%
+
+    address private immutable _treasury;
+    uint256 private immutable _entryFeeBps;
+    uint256 private immutable _exitFeeBps;
+
+    error UsdtVaultInvalidFee(uint256 basisPoints);
+    error UsdtVaultInvalidTreasury();
+
+    constructor(
+        ITRC20 usdt,
+        address treasury_,
+        uint256 entryFeeBps_,
+        uint256 exitFeeBps_
+    ) TRC20("USDT Vault Share", "vUSDT") TRC4626(usdt) {
+        if (treasury_ == address(0)) revert UsdtVaultInvalidTreasury();
+        if (entryFeeBps_ > _MAX_FEE_BASIS_POINTS) revert UsdtVaultInvalidFee(entryFeeBps_);
+        if (exitFeeBps_ > _MAX_FEE_BASIS_POINTS) revert UsdtVaultInvalidFee(exitFeeBps_);
+        _treasury = treasury_;
+        _entryFeeBps = entryFeeBps_;
+        _exitFeeBps = exitFeeBps_;
+    }
+
+    function treasury() external view returns (address) {
+        return _treasury;
+    }
+
+    /// @dev Shares use 6 more decimals than USDT (6 + 6 = 12). This raises the cost of an
+    /// inflation attack by a factor of 10**6. See the TRC-4626 docs for the math.
+    function _decimalsOffset() internal pure override returns (uint8) {
+        return 6;
+    }
+
+    function _entryFeeBasisPoints() internal view override returns (uint256) {
+        return _entryFeeBps;
+    }
+
+    function _exitFeeBasisPoints() internal view override returns (uint256) {
+        return _exitFeeBps;
+    }
+
+    function _entryFeeRecipient() internal view override returns (address) {
+        return _treasury;
+    }
+
+    function _exitFeeRecipient() internal view override returns (address) {
+        return _treasury;
+    }
+}
+```
+
+### Why the fee uses `safeTransferChecked`
+
+The fee payout is the one outbound transfer you write yourself, so you choose how to make it.
+
+On Ethereum you would use `SafeERC20.safeTransfer`. It accepts a token that returns `true` or returns nothing, and reverts if the token returns `false`. USDT-TRON (`TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t`) returns `false` from `transfer` **even when the transfer succeeds**. With `SafeTRC20.safeTransfer`, every deposit that charges a fee would revert with `SafeTRC20FailedOperation`, and your vault would be unusable with the token it was built for.
+
+`SafeTRC20.safeTransferChecked` ignores the return value. It reads the vault's own balance before and after the call, and reverts unless the balance went down by at least `value`. A transfer that fails for real still reverts: USDT-TRON reverts on failure, and the balance check catches a token that returns `false` without moving anything. Use it for every outbound transfer of a token you don't control: fee payouts, rewards and sweeps. `TRC4626` already uses it for withdrawals.
+
+<Callout type='warn'>
+`safeTransferChecked` checks the **sender's debit**, not what the recipient received. That is correct for standard tokens and for fee-on-transfer tokens: the recipient may get less than `value`, and the transfer still counts as successful. It is **not** correct for rebasing or reflection tokens, or for tokens whose `transfer` calls back into the sender, such as TRC-777 (ERC-777-style tokens). If one of these credits the sender during the transfer, the check can reject a successful transfer or panic on underflow. Don't pay out those tokens with it.
+</Callout>
+
+`transferFrom` and `approve` on USDT-TRON return `true` as expected. That's why the deposit path keeps using `safeTransferFrom`.
+
+## Test on a local TRON node
+
+The tests need a token that behaves like USDT-TRON. The mocks in the library repository aren't part of the npm package, so add your own. It mirrors the library's `TRC20USDTMock`:
+
+```solidity title="contracts/test/MockUSDT.sol"
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {TRC20} from "@openzeppelin/tron-contracts/token/TRC20/TRC20.sol";
+
+/// @dev Test-only stand-in for USDT-TRON (TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t):
+/// - 6 decimals.
+/// - `transfer` moves the tokens (and reverts on failure) but returns `false` on success.
+/// - `transferFrom` and `approve` return `true`, like the real token.
+/// Mirrors TRC20USDTMock from OpenZeppelin/tron-contracts. Anyone can mint: never deploy outside tests.
+contract MockUSDT is TRC20 {
+    constructor() TRC20("Tether USD (mock)", "USDT") {}
+
+    function decimals() public pure override returns (uint8) {
+        return 6;
+    }
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+
+    function transfer(address to, uint256 value) public override returns (bool) {
+        super.transfer(to, value);
+        return false;
+    }
+}
+```
+
+Add a small probe contract so a test can show what goes wrong with `safeTransfer`:
+
+```solidity title="contracts/test/PayoutProbe.sol"
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {ITRC20} from "@openzeppelin/tron-contracts/token/TRC20/ITRC20.sol";
+import {SafeTRC20} from "@openzeppelin/tron-contracts/token/TRC20/utils/SafeTRC20.sol";
+
+/// @dev Test-only contract that pays out a token the two ways a vault could:
+/// with the EVM-default `safeTransfer`, or with the TRON-safe `safeTransferChecked`.
+contract PayoutProbe {
+    function payWithSafeTransfer(ITRC20 token, address to, uint256 value) external {
+        SafeTRC20.safeTransfer(token, to, value);
+    }
+
+    function payWithSafeTransferChecked(ITRC20 token, address to, uint256 value) external {
+        SafeTRC20.safeTransferChecked(token, to, value);
+    }
+}
+```
+
+Now write the tests. They cover the USDT quirk, the four vault entry points, the previews, rounding, and the inflation attack:
+
+```js title="test/UsdtVault.test.js"
+const { expect } = require('chai');
+const { ethers } = require('hardhat');
+
+// USDT has 6 decimals. Never use parseEther / `ether` amounts for it.
+const usdt = (amount) => ethers.parseUnits(amount, 6);
+
+const ENTRY_FEE_BPS = 50n; // 0.5%
+const EXIT_FEE_BPS = 50n; // 0.5%
+const BPS = 10_000n;
+
+// Fee math, mirrored from TRC4626Fees (both round up, against the user).
+const ceilDiv = (a, b) => (a + b - 1n) / b;
+const feeOnTotal = (assets, bps) => ceilDiv(assets * bps, bps + BPS);
+const feeOnRaw = (assets, bps) => ceilDiv(assets * bps, BPS);
+
+describe('UsdtVault', function () {
+  let token, vault, owner, alice, bob, treasury;
+
+  beforeEach(async function () {
+    [owner, alice, bob, treasury] = await ethers.getSigners();
+
+    token = await ethers.deployContract('MockUSDT');
+    vault = await ethers.deployContract('UsdtVault', [
+      await token.getAddress(),
+      treasury.address,
+      ENTRY_FEE_BPS,
+      EXIT_FEE_BPS,
+    ]);
+
+    await token.mint(alice.address, usdt('10000'));
+    await token.connect(alice).approve(await vault.getAddress(), ethers.MaxUint256);
+  });
+
+  describe('USDT-TRON transfer quirk', function () {
+    let probe;
+
+    beforeEach(async function () {
+      probe = await ethers.deployContract('PayoutProbe');
+      await token.mint(await probe.getAddress(), usdt('100'));
+    });
+
+    it('safeTransfer reverts even though the transfer would succeed', async function () {
+      await expect(probe.payWithSafeTransfer(await token.getAddress(), bob.address, usdt('10')))
+        .to.be.revertedWithCustomError(probe, 'SafeTRC20FailedOperation')
+        .withArgs(await token.getAddress());
+    });
+
+    it('safeTransferChecked pays out by checking the balance delta', async function () {
+      await probe.payWithSafeTransferChecked(await token.getAddress(), bob.address, usdt('10'));
+      expect(await token.balanceOf(bob.address)).to.equal(usdt('10'));
+    });
+  });
+
+  describe('metadata', function () {
+    it('wraps USDT and uses 12-decimal shares', async function () {
+      expect(await vault.asset()).to.equal(await token.getAddress());
+      expect(await vault.decimals()).to.equal(12n); // 6 (USDT) + 6 (offset)
+      expect(await vault.treasury()).to.equal(treasury.address);
+    });
+
+    it('rejects a fee above 5%', async function () {
+      await expect(
+        ethers.deployContract('UsdtVault', [await token.getAddress(), treasury.address, 501n, 0n]),
+      ).to.be.revertedWithCustomError(vault, 'UsdtVaultInvalidFee');
+    });
+  });
+
+  describe('deposit and mint', function () {
+    it('deposit mints previewDeposit shares and pays the entry fee', async function () {
+      const assets = usdt('1000');
+      const expectedShares = await vault.previewDeposit(assets);
+      const fee = feeOnTotal(assets, ENTRY_FEE_BPS);
+
+      await vault.connect(alice).deposit(assets, alice.address);
+
+      expect(await vault.balanceOf(alice.address)).to.equal(expectedShares);
+      expect(await token.balanceOf(treasury.address)).to.equal(fee);
+      expect(await vault.totalAssets()).to.equal(assets - fee);
+    });
+
+    it('mint pulls previewMint assets', async function () {
+      const shares = 500n * 10n ** 12n; // 500 shares (12 decimals)
+      const expectedAssets = await vault.previewMint(shares);
+      const before = await token.balanceOf(alice.address);
+
+      await vault.connect(alice).mint(shares, alice.address);
+
+      expect(await vault.balanceOf(alice.address)).to.equal(shares);
+      expect(before - (await token.balanceOf(alice.address))).to.equal(expectedAssets);
+    });
+  });
+
+  describe('withdraw and redeem (paid out through safeTransferChecked)', function () {
+    beforeEach(async function () {
+      await vault.connect(alice).deposit(usdt('1000'), alice.address);
+    });
+
+    it('withdraw sends exact assets, burns previewWithdraw shares, pays the exit fee', async function () {
+      const assets = usdt('100');
+      const expectedBurn = await vault.previewWithdraw(assets);
+      const sharesBefore = await vault.balanceOf(alice.address);
+      const treasuryBefore = await token.balanceOf(treasury.address);
+
+      await vault.connect(alice).withdraw(assets, bob.address, alice.address);
+
+      expect(await token.balanceOf(bob.address)).to.equal(assets);
+      expect(sharesBefore - (await vault.balanceOf(alice.address))).to.equal(expectedBurn);
+      expect((await token.balanceOf(treasury.address)) - treasuryBefore).to.equal(feeOnRaw(assets, EXIT_FEE_BPS));
+    });
+
+    it('redeem sends previewRedeem assets', async function () {
+      const shares = await vault.balanceOf(alice.address);
+      const expectedAssets = await vault.previewRedeem(shares);
+
+      await vault.connect(alice).redeem(shares, bob.address, alice.address);
+
+      expect(await vault.balanceOf(alice.address)).to.equal(0n);
+      expect(await token.balanceOf(bob.address)).to.equal(expectedAssets);
+    });
+  });
+
+  describe('rounding', function () {
+    it('round-trips never return more than you put in', async function () {
+      await vault.connect(alice).deposit(usdt('1000'), alice.address);
+      // Move the share price off 1:1 with a direct mint to the vault.
+      await token.mint(await vault.getAddress(), usdt('3.333333'));
+
+      const assets = usdt('7.777777');
+      const shares = await vault.previewDeposit(assets);
+      expect(await vault.previewMint(shares)).to.be.lte(assets);
+
+      const redeemable = await vault.previewRedeem(shares);
+      expect(redeemable).to.be.lt(assets); // fees went to the treasury, rounding stays in the vault
+    });
+  });
+
+  describe('inflation attack', function () {
+    let feeless;
+
+    beforeEach(async function () {
+      // No fees, so the numbers isolate the offset defence.
+      feeless = await ethers.deployContract('UsdtVault', [await token.getAddress(), treasury.address, 0n, 0n]);
+      await token.mint(bob.address, usdt('1000'));
+      await token.connect(bob).approve(await feeless.getAddress(), ethers.MaxUint256);
+      await token.connect(alice).approve(await feeless.getAddress(), ethers.MaxUint256);
+    });
+
+    it('a donation front-run does not steal the next deposit', async function () {
+      const vaultAddress = await feeless.getAddress();
+
+      // 1. Attacker (bob) deposits 1 base unit (0.000001 USDT) into the empty vault...
+      await feeless.connect(bob).deposit(1n, bob.address);
+      // 2. ...then donates 999.999999 USDT directly to inflate the share price.
+      await token.connect(bob).transfer(vaultAddress, usdt('999.999999'));
+
+      // 3. Victim (alice) deposits 1,000 USDT.
+      const deposit = usdt('1000');
+      await feeless.connect(alice).deposit(deposit, alice.address);
+
+      // Victim keeps more than 99.99% of the deposit...
+      const victimAssets = await feeless.previewRedeem(await feeless.balanceOf(alice.address));
+      expect(victimAssets).to.be.gte((deposit * 9_999n) / 10_000n);
+
+      // ...and the attacker loses about half of what they put in, captured by the virtual shares.
+      const attackerAssets = await feeless.previewRedeem(await feeless.balanceOf(bob.address));
+      expect(attackerAssets).to.be.lt(usdt('501'));
+    });
+  });
+});
+```
+
+Run them:
+
+```bash title="Shell"
+npx hardhat test
+```
+
+The first run pulls the `tronbox/tre:dev` image, which can take a minute or two. The plugin then starts the node, waits until it is ready, runs Mocha, and removes the container:
+
+```console
+$ npx hardhat test
+[hardhat-tron]   spawning tronbox/tre:dev as hardhat-tron-46410-ej3vob on port 9090
+[hardhat-tron]   TRE ready in 3s
+
+
+  UsdtVault
+    USDT-TRON transfer quirk
+      ✔ safeTransfer reverts even though the transfer would succeed (83ms)
+      ✔ safeTransferChecked pays out by checking the balance delta (74ms)
+    metadata
+      ✔ wraps USDT and uses 12-decimal shares
+      ✔ rejects a fee above 5% (105ms)
+    deposit and mint
+      ✔ deposit mints previewDeposit shares and pays the entry fee (81ms)
+      ✔ mint pulls previewMint assets (86ms)
+    withdraw and redeem (paid out through safeTransferChecked)
+      ✔ withdraw sends exact assets, burns previewWithdraw shares, pays the exit fee (183ms)
+      ✔ redeem sends previewRedeem assets (90ms)
+    rounding
+      ✔ round-trips never return more than you put in (158ms)
+    inflation attack
+      ✔ a donation front-run does not steal the next deposit (236ms)
+
+
+  10 passing (5s)
+
+[hardhat-tron]   tearing down hardhat-tron-46410-ej3vob
+```
+
+A few things in this test file are specific to TRON:
+
+- `ethers.getSigners()` returns ten test accounts that the plugin funds on the local node. The addresses are the 20-byte hex form that Solidity sees.
+- The inflation-attack numbers come from the offset. Without `_decimalsOffset()`, the attacker would still lose money because of the virtual asset, but the victim's rounding loss would be much larger. Try it: set the offset to `0` and rerun. The victim gets back only 666.666667 of their 1,000 USDT, so the inflation-attack test fails. The 12-decimal metadata check fails too.
+- Mocha's timeout is raised automatically, because TRE produces a block every 3 seconds.
+- `revertedWithCustomError` decodes correctly here, including on the constructor revert in the fee-cap test. It doesn't hold on every path; see the callout below.
+
+<Callout type='warn'>
+Custom-error assertions are not always safe on the TVM. The library documents two paths where the payload doesn't survive:
+
+- An **out-of-gas bubble**. The inner call burns the whole energy budget, and the custom error is dropped on the way out. A `CREATE2` collision is the same case, since it burns almost all energy.
+- A **`Panic(uint256)` revert**, whose payload doesn't reliably survive TVM's revert-data field.
+
+`tron-contracts` loosens its own assertions to `.to.be.reverted` in each of these cases. If a revert assertion fails with no decoded error, check whether you are on one of these paths before concluding the contract is wrong.
+</Callout>
+
+<Callout>
+To keep the node running between runs and skip the startup wait, set `tre.keepRunning: true`.
+
+Starting the container yourself with `tre.autoStart: false` is a sharper edge than it looks. The plugin mines one priming block before your tests, but only when it manages the node; with `autoStart: false` that step never runs. Without the priming block, the first deploy fails inside TronWeb with `Unable to get params: Cannot read properties of undefined (reading 'toString')`, because java-tron omits the zero-valued block number at height 0. Prefer `keepRunning` over managing the container by hand.
+</Callout>
+
+## Deploy to Nile
+
+Nile is TRON's public testnet. You need a funded account and some test USDT.
+
+1. In TronLink, create a separate account for testing and switch the network to **Nile**. Export its private key.
+2. Get test TRX and test USDT from TronFAQBot. Join [TRON's developer Discord](https://discord.com/invite/hqKvyAM) and send the bot two messages:
+
+```text title="Discord"
+!nile <your T... address>
+!nile_usdt <your T... address>
+```
+
+   The bot gives 2,000 of each token per address every 24 hours, far more than this tutorial needs: the deploy below costs about 124 TRX and the walkthrough deposits 10 USDT. Send `!help` for the full command list. The same bot runs in the [TRON Developer Telegram group](https://t.me/TronOfficialDevelopersGroupEn) if you prefer it.
+3. Export the key for Hardhat:
+
+```bash title="Shell"
+export TRON_TESTNET_KEY=<your Nile private key>
+```
+
+<Callout type='warn'>
+Use this key only for testnet funds, and keep it out of your repository. The config reads it from the environment and refuses to sign for Nile without it, so the TRE dev key can never reach a public network.
+</Callout>
+
+TRON shows one address in three formats, and this script deals with all three:
+
+| Format | Example | Used by |
+| --- | --- | --- |
+| Base58Check | `TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t` | Wallets, Tronscan, TronWeb |
+| 21-byte hex | `41a614f803b6fd780986a42c78ec9c7f77e6ded13c` | Node HTTP APIs |
+| 20-byte hex | `0xa614f803b6fd780986a42c78ec9c7f77e6ded13c` | Solidity, ethers, ABI encoding |
+
+All three hold the same 20 bytes. Add a helper that converts between the format users paste and the format contracts take:
+
+```js title="scripts/addresses.js"
+const { TronWeb } = require('tronweb');
+
+// TRON shows the same 20-byte address three ways:
+//   Base58Check  T...           (wallets, Tronscan, TronWeb)
+//   hex, 21 byte 41 + 20 bytes  (node HTTP APIs)
+//   hex, 20 byte 0x + 20 bytes  (Solidity, ethers, ABI encoding)
+function toEvmAddress(base58) {
+  return '0x' + TronWeb.address.toHex(base58).slice(2); // drop the 0x41 prefix
+}
+
+function toBase58(evmAddress) {
+  return TronWeb.address.fromHex('41' + evmAddress.replace(/^0x/, ''));
+}
+
+module.exports = { toEvmAddress, toBase58 };
+```
+
+<Callout type='warn'>
+Pass the 20-byte form to contracts. If an address goes inside a `bytes` payload, it **must** be the 20-byte form. See [Addresses inside `bytes` payloads](/tron-contracts/tvm-differences#addresses-inside-bytes-payloads).
+</Callout>
+
+Create the deploy script:
+
+```js title="scripts/deploy.js"
+// npx hardhat run scripts/deploy.js --network nile
+const hre = require('hardhat');
+const { toEvmAddress, toBase58 } = require('./addresses');
+
+// Test USDT on Nile. Override with USDT_ADDRESS if it changes.
+const NILE_USDT = process.env.USDT_ADDRESS || 'TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf';
+const ENTRY_FEE_BPS = 50n; // 0.5%
+const EXIT_FEE_BPS = 50n; // 0.5%
+
+async function main() {
+  // On public networks, sign with the configured key. ethers.getSigners() funds
+  // test signers through a TRE-only cheatcode, so it does not work here.
+  const { tronWeb, address: deployer } = hre.tre.makeTronWeb();
+  console.log(`network : ${hre.network.name}`);
+  console.log(`deployer: ${deployer}`);
+  console.log(`balance : ${(await tronWeb.trx.getBalance(deployer)) / 1e6} TRX`);
+
+  const vault = await hre.ethers.deployContract('UsdtVault', [
+    toEvmAddress(NILE_USDT),
+    toEvmAddress(deployer), // treasury: the deployer, for this tutorial
+    ENTRY_FEE_BPS,
+    EXIT_FEE_BPS,
+  ]);
+  const vaultAddress = toBase58(await vault.getAddress());
+
+  console.log(`vault   : ${vaultAddress}`);
+  console.log(`tronscan: https://nile.tronscan.org/#/contract/${vaultAddress}`);
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
+```
+
+`TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf` is the test USDT on Nile. Its deployed bytecode is byte-for-byte identical to mainnet USDT-TRON, so it returns `false` from a successful `transfer` in exactly the same way. That is what makes the Nile run a real test of the payout path rather than a rehearsal against a well-behaved token.
+
+Deploy:
+
+```bash title="Shell"
+npx hardhat run scripts/deploy.js --network nile
+```
+
+```console
+network : nile
+deployer: TXfreZ7XyAS9ymxiZg6UkjWP5rL792u9Ht
+balance : 2000 TRX
+vault   : TGmwKo2Tz46uPGsy75eAPNfTRtkZkeFNFg
+tronscan: https://nile.tronscan.org/#/contract/TGmwKo2Tz46uPGsy75eAPNfTRtkZkeFNFg
+```
+
+<Callout>
+TRON has no gas. Transactions use **bandwidth** (for transaction size) and **energy** (for contract execution). Your account gets 600 free bandwidth points a day; beyond that, and for any energy you haven't staked TRX for, TRX is burned. The plugin sets a fee limit of 1,000 TRX (`1_000_000_000` SUN) per transaction. That is a cap on the energy you burn, not a charge: a transaction that succeeds or reverts pays only for the energy it used, while one that exhausts the cap fails and is charged up to it. Deploying this vault used 1,145,938 energy, costing 114.59 TRX, plus 9.62 TRX of bandwidth once the free 600 points ran out: 124.22 TRX in total with nothing staked. To lower the cap for a call, pass `{ gasLimit }`; the plugin converts it into a fee limit and never goes above 1,000 TRX.
+</Callout>
+
+### Interact with the vault
+
+Use the vault the way a user would: approve USDT, deposit, then redeem.
+
+```js title="scripts/interact.js"
+// VAULT_ADDRESS=T... npx hardhat run scripts/interact.js --network nile
+const hre = require('hardhat');
+const { toEvmAddress, toBase58 } = require('./addresses');
+
+const NILE_USDT = process.env.USDT_ADDRESS || 'TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf';
+const VAULT = process.env.VAULT_ADDRESS;
+
+async function main() {
+  if (!VAULT) throw new Error('Set VAULT_ADDRESS to the T... address printed by deploy.js');
+
+  const { address: me } = hre.tre.makeTronWeb();
+  const meHex = toEvmAddress(me);
+  const usdt = await hre.ethers.getContractAt('MockUSDT', toEvmAddress(NILE_USDT)); // only the TRC-20 ABI is used
+  const vault = await hre.ethers.getContractAt('UsdtVault', toEvmAddress(VAULT));
+  const amount = hre.ethers.parseUnits('10', 6); // 10 USDT
+
+  console.log(`USDT before: ${hre.ethers.formatUnits(await usdt.balanceOf(meHex), 6)}`);
+
+  await (await usdt.approve(toEvmAddress(VAULT), amount)).wait();
+  console.log('approved 10 USDT');
+
+  await (await vault.deposit(amount, meHex)).wait();
+  const shares = await vault.balanceOf(meHex);
+  console.log(`deposited 10 USDT -> ${hre.ethers.formatUnits(shares, 12)} vUSDT`);
+
+  const tx = await vault.redeem(shares, meHex, meHex);
+  await tx.wait();
+  console.log(`redeemed all shares, tx: https://nile.tronscan.org/#/transaction/${tx.hash.replace(/^0x/, '')}`);
+  console.log(`USDT after : ${hre.ethers.formatUnits(await usdt.balanceOf(meHex), 6)}`);
+  console.log(`treasury fees are in ${toBase58(await vault.treasury())}`);
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
+```
+
+```bash title="Shell"
+export VAULT_ADDRESS=<T... address from deploy.js>
+npx hardhat run scripts/interact.js --network nile
+```
+
+```console
+USDT before: 2000.0
+approved 10 USDT
+deposited 10 USDT -> 9.950248 vUSDT
+redeemed all shares, tx: https://nile.tronscan.org/#/transaction/4dbf939f3f9490e389c7e760d78a323e29d926c69f335f84b5567de585e45c44
+USDT after : 2000.0
+treasury fees are in TXfreZ7XyAS9ymxiZg6UkjWP5rL792u9Ht
+```
+
+`tx.hash` is the TVM transaction ID, the same 64-character hex string Tronscan indexes, and `.wait()` resolves once the transaction is in a block. Both behave as they do on Ethereum.
+
+Your USDT balance comes back close to where it started. The vault charged both fees, but the treasury is your own address in this tutorial, so they came straight back. What you actually spent is TRX for energy and bandwidth. Point the treasury at a different address and you would end up lower by the two fees. The redeem worked even though Nile's USDT returns `false` from `transfer`, because `TRC4626` paid it out with `safeTransferChecked`.
+
+The run above ended on exactly 2,000.000000 USDT, the balance it started with, because every fee went to the treasury and the treasury is the deployer. The 10 USDT deposit minted 9.950248 vUSDT: the 0.5% entry fee came off first.
+
+### View it on Tronscan
+
+Open the `tronscan:` link printed by the deploy script. On [Nile Tronscan](https://nile.tronscan.org) you can see:
+
+- The contract's **Transactions** tab, listing your `approve`, `deposit` and `redeem` calls.
+- The **TRC-20 transfers** for each call: USDT into the vault, the fee to the treasury, and USDT back to you.
+- Each transaction's **Resources consumed**, showing the energy and bandwidth it used.
+
+<Callout>
+Tronscan source verification isn't automated by `hardhat-tron` yet, so you do it by hand. Tronscan recompiles from what you upload and doesn't accept a subdirectory layout, so flatten the contract into one file first:
+
+```bash title="Shell"
+npx hardhat flatten contracts/UsdtVault.sol > UsdtVault.flat.sol
+```
+
+Open the contract on Tronscan, go to the verification form, and upload that file with these settings:
+
+| Field | Value |
+| --- | --- |
+| Main Contract | `UsdtVault` |
+| Compiler | `0.8.26` |
+| Optimizer | Enabled, 200 runs |
+| ViaIR | Off |
+| VM version | `cancun` |
+| License | MIT |
+
+**Main Contract** is not a label. The flattened file holds every contract the vault inherits, and Tronscan uses this name to pick which one to compile and match against the deployed bytecode, so it must be the contract you deployed. **ViaIR** must be off because the config above doesn't use it: turning it on produces different bytecode and the match fails. These two are where verification usually goes wrong.
+</Callout>
+
+## Optional: make it upgradeable
+
+To upgrade the vault later, deploy it behind a proxy. Use `@openzeppelin/tron-contracts-upgradeable` for the contracts and `@openzeppelin/hardhat-tron-upgrades` for deployment. The Ethereum Upgrades plugins don't work on TRON.
+
+```bash title="Shell"
+npm install @openzeppelin/tron-contracts-upgradeable
+npm install --save-dev @openzeppelin/hardhat-tron-upgrades
+```
+
+Add the plugin to `hardhat.config.cjs`, after `@openzeppelin/hardhat-tron`:
+
+```js title="hardhat.config.cjs"
+require('@openzeppelin/hardhat-tron');
+require('@openzeppelin/hardhat-tron-upgrades');
+```
+
+The plugin deploys proxy contracts that your project must compile. Import them once:
+
+```solidity title="contracts/Proxies.sol"
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+// Compiles the TRON proxy contracts that @openzeppelin/hardhat-tron-upgrades deploys.
+import "@openzeppelin/hardhat-tron-upgrades/contracts/Proxies.sol";
+```
+
+Write the upgradeable vault. The constructor becomes an `initialize` function, and `_authorizeUpgrade` decides who can upgrade. This version leaves out the fees to keep it short:
+
+```solidity title="contracts/UsdtVaultUpgradeable.sol"
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {ITRC20} from "@openzeppelin/tron-contracts/token/TRC20/ITRC20.sol";
+import {TRC20Upgradeable} from "@openzeppelin/tron-contracts-upgradeable/token/TRC20/TRC20Upgradeable.sol";
+import {TRC4626Upgradeable} from "@openzeppelin/tron-contracts-upgradeable/token/TRC20/extensions/TRC4626Upgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/tron-contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {Initializable} from "@openzeppelin/tron-contracts-upgradeable/proxy/utils/Initializable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/tron-contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+
+/// @title UsdtVaultUpgradeable
+/// @notice UUPS-upgradeable TRC-4626 vault over USDT-TRON (no fees, to keep the example short).
+contract UsdtVaultUpgradeable is Initializable, TRC4626Upgradeable, OwnableUpgradeable, UUPSUpgradeable {
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(ITRC20 usdt, address initialOwner) public initializer {
+        __TRC20_init("USDT Vault Share", "vUSDT");
+        __TRC4626_init(usdt);
+        __Ownable_init(initialOwner);
+    }
+
+    function _decimalsOffset() internal pure override returns (uint8) {
+        return 6;
+    }
+
+    function _authorizeUpgrade(address) internal override onlyOwner {}
+}
+```
+
+Deploy it behind a UUPS proxy in a test or script:
+
+```js title="test/UsdtVaultUpgradeable.test.js"
+const { expect } = require('chai');
+const { ethers, upgrades } = require('hardhat');
+
+describe('UsdtVaultUpgradeable', function () {
+  it('deploys behind a UUPS proxy and works as a vault', async function () {
+    const [owner, alice] = await ethers.getSigners();
+    const token = await ethers.deployContract('MockUSDT');
+
+    const vault = await upgrades.deployProxy('UsdtVaultUpgradeable', [await token.getAddress(), owner.address], {
+      kind: 'uups',
+    });
+
+    expect(await vault.asset()).to.equal(await token.getAddress());
+    expect(await vault.owner()).to.equal(owner.address);
+
+    const amount = ethers.parseUnits('100', 6);
+    await token.mint(alice.address, amount);
+    await token.connect(alice).approve(await vault.getAddress(), amount);
+    await vault.connect(alice).deposit(amount, alice.address);
+    await vault.connect(alice).redeem(await vault.balanceOf(alice.address), alice.address, alice.address);
+
+    expect(await token.balanceOf(alice.address)).to.equal(amount);
+  });
+});
+```
+
+`deployProxy` checks the contract for upgrade safety, deploys the implementation and the proxy, and calls `initialize`. On public networks it records the deployment under `.openzeppelin/`. Commit that folder, because `upgradeProxy` uses it to check that the next version's storage layout is compatible. See [Using with Upgrades](/tron-contracts/upgradeable) for the rules on writing upgradeable contracts.
+
+## Next steps
+
+You built, tested and deployed a TRC-4626 vault, and handled the three TRON differences that catch most Ethereum developers. Every contract in the library uses the same workflow:
+
+- Restrict who can change settings with [Access Control](/tron-contracts/access-control). For example, make the fee rate adjustable by a `FEE_MANAGER_ROLE`.
+- Issue your own token with [TRC-20](/tron-contracts/trc20) and [Creating Supply](/tron-contracts/trc20-supply).
+- Put the vault under onchain control with [Governance](/tron-contracts/governance). Use timestamp-based voting periods, because TRON produces a block every 3 seconds.
+- Read [TVM Differences](/tron-contracts/tvm-differences) for the full list of adaptations.
