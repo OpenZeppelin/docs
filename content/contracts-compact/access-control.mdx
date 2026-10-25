@@ -8,17 +8,18 @@ title: AccessControl
 
 [FungibleToken]: ./fungible-token.mdx
 [Ownable]: ./ownable.mdx
-[Initializable]: ./security#initializable
+[Utils]: ./utils.mdx
 [AccessControl]: api/access-control
 [ShieldedAccessControl]: ./shielded-access-control.mdx
 
 [assertOnlyRole]: api/access-control#AccessControl-assertOnlyRole
+[hasRole]: api/access-control#AccessControl-hasRole
 [grantRole]: api/access-control#AccessControl-grantRole
 [_grantRole]: api/access-control#AccessControl-_grantRole
 [_unsafeGrantRole]: api/access-control#AccessControl-_unsafeGrantRole
 [revokeRole]: api/access-control#AccessControl-revokeRole
 [_setRoleAdmin]: api/access-control#AccessControl-_setRoleAdmin
-[computeAccountId]: api/access-control#AccessControl-computeAccountId
+[computeAccountId]: api/utils#Utils-computeAccountId
 
 This module provides a role-based access control mechanism,
 where roles can be used to represent a set of permissions providing the flexibility to create different levels of account authorization.
@@ -50,13 +51,36 @@ some users are regular users, some may be supervisors or managers, and a few wil
 
 AccessControl uses a witness-derived identity scheme. Each caller proves knowledge of a secret key
 by injecting it via the `wit_AccessControlSK` witness. The module computes an account identifier
-as `persistentHash(secretKey)`, which is a commitment that hides the key while providing a stable,
+as `H(secretKey)` (a `persistentHash` of the key), which is a commitment that hides the key while providing a stable,
 pseudonymous on-chain identity.
 
-The same secret key produces the same identity across all contracts (analogous to Solidity's `msg.sender`).
+What is public and what is private:
+
+* **On the ledger**: `_operatorRoles`, a public map from role identifier to account identifier to a Boolean,
+  and `_adminRoles`. Every grant, revoke, and role check discloses the role identifier and the account identifier it touches,
+  so an observer can see which identifiers hold which roles.
+* **Held privately by each account**: the 32-byte `secretKey`, supplied through `wit_AccessControlSK` at proving time.
+  The key never reaches the ledger; only `H(secretKey)` does.
+
+Witness implementations are authored by the consuming DApp.
+The TypeScript witnesses in the repository are test-only and are not published with the package.
+
+The same secret key produces the same identity across all contracts.
 Users who desire cross-contract unlinkability can use different secret keys per contract at the wallet layer.
 
-To derive an account identifier off-chain (e.g. before passing it to a grant operation), use [computeAccountId].
+To derive an account identifier off-chain (e.g. before passing it to a grant operation),
+use [computeAccountId] from the [Utils] module:
+
+```typescript
+import "./node_modules/@openzeppelin/compact-contracts/utils/Utils"
+  prefix Utils_;
+
+const accountId = Utils_computeAccountId(secretKey);
+```
+
+`computeAccountId` is a pure circuit, so it can be evaluated off-chain (for example through a contract simulator),
+or recomputed in TypeScript as a `persistentHash` over a `Vector<1, Bytes<32>>` containing the key
+(see the [Ownable] guide for a runtime snippet).
 
 ### Using `AccessControl`
 
@@ -164,7 +188,7 @@ an internal circuit that is useful when programmatically assigning roles (such a
 But what if we later want to grant the 'minter' role to additional accounts?
 
 By default, **accounts with a role cannot grant it or revoke it from other accounts**:
-all having a role does is making the `hasRole` check pass.
+all having a role does is making the [hasRole] check pass.
 To grant and revoke roles dynamically, you will need help from the _role's admin_.
 
 Every role has an associated admin role,
@@ -212,7 +236,7 @@ constructor(
   BURNER_ROLE = persistentHash<Bytes<32>>(pad(32, "BURNER_ROLE"));
   // Grant the default admin role to the provided account identifier.
   // This account will be able to grant and revoke any roles.
-  // The account identifier should be derived off-chain using computeAccountId(secretKey).
+  // The account identifier should be derived off-chain using Utils_computeAccountId(secretKey).
   AccessControl__grantRole(AccessControl_DEFAULT_ADMIN_ROLE(), defaultAdmin);
 }
 
@@ -232,8 +256,10 @@ Note that, unlike the previous examples, no accounts are granted the 'minter' or
 However, because those roles' admin role is the default admin role, and _that_ role was granted to `defaultAdmin`,
 that same account can call [grantRole] to give minting or burning permission, and [revokeRole] to remove it.
 
-The `defaultAdmin` account identifier should be derived off-chain using `AccessControl_computeAccountId(secretKey)`,
+The `defaultAdmin` account identifier should be derived off-chain using [computeAccountId] from the [Utils] module
+(`Utils_computeAccountId(secretKey)`),
 where `secretKey` is a 32-byte cryptographically secure random value held by the deployer.
+Pass it as `left<Bytes<32>, ContractAddress>(accountId)`.
 
 Dynamic role allocation is often a desirable property,
 for example in systems where trust in a participant may vary over time.
@@ -241,11 +267,11 @@ It can also be used to support use cases such as KYC,
 where the list of role-bearers may not be known up-front,
 or may be prohibitively expensive to include in a single transaction.
 
-### Experimental features
+### Unsafe circuits
 
-This module offers an experimental circuit that allows access control permissions to be granted to contract addresses [_unsafeGrantRole].
+This module offers a circuit that allows access control permissions to be granted to contract addresses, [_unsafeGrantRole].
 
-Note that the circuit name is very explicit ("unsafe") with this experimental circuit.
+Note that the circuit name is very explicit ("unsafe").
 Until contract-to-contract calls are supported,
 there is no direct way for a contract to call permissioned circuits of other contracts or grant/revoke role permissions.
 

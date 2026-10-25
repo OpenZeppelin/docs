@@ -11,7 +11,7 @@ This module provides the full FungibleToken module API.
 ## FungibleToken [toc] [#FungibleToken]
 <APIGithubLinkHeader
     moduleName="FungibleToken"
-    link={`https://github.com/OpenZeppelin/compact-contracts/blob/main/contracts/src/token/FungibleToken.compact`}
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/token/FungibleToken.compact`}
 />
 
 ```ts
@@ -22,6 +22,17 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 
 ### Ledger [toc] [#FungibleToken-Ledger]
 ### Ledger [!toc] [#FungibleToken-Ledger]
+
+#### _isInitialized [toc] [#FungibleToken-_isInitialized]
+#### [!toc] [#FungibleToken-_isInitialized]
+<APIItemCompact
+  circuitSig='_isInitialized: Boolean'
+  kind="ledger"
+  id="FungibleToken-_isInitialized"
+>
+  Initialization flag, owned by this module. Set to `true` by [initialize](#FungibleToken-initialize);
+  every other circuit asserts it is set.
+</APIItemCompact>
 
 #### _balances [toc] [#FungibleToken-_balances]
 #### [!toc] [#FungibleToken-_balances]
@@ -94,6 +105,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   id="FungibleToken-wit_FungibleTokenSK"
 >
   Returns the caller's secret key used in deriving the account identifier.
+  The key stays private; only `persistentHash(secretKey)` reaches the ledger.
 
   The same key produces the same account identifier across all contracts. Users who
   desire cross-contract unlinkability should use different keys per contract.
@@ -101,17 +113,6 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 
 ### Circuits [toc] [#FungibleToken-Circuits]
 ### Circuits [!toc] [#FungibleToken-Circuits]
-
-#### ZERO [toc] [#FungibleToken-ZERO]
-#### [!toc] [#FungibleToken-ZERO]
-<APIItemCompact
-  circuitSig="ZERO() → Either<Bytes<32>, ContractAddress>"
-  kind="pure"
-  modulePrefix="FungibleToken"
->
-  Returns a canonical zero `Either` value for `Bytes<32>` and `ContractAddress`.
-  Returns the left variant (`Bytes<32>`) to avoid misleading contract-to-contract error messages.
-</APIItemCompact>
 
 #### initialize [toc] [#FungibleToken-initialize]
 #### [!toc] [#FungibleToken-initialize]
@@ -126,7 +127,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   modulePrefix="FungibleToken"
   stackParams="true"
 >
-  Initializes the contract by setting the name, symbol, and decimals.
+  Initializes the contract by setting the name, symbol, and decimals, and marks the module initialized.
 
   This MUST be called in the implementing contract's constructor.
   Failure to do so can lead to an irreparable contract.
@@ -220,6 +221,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   modulePrefix="FungibleToken"
 >
   Moves a `value` amount of tokens from the caller's account to `to`.
+  The caller's identity is derived from the `wit_FungibleTokenSK` witness as `persistentHash(secretKey)`.
 
   <Callout type='info'>
     Transfers to contract addresses are currently disallowed until contract-to-contract interactions are supported in Compact.
@@ -268,6 +270,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 >
   Returns the remaining number of tokens that `spender` will be allowed to spend on behalf of `owner` through [transferFrom](#FungibleToken-transferFrom).
   This value changes when [approve](#FungibleToken-approve) or [transferFrom](#FungibleToken-transferFrom) are called.
+  Returns zero when no allowance entry exists.
 
   Requirements:
 
@@ -283,6 +286,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   modulePrefix="FungibleToken"
 >
   Sets a `value` amount of tokens as allowance of `spender` over the caller's tokens.
+  The caller's identity is derived from the `wit_FungibleTokenSK` witness as `persistentHash(secretKey)`.
 
   Requirements:
 
@@ -305,6 +309,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 >
   Moves `value` tokens from `fromAddress` to `to` using the allowance mechanism.
   `value` is then deducted from the caller's allowance.
+  The caller's identity is derived from the `wit_FungibleTokenSK` witness as `persistentHash(secretKey)`.
 
   <Callout type='info'>
     Transfers to contract addresses are currently disallowed until contract-to-contract interactions are supported in Compact.
@@ -533,10 +538,14 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   Updates `owner`'s allowance for `spender` based on spent `value`.
   Does not update the allowance value in case of infinite allowance.
 
+  A missing allowance entry is treated as a zero allowance, mirroring [allowance](#FungibleToken-allowance).
+  A zero `value` is a no-op: no allowance is read and no entry is written.
+  Whether `value` is zero is disclosed.
+
   Requirements:
 
   * Contract is initialized.
-  * `spender` must have at least an allowance of `value` from `owner`.
+  * If `value` is non-zero, `spender` must have an allowance of at least `value` from `owner`.
 </APIItemCompact>
 
 #### _computeAccountId [toc] [#FungibleToken-_computeAccountId]
@@ -546,41 +555,11 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   kind="internal"
   modulePrefix="FungibleToken"
 >
-  Computes the caller's account identifier from the `wit_FungibleTokenSK` witness.
+  Computes the caller's account identifier from the `wit_FungibleTokenSK` witness
+  by delegating to [Utils computeAccountId](./utils#Utils-computeAccountId).
 
   ID Derivation: `accountId = persistentHash(secretKey)`
 
   The result is a 32-byte commitment that uniquely identifies the caller.
-</APIItemCompact>
-
-#### computeAccountId [toc] [#FungibleToken-computeAccountId]
-#### [!toc] [#FungibleToken-computeAccountId]
-<APIItemCompact
-  circuitSig="computeAccountId(secretKey: Bytes<32>) → Bytes<32>"
-  kind="pure"
-  modulePrefix="FungibleToken"
->
-  Computes an account identifier without on-chain state, allowing a user to derive
-  their identity commitment before submitting a token operation.
-  This is the off-chain counterpart to the internal `_computeAccountId` and produces an identical result
-  given the same inputs.
-
-  ID Derivation: `accountId = persistentHash(secretKey)`
-
-  <Callout type='warn'>
-    The `secretKey` parameter is a sensitive secret. Mishandling it can permanently compromise the security of this system.
-    Never log or persist the key in plaintext. Use cryptographically secure randomness to generate keys.
-    Treat key loss as identity loss.
-    A lost key cannot be recovered.
-  </Callout>
-</APIItemCompact>
-
-#### _isTargetZero [toc] [#FungibleToken-_isTargetZero]
-#### [!toc] [#FungibleToken-_isTargetZero]
-<APIItemCompact
-  circuitSig="_isTargetZero(target: Either<Bytes<32>, ContractAddress>) → Boolean"
-  kind="internal"
-  modulePrefix="FungibleToken"
->
-  Returns `true` if `target`'s active branch (as indicated by `is_left`) holds the zero value.
+  The same derivation is available off-chain through `Utils_computeAccountId`.
 </APIItemCompact>

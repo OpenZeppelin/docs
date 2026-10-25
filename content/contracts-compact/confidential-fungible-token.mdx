@@ -1,0 +1,407 @@
+---
+title: ConfidentialFungibleToken
+---
+
+{/* links */}
+[FungibleToken]: ./fungible-token.mdx
+[Module/Contract Pattern]: ./extensibility.mdx#the_module_contract_pattern
+[Ownable]: ./ownable.mdx
+[crypto guide]: ./crypto
+[ElGamal]: api/crypto#ElGamal
+[EcdhMask]: api/crypto#EcdhMask
+[ConfidentialFungibleToken API]: api/confidential-fungible-token
+[EscrowEntry]: api/confidential-fungible-token#ConfidentialFungibleToken-EscrowEntry
+[wit_ConfidentialTokenSK]: api/confidential-fungible-token#ConfidentialFungibleToken-wit_ConfidentialTokenSK
+[wit_ConfidentialTokenEK]: api/confidential-fungible-token#ConfidentialFungibleToken-wit_ConfidentialTokenEK
+[wit_PlaintextBalance]: api/confidential-fungible-token#ConfidentialFungibleToken-wit_PlaintextBalance
+[wit_RandomnessSeed]: api/confidential-fungible-token#ConfidentialFungibleToken-wit_RandomnessSeed
+[MAX_TRANSFER_VALUE]: api/confidential-fungible-token#ConfidentialFungibleToken-MAX_TRANSFER_VALUE
+[initialize]: api/confidential-fungible-token#ConfidentialFungibleToken-initialize
+[balanceOf]: api/confidential-fungible-token#ConfidentialFungibleToken-balanceOf
+[pendingOf]: api/confidential-fungible-token#ConfidentialFungibleToken-pendingOf
+[allowance]: api/confidential-fungible-token#ConfidentialFungibleToken-allowance
+[isRegistered]: api/confidential-fungible-token#ConfidentialFungibleToken-isRegistered
+[register]: api/confidential-fungible-token#ConfidentialFungibleToken-register
+[_mint]: api/confidential-fungible-token#ConfidentialFungibleToken-_mint
+[_burn]: api/confidential-fungible-token#ConfidentialFungibleToken-_burn
+[_burnFrom]: api/confidential-fungible-token#ConfidentialFungibleToken-_burnFrom
+[transfer]: api/confidential-fungible-token#ConfidentialFungibleToken-transfer
+[_move]: api/confidential-fungible-token#ConfidentialFungibleToken-_move
+[sweep]: api/confidential-fungible-token#ConfidentialFungibleToken-sweep
+[approve]: api/confidential-fungible-token#ConfidentialFungibleToken-approve
+[transferFrom]: api/confidential-fungible-token#ConfidentialFungibleToken-transferFrom
+[clearMemos]: api/confidential-fungible-token#ConfidentialFungibleToken-clearMemos
+[computeAccountId]: api/confidential-fungible-token#ConfidentialFungibleToken-computeAccountId
+[ConfidentialFungibleTokenPublicSupply]: api/confidential-fungible-token#ConfidentialFungibleTokenPublicSupply
+[_addSupply]: api/confidential-fungible-token#ConfidentialFungibleTokenPublicSupply-_addSupply
+[_subSupply]: api/confidential-fungible-token#ConfidentialFungibleTokenPublicSupply-_subSupply
+[totalSupply]: api/confidential-fungible-token#ConfidentialFungibleTokenPublicSupply-totalSupply
+
+ConfidentialFungibleToken is an account-based fungible token whose balances live on the public ledger
+as [ElGamal] ciphertexts over the Jubjub curve, so no amount is ever written in the clear.
+Accounts are identified the same way as in [FungibleToken], by a 32-byte `accountId` derived from a secret key,
+but every value a circuit moves is encrypted under the account holder's own encryption key,
+and the caller proves in zero knowledge that it knows the plaintext of the balance it spends from.
+Transfers hide the amount; the (sender, recipient) pair is public.
+Total-supply tracking is optional and lives in the separate [ConfidentialFungibleTokenPublicSupply] extension.
+
+The encryption primitives (`ElGamal` and `EcdhMask`) are documented in the [crypto guide].
+This page covers how the token composes them.
+
+## The account model
+
+### What is on the public ledger
+
+Every ledger field of the module is exported, so an observer can read all of the following directly from state:
+
+* **Encryption keys** (`_encryptionKeys`): `accountId` to the account's ElGamal public key, published by [register].
+* **Spendable balances** (`_balances`): one ElGamal ciphertext per registered account.
+  Debits (transfers out, approvals, burns) draw from this cell.
+* **Pending balances** (`_pending`): a second ciphertext per account where incoming credits land.
+  Only the owner moves pending into spendable, with [sweep].
+* **Memos** (`_memos`): per account, a list of [EcdhMask] ciphertexts, one per credit received.
+  Each one carries the credited amount encrypted to the recipient's key; this is how a recipient learns what it was sent.
+* **Escrow entries** (`_escrow`): per (owner, spender), an [EscrowEntry] holding the encrypted allowance.
+* **Credit counters** (`_creditEpochs`): per account, the lifetime number of credits received. It never resets.
+* **Escrow-spend counters** (`_escrowSpendEpochs`): per (owner, spender), the number of times the escrow was drawn on. It never resets.
+* **Metadata** (`_name`, `_symbol`, `_decimals`) and the `_isInitialized` flag.
+
+The module keeps no nullifier sets; the two counters above are the only monotonic state it writes,
+and both exist to keep per-operation randomness distinct (see below), not to prevent replay.
+
+What an observer learns from this is the set of registered `accountId`s, which accounts transact with which,
+how many credits each account has received, and how often each escrow has been spent from.
+What an observer does not learn is any balance, any transferred amount, or any allowance cap,
+unless the deployment also tracks public supply (see [Minting, burning and supply](#minting-burning-and-supply)).
+
+### What the user holds privately
+
+Four witnesses feed the circuits. Each is listed with how (or whether) the circuit verifies it.
+
+* [wit_ConfidentialTokenSK] returns the **account secret**. The circuit computes `accountId = H(SK)`
+  and uses that id for every ledger lookup, so a wrong secret resolves to a different account and the call fails.
+* [wit_ConfidentialTokenEK] returns the **encryption secret**. The circuit re-derives the ElGamal public key from it
+  and compares against the key stored at registration, either through the balance proof or directly on
+  [sweep] and [clearMemos], which have no plaintext to prove.
+* [wit_PlaintextBalance] returns the wallet's **cached plaintext** for a given ciphertext.
+  The ciphertext is passed in as the argument so the wallet can route by ciphertext identity rather than by call order.
+  The circuit verifies the claim with `ElGamal_assertDecryptsTo`; a wrong value fails the proof.
+* [wit_RandomnessSeed] returns a 32-byte **randomness seed** from which every per-operation random scalar
+  and every memo ephemeral is expanded in-circuit. Unlike the other three, this witness is **not** verified.
+
+The same key material may back both the account secret and the encryption secret, or both may be derived from one master secret:
+the account id is an untagged hash of the SK, while the encryption scalar is a domain-separated hash of the EK,
+so publishing the id does not reveal the encryption key.
+
+<Callout type='warn'>
+  Seed freshness is load-bearing for confidentiality on every path. The seed-to-randomness expansion is deterministic
+  and public, so anyone who knows a seed can strip the memo mask and read the delivered amount, and can recover a balance
+  or escrow amount from its public ciphertext. Reusing a seed across two operations leaks the difference between their amounts,
+  and the circuit does not prevent reuse. A wallet must supply a fresh, high-entropy, secret seed on every invocation.
+  On `transferFrom` and `burnFrom` the seed is the spender's but the ciphertexts it randomizes belong to the owner,
+  so a careless spender leaks a counterparty's balance, not their own.
+</Callout>
+
+The TypeScript witnesses in the repository are test-only and are not published with the package;
+in particular the test seed witness returns a fixed value. A consumer authors its own witnesses,
+backed by the user's wallet, and the seed witness must draw from a cryptographically secure random source.
+
+### Balance claims and the per-operation bound
+
+Every value-bearing circuit takes a `Uint<128>` amount and checks it against [MAX_TRANSFER_VALUE].
+A balance, however, is the homomorphic sum of every credit it has ever received and has no running total to bound it,
+so the plaintext a wallet claims through [wit_PlaintextBalance] is a `Uint<248>`, wider than any single amount.
+A balance accumulated past the per-operation bound therefore stays spendable.
+Escrow claims are narrowed back to `Uint<128>`, since an allowance is set by one `approve` and only ever reduced.
+
+## Registration
+
+[register] derives the caller's ElGamal public key from the encryption secret, stores it under the caller's `accountId`,
+and initializes both the spendable and the pending balance to an encryption of zero.
+It discloses the `accountId` and the public key. Registration is required before an account can send **or** receive:
+a credit needs the recipient's public key to encrypt under.
+
+Before any on-chain call, a wallet derives its own id with the pure [computeAccountId] circuit (no proof needed):
+
+```ts
+const accountId = Token_computeAccountId(secretKey);
+```
+
+The id is global: the same secret produces the same `accountId` in every module that derives it this way
+(`Utils_computeAccountId` is the shared implementation).
+
+## Transfers, pending balances and memos
+
+[transfer] does three things in one proof:
+
+1. **Debit.** The caller proves the plaintext of its spendable balance, the circuit checks it is at least `value`,
+   and the balance ciphertext is replaced by a homomorphic subtraction of `value` under fresh randomness.
+2. **Credit.** The recipient's *pending* ciphertext is replaced by a homomorphic addition of `value`.
+   The recipient's credit counter is incremented and folded into the randomness, so two credits never share randomness
+   even if a sender reuses a seed.
+3. **Memo.** An [EcdhMask] ciphertext carrying `value`, encrypted to the recipient's public key, is pushed to the front of
+   the recipient's memo list.
+
+What reaches the ledger: the sender's `accountId`, the recipient's `accountId`, two new ciphertexts and one memo.
+The amount is not disclosed. Self-transfer is rejected.
+
+### How a recipient learns of incoming funds
+
+The on-chain balance ciphertext is exponential ElGamal (it encrypts `g^value`), so a wallet cannot cheaply decrypt it.
+Instead the wallet scans its own `_memos` list off-chain, decrypts each new entry directly with its encryption secret
+(no discrete-log search and no bounded-value table), and adds the amounts to a local plaintext cache.
+
+Memos record credits only. Debits (sends, approvals, burns) move value with no memo, so summing memos overcounts an account
+that has ever spent. The wallet's running cache, not memo replay, is the authoritative balance,
+and it is what the wallet returns from [wit_PlaintextBalance].
+
+### Sweeping pending into spendable
+
+Credits land in `_pending`, not in `_balances`, so a third party cannot change the ciphertext an owner is about to prove against.
+Without this split an attacker could send dust to invalidate a victim's in-flight spend proofs.
+The owner calls [sweep] when ready: it homomorphically adds the two ciphertexts, resets pending to an encryption of zero,
+and needs no plaintext (the wallet already learned the pending amounts from its memos).
+Only the owner can sweep, since the circuit checks both the account secret and the encryption secret.
+A wallet's total holding is `balanceOf + pendingOf`.
+
+### The conserving primitive
+
+[_move] is [transfer] without the self-transfer guard: it debits the caller and credits `to` by the same amount, net zero,
+and never changes supply. It is the building block for custom value flows (fees, splits, settlement),
+and it stays permissive so a composing contract can set its own policy.
+
+### Pruning memos
+
+A wallet that has folded its memos into a durable cache can call [clearMemos] to empty its list on chain.
+The call takes the caller's view of its credit counter and is rejected if a credit landed in between,
+so a memo the wallet has not yet seen is never discarded.
+
+<Callout type='warn'>
+  Clearing memos is destructive. Spending requires proving the balance plaintext, and the plaintext can only be
+  reconstructed from the memos or from the wallet's cache. Clear only memos already folded into a durable, backed-up cache;
+  otherwise the balance becomes unspendable, not merely undisplayable.
+</Callout>
+
+## Approvals and escrow
+
+An allowance is not a public cap. [approve] moves `value` out of the caller's spendable balance into an escrow entry
+that holds two encryptions of the same amount, one under the spender's key and one under the owner's,
+plus an owner-readable memo of the current remaining allowance:
+
+```
+EscrowEntry { spenderCt, ownerCt, ownerMemo }
+```
+
+Re-approving first refunds any prior escrow for that spender back to the owner's balance (a homomorphic add of `ownerCt`,
+no plaintext needed) and then escrows the new amount, so allowances replace rather than stack.
+Revoking is `approve(spender, 0)`. What reaches the ledger: the owner's and spender's ids, the owner's new balance ciphertext,
+and the entry; the cap is not disclosed.
+
+[transferFrom] is called by the spender. It proves the plaintext of `spenderCt`, checks it is at least `value`,
+reduces **both** escrow copies by `value`, refreshes `ownerMemo` with the new remaining amount
+(computed in-circuit from the verified plaintext, so the spender cannot forge it), increments the (owner, spender) spend counter,
+and credits `to` exactly as [transfer] does. [_burnFrom] is the same escrow spend with no credit.
+
+### What a partial spend leaves behind
+
+After a spender draws part of an allowance, the ledger holds a reduced `spenderCt` and `ownerCt` that still encrypt the same
+remaining amount, a fresh `ownerMemo` stating that remainder, and an incremented spend counter.
+The owner receives no balance memo (its spendable balance did not change) and instead decrypts `ownerMemo`
+to learn how much is left in escrow. That is what lets the owner prove its post-refund balance on the next `approve`,
+when the remainder flows back into `_balances`. Without the memo a partial spend would strand the escrow.
+
+[allowance] returns the entry, or a well-formed encrypted-zero entry when none exists. "No allowance" and "an allowance of zero"
+read the same through the getter; a caller that must distinguish them reads `_escrow` membership off chain.
+Granting nothing is safe because the spend path gates on escrow membership independently.
+
+## Minting, burning and supply
+
+The base module ships three supply-changing building blocks and no supply accounting:
+
+* [_mint] credits `value` to `account` (with a memo), exactly like the credit half of a transfer.
+* [_burn] debits `value` from the caller's spendable balance.
+* [_burnFrom] consumes `value` from an escrow the owner granted the caller.
+
+None of them touches a total. Pair them with [ConfidentialFungibleTokenPublicSupply] when the deployment tracks supply:
+its `_totalSupply` ledger field is a public `Uint<128>`, and [_addSupply] / [_subSupply] disclose each mint and burn amount
+through the delta on that value. Balances stay confidential; only the aggregate is visible. This is the right default
+for issuers who must attest to a circulating supply. The extension imports no token module, needs no initialization,
+and the pairing of each token operation with its accounting block is the composing contract's responsibility.
+
+<Callout type='warn'>
+  Never re-export `_mint`, `_burn`, or `_burnFrom` from a deployed contract. Compact cannot restrict a re-export,
+  so a raw `_mint` is a permissionless mint, a raw `_burn` a permissionless burn, and a raw `_burnFrom` destroys escrowed
+  value with no supply decrement. Expose only the conserving surface (`transfer`, `_move`, `approve`, `transferFrom`, `sweep`)
+  plus your own gated `mint` / `burn` / `burnFrom` wrappers.
+</Callout>
+
+## Gating on the caller
+
+A composing contract that enforces policy on the caller (freeze lists, KYC, pause) cannot read the caller's identity itself:
+the caller is derived from a witness inside the module, and a second witness call in the wrapper could return a different secret.
+For that reason every caller-authenticating circuit ([register], [_burn], [transfer], [_move], [approve], [transferFrom],
+[sweep], [_burnFrom]) returns the `accountId` it authenticated. Gate on the returned value after the call;
+an assertion that fails anywhere in a circuit invalidates the whole transaction, so a post-call check still blocks the operation.
+The returned id is always the caller (sender, approver, spender, or registrant), never `to` or `fromAddress`,
+which are explicit arguments a wrapper gates directly.
+
+Accounts are externally owned. A contract has no private state in which to hold an encryption secret,
+so it could be credited but could never prove a balance or scan memos; the module therefore keys everything by a `Bytes<32>`
+account id and offers no `ContractAddress` variant. A protocol that needs to hold these tokens uses an account it controls
+through `approve` / `transferFrom`.
+
+## Usage
+
+The following contract composes the token with the public-supply extension and [Ownable],
+pairing every supply change with its accounting block and restricting `mint` to the contract owner.
+It re-exports the module's ledger so wallets can read ciphertexts and memos off chain,
+and it exposes the conserving surface plus gated supply wrappers.
+
+```typescript
+pragma language_version >= {{compact_language_version}};
+
+import CompactStandardLibrary;
+import "./node_modules/@openzeppelin/compact-contracts/token/ConfidentialFungibleToken"
+  prefix Token_;
+import "./node_modules/@openzeppelin/compact-contracts/token/extensions/ConfidentialFungibleTokenPublicSupply"
+  prefix Supply_;
+import "./node_modules/@openzeppelin/compact-contracts/crypto/ElGamal"
+  prefix ElGamal_;
+import "./node_modules/@openzeppelin/compact-contracts/access/Ownable"
+  prefix Ownable_;
+
+// Types wallets need to read balances and escrow entries.
+export { Token_EscrowEntry, ElGamal_Ciphertext };
+
+// Surface the module's ledger so wallets can scan memos and read ciphertexts
+// without a proof.
+export {
+  Token__balances,
+  Token__pending,
+  Token__encryptionKeys,
+  Token__memos,
+  Token__escrow,
+  Token__creditEpochs,
+  Token__name,
+  Token__symbol,
+  Token__decimals,
+  Supply__totalSupply
+};
+
+constructor(
+  name_: Opaque<"string">,
+  symbol_: Opaque<"string">,
+  decimals_: Uint<8>,
+  issuer: Either<Bytes<32>, ContractAddress>
+) {
+  Token_initialize(name_, symbol_, decimals_);
+  Ownable_initialize(issuer);
+}
+
+// Views
+
+export circuit totalSupply(): Uint<128> {
+  return Supply_totalSupply();
+}
+
+export circuit balanceOf(account: Bytes<32>): ElGamal_Ciphertext {
+  return Token_balanceOf(account);
+}
+
+export circuit pendingOf(account: Bytes<32>): ElGamal_Ciphertext {
+  return Token_pendingOf(account);
+}
+
+export circuit allowance(owner: Bytes<32>, spender: Bytes<32>): Token_EscrowEntry {
+  return Token_allowance(owner, spender);
+}
+
+export circuit isRegistered(account: Bytes<32>): Boolean {
+  return Token_isRegistered(account);
+}
+
+export pure circuit computeAccountId(sk: Bytes<32>): Bytes<32> {
+  return Token_computeAccountId(sk);
+}
+
+// Registration and wallet maintenance
+
+export circuit register(): Bytes<32> {
+  return Token_register();
+}
+
+export circuit sweep(): Bytes<32> {
+  return Token_sweep();
+}
+
+export circuit clearMemos(expectedEpoch: Uint<64>): [] {
+  Token_clearMemos(expectedEpoch);
+}
+
+// Conserving value operations
+
+export circuit transfer(to: Bytes<32>, value: Uint<128>): Bytes<32> {
+  return Token_transfer(to, value);
+}
+
+export circuit approve(spender: Bytes<32>, value: Uint<128>): Bytes<32> {
+  return Token_approve(spender, value);
+}
+
+export circuit transferFrom(
+  fromAddress: Bytes<32>,
+  to: Bytes<32>,
+  value: Uint<128>
+): Bytes<32> {
+  return Token_transferFrom(fromAddress, to, value);
+}
+
+// Supply operations: each token building block is paired with its
+// accounting block, so sum(balances) == totalSupply holds by construction.
+
+export circuit mint(account: Bytes<32>, value: Uint<128>): [] {
+  Ownable_assertOnlyOwner();
+  Supply__addSupply(value);
+  Token__mint(account, value);
+}
+
+export circuit burn(value: Uint<128>): Bytes<32> {
+  const accountId = Token__burn(value);
+  Supply__subSupply(value);
+  return accountId;
+}
+
+export circuit burnFrom(fromAddress: Bytes<32>, value: Uint<128>): Bytes<32> {
+  const spenderId = Token__burnFrom(fromAddress, value);
+  Supply__subSupply(value);
+  return spenderId;
+}
+```
+
+A few points about this layout:
+
+* `mint` is gated on the contract owner. `burn` and `burnFrom` need no extra gate: the module already authenticates
+  the caller as the account (or the approved spender) whose value is destroyed, and both return that `accountId`
+  for any further policy check.
+* `name`, `symbol`, and `decimals` are read from the exported ledger rather than through getter circuits.
+* The raw `_mint`, `_burn`, and `_burnFrom` building blocks are not re-exported; see the callout above.
+
+### Wallet-side flow
+
+A wallet integrating this contract typically:
+
+1. Derives `accountId` with `computeAccountId(sk)` and calls `register()` once.
+2. Scans `_memos[accountId]` after each block, decrypts new entries with the encryption secret, and updates its plaintext cache.
+3. Calls `sweep()` to make pending credits spendable.
+4. Supplies, through its witnesses, the account secret, the encryption secret, the cached plaintext for whichever ciphertext
+   the circuit asks about, and a fresh seed on every call.
+5. After a partial `transferFrom` against an allowance it granted, decrypts the escrow entry's `ownerMemo` to learn the remainder.
+
+## Known limitations
+
+* Two credits to the same recipient in the same block conflict, because each credit reads and advances the recipient's
+  credit counter. Credits to one account serialize.
+* Anyone can append memos to any registered account by sending it dust, and only the account owner can prune the list.
+* The value circuits are large. A deployment that exposes the full surface may exceed a network's per-transaction byte budget;
+  confirm deployability against the target network and expose only the operations the contract needs.
+* Contract-to-contract holdings are out of scope, as described under [Gating on the caller](#gating-on-the-caller).

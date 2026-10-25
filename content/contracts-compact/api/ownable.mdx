@@ -8,10 +8,15 @@ This module provides the full Ownable module API.
 For an overview of the module, read the [Ownable guide](../ownable).
 </Callout>
 
+The page covers the following modules:
+
+- [Ownable](#Ownable): a single owner identified by a public account identifier.
+- [ZOwnablePK](#ZOwnablePK): a single owner identified by a shielded commitment.
+
 ## Ownable [toc] [#Ownable]
 <APIGithubLinkHeader
     moduleName="Ownable"
-    link={`https://github.com/OpenZeppelin/compact-contracts/blob/main/contracts/src/access/Ownable.compact`}
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/access/Ownable.compact`}
 />
 
 ```ts
@@ -23,6 +28,17 @@ import "./node_modules/@openzeppelin/compact-contracts/access/Ownable";
 ### Ledger [toc] [#Ownable-Ledger]
 ### Ledger [!toc] [#Ownable-Ledger]
 
+#### _isInitialized [toc] [#Ownable-_isInitialized]
+#### [!toc] [#Ownable-_isInitialized]
+<APIItemCompact
+  circuitSig='_isInitialized: Boolean'
+  kind="ledger"
+  id="Ownable-_isInitialized"
+>
+  Boolean indicating whether [initialize](#Ownable-initialize) has been called.
+  Every other circuit in the module requires it to be `true`.
+</APIItemCompact>
+
 #### _owner [toc] [#Ownable-_owner]
 #### [!toc] [#Ownable-_owner]
 <APIItemCompact
@@ -30,11 +46,16 @@ import "./node_modules/@openzeppelin/compact-contracts/access/Ownable";
   kind="ledger"
   id="Ownable-_owner"
 >
-  Either a `Bytes<32>` account identifier or `ContractAddress` representing the owner.
+  Either a `Bytes<32>` account identifier or a `ContractAddress` representing the owner.
+  The value is stored canonicalized (the inactive branch of the `Either` is zeroed).
+  A `Bytes<32>` value of zero means the contract is unowned.
 </APIItemCompact>
 
 ### Witnesses [toc] [#Ownable-Witnesses]
 ### Witnesses [!toc] [#Ownable-Witnesses]
+
+Witness implementations are authored by the consuming DApp.
+The TypeScript witnesses in the repository are test-only and are not published with the package.
 
 #### wit_OwnableSK [toc] [#Ownable-wit_OwnableSK]
 #### [!toc] [#Ownable-wit_OwnableSK]
@@ -43,7 +64,8 @@ import "./node_modules/@openzeppelin/compact-contracts/access/Ownable";
   kind="witness"
   id="Ownable-wit_OwnableSK"
 >
-  Returns the caller's secret key used in deriving the account identifier.
+  Returns the caller's secret key used in deriving the account identifier `H(secretKey)`.
+  The key never reaches the ledger; only the derived identifier is compared against `_owner`.
 
   The same key produces the same account identifier across all contracts. Users who
   desire cross-contract unlinkability should use different keys per contract.
@@ -62,6 +84,8 @@ import "./node_modules/@openzeppelin/compact-contracts/access/Ownable";
 >
   Initializes the contract by setting the `initialOwner`.
   This must be called in the contract's constructor.
+
+  Discloses: the canonicalized `initialOwner`, written to `_owner`.
 
   Requirements:
 
@@ -100,6 +124,8 @@ import "./node_modules/@openzeppelin/compact-contracts/access/Ownable";
     This restriction prevents permanently disabling access to a circuit.
   </Callout>
 
+  Discloses: the canonicalized `newOwner`, written to `_owner`.
+
   Requirements:
 
   * Contract is initialized.
@@ -124,6 +150,8 @@ import "./node_modules/@openzeppelin/compact-contracts/access/Ownable";
     Once contract-to-contract calls are supported, this circuit may be deprecated.
   </Callout>
 
+  Discloses: the canonicalized `newOwner`, written to `_owner`.
+
   Requirements:
 
   * Contract is initialized.
@@ -139,7 +167,7 @@ import "./node_modules/@openzeppelin/compact-contracts/access/Ownable";
   complexity="k=13, rows=2364"
   modulePrefix="Ownable"
 >
-  Leaves the contract without an owner.
+  Leaves the contract without an owner by writing the zero `Bytes<32>` identifier to `_owner`.
   It will not be possible to call [`assertOnlyOwner`](#Ownable-assertOnlyOwner) circuits anymore.
   Can only be called by the current owner.
 
@@ -159,11 +187,14 @@ import "./node_modules/@openzeppelin/compact-contracts/access/Ownable";
 >
   Throws if called by any account other than the owner.
   Use this to restrict access of specific circuits to the owner.
-  The caller's identity is derived from the `wit_OwnableSK` witness as `persistentHash(secretKey)`.
+  The caller's identity is derived from the `wit_OwnableSK` witness as `H(secretKey)`,
+  the same derivation as [`Utils.computeAccountId`](./utils#Utils-computeAccountId),
+  and compared against `_owner`.
 
   Requirements:
 
   * Contract is initialized.
+  * `_owner` holds a `Bytes<32>` account identifier (a contract-address owner cannot authenticate).
   * The caller is the current contract owner.
 </APIItemCompact>
 
@@ -182,6 +213,8 @@ import "./node_modules/@openzeppelin/compact-contracts/access/Ownable";
     This restriction prevents circuits from being inadvertently locked in contracts.
   </Callout>
 
+  Discloses: the canonicalized `newOwner`, written to `_owner`.
+
   Requirements:
 
   * Contract is initialized.
@@ -197,6 +230,7 @@ import "./node_modules/@openzeppelin/compact-contracts/access/Ownable";
   modulePrefix="Ownable"
 >
   Unsafe variant of [`_transferOwnership`](#Ownable-_transferOwnership).
+  This is the single write point for `_owner`: every ownership change flows through it.
 
   <Callout type='warn'>
     Ownership transfers to contract addresses are considered unsafe because contract-to-contract calls are not currently supported.
@@ -204,45 +238,11 @@ import "./node_modules/@openzeppelin/compact-contracts/access/Ownable";
     Once contract-to-contract calls are supported, this circuit may be deprecated.
   </Callout>
 
+  Discloses: the canonicalized `newOwner`, written to `_owner`.
+
   Requirements:
 
   * Contract is initialized.
-</APIItemCompact>
-
-#### _computeAccountId [toc] [#Ownable-_computeAccountId]
-#### [!toc] [#Ownable-_computeAccountId]
-<APIItemCompact
-  circuitSig="_computeAccountId() → Bytes<32>"
-  kind="internal"
-  modulePrefix="Ownable"
->
-  Computes the caller's account identifier from the `wit_OwnableSK` witness.
-
-  ID Derivation: `accountId = persistentHash(secretKey)`
-
-  The result is a 32-byte commitment that uniquely identifies the caller.
-</APIItemCompact>
-
-#### computeAccountId [toc] [#Ownable-computeAccountId]
-#### [!toc] [#Ownable-computeAccountId]
-<APIItemCompact
-  circuitSig="computeAccountId(secretKey: Bytes<32>) → Bytes<32>"
-  kind="pure"
-  modulePrefix="Ownable"
->
-  Computes an account identifier without on-chain state, allowing a user to derive
-  their identity commitment before submitting it in an ownership transfer.
-  This is the off-chain counterpart to the internal `_computeAccountId` and produces an identical result
-  given the same inputs.
-
-  ID Derivation: `accountId = persistentHash(secretKey)`
-
-  <Callout type='warn'>
-    The `secretKey` parameter is a sensitive secret. Mishandling it can permanently compromise the security of this system.
-    Never log or persist the key in plaintext. Use cryptographically secure randomness to generate keys.
-    Treat key loss as identity loss.
-    A lost key cannot be recovered.
-  </Callout>
 </APIItemCompact>
 
 ---
@@ -250,7 +250,7 @@ import "./node_modules/@openzeppelin/compact-contracts/access/Ownable";
 ## ZOwnablePK [toc] [#ZOwnablePK]
 <APIGithubLinkHeader
     moduleName="ZOwnablePK"
-    link={`https://github.com/OpenZeppelin/compact-contracts/blob/main/contracts/src/access/ZOwnablePK.compact`}
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/access/ZOwnablePK.compact`}
 />
 
 ```ts
@@ -259,8 +259,19 @@ import "./node_modules/@openzeppelin/compact-contracts/access/ZOwnablePK";
 
 ---
 
-### Ledger [toc] [#ZOwnablePK-ledger]
-### Ledger [!toc] [#ZOwnablePK-ledger]
+### Ledger [toc] [#ZOwnablePK-Ledger]
+### Ledger [!toc] [#ZOwnablePK-Ledger]
+
+#### _isInitialized [toc] [#ZOwnablePK-_isInitialized]
+#### [!toc] [#ZOwnablePK-_isInitialized]
+<APIItemCompact
+  circuitSig='_isInitialized: Boolean'
+  kind="ledger"
+  id="ZOwnablePK-_isInitialized"
+>
+  Boolean indicating whether [initialize](#ZOwnablePK-initialize) has been called.
+  Every other non-pure circuit in the module requires it to be `true`.
+</APIItemCompact>
 
 #### _ownerCommitment [toc] [#ZOwnablePK-_ownerCommitment]
 #### [!toc] [#ZOwnablePK-_ownerCommitment]
@@ -270,7 +281,7 @@ import "./node_modules/@openzeppelin/compact-contracts/access/ZOwnablePK";
   id="ZOwnablePK-_ownerCommitment"
 >
   Stores the current hashed commitment representing the owner.
-  This commitment is derived from the public identifier (e.g., `SHA256(pk, nonce)`),
+  This commitment is derived from the owner identifier `SHA256(pk || nonce)`,
   the `instanceSalt`, the transfer `counter`, and a domain separator.
 
   A commitment of `default<Bytes<32>>` (i.e. zero) indicates the contract is unowned.
@@ -299,32 +310,43 @@ import "./node_modules/@openzeppelin/compact-contracts/access/ZOwnablePK";
   A per-instance value provided at initialization used to namespace commitments for this contract instance.
 
   This salt prevents commitment collisions across contracts that might otherwise use the same owner identifiers or domain parameters.
+  Use a fresh random value per deployment: a reused salt links the same owner across deployments.
   It is immutable after initialization.
 </APIItemCompact>
 
-### Witnesses [toc] [#ZOwnablePK-witnesses]
-### Witnesses [!toc] [#ZOwnablePK-witnesses]
+### Witnesses [toc] [#ZOwnablePK-Witnesses]
+### Witnesses [!toc] [#ZOwnablePK-Witnesses]
+
+Witness implementations are authored by the consuming DApp.
+The TypeScript witnesses in the repository are test-only and are not published with the package.
 
 #### wit_secretNonce [toc] [#ZOwnablePK-wit_secretNonce]
 #### [!toc] [#ZOwnablePK-wit_secretNonce]
 <APIItemCompact
-  circuitSig='wit_secretNonce(): Bytes<32>'
+  circuitSig='wit_secretNonce() → Bytes<32>'
   kind="witness"
-  modulePrefix="ZOwnablePK"
+  id="ZOwnablePK-wit_secretNonce"
 >
   A private per-user nonce used in deriving the shielded owner identifier.
 
-  Combined with the user's public key as `SHA256(pk, nonce)` to produce an obfuscated, unlinkable identity commitment.
-  Users are encouraged to rotate this value on ownership changes.
+  Combined with the user's public key as `SHA256(pk || nonce)` to produce an obfuscated,
+  unlinkable identity commitment. Users are encouraged to rotate this value on ownership changes.
+
+  <Callout type='warn'>
+    `ownPublicKey()` is itself a witness: it returns the caller's Zswap coin public key, and nothing proves the caller
+    holds the matching private key. The secret nonce is therefore the owner credential. Anyone holding the nonce and
+    the owner's public key can pass `assertOnlyOwner`. Generate it as 32 bytes from a CSPRNG and keep it private;
+    losing it prevents the owner from proving ownership or transferring it.
+  </Callout>
 </APIItemCompact>
 
-### Circuits [toc] [#ZOwnablePK-circuits]
-### Circuits [!toc] [#ZOwnablePK-circuits]
+### Circuits [toc] [#ZOwnablePK-Circuits]
+### Circuits [!toc] [#ZOwnablePK-Circuits]
 
 #### initialize [toc] [#ZOwnablePK-initialize]
 #### [!toc] [#ZOwnablePK-initialize]
 <APIItemCompact
-  circuitSig='initialize(ownerId: Bytes<32>, instanceSalt: Bytes<32>): []'
+  circuitSig='initialize(ownerId: Bytes<32>, instanceSalt: Bytes<32>) → []'
   kind="circuit"
   complexity="k=14, rows=14933"
   modulePrefix="ZOwnablePK"
@@ -339,22 +361,26 @@ import "./node_modules/@openzeppelin/compact-contracts/access/ZOwnablePK";
     See [_computeOwnerId](#ZOwnablePK-_computeOwnerId).
   </Callout>
 
+  Discloses: `instanceSalt`, written to `_instanceSalt`, and the resulting owner commitment, written to `_ownerCommitment`.
+  The `ownerId` itself is not disclosed.
+
   Requirements:
 
   * Contract is not initialized.
   * `ownerId` is not zero.
+  * `instanceSalt` is not zero.
 </APIItemCompact>
 
 #### owner [toc] [#ZOwnablePK-owner]
 #### [!toc] [#ZOwnablePK-owner]
 <APIItemCompact
-  circuitSig='owner(): Bytes<32>'
+  circuitSig='owner() → Bytes<32>'
   kind="circuit"
   complexity="k=10, rows=57"
   modulePrefix="ZOwnablePK"
 >
   Returns the current commitment representing the contract owner.
-  The full commitment is: `SHA256(SHA256(pk, nonce), instanceSalt, counter, domain)`.
+  The full commitment is `SHA256(SHA256(pk || nonce) || instanceSalt || counter || domain)`.
 
   Requirements:
 
@@ -364,7 +390,7 @@ import "./node_modules/@openzeppelin/compact-contracts/access/ZOwnablePK";
 #### transferOwnership [toc] [#ZOwnablePK-transferOwnership]
 #### [!toc] [#ZOwnablePK-transferOwnership]
 <APIItemCompact
-  circuitSig='transferOwnership(newOwnerId: Bytes<32>): []'
+  circuitSig='transferOwnership(newOwnerId: Bytes<32>) → []'
   kind="circuit"
   complexity="k=16, rows=39240"
   modulePrefix="ZOwnablePK"
@@ -372,22 +398,24 @@ import "./node_modules/@openzeppelin/compact-contracts/access/ZOwnablePK";
   Transfers ownership to `newOwnerId`.
   `newOwnerId` must be precalculated and given to the current owner off chain.
 
+  Discloses: the new owner commitment, written to `_ownerCommitment`. The `newOwnerId` itself is not disclosed.
+
   Requirements:
 
   * Contract is initialized.
   * Caller is the current owner.
-  * `newOwnerId` is not an empty array.
+  * `newOwnerId` is not zero.
 </APIItemCompact>
 
 #### renounceOwnership [toc] [#ZOwnablePK-renounceOwnership]
 #### [!toc] [#ZOwnablePK-renounceOwnership]
 <APIItemCompact
-  circuitSig='renounceOwnership(): []'
+  circuitSig='renounceOwnership() → []'
   kind="circuit"
   complexity="k=15, rows=24442"
   modulePrefix="ZOwnablePK"
 >
-  Leaves the contract without an owner.
+  Leaves the contract without an owner by resetting `_ownerCommitment` to zero.
   It will not be possible to call `assertOnlyOwner` circuits anymore.
   Can only be called by the current owner.
 
@@ -400,25 +428,28 @@ import "./node_modules/@openzeppelin/compact-contracts/access/ZOwnablePK";
 #### assertOnlyOwner [toc] [#ZOwnablePK-assertOnlyOwner]
 #### [!toc] [#ZOwnablePK-assertOnlyOwner]
 <APIItemCompact
-  circuitSig='assertOnlyOwner(): []'
+  circuitSig='assertOnlyOwner() → []'
   kind="circuit"
   complexity="k=15, rows=24437"
   modulePrefix="ZOwnablePK"
 >
-  Throws if called by any account whose id hash `SHA256(pk, nonce)` does not match
+  Throws if called by any account whose id hash `SHA256(pk || nonce)` does not match
   the stored owner commitment.
   Use this to only allow the owner to call specific circuits.
+
+  The `pk` is read from `ownPublicKey()` and the `nonce` from `wit_secretNonce`; both are witness values.
+  Neither reaches the ledger: the check compares the recomputed commitment against `_ownerCommitment` inside the proof.
 
   Requirements:
 
   * Contract is initialized.
-  * Caller's id (`SHA256(pk, nonce)`) when used in `_computeOwnerCommitment` equals the stored `_ownerCommitment`.
+  * Caller's id (`SHA256(pk || nonce)`) when used in `_computeOwnerCommitment` equals the stored `_ownerCommitment`.
 </APIItemCompact>
 
 #### _computeOwnerCommitment [toc] [#ZOwnablePK-_computeOwnerCommitment]
 #### [!toc] [#ZOwnablePK-_computeOwnerCommitment]
 <APIItemCompact
-  circuitSig='_computeOwnerCommitment(id: Bytes<32>, counter: Uint<64>): Bytes<32>'
+  circuitSig='_computeOwnerCommitment(id: Bytes<32>, counter: Uint<64>) → Bytes<32>'
   kind="circuit"
   complexity="k=14, rows=14853"
   modulePrefix="ZOwnablePK"
@@ -426,10 +457,10 @@ import "./node_modules/@openzeppelin/compact-contracts/access/ZOwnablePK";
   Computes the owner commitment from the given `id` and `counter`.
 
   The commitment derivation follows:
-  `commitment = SHA256(id, instanceSalt, counter, "ZOwnablePK:shield:")`
+  `commitment = SHA256(id || instanceSalt || counter || "ZOwnablePK:shield:")`
 
   Where:
-  - `id`: The unique identifier `SHA256(pk, nonce)`.
+  - `id`: The unique identifier `SHA256(pk || nonce)`.
   - `instanceSalt`: Per-deployment salt to prevent collisions.
   - `counter`: Incremented with each transfer for uniqueness. Cast to `Field` then `Bytes<32>` for hashing.
   - Domain separator: `"ZOwnablePK:shield:"` padded to 32 bytes.
@@ -442,13 +473,13 @@ import "./node_modules/@openzeppelin/compact-contracts/access/ZOwnablePK";
 #### _computeOwnerId [toc] [#ZOwnablePK-_computeOwnerId]
 #### [!toc] [#ZOwnablePK-_computeOwnerId]
 <APIItemCompact
-  circuitSig='_computeOwnerId(pk: Either<ZswapCoinPublicKey, ContractAddress>, nonce: Bytes<32>): Bytes<32>'
+  circuitSig='_computeOwnerId(pk: Either<ZswapCoinPublicKey, ContractAddress>, nonce: Bytes<32>) → Bytes<32>'
   kind="pure"
   modulePrefix="ZOwnablePK"
 >
   Computes the unique identifier (`id`) of the owner from their public key and a secret nonce.
 
-  The ID derivation follows: `id = SHA256(pk, nonce)`
+  The ID derivation follows: `id = SHA256(pk || nonce)`
 
   <Callout type='info'>
     Currently only supports `ZswapCoinPublicKey`. Contract address owners are not yet supported.
@@ -462,26 +493,18 @@ import "./node_modules/@openzeppelin/compact-contracts/access/ZOwnablePK";
 #### _transferOwnership [toc] [#ZOwnablePK-_transferOwnership]
 #### [!toc] [#ZOwnablePK-_transferOwnership]
 <APIItemCompact
-  circuitSig='_transferOwnership(newOwnerId: Bytes<32>): []'
+  circuitSig='_transferOwnership(newOwnerId: Bytes<32>) → []'
   kind="circuit"
   complexity="k=14, rows=14823"
   modulePrefix="ZOwnablePK"
 >
   Transfers ownership to owner id `newOwnerId` without enforcing permission checks on the caller.
 
-  This is an internal function that increments the counter and updates the owner commitment.
+  This is an internal circuit that increments the counter and updates the owner commitment.
+
+  Discloses: the new owner commitment, written to `_ownerCommitment`. The `newOwnerId` itself is not disclosed.
 
   Requirements:
 
   * Contract is initialized.
-</APIItemCompact>
-
-#### _isTargetZero [toc] [#Ownable-_isTargetZero]
-#### [!toc] [#Ownable-_isTargetZero]
-<APIItemCompact
-  circuitSig="_isTargetZero(target: Either<Bytes<32>, ContractAddress>) → Boolean"
-  kind="internal"
-  modulePrefix="Ownable"
->
-  Returns `true` if `target`'s active branch (as indicated by `is_left`) holds the zero value.
 </APIItemCompact>

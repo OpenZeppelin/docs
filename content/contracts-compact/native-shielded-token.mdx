@@ -1,0 +1,374 @@
+---
+title: NativeShieldedToken
+---
+
+{/* links */}
+[Module/Contract Pattern]: ./extensibility.mdx#the_module_contract_pattern
+[ZOwnablePK]: ./ownable
+[wit_secretNonce]: api/ownable#ZOwnablePK-wit_secretNonce
+[ZOwnablePK__computeOwnerId]: api/ownable#ZOwnablePK-_computeOwnerId
+[NativeShieldedToken]: api/native-shielded-token#NativeShieldedToken
+[NativeShieldedTokenFamily]: api/native-shielded-token#NativeShieldedTokenFamily
+[NativeShieldedTokenCore]: api/native-shielded-token#NativeShieldedTokenCore
+[tokenColor]: api/native-shielded-token#NativeShieldedToken-tokenColor
+[_mint]: api/native-shielded-token#NativeShieldedToken-_mint
+[_mintToSelf]: api/native-shielded-token#NativeShieldedToken-_mintToSelf
+[_burn]: api/native-shielded-token#NativeShieldedToken-_burn
+[_burnFromSelf]: api/native-shielded-token#NativeShieldedToken-_burnFromSelf
+[Core__mint]: api/native-shielded-token#NativeShieldedTokenCore-_mint
+[NativeShieldedTokenPublicSupply]: api/native-shielded-token#NativeShieldedTokenPublicSupply
+[NativeShieldedTokenFamilyPublicSupply]: api/native-shielded-token#NativeShieldedTokenFamilyPublicSupply
+[_addMinted]: api/native-shielded-token#NativeShieldedTokenPublicSupply-_addMinted
+[_addBurned]: api/native-shielded-token#NativeShieldedTokenPublicSupply-_addBurned
+[totalMinted]: api/native-shielded-token#NativeShieldedTokenPublicSupply-totalMinted
+[totalBurned]: api/native-shielded-token#NativeShieldedTokenPublicSupply-totalBurned
+[totalSupply]: api/native-shielded-token#NativeShieldedTokenPublicSupply-totalSupply
+[NativeShieldedTokenDerivedNonce]: api/native-shielded-token#NativeShieldedTokenDerivedNonce
+[_deriveNonce]: api/native-shielded-token#NativeShieldedTokenDerivedNonce-_deriveNonce
+[ZOwnableNativeShieldedToken]: api/native-shielded-token#ZOwnableNativeShieldedToken
+[mint]: api/native-shielded-token#ZOwnableNativeShieldedToken-mint
+[burn]: api/native-shielded-token#ZOwnableNativeShieldedToken-burn
+
+A native shielded token is a token whose units are Midnight's own shielded coins (Zswap UTXOs)
+rather than entries in a contract-owned map.
+The issuing contract mints coins of its own color and burns them;
+holding, spending, and transferring happen in the holder's wallet through Zswap, outside the contract.
+This family of modules implements the MIP-0011 native shielded token standard for the Midnight network:
+a single-token flavor ([NativeShieldedToken]), a multi-token flavor ([NativeShieldedTokenFamily]),
+the shared core both are built on ([NativeShieldedTokenCore]), opt-in supply accounting,
+an opt-in derived-nonce helper, and an owner-gated preset ([ZOwnableNativeShieldedToken]).
+
+## How a native shielded token works
+
+**Coins, not balances.** A unit of the token is a shielded coin with a `color`, a `value`, and a `nonce`.
+The ledger stores a commitment to each coin and a nullifier once it is spent; it never stores who holds what.
+There is no `balanceOf`, `allowance`, or contract-mediated `transfer`:
+once a user holds a coin, the contract cannot observe or restrict its movement,
+and holders move coins between wallets with ordinary Zswap transactions.
+
+**Color.** Every token type is identified by its coin color, `tokenType(domain, contractAddress)`,
+where `domain` is a 32-byte discriminator and `contractAddress` is the issuing contract.
+Because the contract address is part of the derivation, only the issuing contract can mint coins of its colors.
+The modules compute the color at call time with [tokenColor] and never store it.
+
+**Minting.** The contract calls `mintShieldedToken`, which creates a new coin for a recipient.
+The protocol caps a single mint at `Uint<64>`.
+
+**Burning.** The contract burns by sending value to `shieldedBurnAddress()`.
+Burn amounts are `Uint<128>`, because `sendShielded` accepts that width; the asymmetry with mints is a protocol property.
+
+**Metadata.** `name`, `symbol`, and `decimals` are contract-wide, fixed at construction, and public.
+`decimals` is a display convention only; the protocol operates on integer values.
+
+## What is public and what is private
+
+The token modules declare no witnesses; the only secrets are the ones that travel inside coins.
+
+Public on the ledger as state:
+
+* `_name`, `_symbol`, `_decimals`, and `_isInitialized` (and `_domain` for the single-token flavor).
+* The supply counters, if a supply extension is composed.
+
+Public in every transaction:
+
+* Each mint's color and amount, through the protocol's shielded-mint effect.
+* The coin commitments created and the nullifiers spent.
+* Which circuit ran.
+
+Private:
+
+* The recipient and the nonce of a mint, provided the nonce is secret and random.
+  Anyone who knows the nonce can recompute the commitment for candidate recipient keys.
+* The amount, the coin, and the refund recipient of a burn, as long as the observer does not know the coin's nonce.
+  A change output does reveal that a burn was partial.
+
+<Callout type='warn'>
+Contract-initiated mints and refunds do not create coin ciphertexts, so a recipient's wallet cannot discover
+those coins by scanning the chain. The `ShieldedCoinInfo` a circuit returns is the only copy of the coin:
+the DApp must capture it and deliver it to the recipient (or persist it, when the contract is the recipient).
+Dropping it strands the value irrecoverably.
+</Callout>
+
+## Single token or a family
+
+Both user-facing modules are thin wrappers over [NativeShieldedTokenCore], which owns the initialization flag,
+the metadata, and the mint and burn logic. They differ only in where the domain comes from.
+
+* [NativeShieldedToken] issues one token type. The domain is passed to `initialize`, stored as `sealed ledger _domain`,
+  and forwarded to every core operation, so no circuit takes a domain parameter and a caller cannot misuse one.
+* [NativeShieldedTokenFamily] issues many token types from one contract. Every circuit takes a `domain` parameter,
+  and `tokenType(domain, kernel.self())` discriminates the types.
+  Midnight has no contract-to-contract calls and no way for a contract to deploy another,
+  so a protocol that issues many related tokens (one liquidity-share token per pair, for instance)
+  must do so from a single contract. Metadata is family-wide; per-type identity belongs in the consumer's own state.
+
+<Callout type='warn'>
+Pick one flavor per contract. Both wrap the same core, so importing both into one contract shares a single
+initialization flag and one set of `name`, `symbol`, and `decimals`.
+</Callout>
+
+The core itself is not meant to be composed directly. Its `_mint` and `_burn` take an
+`Either<ZswapCoinPublicKey, ContractAddress>` recipient; the flavors narrow that to a `ZswapCoinPublicKey`
+and expose [_mintToSelf] for the contract's own coins.
+
+## Minting and who can receive a coin
+
+[_mint] takes a `ZswapCoinPublicKey` recipient, a `Uint<64>` amount, and a caller-supplied `Bytes<32>` nonce,
+and returns the new coin's `ShieldedCoinInfo`. The recipient must not be the zero key.
+
+**Recipients.** A coin can be minted to any user's coin public key, or to the issuing contract itself through [_mintToSelf],
+which mints to `kernel.self()` and claims the coin with `receiveShielded` in the same call.
+No other contract can receive a mint: the ledger only accepts a contract-addressed commitment when that contract claims it
+in the same transaction, and no primitive can claim a receive on another contract's behalf.
+The core enforces this directly ([Core__mint] rejects any `ContractAddress` other than the contract's own),
+and the flavors do not expose the address arm at all.
+A coin minted to the contract is the contract's holding: persist the returned coin info in your own ledger state,
+and spend it later with [_burnFromSelf] once it carries a Merkle-tree index.
+
+**Nonces.** The caller is responsible for nonce uniqueness. Reusing a nonce for the same (domain, value, recipient)
+produces a duplicate commitment, which the ledger rejects.
+With a secret, cryptographically random nonce the mint is recipient-private.
+If you do not want to manage nonces, compose [NativeShieldedTokenDerivedNonce] and pass its [_deriveNonce] output,
+at the cost of making those mints recipient-public (see below).
+
+The modules include no access control. Gate `_mint` and `_mintToSelf` with an access-control module
+following the [Module/Contract Pattern]; exposing them as-is lets anyone mint.
+
+## Burning and change
+
+There are two burn paths, chosen by where the coin comes from.
+
+[_burn] destroys value from a coin that the caller's wallet pays into the current transaction.
+The contract receives the coin and spends `amount` of it to the burn address through `sendImmediateShielded`,
+the required path for a coin that was created in the same transaction.
+If `amount` is less than `coin.value`, the remainder is sent to `refundTo` as a new coin and returned as `some(refund)`;
+pass `coin.value` as `amount` to burn the coin in full, in which case `none` is returned.
+`refundTo` must always be supplied and non-zero, even on a full burn: the zero key is the burn address,
+so a zero `refundTo` would silently burn the change as well.
+
+[_burnFromSelf] destroys value from a coin the contract already holds, identified by a `QualifiedShieldedCoinInfo`
+(a coin with a valid Merkle-tree index). It spends through `sendShielded`; any change is received by the contract
+automatically and returned so the consumer can persist it. The change coin replaces the original as the contract's holding,
+and its info is not otherwise recoverable.
+
+Both paths put the spent coin's nullifier and the new output commitments on the ledger.
+Neither puts the burned amount on the ledger: the `disclose()` calls in the module are compiler permission markers
+for the coin primitives, not disclosure sinks.
+
+## Supply accounting (optional)
+
+The token modules track no supply totals. [NativeShieldedTokenPublicSupply] (for the single-token flavor) and
+[NativeShieldedTokenFamilyPublicSupply] (for the family) add on-chain counters.
+They import no token module: the consuming contract pairs every mint with [_addMinted] and every burn with [_addBurned],
+under the same domain for the family. The three getters carry different guarantees:
+
+* [totalMinted] is exact. Every mint of this contract's colors goes through the contract.
+* [totalBurned] is a lower bound. A holder can send coins to the burn address without calling the contract, and those burns are invisible.
+* [totalSupply] is `totalMinted - totalBurned`, an upper bound on circulating supply.
+
+`_addBurned` enforces `burned <= minted`, so an unpaired, duplicate, or wrong-domain burn reverts instead of pushing
+the supply negative. Nothing catches drift on the mint side: a missing `_addMinted` undercounts, after which
+`_addBurned` rejects legitimate burns, and a duplicate `_addMinted` lets burns exceed what was minted.
+The pairing is an invariant of the consuming contract.
+
+<Callout type='warn'>
+Composing a supply extension makes contract-mediated burn amounts public: the `_addBurned` write is what puts the
+burned amount into the public transcript. Mint amounts are already public through the shielded-mint effect, so
+`_addMinted` adds accounting, not disclosure. Compose supply tracking only when on-chain auditability is worth more
+than burn-amount privacy.
+</Callout>
+
+## Derived nonces (optional)
+
+[NativeShieldedTokenDerivedNonce] owns a monotonic `_counter` and exposes [_deriveNonce], which increments the counter
+and returns `evolveNonce(_counter, pad(32, "NativeShieldedToken:nonce"))`.
+Uniqueness comes from the counter; the fixed tag separates these nonces from any other `evolveNonce` use in the contract.
+One counter serves the whole contract, so derived nonces never repeat across token types.
+It needs no initialization and pairs with either flavor.
+
+Derived nonces are predictable from public state, so mints that use them are recipient-public:
+anyone can recompute the commitment for candidate recipient keys.
+They are also open to collision griefing: an actor with access to a caller-nonce mint can pre-mint a colliding commitment
+and make the matching derived-nonce mint fail. Gate both mint paths at the same trust level, and do not rely on retrying:
+the nonce is a pure function of the counter, and a reverted mint does not advance it, so an identical retry collides again.
+A mint with different inputs advances the counter and clears the way.
+
+## Usage
+
+### An owner-gated single token
+
+[ZOwnableNativeShieldedToken] composes [ZOwnablePK] (a shielded owner), [NativeShieldedToken] (one color), and
+[NativeShieldedTokenPublicSupply] (a public minted total). Only the owner can [mint] and [burn];
+the preset deliberately never calls `_addBurned`, so burn amounts stay private and `_totalBurned` stays empty.
+The following contract is the published `ZOwnableNativeShieldedTokenExample`.
+
+```typescript
+pragma language_version >= {{compact_language_version}};
+
+import CompactStandardLibrary;
+import "./node_modules/@openzeppelin/compact-contracts/token/presets/ZOwnableNativeShieldedToken"
+  prefix ZOwnableNativeShieldedToken_;
+
+export { ZswapCoinPublicKey, ContractAddress, Either, Maybe, ShieldedCoinInfo };
+
+// Surface the preset's state unprefixed so `ledger()` readers use the keys the
+// modules declare.
+import {
+  _ownerCommitment,
+  _counter,
+  _instanceSalt,
+  _ownableIsInitialized,
+  _domain,
+  _name,
+  _symbol,
+  _decimals,
+  _isInitialized,
+  _totalMinted,
+  _totalBurned,
+} from "./node_modules/@openzeppelin/compact-contracts/token/presets/ZOwnableNativeShieldedToken";
+export {
+  _ownerCommitment,
+  _counter,
+  _instanceSalt,
+  _ownableIsInitialized,
+  _domain,
+  _name,
+  _symbol,
+  _decimals,
+  _isInitialized,
+  _totalMinted,
+  _totalBurned,
+};
+
+constructor(
+  ownerId: Bytes<32>,
+  instanceSalt: Bytes<32>,
+  tokenDomain: Bytes<32>,
+  name_: Opaque<"string">,
+  symbol_: Opaque<"string">,
+  decimals_: Uint<8>,
+) {
+  ZOwnableNativeShieldedToken_initialize(
+    ownerId,
+    instanceSalt,
+    tokenDomain,
+    name_,
+    symbol_,
+    decimals_,
+  );
+}
+
+export circuit mint(recipient: ZswapCoinPublicKey, amount: Uint<64>, nonce: Bytes<32>): ShieldedCoinInfo {
+  return ZOwnableNativeShieldedToken_mint(recipient, amount, nonce);
+}
+
+export circuit burn(coin: ShieldedCoinInfo, amount: Uint<64>, refundTo: ZswapCoinPublicKey): Maybe<ShieldedCoinInfo> {
+  return ZOwnableNativeShieldedToken_burn(coin, amount, refundTo);
+}
+
+export circuit transferOwnership(newOwnerId: Bytes<32>): [] {
+  ZOwnableNativeShieldedToken_transferOwnership(newOwnerId);
+}
+
+export circuit renounceOwnership(): [] {
+  ZOwnableNativeShieldedToken_renounceOwnership();
+}
+
+export circuit owner(): Bytes<32> {
+  return ZOwnableNativeShieldedToken_owner();
+}
+
+export pure circuit _computeOwnerId(pk: Either<ZswapCoinPublicKey, ContractAddress>, nonce: Bytes<32>): Bytes<32> {
+  return ZOwnableNativeShieldedToken__computeOwnerId(pk, nonce);
+}
+
+export circuit totalMinted(): Uint<128> {
+  return ZOwnableNativeShieldedToken_totalMinted();
+}
+
+export circuit tokenColor(): Bytes<32> {
+  return ZOwnableNativeShieldedToken_tokenColor();
+}
+```
+
+The owner is identified by a commitment, not a key. Before deploying, compute
+`ownerId = _computeOwnerId(pk, secretNonce)` off-chain, where `pk` is the coin public key the owner's wallet
+will supply as `ownPublicKey()` and `secretNonce` is fresh random bytes the owner keeps private.
+The contract cannot check this value at deploy time; any other value leaves the contract with no usable owner and no recovery.
+Every owner transaction then proves knowledge of the pair: the wallet supplies the coin public key, and the
+[wit_secretNonce] witness (inherited from [ZOwnablePK]) supplies the nonce.
+The TypeScript witness implementations in the library repository are test-only and are not published;
+you author the witness for your own DApp.
+The proof server sees `wit_secretNonce`, so run it where the owner controls it.
+
+On the client side, pass fresh random bytes as `nonce` on every `mint`, and persist the `ShieldedCoinInfo` values that
+`mint` and `burn` return: midnight-js encrypts an output to its recipient only when it can resolve the recipient's
+encryption key (its own, or one supplied in `additionalCoinEncPublicKeyMappings`).
+
+`initialize` writes sealed fields, so it belongs in the constructor and must not be exposed as a post-deploy circuit.
+`transferOwnership` is one step and `renounceOwnership` stops minting and burning forever.
+
+### A token family with supply tracking and derived nonces
+
+This contract issues one token type per `domain`, counts supply per domain, and lets the owner mint without
+managing nonces. Burns are open to any holder, since a holder can always burn by sending to the burn address directly;
+routing burns through the contract keeps `totalBurned` closer to the truth.
+
+```typescript
+pragma language_version >= {{compact_language_version}};
+
+import CompactStandardLibrary;
+import "./node_modules/@openzeppelin/compact-contracts/access/ZOwnablePK"
+  prefix ZOwnablePK_;
+import "./node_modules/@openzeppelin/compact-contracts/token/NativeShieldedTokenFamily"
+  prefix Family_;
+import "./node_modules/@openzeppelin/compact-contracts/token/extensions/NativeShieldedTokenFamilyPublicSupply"
+  prefix Supply_;
+import "./node_modules/@openzeppelin/compact-contracts/token/extensions/NativeShieldedTokenDerivedNonce"
+  prefix Derived_;
+
+export { ZswapCoinPublicKey, Maybe, ShieldedCoinInfo };
+
+constructor(
+  ownerId: Bytes<32>,
+  instanceSalt: Bytes<32>,
+  name_: Opaque<"string">,
+  symbol_: Opaque<"string">,
+  decimals_: Uint<8>,
+) {
+  ZOwnablePK_initialize(ownerId, instanceSalt);
+  Family_initialize(name_, symbol_, decimals_);
+}
+
+// Owner only. Derived nonces make these mints recipient-public.
+export circuit mint(domain: Bytes<32>, recipient: ZswapCoinPublicKey, amount: Uint<64>): ShieldedCoinInfo {
+  ZOwnablePK_assertOnlyOwner();
+  const coin = Family__mint(domain, recipient, amount, Derived__deriveNonce());
+  Supply__addMinted(domain, amount);
+  return coin;
+}
+
+// Any holder. `coin` is paid into the transaction by the caller's wallet;
+// the change, if any, goes to `refundTo`. Publishes `amount`.
+export circuit burn(
+  domain: Bytes<32>,
+  coin: ShieldedCoinInfo,
+  amount: Uint<128>,
+  refundTo: ZswapCoinPublicKey
+): Maybe<ShieldedCoinInfo> {
+  const refund = Family__burn(domain, coin, amount, refundTo);
+  Supply__addBurned(domain, amount);
+  return refund;
+}
+
+export circuit tokenColor(domain: Bytes<32>): Bytes<32> {
+  return Family_tokenColor(domain);
+}
+
+export circuit totalSupply(domain: Bytes<32>): Uint<128> {
+  return Supply_totalSupply(domain);
+}
+```
+
+A `mint` and a `burn` under the same `domain` both touch that domain's supply entry, so only one of them lands per block;
+operations on different domains do not conflict.

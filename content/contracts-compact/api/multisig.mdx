@@ -1,0 +1,1120 @@
+---
+title: Multisig API
+---
+
+This page provides the full API for the Multisig modules.
+
+<Callout type='info'>
+  For an overview of the modules, read the [Multisig guide](../multisig).
+</Callout>
+
+The page covers the following modules:
+
+- [Signer](#Signer): the registry of who may approve and how many approvals are required, generic over the signer identity type.
+- [ProposalManager](#ProposalManager): the lifecycle of transfer proposals, independent of the token kind.
+- [ShieldedTreasury](#ShieldedTreasury): holds one shielded coin per token color on the ledger and sends from it.
+- [ShieldedTreasuryStateless](#ShieldedTreasuryStateless): receives and sends shielded coins without keeping any ledger state.
+- [UnshieldedTreasury](#UnshieldedTreasury): holds unshielded tokens with a tracked per-color balance.
+- [ForwarderPrivate](#ForwarderPrivate): forwards shielded deposits to a parent stored as a commitment.
+- [ForwarderShielded](#ForwarderShielded): forwards shielded deposits to a public parent in the same transaction.
+- [ForwarderUnshielded](#ForwarderUnshielded): forwards unshielded deposits to a public parent in the same transaction.
+
+## Signer [toc] [#Signer]
+<APIGithubLinkHeader
+    moduleName="Signer"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/multisig/Signer.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/multisig/Signer"<Bytes<32>>;
+```
+
+`Signer<T>` is generic over the signer identity type `T`, chosen at import time (for example `Bytes<32>`, `JubjubPoint`, or `Either<ZswapCoinPublicKey, ContractAddress>`).
+The module never resolves the caller; the consuming contract passes an identity in.
+
+---
+
+### Ledger [toc] [#Signer-Ledger]
+### Ledger [!toc] [#Signer-Ledger]
+
+#### _signers [toc] [#Signer-_signers]
+#### [!toc] [#Signer-_signers]
+<APIItemCompact
+  circuitSig='_signers: Set<T>'
+  kind="ledger"
+  id="Signer-_signers"
+>
+  The set of registered signer identities.
+</APIItemCompact>
+
+#### _signerCount [toc] [#Signer-_signerCount]
+#### [!toc] [#Signer-_signerCount]
+<APIItemCompact
+  circuitSig='_signerCount: Uint<8>'
+  kind="ledger"
+  id="Signer-_signerCount"
+>
+  The number of registered signers (at most 255).
+</APIItemCompact>
+
+#### _threshold [toc] [#Signer-_threshold]
+#### [!toc] [#Signer-_threshold]
+<APIItemCompact
+  circuitSig='_threshold: Uint<8>'
+  kind="ledger"
+  id="Signer-_threshold"
+>
+  The minimum number of approvals required. Zero until it is set.
+</APIItemCompact>
+
+#### _isInitialized [toc] [#Signer-_isInitialized]
+#### [!toc] [#Signer-_isInitialized]
+<APIItemCompact
+  circuitSig='_isInitialized: Boolean'
+  kind="ledger"
+  id="Signer-_isInitialized"
+>
+  Records whether [initialize](#Signer-initialize) has run. It gates re-entry into `initialize` and nothing else; no other circuit consults it.
+</APIItemCompact>
+
+### Witnesses [toc] [#Signer-Witnesses]
+### Witnesses [!toc] [#Signer-Witnesses]
+
+None.
+
+### Circuits [toc] [#Signer-Circuits]
+### Circuits [!toc] [#Signer-Circuits]
+
+#### initialize [toc] [#Signer-initialize]
+#### [!toc] [#Signer-initialize]
+<APIItemCompact
+  circuitSig='initialize<#n>(signers: Vector<n, T>, thresh: Uint<8>) → []'
+  kind="circuit"
+  id="Signer-initialize"
+>
+  Registers each entry of `signers` and sets the threshold to `thresh`.
+  If used, it MUST only be called from the contract's constructor; a contract may instead configure signers through its own gated flow with [_addSigner](#Signer-_addSigner) and [_setThreshold](#Signer-_setThreshold).
+  The signer identities and the threshold are disclosed to the ledger.
+
+  Requirements:
+
+  * Contract is not initialized.
+  * `thresh` is not zero.
+  * `thresh` does not exceed the number of `signers`.
+  * `signers` contains no duplicates.
+</APIItemCompact>
+
+#### assertSigner [toc] [#Signer-assertSigner]
+#### [!toc] [#Signer-assertSigner]
+<APIItemCompact
+  circuitSig='assertSigner(caller: T) → []'
+  kind="circuit"
+  modulePrefix="Signer"
+>
+  Asserts that `caller` is a registered signer. Does not check initialization: an empty registry rejects every caller.
+  `caller` is disclosed as the key of the set lookup.
+
+  Requirements:
+
+  * `caller` is a member of the signer registry.
+</APIItemCompact>
+
+#### assertThresholdMet [toc] [#Signer-assertThresholdMet]
+#### [!toc] [#Signer-assertThresholdMet]
+<APIItemCompact
+  circuitSig='assertThresholdMet(approvalCount: Uint<8>) → []'
+  kind="circuit"
+  complexity="k=9, rows=54"
+  modulePrefix="Signer"
+>
+  Asserts that `approvalCount` meets the threshold.
+  The count is supplied by the consuming contract and compared against the threshold only; the registry is never consulted,
+  so the contract's approval accounting must itself be gated by [assertSigner](#Signer-assertSigner) and count distinct signers.
+  The count is not bounded by `_signerCount`, so approvals collected before a signer was removed still count.
+
+  Requirements:
+
+  * The threshold is set (not zero).
+  * `approvalCount` is greater than or equal to the threshold.
+</APIItemCompact>
+
+#### getSignerCount [toc] [#Signer-getSignerCount]
+#### [!toc] [#Signer-getSignerCount]
+<APIItemCompact
+  circuitSig='getSignerCount() → Uint<8>'
+  kind="circuit"
+  complexity="k=6, rows=26"
+  modulePrefix="Signer"
+>
+  Returns the number of registered signers. Returns zero when none have been registered.
+</APIItemCompact>
+
+#### getThreshold [toc] [#Signer-getThreshold]
+#### [!toc] [#Signer-getThreshold]
+<APIItemCompact
+  circuitSig='getThreshold() → Uint<8>'
+  kind="circuit"
+  complexity="k=6, rows=26"
+  modulePrefix="Signer"
+>
+  Returns the approval threshold. Returns zero when it has not been set.
+</APIItemCompact>
+
+#### isSigner [toc] [#Signer-isSigner]
+#### [!toc] [#Signer-isSigner]
+<APIItemCompact
+  circuitSig='isSigner(account: T) → Boolean'
+  kind="circuit"
+  modulePrefix="Signer"
+>
+  Returns true if `account` is a registered signer. `account` is disclosed as the key of the set lookup.
+</APIItemCompact>
+
+#### _addSigner [toc] [#Signer-_addSigner]
+#### [!toc] [#Signer-_addSigner]
+<APIItemCompact
+  circuitSig='_addSigner(signer: T) → []'
+  kind="circuit"
+  modulePrefix="Signer"
+>
+  Adds `signer` to the registry and increments the signer count. `signer` is disclosed.
+
+  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+
+  Requirements:
+
+  * `signer` is not already a registered signer.
+</APIItemCompact>
+
+#### _removeSigner [toc] [#Signer-_removeSigner]
+#### [!toc] [#Signer-_removeSigner]
+<APIItemCompact
+  circuitSig='_removeSigner(signer: T) → []'
+  kind="circuit"
+  modulePrefix="Signer"
+>
+  Removes `signer` from the registry and decrements the signer count. `signer` is disclosed.
+
+  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+
+  Requirements:
+
+  * `signer` is a registered signer.
+  * The signer count after removal is greater than or equal to the threshold.
+</APIItemCompact>
+
+#### _changeThreshold [toc] [#Signer-_changeThreshold]
+#### [!toc] [#Signer-_changeThreshold]
+<APIItemCompact
+  circuitSig='_changeThreshold(newThreshold: Uint<8>) → []'
+  kind="circuit"
+  complexity="k=9, rows=53"
+  modulePrefix="Signer"
+>
+  Updates the approval threshold, checking it against the current signer count. `newThreshold` is disclosed.
+
+  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+
+  Requirements:
+
+  * `newThreshold` is not zero.
+  * `newThreshold` does not exceed the current signer count.
+</APIItemCompact>
+
+#### _setThreshold [toc] [#Signer-_setThreshold]
+#### [!toc] [#Signer-_setThreshold]
+<APIItemCompact
+  circuitSig='_setThreshold(newThreshold: Uint<8>) → []'
+  kind="circuit"
+  complexity="k=6, rows=40"
+  modulePrefix="Signer"
+>
+  Sets the approval threshold without checking it against the signer count. `newThreshold` is disclosed.
+  Intended for construction or custom setup flows where signers are not yet registered.
+  A threshold above the signer count is permitted mid-setup and is not self-enforcing:
+  the contract must not gate operations on [assertThresholdMet](#Signer-assertThresholdMet) while setup is incomplete.
+  Use [_changeThreshold](#Signer-_changeThreshold) for operational changes.
+
+  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+
+  Requirements:
+
+  * `newThreshold` is not zero.
+</APIItemCompact>
+
+---
+
+## ProposalManager [toc] [#ProposalManager]
+<APIGithubLinkHeader
+    moduleName="ProposalManager"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/multisig/ProposalManager.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/multisig/ProposalManager";
+```
+
+---
+
+### Types [toc] [#ProposalManager-Types]
+### Types [!toc] [#ProposalManager-Types]
+
+#### ProposalStatus [toc] [#ProposalManager-ProposalStatus]
+#### [!toc] [#ProposalManager-ProposalStatus]
+<APIItemCompact
+  circuitSig="enum ProposalStatus { Inactive, Active, Executed, Cancelled }"
+  kind="enum"
+  id="ProposalManager-ProposalStatus"
+>
+  Proposal lifecycle states. `Inactive` is the zero value and is never stored:
+  [_createProposal](#ProposalManager-_createProposal) writes `Active`, and every view asserts the proposal exists before reading.
+</APIItemCompact>
+
+#### RecipientKind [toc] [#ProposalManager-RecipientKind]
+#### [!toc] [#ProposalManager-RecipientKind]
+<APIItemCompact
+  circuitSig="enum RecipientKind { ShieldedUser, UnshieldedUser, Contract }"
+  kind="enum"
+  id="ProposalManager-RecipientKind"
+>
+  Says how a recipient's 32 address bytes are to be read: as a Zswap coin public key, a user address, or a contract address.
+  `Contract` is accepted by both [toShieldedRecipient](#ProposalManager-toShieldedRecipient) and [toUnshieldedRecipient](#ProposalManager-toUnshieldedRecipient),
+  so the tag alone does not determine the rail.
+</APIItemCompact>
+
+#### Recipient [toc] [#ProposalManager-Recipient]
+#### [!toc] [#ProposalManager-Recipient]
+<APIItemCompact
+  circuitSig="struct Recipient { kind: RecipientKind, address: Bytes<32> }"
+  kind="struct"
+  id="ProposalManager-Recipient"
+>
+  A typed recipient. Construct it with the recipient helper circuits rather than directly.
+</APIItemCompact>
+
+#### Proposal [toc] [#ProposalManager-Proposal]
+#### [!toc] [#ProposalManager-Proposal]
+<APIItemCompact
+  circuitSig="struct Proposal { to: Recipient, color: Bytes<32>, amount: Uint<128>, status: ProposalStatus }"
+  kind="struct"
+  id="ProposalManager-Proposal"
+>
+  A transfer proposal: recipient, token color, amount, and lifecycle status.
+</APIItemCompact>
+
+### Ledger [toc] [#ProposalManager-Ledger]
+### Ledger [!toc] [#ProposalManager-Ledger]
+
+#### _nextProposalId [toc] [#ProposalManager-_nextProposalId]
+#### [!toc] [#ProposalManager-_nextProposalId]
+<APIItemCompact
+  circuitSig='_nextProposalId: Counter'
+  kind="ledger"
+  id="ProposalManager-_nextProposalId"
+>
+  Counter of proposals created. Its value is the id of the most recent proposal.
+</APIItemCompact>
+
+#### _proposals [toc] [#ProposalManager-_proposals]
+#### [!toc] [#ProposalManager-_proposals]
+<APIItemCompact
+  circuitSig='_proposals: Map<Uint<64>, Proposal>'
+  kind="ledger"
+  id="ProposalManager-_proposals"
+>
+  Mapping from proposal id to proposal. Proposals are public: every recipient address, color, amount, and status is readable off-chain.
+</APIItemCompact>
+
+### Witnesses [toc] [#ProposalManager-Witnesses]
+### Witnesses [!toc] [#ProposalManager-Witnesses]
+
+None.
+
+### Circuits [toc] [#ProposalManager-Circuits]
+### Circuits [!toc] [#ProposalManager-Circuits]
+
+#### shieldedUserRecipient [toc] [#ProposalManager-shieldedUserRecipient]
+#### [!toc] [#ProposalManager-shieldedUserRecipient]
+<APIItemCompact
+  circuitSig='shieldedUserRecipient(key: ZswapCoinPublicKey) → Recipient'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Constructs a `ShieldedUser` recipient from a coin public key.
+</APIItemCompact>
+
+#### unshieldedUserRecipient [toc] [#ProposalManager-unshieldedUserRecipient]
+#### [!toc] [#ProposalManager-unshieldedUserRecipient]
+<APIItemCompact
+  circuitSig='unshieldedUserRecipient(addr: UserAddress) → Recipient'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Constructs an `UnshieldedUser` recipient from a user address.
+</APIItemCompact>
+
+#### contractRecipient [toc] [#ProposalManager-contractRecipient]
+#### [!toc] [#ProposalManager-contractRecipient]
+<APIItemCompact
+  circuitSig='contractRecipient(addr: ContractAddress) → Recipient'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Constructs a `Contract` recipient from a contract address.
+</APIItemCompact>
+
+#### toShieldedRecipient [toc] [#ProposalManager-toShieldedRecipient]
+#### [!toc] [#ProposalManager-toShieldedRecipient]
+<APIItemCompact
+  circuitSig='toShieldedRecipient(r: Recipient) → Either<ZswapCoinPublicKey, ContractAddress>'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Converts a recipient into the form a shielded send accepts: `left` for a `ShieldedUser`, `right` for a `Contract`.
+
+  Requirements:
+
+  * `r.kind` is `ShieldedUser` or `Contract`.
+</APIItemCompact>
+
+#### toUnshieldedRecipient [toc] [#ProposalManager-toUnshieldedRecipient]
+#### [!toc] [#ProposalManager-toUnshieldedRecipient]
+<APIItemCompact
+  circuitSig='toUnshieldedRecipient(r: Recipient) → Either<ContractAddress, UserAddress>'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Converts a recipient into the form an unshielded send accepts: `left` for a `Contract`, `right` for an `UnshieldedUser`.
+
+  Requirements:
+
+  * `r.kind` is `UnshieldedUser` or `Contract`.
+</APIItemCompact>
+
+#### assertProposalExists [toc] [#ProposalManager-assertProposalExists]
+#### [!toc] [#ProposalManager-assertProposalExists]
+<APIItemCompact
+  circuitSig='assertProposalExists(id: Uint<64>) → []'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Asserts that a proposal with `id` has been created. `id` is disclosed.
+
+  Requirements:
+
+  * A proposal with `id` exists.
+</APIItemCompact>
+
+#### assertProposalActive [toc] [#ProposalManager-assertProposalActive]
+#### [!toc] [#ProposalManager-assertProposalActive]
+<APIItemCompact
+  circuitSig='assertProposalActive(id: Uint<64>) → []'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Asserts that a proposal with `id` exists and is `Active`. `id` is disclosed.
+
+  Requirements:
+
+  * A proposal with `id` exists.
+  * Its status is `Active`.
+</APIItemCompact>
+
+#### _createProposal [toc] [#ProposalManager-_createProposal]
+#### [!toc] [#ProposalManager-_createProposal]
+<APIItemCompact
+  circuitSig='_createProposal(
+    to: Recipient,
+    color: Bytes<32>,
+    amount: Uint<128>
+  ) → Uint<64>'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+  stackParams="true"
+>
+  Increments the proposal counter, stores a new `Active` proposal under the new id, and returns the id.
+  The whole proposal (recipient, color, amount, status) is disclosed to the ledger.
+  The counter is incremented and read back as the map key, so concurrent creations against the same state conflict.
+
+  The recipient is not validated beyond being well-typed: a kind the execution rail cannot accept creates a proposal that stays `Active` until cancelled,
+  and an unspendable address is accepted.
+
+  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+
+  Requirements:
+
+  * `amount` is greater than zero.
+</APIItemCompact>
+
+#### _cancelProposal [toc] [#ProposalManager-_cancelProposal]
+#### [!toc] [#ProposalManager-_cancelProposal]
+<APIItemCompact
+  circuitSig='_cancelProposal(id: Uint<64>) → []'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Sets the proposal's status to `Cancelled`. `id` is disclosed.
+
+  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+
+  Requirements:
+
+  * The proposal exists and is `Active`.
+</APIItemCompact>
+
+#### _markExecuted [toc] [#ProposalManager-_markExecuted]
+#### [!toc] [#ProposalManager-_markExecuted]
+<APIItemCompact
+  circuitSig='_markExecuted(id: Uint<64>) → []'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Sets the proposal's status to `Executed`. `id` is disclosed.
+
+  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+
+  Requirements:
+
+  * The proposal exists and is `Active`.
+</APIItemCompact>
+
+#### getProposal [toc] [#ProposalManager-getProposal]
+#### [!toc] [#ProposalManager-getProposal]
+<APIItemCompact
+  circuitSig='getProposal(id: Uint<64>) → Proposal'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Returns the full proposal. `id` is disclosed.
+
+  Requirements:
+
+  * A proposal with `id` exists.
+</APIItemCompact>
+
+#### getProposalRecipient [toc] [#ProposalManager-getProposalRecipient]
+#### [!toc] [#ProposalManager-getProposalRecipient]
+<APIItemCompact
+  circuitSig='getProposalRecipient(id: Uint<64>) → Recipient'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Returns the proposal's recipient. `id` is disclosed.
+
+  Requirements:
+
+  * A proposal with `id` exists.
+</APIItemCompact>
+
+#### getProposalAmount [toc] [#ProposalManager-getProposalAmount]
+#### [!toc] [#ProposalManager-getProposalAmount]
+<APIItemCompact
+  circuitSig='getProposalAmount(id: Uint<64>) → Uint<128>'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Returns the proposal's amount. `id` is disclosed.
+
+  Requirements:
+
+  * A proposal with `id` exists.
+</APIItemCompact>
+
+#### getProposalColor [toc] [#ProposalManager-getProposalColor]
+#### [!toc] [#ProposalManager-getProposalColor]
+<APIItemCompact
+  circuitSig='getProposalColor(id: Uint<64>) → Bytes<32>'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Returns the proposal's token color. `id` is disclosed.
+
+  Requirements:
+
+  * A proposal with `id` exists.
+</APIItemCompact>
+
+#### getProposalStatus [toc] [#ProposalManager-getProposalStatus]
+#### [!toc] [#ProposalManager-getProposalStatus]
+<APIItemCompact
+  circuitSig='getProposalStatus(id: Uint<64>) → ProposalStatus'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Returns the proposal's status. `id` is disclosed.
+
+  Requirements:
+
+  * A proposal with `id` exists.
+</APIItemCompact>
+
+---
+
+## ShieldedTreasury [toc] [#ShieldedTreasury]
+<APIGithubLinkHeader
+    moduleName="ShieldedTreasury"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/multisig/ShieldedTreasury.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/multisig/ShieldedTreasury";
+```
+
+---
+
+### Ledger [toc] [#ShieldedTreasury-Ledger]
+### Ledger [!toc] [#ShieldedTreasury-Ledger]
+
+#### _coins [toc] [#ShieldedTreasury-_coins]
+#### [!toc] [#ShieldedTreasury-_coins]
+<APIItemCompact
+  circuitSig='_coins: Map<Bytes<32>, QualifiedShieldedCoinInfo>'
+  kind="ledger"
+  id="ShieldedTreasury-_coins"
+>
+  One stored coin per token color. Every coin held (nonce, color, value, and Merkle index) is readable off-chain in plaintext.
+</APIItemCompact>
+
+#### _received [toc] [#ShieldedTreasury-_received]
+#### [!toc] [#ShieldedTreasury-_received]
+<APIItemCompact
+  circuitSig='_received: Map<Bytes<32>, Uint<128>>'
+  kind="ledger"
+  id="ShieldedTreasury-_received"
+>
+  Cumulative value received per token color.
+</APIItemCompact>
+
+#### _sent [toc] [#ShieldedTreasury-_sent]
+#### [!toc] [#ShieldedTreasury-_sent]
+<APIItemCompact
+  circuitSig='_sent: Map<Bytes<32>, Uint<128>>'
+  kind="ledger"
+  id="ShieldedTreasury-_sent"
+>
+  Cumulative value sent per token color.
+</APIItemCompact>
+
+### Witnesses [toc] [#ShieldedTreasury-Witnesses]
+### Witnesses [!toc] [#ShieldedTreasury-Witnesses]
+
+None.
+
+### Circuits [toc] [#ShieldedTreasury-Circuits]
+### Circuits [!toc] [#ShieldedTreasury-Circuits]
+
+#### _deposit [toc] [#ShieldedTreasury-_deposit]
+#### [!toc] [#ShieldedTreasury-_deposit]
+<APIItemCompact
+  circuitSig='_deposit(coin: ShieldedCoinInfo) → []'
+  kind="circuit"
+  modulePrefix="ShieldedTreasury"
+>
+  Claims `coin` with `receiveShielded`, then merges it into the stored coin of the same color (`mergeCoinImmediate`) or inserts it when the color is new,
+  and adds its value to the received total.
+  The coin and the updated total are disclosed to the ledger.
+  Zero-value deposits are permitted: on a new color the zero coin occupies that color's slot until a later deposit merges into it.
+
+  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+
+  Requirements:
+
+  * The received total for `coin.color` plus `coin.value` does not overflow `Uint<128>`.
+</APIItemCompact>
+
+#### _send [toc] [#ShieldedTreasury-_send]
+#### [!toc] [#ShieldedTreasury-_send]
+<APIItemCompact
+  circuitSig='_send(
+    recipient: Either<ZswapCoinPublicKey, ContractAddress>,
+    color: Bytes<32>,
+    amount: Uint<128>
+  ) → ShieldedSendResult'
+  kind="circuit"
+  modulePrefix="ShieldedTreasury"
+  stackParams="true"
+>
+  Looks up the stored coin for `color`, sends `amount` of it to `recipient` with `sendShielded`, and adds `amount` to the sent total.
+  Any change is routed back to the contract as a self-owned output and retained in `_coins` for the next spend;
+  when the send leaves no change, the color's entry is removed.
+  The color, recipient, amount, and retained change coin are disclosed to the ledger.
+
+  The returned `ShieldedSendResult` carries the sent and change coins in plaintext; returning it from an entry point, writing it to the ledger,
+  or passing it to another contract discloses them.
+  The change coin belongs to the treasury and must not be spent again by the caller.
+
+  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+
+  Requirements:
+
+  * A coin of `color` exists in the treasury.
+  * The stored coin's value is greater than or equal to `amount`.
+  * The sent total for `color` plus `amount` does not overflow `Uint<128>`.
+</APIItemCompact>
+
+#### getTokenBalance [toc] [#ShieldedTreasury-getTokenBalance]
+#### [!toc] [#ShieldedTreasury-getTokenBalance]
+<APIItemCompact
+  circuitSig='getTokenBalance(color: Bytes<32>) → Uint<128>'
+  kind="circuit"
+  modulePrefix="ShieldedTreasury"
+>
+  Returns the value of the stored coin for `color`, or zero when none is held. `color` is disclosed.
+</APIItemCompact>
+
+#### getReceivedTotal [toc] [#ShieldedTreasury-getReceivedTotal]
+#### [!toc] [#ShieldedTreasury-getReceivedTotal]
+<APIItemCompact
+  circuitSig='getReceivedTotal(color: Bytes<32>) → Uint<128>'
+  kind="circuit"
+  modulePrefix="ShieldedTreasury"
+>
+  Returns the cumulative value received for `color`, or zero. `color` is disclosed.
+</APIItemCompact>
+
+#### getSentTotal [toc] [#ShieldedTreasury-getSentTotal]
+#### [!toc] [#ShieldedTreasury-getSentTotal]
+<APIItemCompact
+  circuitSig='getSentTotal(color: Bytes<32>) → Uint<128>'
+  kind="circuit"
+  modulePrefix="ShieldedTreasury"
+>
+  Returns the cumulative value sent for `color`, or zero. `color` is disclosed.
+</APIItemCompact>
+
+#### getReceivedMinusSent [toc] [#ShieldedTreasury-getReceivedMinusSent]
+#### [!toc] [#ShieldedTreasury-getReceivedMinusSent]
+<APIItemCompact
+  circuitSig='getReceivedMinusSent(color: Bytes<32>) → Uint<128>'
+  kind="circuit"
+  modulePrefix="ShieldedTreasury"
+>
+  Returns the received total minus the sent total for `color`, which equals [getTokenBalance](#ShieldedTreasury-getTokenBalance) when all value moved through `_deposit` and `_send`.
+  The subtraction is unguarded: a consumer that writes `_coins` directly can make it fail as a range violation.
+</APIItemCompact>
+
+---
+
+## ShieldedTreasuryStateless [toc] [#ShieldedTreasuryStateless]
+<APIGithubLinkHeader
+    moduleName="ShieldedTreasuryStateless"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/multisig/ShieldedTreasuryStateless.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/multisig/ShieldedTreasuryStateless";
+```
+
+---
+
+### Ledger [toc] [#ShieldedTreasuryStateless-Ledger]
+### Ledger [!toc] [#ShieldedTreasuryStateless-Ledger]
+
+None. The module keeps no coin map, balances, or totals; the operator tracks coins off-chain.
+
+### Witnesses [toc] [#ShieldedTreasuryStateless-Witnesses]
+### Witnesses [!toc] [#ShieldedTreasuryStateless-Witnesses]
+
+None.
+
+### Circuits [toc] [#ShieldedTreasuryStateless-Circuits]
+### Circuits [!toc] [#ShieldedTreasuryStateless-Circuits]
+
+#### _deposit [toc] [#ShieldedTreasuryStateless-_deposit]
+#### [!toc] [#ShieldedTreasuryStateless-_deposit]
+<APIItemCompact
+  circuitSig='_deposit(coin: ShieldedCoinInfo) → []'
+  kind="circuit"
+  modulePrefix="ShieldedTreasuryStateless"
+>
+  Claims `coin` with `receiveShielded`. Nothing is written to the ledger; the coin is disclosed to the protocol.
+
+  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+</APIItemCompact>
+
+#### _send [toc] [#ShieldedTreasuryStateless-_send]
+#### [!toc] [#ShieldedTreasuryStateless-_send]
+<APIItemCompact
+  circuitSig='_send(
+    coin: QualifiedShieldedCoinInfo,
+    recipient: Either<ZswapCoinPublicKey, ContractAddress>,
+    amount: Uint<128>
+  ) → ShieldedSendResult'
+  kind="circuit"
+  modulePrefix="ShieldedTreasuryStateless"
+  stackParams="true"
+>
+  Sends `amount` of the caller-supplied `coin` to `recipient` with `sendShielded` and returns the result untouched.
+  The coin, recipient, and amount are disclosed.
+  Any change is routed back to the contract as a self-owned output and returned in `result.change` as a live, spendable coin:
+  keep it off-chain as the `coin` of a later spend, or route it onward in the same transaction with `sendImmediateShielded`.
+  The change must never be spent again and still treated as held.
+
+  The returned `ShieldedSendResult` holds the sent and change coins in plaintext.
+  Consuming it in-circuit is safe; returning it from an entry point, writing it to the ledger, or passing it to another contract publishes those coins,
+  and the compiler does not require a `disclose` at that point.
+
+  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+
+  Requirements:
+
+  * `coin.value` is greater than or equal to `amount` (enforced by `sendShielded`).
+</APIItemCompact>
+
+---
+
+## UnshieldedTreasury [toc] [#UnshieldedTreasury]
+<APIGithubLinkHeader
+    moduleName="UnshieldedTreasury"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/multisig/UnshieldedTreasury.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/multisig/UnshieldedTreasury";
+```
+
+---
+
+### Ledger [toc] [#UnshieldedTreasury-Ledger]
+### Ledger [!toc] [#UnshieldedTreasury-Ledger]
+
+#### _balances [toc] [#UnshieldedTreasury-_balances]
+#### [!toc] [#UnshieldedTreasury-_balances]
+<APIItemCompact
+  circuitSig='_balances: Map<Bytes<32>, Uint<128>>'
+  kind="ledger"
+  id="UnshieldedTreasury-_balances"
+>
+  Tracked balance per token color. It is the authority for the module's sufficiency and overflow guards and stays in step with the protocol balance only while every credit and debit goes through `_deposit` and `_send`.
+</APIItemCompact>
+
+### Witnesses [toc] [#UnshieldedTreasury-Witnesses]
+### Witnesses [!toc] [#UnshieldedTreasury-Witnesses]
+
+None.
+
+### Circuits [toc] [#UnshieldedTreasury-Circuits]
+### Circuits [!toc] [#UnshieldedTreasury-Circuits]
+
+#### _deposit [toc] [#UnshieldedTreasury-_deposit]
+#### [!toc] [#UnshieldedTreasury-_deposit]
+<APIItemCompact
+  circuitSig='_deposit(color: Bytes<32>, amount: Uint<128>) → []'
+  kind="circuit"
+  modulePrefix="UnshieldedTreasury"
+>
+  Receives `amount` of `color` with `receiveUnshielded` and adds it to the tracked balance.
+  The color, amount, and new balance are disclosed.
+  Zero-value deposits are permitted and create a zero-valued balance entry on a new color.
+
+  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+
+  Requirements:
+
+  * The tracked balance for `color` plus `amount` does not overflow `Uint<128>`.
+</APIItemCompact>
+
+#### _send [toc] [#UnshieldedTreasury-_send]
+#### [!toc] [#UnshieldedTreasury-_send]
+<APIItemCompact
+  circuitSig='_send(
+    recipient: Either<ContractAddress, UserAddress>,
+    color: Bytes<32>,
+    amount: Uint<128>
+  ) → []'
+  kind="circuit"
+  modulePrefix="UnshieldedTreasury"
+  stackParams="true"
+>
+  Subtracts `amount` from the tracked balance and sends it to `recipient` with `sendUnshielded`.
+  The color, amount, recipient, and new balance are disclosed.
+  Zero-amount sends are permitted.
+  Recipients are not validated: an unspendable recipient permanently removes the funds,
+  and a send to the contract's own address zeroes the tracked balance while the funds stay held at the protocol level.
+
+  Access control is NOT enforced. The consuming contract must gate this behind its own authorization policy.
+
+  Requirements:
+
+  * The tracked balance for `color` is greater than or equal to `amount`.
+</APIItemCompact>
+
+#### getTokenBalance [toc] [#UnshieldedTreasury-getTokenBalance]
+#### [!toc] [#UnshieldedTreasury-getTokenBalance]
+<APIItemCompact
+  circuitSig='getTokenBalance(color: Bytes<32>) → Uint<128>'
+  kind="circuit"
+  modulePrefix="UnshieldedTreasury"
+>
+  Returns the tracked balance for `color`, or zero. `color` is disclosed.
+</APIItemCompact>
+
+---
+
+## ForwarderPrivate [toc] [#ForwarderPrivate]
+<APIGithubLinkHeader
+    moduleName="ForwarderPrivate"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/multisig/ForwarderPrivate.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/multisig/ForwarderPrivate";
+```
+
+---
+
+### Ledger [toc] [#ForwarderPrivate-Ledger]
+### Ledger [!toc] [#ForwarderPrivate-Ledger]
+
+#### _parentCommitment [toc] [#ForwarderPrivate-_parentCommitment]
+#### [!toc] [#ForwarderPrivate-_parentCommitment]
+<APIItemCompact
+  circuitSig='_parentCommitment: Bytes<32>'
+  kind="ledger"
+  id="ForwarderPrivate-_parentCommitment"
+>
+  Commitment to the `(parent, opSecret)` pair, `H(pad(32, "ForwarderPrivate:commitment") || parent || opSecret)`. Immutable after initialization.
+</APIItemCompact>
+
+#### _isInitialized [toc] [#ForwarderPrivate-_isInitialized]
+#### [!toc] [#ForwarderPrivate-_isInitialized]
+<APIItemCompact
+  circuitSig='_isInitialized: Boolean'
+  kind="ledger"
+  id="ForwarderPrivate-_isInitialized"
+>
+  Boolean indicating if initialized.
+</APIItemCompact>
+
+### Witnesses [toc] [#ForwarderPrivate-Witnesses]
+### Witnesses [!toc] [#ForwarderPrivate-Witnesses]
+
+None.
+
+### Circuits [toc] [#ForwarderPrivate-Circuits]
+### Circuits [!toc] [#ForwarderPrivate-Circuits]
+
+#### initialize [toc] [#ForwarderPrivate-initialize]
+#### [!toc] [#ForwarderPrivate-initialize]
+<APIItemCompact
+  circuitSig='initialize(parentCommitment: Bytes<32>) → []'
+  kind="circuit"
+  modulePrefix="ForwarderPrivate"
+>
+  Stores the parent commitment, computed off-chain with [_calculateParentCommitment](#ForwarderPrivate-_calculateParentCommitment). The commitment is disclosed.
+
+  Requirements:
+
+  * Contract is not initialized.
+  * `parentCommitment` is not the zero bytes.
+</APIItemCompact>
+
+#### _deposit [toc] [#ForwarderPrivate-_deposit]
+#### [!toc] [#ForwarderPrivate-_deposit]
+<APIItemCompact
+  circuitSig='_deposit(coin: ShieldedCoinInfo) → []'
+  kind="circuit"
+  complexity="k=13, rows=6538"
+  modulePrefix="ForwarderPrivate"
+>
+  Claims `coin` with `receiveShielded`. Nothing is written to the ledger; the coin dwells at the contract address until drained. The coin is disclosed to the protocol.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### _drain [toc] [#ForwarderPrivate-_drain]
+#### [!toc] [#ForwarderPrivate-_drain]
+<APIItemCompact
+  circuitSig='_drain(
+    coin: QualifiedShieldedCoinInfo,
+    parent: ZswapCoinPublicKey,
+    opSecret: Bytes<32>,
+    value: Uint<128>
+  ) → ShieldedSendResult'
+  kind="circuit"
+  complexity="k=15, rows=23937"
+  modulePrefix="ForwarderPrivate"
+  stackParams="true"
+>
+  Sends `value` of a previously deposited `coin` to `parent` with `sendShielded`, after checking that `(parent, opSecret)` hashes to the stored commitment.
+  The coin and value are disclosed; the parent is a coin public key, which is encrypted inside the Zswap output and does not appear on the public transcript.
+  `opSecret` never leaves the circuit.
+  Any change is routed back to the contract and returned untouched in `result.change`, to leave dwelling for a future drain or to route onward with `sendImmediateShielded`.
+  The change must never be spent again and still treated as held.
+
+  Knowledge of the preimage is the only authorization; losing the operational secret makes every coin at the contract permanently inaccessible.
+
+  Requirements:
+
+  * Contract is initialized.
+  * `parent` is not the zero key.
+  * `_calculateParentCommitment(parent.bytes, opSecret)` equals `_parentCommitment`.
+  * `coin.value` is greater than or equal to `value` (enforced by `sendShielded`).
+</APIItemCompact>
+
+#### _calculateParentCommitment [toc] [#ForwarderPrivate-_calculateParentCommitment]
+#### [!toc] [#ForwarderPrivate-_calculateParentCommitment]
+<APIItemCompact
+  circuitSig='_calculateParentCommitment(parentAddr: Bytes<32>, opSecret: Bytes<32>) → Bytes<32>'
+  kind="pure"
+  modulePrefix="ForwarderPrivate"
+>
+  Returns `H(pad(32, "ForwarderPrivate:commitment") || parentAddr || opSecret)` using `persistentHash`.
+  Used off-chain by the deployer to compute the constructor argument and inside [_drain](#ForwarderPrivate-_drain) for the preimage check. Callable without initialization.
+</APIItemCompact>
+
+---
+
+## ForwarderShielded [toc] [#ForwarderShielded]
+<APIGithubLinkHeader
+    moduleName="ForwarderShielded"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/multisig/ForwarderShielded.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/multisig/ForwarderShielded";
+```
+
+---
+
+### Ledger [toc] [#ForwarderShielded-Ledger]
+### Ledger [!toc] [#ForwarderShielded-Ledger]
+
+#### _parent [toc] [#ForwarderShielded-_parent]
+#### [!toc] [#ForwarderShielded-_parent]
+<APIItemCompact
+  circuitSig='_parent: Either<ZswapCoinPublicKey, ContractAddress>'
+  kind="ledger"
+  id="ForwarderShielded-_parent"
+>
+  The parent recipient. Stored as a generic `Either` for forward compatibility; `initialize` only ever writes the `left` (coin public key) arm.
+</APIItemCompact>
+
+#### _isInitialized [toc] [#ForwarderShielded-_isInitialized]
+#### [!toc] [#ForwarderShielded-_isInitialized]
+<APIItemCompact
+  circuitSig='_isInitialized: Boolean'
+  kind="ledger"
+  id="ForwarderShielded-_isInitialized"
+>
+  Boolean indicating if initialized.
+</APIItemCompact>
+
+### Witnesses [toc] [#ForwarderShielded-Witnesses]
+### Witnesses [!toc] [#ForwarderShielded-Witnesses]
+
+None.
+
+### Circuits [toc] [#ForwarderShielded-Circuits]
+### Circuits [!toc] [#ForwarderShielded-Circuits]
+
+#### initialize [toc] [#ForwarderShielded-initialize]
+#### [!toc] [#ForwarderShielded-initialize]
+<APIItemCompact
+  circuitSig='initialize(parent: ZswapCoinPublicKey) → []'
+  kind="circuit"
+  modulePrefix="ForwarderShielded"
+>
+  Stores `parent` in the `left` arm of `_parent`. The parent is disclosed.
+  Beyond the zero-key check, the caller must ensure `parent` can spend forwarded coins; an unspendable parent strands every deposit.
+
+  Requirements:
+
+  * Contract is not initialized.
+  * `parent` is not the zero key.
+</APIItemCompact>
+
+#### _deposit [toc] [#ForwarderShielded-_deposit]
+#### [!toc] [#ForwarderShielded-_deposit]
+<APIItemCompact
+  circuitSig='_deposit(coin: ShieldedCoinInfo) → []'
+  kind="circuit"
+  complexity="k=15, rows=24446"
+  modulePrefix="ForwarderShielded"
+>
+  Claims `coin` with `receiveShielded` and immediately re-sends its full value to `_parent` with `sendImmediateShielded`. The coin is disclosed.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+---
+
+## ForwarderUnshielded [toc] [#ForwarderUnshielded]
+<APIGithubLinkHeader
+    moduleName="ForwarderUnshielded"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/multisig/ForwarderUnshielded.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/multisig/ForwarderUnshielded";
+```
+
+---
+
+### Ledger [toc] [#ForwarderUnshielded-Ledger]
+### Ledger [!toc] [#ForwarderUnshielded-Ledger]
+
+#### _parent [toc] [#ForwarderUnshielded-_parent]
+#### [!toc] [#ForwarderUnshielded-_parent]
+<APIItemCompact
+  circuitSig='_parent: Either<ContractAddress, UserAddress>'
+  kind="ledger"
+  id="ForwarderUnshielded-_parent"
+>
+  The parent recipient. Stored as a generic `Either` for forward compatibility; `initialize` only ever writes the `right` (user address) arm.
+</APIItemCompact>
+
+#### _isInitialized [toc] [#ForwarderUnshielded-_isInitialized]
+#### [!toc] [#ForwarderUnshielded-_isInitialized]
+<APIItemCompact
+  circuitSig='_isInitialized: Boolean'
+  kind="ledger"
+  id="ForwarderUnshielded-_isInitialized"
+>
+  Boolean indicating if initialized.
+</APIItemCompact>
+
+### Witnesses [toc] [#ForwarderUnshielded-Witnesses]
+### Witnesses [!toc] [#ForwarderUnshielded-Witnesses]
+
+None.
+
+### Circuits [toc] [#ForwarderUnshielded-Circuits]
+### Circuits [!toc] [#ForwarderUnshielded-Circuits]
+
+#### initialize [toc] [#ForwarderUnshielded-initialize]
+#### [!toc] [#ForwarderUnshielded-initialize]
+<APIItemCompact
+  circuitSig='initialize(parent: UserAddress) → []'
+  kind="circuit"
+  modulePrefix="ForwarderUnshielded"
+>
+  Stores `parent` in the `right` arm of `_parent`. The parent is disclosed.
+  Beyond the zero-address check, the caller must ensure `parent` can spend forwarded amounts; an unspendable parent strands every deposit.
+
+  Requirements:
+
+  * Contract is not initialized.
+  * `parent` is not the zero address.
+</APIItemCompact>
+
+#### _deposit [toc] [#ForwarderUnshielded-_deposit]
+#### [!toc] [#ForwarderUnshielded-_deposit]
+<APIItemCompact
+  circuitSig='_deposit(color: Bytes<32>, amount: Uint<128>) → []'
+  kind="circuit"
+  complexity="k=10, rows=565"
+  modulePrefix="ForwarderUnshielded"
+>
+  Receives `amount` of `color` with `receiveUnshielded` and immediately forwards it to `_parent` with `sendUnshielded`.
+  Depositor, recipient, color, and amount all appear on the public transcript.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+

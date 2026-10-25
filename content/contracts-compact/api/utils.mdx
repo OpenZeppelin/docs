@@ -11,7 +11,7 @@ This package provides the API for all Utils modules.
 ## Utils [toc] [#Utils]
 <APIGithubLinkHeader
     moduleName="Utils"
-    link={`https://github.com/OpenZeppelin/compact-contracts/blob/main/contracts/src/utils/Utils.compact`}
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/utils/Utils.compact`}
 />
 
 ```ts
@@ -21,7 +21,8 @@ import "./node_modules/@openzeppelin/compact-contracts/utils/Utils";
 ---
 
 <Callout>
-  There's no easy way to get the constraints of circuits at this time so the constraints of the circuits listed below have been omitted.
+  The circuits below are helpers that are compiled into the circuit that calls them,
+  so no standalone complexity is listed for them.
 </Callout>
 
 ### Ledger [toc] [#Utils-Ledger]
@@ -41,15 +42,15 @@ None.
 #### [!toc] [#Utils-isKeyOrAddressZero]
 <APIItemCompact
   circuitSig='isKeyOrAddressZero(keyOrAddress: Either<ZswapCoinPublicKey, ContractAddress>) → Boolean'
-  kind="circuit"
-  stackParams="true"
+  kind="pure"
+  stackParams
   modulePrefix="Utils"
 >
   Returns whether `keyOrAddress` is the zero address.
 
   <Callout>
     Midnight's burn address is represented as `left<ZswapCoinPublicKey, ContractAddress>(default<ZswapCoinPublicKey>)` in Compact,
-    so we've chosen to represent the zero address as this structure as well.
+    so the zero address is represented as this structure as well.
   </Callout>
 </APIItemCompact>
 
@@ -57,7 +58,7 @@ None.
 #### [!toc] [#Utils-isKeyZero]
 <APIItemCompact
   circuitSig='isKeyZero(key: ZswapCoinPublicKey) → Boolean'
-  kind="circuit"
+  kind="pure"
   modulePrefix="Utils"
 >
   Returns whether `key` is the zero address.
@@ -67,8 +68,8 @@ None.
 #### [!toc] [#Utils-isKeyOrAddressEqual]
 <APIItemCompact
   circuitSig='isKeyOrAddressEqual(keyOrAddress: Either<ZswapCoinPublicKey, ContractAddress>, other: Either<ZswapCoinPublicKey, ContractAddress>) → Boolean'
-  kind="circuit"
-  stackParams="true"
+  kind="pure"
+  stackParams
   modulePrefix="Utils"
 >
   Returns whether `keyOrAddress` is equal to `other`.
@@ -79,8 +80,8 @@ None.
 #### [!toc] [#Utils-isContractAddress]
 <APIItemCompact
   circuitSig='isContractAddress(keyOrAddress: Either<ZswapCoinPublicKey, ContractAddress>) → Boolean'
-  kind="circuit"
-  stackParams="true"
+  kind="pure"
+  stackParams
   modulePrefix="Utils"
 >
   Returns whether `keyOrAddress` is a `ContractAddress` type.
@@ -90,7 +91,7 @@ None.
 #### [!toc] [#Utils-emptyString]
 <APIItemCompact
   circuitSig='emptyString() → Opaque<"string">'
-  kind="circuit"
+  kind="pure"
   modulePrefix="Utils"
 >
   A helper function that returns the empty string: `""`.
@@ -100,8 +101,87 @@ None.
 #### [!toc] [#Utils-canonicalize]
 <APIItemCompact
   circuitSig='canonicalize<T1, T2>(value: Either<T1, T2>) → Either<T1, T2>'
-  kind="circuit"
+  kind="pure"
   modulePrefix="Utils"
 >
   Zeroes out the unused side of an `Either` value. Prevents crafted inputs where both `left` and `right` fields carry data from bypassing checks that only inspect the active side.
+</APIItemCompact>
+
+#### zeroAccount [toc] [#Utils-zeroAccount]
+#### [!toc] [#Utils-zeroAccount]
+<APIItemCompact
+  circuitSig='zeroAccount() → Either<Bytes<32>, ContractAddress>'
+  kind="pure"
+  modulePrefix="Utils"
+>
+  Returns the canonical zero `Either<Bytes<32>, ContractAddress>` value: the left variant (`Bytes<32>`) set to zero.
+  Used as the sentinel for mint and burn operations (a zero `from` signals a mint, a zero `to` signals a burn)
+  and for cleared approvals.
+
+  The left variant is returned so that `isTargetZero` compares against `default<Bytes<32>>`
+  and so that the value does not trigger contract-address guards.
+</APIItemCompact>
+
+#### isTargetZero [toc] [#Utils-isTargetZero]
+#### [!toc] [#Utils-isTargetZero]
+<APIItemCompact
+  circuitSig='isTargetZero(target: Either<Bytes<32>, ContractAddress>) → Boolean'
+  kind="pure"
+  modulePrefix="Utils"
+>
+  Returns `true` if the active branch of `target` (as indicated by `is_left`) holds the zero value.
+</APIItemCompact>
+
+#### computeAccountId [toc] [#Utils-computeAccountId]
+#### [!toc] [#Utils-computeAccountId]
+<APIItemCompact
+  circuitSig='computeAccountId(secretKey: Bytes<32>) → Bytes<32>'
+  kind="pure"
+  modulePrefix="Utils"
+>
+  Computes an account identifier without on-chain state, allowing a user to derive
+  their identity commitment before submitting an operation.
+
+  Derivation: `accountId = persistentHash(secretKey)`, with no domain-separation tag.
+
+  The absence of a tag is deliberate. The identifier is global by design: the same key material yields the same
+  identity in every module deriving one, so a user who wishes to carry one identity across modules can.
+  Modules wanting a per-deployment, unlinkable identity should not use this circuit.
+
+  Not for private derivation. This returns an identifier, not a secret, and the construction is untagged.
+  A circuit deriving a private value from a secret must use its own domain-separation tag.
+
+  <Callout type='warn'>
+    `secretKey` is a sensitive secret. Never log or persist it in plaintext (browser devtools, application logs,
+    analytics pipelines, or any observable side-channel). Prefer offline storage or secure enclaves (HSMs,
+    air-gapped devices, encrypted vaults) over hot storage. Generate it with `crypto.getRandomValues()` or equivalent;
+    weak or predictable keys can be brute-forced to reveal the identity. Treat key loss as identity loss: a lost key
+    cannot be recovered. Avoid evaluating this circuit in untrusted environments (an unverified browser extension,
+    a compromised runtime, or a shared machine) where the key may be exposed to a malicious observer.
+  </Callout>
+
+  Requirements:
+
+  * `secretKey` is a 32-byte cryptographically secure random value.
+</APIItemCompact>
+
+#### selfAsRecipient [toc] [#Utils-selfAsRecipient]
+#### [!toc] [#Utils-selfAsRecipient]
+<APIItemCompact
+  circuitSig='selfAsRecipient() → Either<ZswapCoinPublicKey, ContractAddress>'
+  kind="circuit"
+  modulePrefix="Utils"
+>
+  Returns the current contract's address as an `Either<ZswapCoinPublicKey, ContractAddress>`
+  for use as a recipient in shielded send operations (deposits and receiving change).
+</APIItemCompact>
+
+#### UINT128_MAX [toc] [#Utils-UINT128_MAX]
+#### [!toc] [#Utils-UINT128_MAX]
+<APIItemCompact
+  circuitSig='UINT128_MAX() → Uint<128>'
+  kind="pure"
+  modulePrefix="Utils"
+>
+  The maximum value representable by a `Uint<128>`: `2^128 - 1`.
 </APIItemCompact>

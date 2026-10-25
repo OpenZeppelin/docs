@@ -8,6 +8,11 @@ title: NonFungibleToken
 [ERC-165]: https://eips.ethereum.org/EIPS/eip-165
 [Module/Contract Pattern]: ./extensibility#the-modulecontract-pattern
 [_mint]: ./api/non-fungible-token#NonFungibleToken-_mint
+[approve]: ./api/non-fungible-token#NonFungibleToken-approve
+[setApprovalForAll]: ./api/non-fungible-token#NonFungibleToken-setApprovalForAll
+[transferFrom]: ./api/non-fungible-token#NonFungibleToken-transferFrom
+[wit_NonFungibleTokenSK]: ./api/non-fungible-token#NonFungibleToken-wit_NonFungibleTokenSK
+[computeAccountId]: ./api/utils#Utils-computeAccountId
 
 NonFungibleToken is a specification for [non-fungible tokens],
 a type of token where all the units are unique and distinct from each other.
@@ -50,6 +55,47 @@ The NonFungibleToken module, however, does provide `unsafe` circuit variants for
 <Callout type='warn'>
 The `unsafe` circuits will eventually be deprecated after Compact supports contract-to-contract calls—meaning
 `_transfer`, `_mint`, etc. are planned to eventually allow the recipients to be of the `ContractAddress` type.
+</Callout>
+
+## Identity Model
+
+NonFungibleToken uses a witness-derived identity scheme. Each caller proves knowledge of a secret key
+by injecting it through the [wit_NonFungibleTokenSK] witness. The module computes the caller's account identifier
+as `persistentHash(secretKey)`, a commitment that hides the key while providing a stable, pseudonymous on-chain identity.
+That identifier is the `Bytes<32>` (left) branch of the `Either<Bytes<32>, ContractAddress>` account type
+and is what [approve], [setApprovalForAll], and [transferFrom] check ownership and operator rights against.
+
+What is public on the ledger:
+
+* `_owners`, keyed by token id, and `_balances`, keyed by account identifier (or contract address).
+* `_tokenApprovals`, keyed by token id, and `_operatorApprovals`, keyed by owner and then operator.
+* `_tokenURIs`, `_name`, and `_symbol`.
+
+What the caller holds privately:
+
+* The 32-byte `secretKey`. It never reaches the ledger; only its hash does.
+
+A transfer discloses the token id, the previous owner, and the recipient, because the owner and balance maps are updated with those values.
+A single-token approval discloses the token id and the approved account; an operator approval discloses the caller's identifier, the operator, and the flag.
+
+Because the identifier is `H(secretKey)` with no per-deployment salt, the same key produces the same identity in every contract.
+Users who want cross-contract unlinkability can use a different secret key per contract at the wallet layer.
+
+To derive an account identifier off-chain (for example, to pass as the `recipient` of a mint), use [computeAccountId] from the Utils module:
+
+```typescript
+import "./node_modules/@openzeppelin/compact-contracts/utils/Utils" prefix Utils_;
+
+const accountId = Utils_computeAccountId(secretKey);
+```
+
+The TypeScript witness implementation lives with the DApp, not with the library.
+The witnesses in the `compact-contracts` repository are test-only and are not published;
+consumers author their own `wit_NonFungibleTokenSK` that returns the caller's 32-byte secret key.
+
+<Callout type='warn'>
+  The `secretKey` must never be logged or persisted in plaintext. Loss of the key means loss of the tokens held under that identity,
+  and key exposure allows impersonation. Use `crypto.getRandomValues()` or equivalent to generate keys.
 </Callout>
 
 ## Usage

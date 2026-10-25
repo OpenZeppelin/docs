@@ -1,0 +1,445 @@
+---
+title: Crypto API
+---
+
+This page provides the full API for the Crypto modules.
+
+<Callout type='info'>
+  For an overview of the modules, read the [Crypto guide](../crypto).
+</Callout>
+
+The page covers the following modules:
+
+- [ElGamal](#ElGamal): exponential ElGamal encryption over Jubjub with homomorphic addition and re-randomization.
+- [EcdhMask](#EcdhMask): an ECDH-derived mask for encrypting a value to a recipient's public key.
+
+## ElGamal [toc] [#ElGamal]
+<APIGithubLinkHeader
+    moduleName="ElGamal"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/crypto/ElGamal.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/crypto/ElGamal";
+```
+
+---
+
+### Types [toc] [#ElGamal-Types]
+### Types [!toc] [#ElGamal-Types]
+
+#### Ciphertext [toc] [#ElGamal-Ciphertext]
+#### [!toc] [#ElGamal-Ciphertext]
+<APIItemCompact
+  circuitSig='struct Ciphertext { c1: JubjubPoint; c2: JubjubPoint; }'
+  kind="struct"
+  id="ElGamal-Ciphertext"
+>
+  A single-receiver ElGamal ciphertext over Jubjub: `c1 = g^r` and `c2 = pk^r * m`.
+  In the lifted form the message point is `m = g^v` for a plaintext value `v`.
+</APIItemCompact>
+
+### Ledger [toc] [#ElGamal-Ledger]
+### Ledger [!toc] [#ElGamal-Ledger]
+
+None.
+
+### Witnesses [toc] [#ElGamal-Witnesses]
+### Witnesses [!toc] [#ElGamal-Witnesses]
+
+None.
+
+### Circuits [toc] [#ElGamal-Circuits]
+### Circuits [!toc] [#ElGamal-Circuits]
+
+#### secretToScalar [toc] [#ElGamal-secretToScalar]
+#### [!toc] [#ElGamal-secretToScalar]
+<APIItemCompact
+  circuitSig='secretToScalar(secret: Bytes<32>) → Field'
+  kind="pure"
+  modulePrefix="ElGamal"
+>
+  Maps a 32-byte secret to a valid Jubjub scalar, computed as
+  `degradeToTransient(H("ElGamal:secretToScalar" || secret))` with the tag padded to 32 bytes.
+  The output is always below the Jubjub subgroup order, so it is safe to pass to `ecMulGenerator` and `ecMul`.
+  The fixed tag keeps this derivation distinct from both `expandRandomness` and any account identifier computed as `H(secret)`.
+</APIItemCompact>
+
+#### derivePk [toc] [#ElGamal-derivePk]
+#### [!toc] [#ElGamal-derivePk]
+<APIItemCompact
+  circuitSig='derivePk(ek: Bytes<32>) → JubjubPoint'
+  kind="pure"
+  modulePrefix="ElGamal"
+>
+  Derives the public key `pk = g^secretToScalar(ek)` from the 32-byte encryption secret `ek`.
+</APIItemCompact>
+
+#### expandRandomness [toc] [#ElGamal-expandRandomness]
+#### [!toc] [#ElGamal-expandRandomness]
+<APIItemCompact
+  circuitSig='expandRandomness(seed: Bytes<32>, tag: Bytes<32>) → Field'
+  kind="pure"
+  modulePrefix="ElGamal"
+>
+  Deterministically expands a 32-byte seed into a Jubjub scalar tagged by a distinguishing string,
+  computed as `degradeToTransient(H(seed || tag))`.
+  One secret seed can yield many distinct randomness values within a single circuit invocation, one per tag.
+  Distinct tags always produce distinct outputs; the caller is responsible for using distinct tags
+  and for supplying a fresh, secret seed on every invocation.
+</APIItemCompact>
+
+#### encryptZero [toc] [#ElGamal-encryptZero]
+#### [!toc] [#ElGamal-encryptZero]
+<APIItemCompact
+  circuitSig='encryptZero() → Ciphertext'
+  kind="pure"
+  modulePrefix="ElGamal"
+>
+  Returns the identity ciphertext `Enc(0)`, where both components are the curve identity point.
+  Useful for initializing a fresh slot.
+
+  This is a fixed, deterministic value, not a hiding encryption: a slot still holding it is publicly recognizable as never written.
+  Rerandomize it, or credit it with fresh randomness, before treating it as private.
+</APIItemCompact>
+
+#### encryptPoint [toc] [#ElGamal-encryptPoint]
+#### [!toc] [#ElGamal-encryptPoint]
+<APIItemCompact
+  circuitSig='encryptPoint(
+    pk: JubjubPoint,
+    m: JubjubPoint,
+    r: Field
+  ) → Ciphertext'
+  kind="pure"
+  modulePrefix="ElGamal"
+  stackParams="true"
+>
+  Encrypts an arbitrary message point `m` under `pk` with randomness `r`, producing `(g^r, pk^r * m)`.
+  This is the general (non-lifted) encryption; `encrypt` is the lifted special case with `m = g^value`.
+  Every encryption path in the module goes through this circuit, so its requirements apply to all of them.
+
+  `m` and `pk` are constrained into the prime-order subgroup by the runtime, so no in-circuit membership check is performed.
+  Decrypting `m` is only feasible when it is a known or small-exponent point; the caller owns that concern.
+  `r` must be a valid Jubjub scalar (below the subgroup order), secret, and fresh per ciphertext;
+  the circuit cannot check any of these.
+
+  Requirements:
+
+  * `pk` is not the identity point.
+  * `r` is non-zero.
+</APIItemCompact>
+
+#### encrypt [toc] [#ElGamal-encrypt]
+#### [!toc] [#ElGamal-encrypt]
+<APIItemCompact
+  circuitSig='encrypt(
+    pk: JubjubPoint,
+    value: Uint<128>,
+    r: Field
+  ) → Ciphertext'
+  kind="pure"
+  modulePrefix="ElGamal"
+  stackParams="true"
+>
+  Produces a fresh ciphertext of `value` under `pk` with randomness `r`, lifting `value` to the point `g^value`:
+  the result is `(g^r, pk^r * g^value)`.
+  The caller is responsible for keeping `value` within a range a discrete-log search can recover.
+
+  Requirements:
+
+  * `pk` is not the identity point.
+  * `r` is non-zero.
+</APIItemCompact>
+
+#### negate [toc] [#ElGamal-negate]
+#### [!toc] [#ElGamal-negate]
+<APIItemCompact
+  circuitSig='negate(ct: Ciphertext) → Ciphertext'
+  kind="pure"
+  modulePrefix="ElGamal"
+>
+  Negates a ciphertext componentwise: if `ct` encrypts `v`, the result encrypts `-v` under the same key
+  (with negated randomness). Each point is negated by scalar multiplication with the subgroup order minus one.
+  This is the building block `sub` rests on.
+</APIItemCompact>
+
+#### add [toc] [#ElGamal-add]
+#### [!toc] [#ElGamal-add]
+<APIItemCompact
+  circuitSig='add(a: Ciphertext, b: Ciphertext) → Ciphertext'
+  kind="pure"
+  modulePrefix="ElGamal"
+>
+  Homomorphically adds two ciphertexts componentwise: `Enc(a) + Enc(b)` decrypts to `a + b`.
+  The randomness of the result is the sum of the inputs' randomness, so the result is a valid ciphertext under the same key.
+
+  Both inputs must be encrypted under the same public key; combining ciphertexts under different keys yields
+  a ciphertext no single key can open.
+</APIItemCompact>
+
+#### sub [toc] [#ElGamal-sub]
+#### [!toc] [#ElGamal-sub]
+<APIItemCompact
+  circuitSig='sub(a: Ciphertext, b: Ciphertext) → Ciphertext'
+  kind="pure"
+  modulePrefix="ElGamal"
+>
+  Homomorphically subtracts two ciphertexts: `Enc(a) - Enc(b)` decrypts to `a - b`. Implemented as `add(a, negate(b))`.
+
+  Both inputs must be encrypted under the same public key.
+  The caller must ensure the underlying plaintext subtraction does not underflow; this circuit cannot check it.
+</APIItemCompact>
+
+#### scalarMul [toc] [#ElGamal-scalarMul]
+#### [!toc] [#ElGamal-scalarMul]
+<APIItemCompact
+  circuitSig='scalarMul(ct: Ciphertext, k: Field) → Ciphertext'
+  kind="pure"
+  modulePrefix="ElGamal"
+>
+  Homomorphically multiplies the plaintext of `ct` by a public scalar `k`: if `ct` encrypts `v`,
+  the result encrypts `k * v` under the same key. Both components are scaled, so the randomness becomes `k * r`.
+  Together with `add` this expresses linear combinations, for example `Enc(3a + 5b)` as `add(scalarMul(ca, 3), scalarMul(cb, 5))`.
+
+  `k` must be a valid Jubjub scalar (below the subgroup order); larger values fault `ecMul`.
+  The caller remains responsible for keeping `k * v` within the discrete-log bound.
+</APIItemCompact>
+
+#### addEncrypted [toc] [#ElGamal-addEncrypted]
+#### [!toc] [#ElGamal-addEncrypted]
+<APIItemCompact
+  circuitSig='addEncrypted(
+    old: Ciphertext,
+    pk: JubjubPoint,
+    value: Uint<128>,
+    r: Field
+  ) → Ciphertext'
+  kind="pure"
+  modulePrefix="ElGamal"
+  stackParams="true"
+>
+  Homomorphically adds `value` to the plaintext encrypted by `old`, producing a fresh ciphertext under `pk`
+  with new randomness `r`. Equivalent to `add(old, encrypt(pk, value, r))`.
+
+  Requirements:
+
+  * `pk` is not the identity point.
+  * `r` is non-zero.
+</APIItemCompact>
+
+#### subEncrypted [toc] [#ElGamal-subEncrypted]
+#### [!toc] [#ElGamal-subEncrypted]
+<APIItemCompact
+  circuitSig='subEncrypted(
+    old: Ciphertext,
+    pk: JubjubPoint,
+    value: Uint<128>,
+    r: Field
+  ) → Ciphertext'
+  kind="pure"
+  modulePrefix="ElGamal"
+  stackParams="true"
+>
+  Homomorphically subtracts `value` from the plaintext encrypted by `old`, producing a fresh ciphertext under `pk`
+  with new randomness `r`. Equivalent to `sub(old, encrypt(pk, value, r))`.
+
+  The caller must ensure the underlying plaintext subtraction does not underflow; this circuit cannot check it.
+  Callers verify sufficiency by reading the plaintext through their own witness and asserting it with
+  `assertDecryptsTo` before calling.
+
+  Requirements:
+
+  * `pk` is not the identity point.
+  * `r` is non-zero.
+</APIItemCompact>
+
+#### rerandomize [toc] [#ElGamal-rerandomize]
+#### [!toc] [#ElGamal-rerandomize]
+<APIItemCompact
+  circuitSig='rerandomize(
+    ct: Ciphertext,
+    pk: JubjubPoint,
+    r: Field
+  ) → Ciphertext'
+  kind="pure"
+  modulePrefix="ElGamal"
+  stackParams="true"
+>
+  Returns a fresh ciphertext of the same plaintext as `ct` under the same key `pk`, using new randomness `r`.
+  The output is unlinkable to the input yet decrypts identically. Equivalent to homomorphically adding an encryption of zero.
+
+  A `pk` that is not the key `ct` was encrypted under silently corrupts the plaintext; the circuit cannot detect this.
+  Pass fresh randomness and the matching `pk`.
+
+  Requirements:
+
+  * `pk` is not the identity point.
+  * `r` is non-zero.
+</APIItemCompact>
+
+#### assertKeyPair [toc] [#ElGamal-assertKeyPair]
+#### [!toc] [#ElGamal-assertKeyPair]
+<APIItemCompact
+  circuitSig='assertKeyPair(pk: JubjubPoint, ek: Bytes<32>) → []'
+  kind="pure"
+  modulePrefix="ElGamal"
+>
+  Asserts that `ek` is the secret for `pk`, i.e. `derivePk(ek) == pk`.
+  Lets a caller prove ownership of a public key without touching any ciphertext or plaintext.
+
+  Requirements:
+
+  * `derivePk(ek) == pk`.
+</APIItemCompact>
+
+#### assertDecryptsToPoint [toc] [#ElGamal-assertDecryptsToPoint]
+#### [!toc] [#ElGamal-assertDecryptsToPoint]
+<APIItemCompact
+  circuitSig='assertDecryptsToPoint(
+    ct: Ciphertext,
+    pk: JubjubPoint,
+    ek: Bytes<32>,
+    m: JubjubPoint
+  ) → []'
+  kind="pure"
+  modulePrefix="ElGamal"
+  stackParams="true"
+>
+  Asserts that `ek` is the secret for `pk` and that `ct` decrypts under `(pk, ek)` to the message point `m`,
+  computed as `c2 - ek * c1`. This is the general (non-lifted) verification;
+  `assertDecryptsTo` is the lifted special case with `m = g^claimedValue`.
+
+  Requirements:
+
+  * `ek` is the secret for `pk`.
+  * `ct` decrypts under `(pk, ek)` to `m`.
+</APIItemCompact>
+
+#### assertDecryptsTo [toc] [#ElGamal-assertDecryptsTo]
+#### [!toc] [#ElGamal-assertDecryptsTo]
+<APIItemCompact
+  circuitSig='assertDecryptsTo(
+    ct: Ciphertext,
+    pk: JubjubPoint,
+    ek: Bytes<32>,
+    claimedValue: Uint<248>
+  ) → []'
+  kind="pure"
+  modulePrefix="ElGamal"
+  stackParams="true"
+>
+  Asserts that `ek` is the secret for `pk` and that `ct` decrypts under `(pk, ek)` to `claimedValue`.
+  This is the in-circuit verification path an importing contract uses to bind its witness-supplied secret and cached plaintext
+  to publicly stored state: a wrong `ek` fails the key check, a wrong plaintext fails the decryption check.
+
+  `claimedValue` is the widest `Uint` Compact offers, so this parameter never bounds a caller; a narrower value declared
+  at the call site costs proportionally less. The claim domain must stay below the Jubjub subgroup order, since two claims
+  congruent modulo that order are indistinguishable; `Uint<248>` satisfies this.
+
+  Requirements:
+
+  * `ek` is the secret for `pk`.
+  * `ct` decrypts under `(pk, ek)` to `claimedValue`.
+</APIItemCompact>
+
+---
+
+## EcdhMask [toc] [#EcdhMask]
+<APIGithubLinkHeader
+    moduleName="EcdhMask"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/crypto/EcdhMask.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/crypto/EcdhMask";
+```
+
+---
+
+### Types [toc] [#EcdhMask-Types]
+### Types [!toc] [#EcdhMask-Types]
+
+#### Ciphertext [toc] [#EcdhMask-Ciphertext]
+#### [!toc] [#EcdhMask-Ciphertext]
+<APIItemCompact
+  circuitSig='struct Ciphertext { ephemeralPk: JubjubPoint; ct: Field; }'
+  kind="struct"
+  id="EcdhMask-Ciphertext"
+>
+  An ECDH one-time-pad ciphertext: the ephemeral public key `g^e` and the field-masked value `value + kdf(pk^e, domain)`.
+</APIItemCompact>
+
+### Ledger [toc] [#EcdhMask-Ledger]
+### Ledger [!toc] [#EcdhMask-Ledger]
+
+None.
+
+### Witnesses [toc] [#EcdhMask-Witnesses]
+### Witnesses [!toc] [#EcdhMask-Witnesses]
+
+None.
+
+### Circuits [toc] [#EcdhMask-Circuits]
+### Circuits [!toc] [#EcdhMask-Circuits]
+
+#### kdf [toc] [#EcdhMask-kdf]
+#### [!toc] [#EcdhMask-kdf]
+<APIItemCompact
+  circuitSig='kdf(sShared: JubjubPoint, domain: Bytes<32>) → Field'
+  kind="pure"
+  modulePrefix="EcdhMask"
+>
+  Derives the field mask from the ECDH shared secret point, domain-separated by the caller-supplied `domain` tag:
+  `degradeToTransient(H(H(sShared) || domain))`, where `H` is `persistentHash`.
+  `sShared` is `pk^e` for the sender and `ephemeralPk^ek` for the recipient, which are equal by construction.
+  The consumer chooses `domain` and must use the same value on encrypt and decrypt.
+</APIItemCompact>
+
+#### encrypt [toc] [#EcdhMask-encrypt]
+#### [!toc] [#EcdhMask-encrypt]
+<APIItemCompact
+  circuitSig='encrypt(
+    recipientPk: JubjubPoint,
+    value: Uint<128>,
+    e: Field,
+    domain: Bytes<32>
+  ) → Ciphertext'
+  kind="pure"
+  modulePrefix="EcdhMask"
+  stackParams="true"
+>
+  Encrypts `value` to `recipientPk` under the ephemeral scalar `e`, returning
+  `{ ephemeralPk: g^e, ct: value + kdf(recipientPk^e, domain) }`.
+  Any `Uint<128>` value is accepted; there is no discrete-log bound.
+
+  `e` is a one-time pad key: it must be a valid Jubjub scalar (below the subgroup order), secret,
+  and fresh for every ciphertext. Reusing `e` to the same recipient repeats the mask and exposes both values;
+  a predictable `e` lets anyone recompute the mask from the public `recipientPk`.
+  The pad is not authenticated.
+
+  Requirements:
+
+  * `recipientPk` is not the identity point.
+  * The ephemeral point `g^e` is not the identity (this rejects `e = 0`).
+</APIItemCompact>
+
+#### decrypt [toc] [#EcdhMask-decrypt]
+#### [!toc] [#EcdhMask-decrypt]
+<APIItemCompact
+  circuitSig='decrypt(
+    ciphertext: Ciphertext,
+    ekScalar: Field,
+    domain: Bytes<32>
+  ) → Field'
+  kind="pure"
+  modulePrefix="EcdhMask"
+  stackParams="true"
+>
+  Recovers the value from a ciphertext using the recipient's secret scalar: computes `sShared = ephemeralPk^ekScalar`
+  and returns `ct - kdf(sShared, domain)`. The result equals the original `value` as a `Field`.
+  `ekScalar` is the scalar form of the recipient's secret, as produced by ElGamal's `secretToScalar`,
+  and `domain` must match the tag used on encrypt.
+
+  Intended for wallets and off-chain code: reading a received value needs no proof.
+</APIItemCompact>

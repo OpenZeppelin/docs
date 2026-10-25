@@ -49,7 +49,7 @@ More complex role relationships can be created by using [_setRoleAdmin](#AccessC
 ## AccessControl [toc] [#AccessControl]
 <APIGithubLinkHeader
     moduleName="AccessControl"
-    link={`https://github.com/OpenZeppelin/compact-contracts/blob/main/contracts/src/access/AccessControl.compact`}
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/access/AccessControl.compact`}
 />
 
 ```ts
@@ -69,6 +69,7 @@ import "./node_modules/@openzeppelin/compact-contracts/access/AccessControl";
   id="AccessControl-_operatorRoles"
 >
   Mapping from a role identifier -> account -> its permissions.
+  Account keys are stored canonicalized (the inactive branch of the `Either` is zeroed).
 </APIItemCompact>
 
 #### _adminRoles [toc] [#AccessControl-_adminRoles]
@@ -84,6 +85,9 @@ import "./node_modules/@openzeppelin/compact-contracts/access/AccessControl";
 ### Witnesses [toc] [#AccessControl-Witnesses]
 ### Witnesses [!toc] [#AccessControl-Witnesses]
 
+Witness implementations are authored by the consuming DApp.
+The TypeScript witnesses in the repository are test-only and are not published with the package.
+
 #### wit_AccessControlSK [toc] [#AccessControl-wit_AccessControlSK]
 #### [!toc] [#AccessControl-wit_AccessControlSK]
 <APIItemCompact
@@ -91,7 +95,8 @@ import "./node_modules/@openzeppelin/compact-contracts/access/AccessControl";
   kind="witness"
   id="AccessControl-wit_AccessControlSK"
 >
-  Returns the caller's secret key used in deriving the account identifier.
+  Returns the caller's secret key used in deriving the account identifier `H(secretKey)`.
+  The key never reaches the ledger; only the derived identifier is used as a map key.
 
   The same key produces the same account identifier across all contracts. Users who
   desire cross-contract unlinkability should use different keys per contract.
@@ -104,7 +109,7 @@ import "./node_modules/@openzeppelin/compact-contracts/access/AccessControl";
 #### [!toc] [#AccessControl-DEFAULT_ADMIN_ROLE]
 <APIItemCompact
   circuitSig="DEFAULT_ADMIN_ROLE() → Bytes<32>"
-  kind="circuit"
+  kind="pure"
   modulePrefix="AccessControl"
 >
   The default admin role for all roles. Returns zero bytes (`default<Bytes<32>>`).
@@ -121,19 +126,9 @@ import "./node_modules/@openzeppelin/compact-contracts/access/AccessControl";
   modulePrefix="AccessControl"
 >
   Returns `true` if `account` has been granted `roleId`.
-</APIItemCompact>
+  `account` is canonicalized before the lookup.
 
-#### _hasRole [toc] [#AccessControl-_hasRole]
-#### [!toc] [#AccessControl-_hasRole]
-<APIItemCompact
-  circuitSig="_hasRole(roleId: Bytes<32>, account: Either<Bytes<32>, ContractAddress>) → Boolean"
-  kind="internal"
-  stackParams="true"
-  modulePrefix="AccessControl"
->
-  Returns `true` if `account` has been granted `roleId`.
-  Internal variant that assumes `account` has already been canonicalized by the caller.
-  External consumers should use `hasRole` which canonicalizes the input automatically.
+  Discloses: `roleId` and the canonicalized `account` (map lookup keys).
 </APIItemCompact>
 
 #### assertOnlyRole [toc] [#AccessControl-assertOnlyRole]
@@ -145,7 +140,10 @@ import "./node_modules/@openzeppelin/compact-contracts/access/AccessControl";
   modulePrefix="AccessControl"
 >
   Reverts if the caller cannot prove ownership of `roleId`.
-  The caller's identity is derived from the `wit_AccessControlSK` witness as `persistentHash(secretKey)`.
+  The caller's identity is derived from the `wit_AccessControlSK` witness as `H(secretKey)`,
+  the same derivation as [`Utils.computeAccountId`](./utils#Utils-computeAccountId).
+
+  Discloses: `roleId` and the caller's account identifier (map lookup keys).
 
   Requirements:
 
@@ -157,10 +155,12 @@ import "./node_modules/@openzeppelin/compact-contracts/access/AccessControl";
 <APIItemCompact
   circuitSig="_checkRole(roleId: Bytes<32>, account: Either<Bytes<32>, ContractAddress>) → []"
   kind="circuit"
-  complexity="k=10, rows=999"
+  complexity="k=10, rows=987"
   modulePrefix="AccessControl"
 >
   Reverts if `account` is missing `roleId`.
+
+  Discloses: `roleId` and the canonicalized `account` (map lookup keys).
 
   Requirements:
 
@@ -179,6 +179,8 @@ import "./node_modules/@openzeppelin/compact-contracts/access/AccessControl";
   See [grantRole](#AccessControl-grantRole) and [revokeRole](#AccessControl-revokeRole).
 
   To change a role's admin use [_setRoleAdmin](#AccessControl-_setRoleAdmin).
+
+  Discloses: `roleId`.
 </APIItemCompact>
 
 #### grantRole [toc] [#AccessControl-grantRole]
@@ -196,6 +198,8 @@ import "./node_modules/@openzeppelin/compact-contracts/access/AccessControl";
     This restriction prevents permanently disabling access to a circuit.
   </Callout>
 
+  Discloses: `roleId`, the caller's account identifier, and the canonicalized `account`, which is written into `_operatorRoles`.
+
   Requirements:
 
   * `account` must not be a ContractAddress.
@@ -211,6 +215,8 @@ import "./node_modules/@openzeppelin/compact-contracts/access/AccessControl";
   modulePrefix="AccessControl"
 >
   Revokes `roleId` from `account`.
+
+  Discloses: `roleId`, the caller's account identifier, and the canonicalized `account`.
 
   Requirements:
 
@@ -233,13 +239,15 @@ import "./node_modules/@openzeppelin/compact-contracts/access/AccessControl";
   if they are compromised (such as when a trusted device is misplaced).
 
   The caller's identity is derived from the `wit_AccessControlSK` witness as
-  `persistentHash(secretKey)`. The `callerConfirmation` parameter must match
+  `H(secretKey)`. The `callerConfirmation` parameter must match
   the caller's computed account identifier to prevent accidental renunciation.
 
   <Callout type='info'>
     We do not provide functionality for smart contracts to renounce roles because self-executing transactions are not supported on Midnight at this time.
     We may revisit this in future if this feature is made available in Compact.
   </Callout>
+
+  Discloses: `roleId` and `callerConfirmation`.
 
   Requirements:
 
@@ -256,6 +264,9 @@ import "./node_modules/@openzeppelin/compact-contracts/access/AccessControl";
   modulePrefix="AccessControl"
 >
   Sets `adminRole` as `roleId`'s admin role.
+  Internal circuit without access restriction.
+
+  Discloses: `roleId` and `adminRole`, written to `_adminRoles`.
 </APIItemCompact>
 
 #### _grantRole [toc] [#AccessControl-_grantRole]
@@ -266,7 +277,8 @@ import "./node_modules/@openzeppelin/compact-contracts/access/AccessControl";
   complexity="k=11, rows=1143"
   modulePrefix="AccessControl"
 >
-  Attempts to grant `roleId` to `account` and returns a boolean indicating if `roleId` was granted.
+  Attempts to grant `roleId` to `account` and returns a boolean indicating if `roleId` was granted
+  (`false` when `account` already holds it).
 
   Internal circuit without access restriction.
 
@@ -274,6 +286,8 @@ import "./node_modules/@openzeppelin/compact-contracts/access/AccessControl";
     Granting roles to contract addresses is currently disallowed in this circuit until contract-to-contract interactions are supported in Compact.
     This restriction prevents permanently disabling access to a circuit.
   </Callout>
+
+  Discloses: `roleId` and the canonicalized `account`, written into `_operatorRoles`.
 
   Requirements:
 
@@ -289,12 +303,15 @@ import "./node_modules/@openzeppelin/compact-contracts/access/AccessControl";
   modulePrefix="AccessControl"
 >
   Unsafe variant of [_grantRole](#AccessControl-_grantRole).
+  It does not check whether `account` is a ContractAddress.
 
   <Callout type='warn'>
     Granting roles to contract addresses is considered unsafe because contract-to-contract calls are not currently supported.
     Granting a role to a smart contract may render a circuit permanently inaccessible.
     Once contract-to-contract calls are supported, this circuit may be deprecated.
   </Callout>
+
+  Discloses: `roleId` and the canonicalized `account`, written into `_operatorRoles`.
 </APIItemCompact>
 
 #### _revokeRole [toc] [#AccessControl-_revokeRole]
@@ -305,43 +322,10 @@ import "./node_modules/@openzeppelin/compact-contracts/access/AccessControl";
   complexity="k=11, rows=1073"
   modulePrefix="AccessControl"
 >
-  Attempts to revoke `roleId` from `account` and returns a boolean indicating if `roleId` was revoked.
+  Attempts to revoke `roleId` from `account` and returns a boolean indicating if `roleId` was revoked
+  (`false` when `account` did not hold it).
 
   Internal circuit without access restriction.
-</APIItemCompact>
 
-#### _computeAccountId [toc] [#AccessControl-_computeAccountId]
-#### [!toc] [#AccessControl-_computeAccountId]
-<APIItemCompact
-  circuitSig="_computeAccountId() → Bytes<32>"
-  kind="internal"
-  modulePrefix="AccessControl"
->
-  Computes the caller's account identifier from the `wit_AccessControlSK` witness.
-
-  ID Derivation: `accountId = persistentHash(secretKey)`
-
-  The result is a 32-byte commitment that uniquely identifies the caller.
-</APIItemCompact>
-
-#### computeAccountId [toc] [#AccessControl-computeAccountId]
-#### [!toc] [#AccessControl-computeAccountId]
-<APIItemCompact
-  circuitSig="computeAccountId(secretKey: Bytes<32>) → Bytes<32>"
-  kind="pure"
-  modulePrefix="AccessControl"
->
-  Computes an account identifier without on-chain state, allowing a user to derive
-  their identity commitment before submitting it in a grant or revoke operation.
-  This is the off-chain counterpart to the internal `_computeAccountId` and produces an identical result
-  given the same inputs.
-
-  ID Derivation: `accountId = persistentHash(secretKey)`
-
-  <Callout type='warn'>
-    The `secretKey` parameter is a sensitive secret. Mishandling it can permanently compromise the privacy guarantees of this system.
-    Never log or persist the key in plaintext. Use cryptographically secure randomness to generate keys.
-    Treat key loss as identity loss.
-    A lost key cannot be recovered.
-  </Callout>
+  Discloses: `roleId` and the canonicalized `account`.
 </APIItemCompact>

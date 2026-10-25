@@ -8,15 +8,30 @@ This package provides the API for all Security modules.
   For an overview of the module, read the [Security guide](../security).
 </Callout>
 
+The page covers the following modules:
+
+- [Initializable](#Initializable): a one-time initialization guard.
+- [Pausable](#Pausable): an emergency stop mechanism.
+- [Allowlist](#Allowlist): a permit-list keyed by account identifier.
+- [Blocklist](#Blocklist): a deny-list keyed by account identifier.
+
 ## Initializable [toc] [#Initializable]
 <APIGithubLinkHeader
     moduleName="Initializable"
-    link={`https://github.com/OpenZeppelin/compact-contracts/blob/main/contracts/src/security/Initializable.compact`}
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/security/Initializable.compact`}
 />
 
 ```ts
 import "./node_modules/@openzeppelin/compact-contracts/security/Initializable";
 ```
+
+<Callout type='warn'>
+  Use this module only at the top contract layer, and import it into at most one module per contract.
+  When two modules in the same directory both import Initializable, the compiler collapses their
+  `_isInitialized` flags into a single shared ledger slot
+  ([compact#270](https://github.com/LFDT-Minokawa/compact/issues/270)): initializing one marks the other
+  as initialized. The OpenZeppelin modules do not import this module; each tracks its own `_isInitialized` flag inline.
+</Callout>
 
 ---
 
@@ -91,7 +106,7 @@ None.
 ## Pausable [toc] [#Pausable]
 <APIGithubLinkHeader
     moduleName="Pausable"
-    link={`https://github.com/OpenZeppelin/compact-contracts/blob/main/contracts/src/security/Pausable.compact`}
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/security/Pausable.compact`}
 />
 
 ```ts
@@ -190,4 +205,196 @@ None.
   Requirements:
 
   * Contract must be paused.
+</APIItemCompact>
+
+---
+
+## Allowlist [toc] [#Allowlist]
+<APIGithubLinkHeader
+    moduleName="Allowlist"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/security/Allowlist.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/security/Allowlist";
+```
+
+A minimal permit-list keyed by a `Bytes<32>` account identifier.
+The mutators `_allow` and `_disallow` are ungated: the implementing contract must protect them with its own access control
+and decides where `assertAllowed` applies.
+Membership is public and the approved set is publicly enumerable.
+
+---
+
+### Ledger [toc] [#Allowlist-Ledger]
+### Ledger [!toc] [#Allowlist-Ledger]
+
+#### _allowed [toc] [#Allowlist-_allowed]
+#### [!toc] [#Allowlist-_allowed]
+<APIItemCompact
+  circuitSig='_allowed: Set<Bytes<32>>'
+  kind="ledger"
+  id="Allowlist-_allowed"
+>
+  Approved accounts. An absent account is not allowed.
+</APIItemCompact>
+
+### Witnesses [toc] [#Allowlist-Witnesses]
+### Witnesses [!toc] [#Allowlist-Witnesses]
+
+None.
+
+### Circuits [toc] [#Allowlist-Circuits]
+### Circuits [!toc] [#Allowlist-Circuits]
+
+#### isAllowed [toc] [#Allowlist-isAllowed]
+#### [!toc] [#Allowlist-isAllowed]
+<APIItemCompact
+  circuitSig='isAllowed(account: Bytes<32>) → Boolean'
+  kind="circuit"
+  complexity="k=9, rows=305"
+  modulePrefix="Allowlist"
+>
+  Returns whether `account` is currently allowed.
+
+  Discloses `account` to the ledger.
+</APIItemCompact>
+
+#### assertAllowed [toc] [#Allowlist-assertAllowed]
+#### [!toc] [#Allowlist-assertAllowed]
+<APIItemCompact
+  circuitSig='assertAllowed(account: Bytes<32>) → []'
+  kind="circuit"
+  complexity="k=9, rows=305"
+  modulePrefix="Allowlist"
+>
+  Asserts that `account` is allowed. The implementing contract decides when this gate applies.
+
+  Discloses `account` to the ledger.
+
+  Requirements:
+
+  * `account` is a member of the allowlist.
+</APIItemCompact>
+
+#### _allow [toc] [#Allowlist-_allow]
+#### [!toc] [#Allowlist-_allow]
+<APIItemCompact
+  circuitSig='_allow(account: Bytes<32>) → []'
+  kind="circuit"
+  complexity="k=9, rows=303"
+  modulePrefix="Allowlist"
+>
+  Adds `account` to the allowlist. Ungated: the implementing contract is responsible for protecting this circuit.
+
+  Discloses `account` to the ledger.
+</APIItemCompact>
+
+#### _disallow [toc] [#Allowlist-_disallow]
+#### [!toc] [#Allowlist-_disallow]
+<APIItemCompact
+  circuitSig='_disallow(account: Bytes<32>) → []'
+  kind="circuit"
+  complexity="k=9, rows=303"
+  modulePrefix="Allowlist"
+>
+  Removes `account` from the allowlist. Ungated: the implementing contract is responsible for protecting this circuit.
+
+  Discloses `account` to the ledger.
+</APIItemCompact>
+
+---
+
+## Blocklist [toc] [#Blocklist]
+<APIGithubLinkHeader
+    moduleName="Blocklist"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/security/Blocklist.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/security/Blocklist";
+```
+
+A minimal deny-list keyed by a `Bytes<32>` account identifier.
+The mutators `_block` and `_unblock` are ungated: the implementing contract must protect them with its own access control
+and decides where `assertNotBlocked` applies.
+Membership is public and the blocked set is publicly enumerable.
+
+---
+
+### Ledger [toc] [#Blocklist-Ledger]
+### Ledger [!toc] [#Blocklist-Ledger]
+
+#### _blocked [toc] [#Blocklist-_blocked]
+#### [!toc] [#Blocklist-_blocked]
+<APIItemCompact
+  circuitSig='_blocked: Set<Bytes<32>>'
+  kind="ledger"
+  id="Blocklist-_blocked"
+>
+  Blocked accounts. An absent account is not blocked.
+</APIItemCompact>
+
+### Witnesses [toc] [#Blocklist-Witnesses]
+### Witnesses [!toc] [#Blocklist-Witnesses]
+
+None.
+
+### Circuits [toc] [#Blocklist-Circuits]
+### Circuits [!toc] [#Blocklist-Circuits]
+
+#### isBlocked [toc] [#Blocklist-isBlocked]
+#### [!toc] [#Blocklist-isBlocked]
+<APIItemCompact
+  circuitSig='isBlocked(account: Bytes<32>) → Boolean'
+  kind="circuit"
+  complexity="k=9, rows=305"
+  modulePrefix="Blocklist"
+>
+  Returns whether `account` is currently blocked.
+
+  Discloses `account` to the ledger.
+</APIItemCompact>
+
+#### assertNotBlocked [toc] [#Blocklist-assertNotBlocked]
+#### [!toc] [#Blocklist-assertNotBlocked]
+<APIItemCompact
+  circuitSig='assertNotBlocked(account: Bytes<32>) → []'
+  kind="circuit"
+  complexity="k=9, rows=308"
+  modulePrefix="Blocklist"
+>
+  Asserts that `account` is not blocked. The implementing contract decides when this gate applies.
+
+  Discloses `account` to the ledger.
+
+  Requirements:
+
+  * `account` is not a member of the blocklist.
+</APIItemCompact>
+
+#### _block [toc] [#Blocklist-_block]
+#### [!toc] [#Blocklist-_block]
+<APIItemCompact
+  circuitSig='_block(account: Bytes<32>) → []'
+  kind="circuit"
+  complexity="k=9, rows=303"
+  modulePrefix="Blocklist"
+>
+  Adds `account` to the blocklist. Ungated: the implementing contract is responsible for protecting this circuit.
+
+  Discloses `account` to the ledger.
+</APIItemCompact>
+
+#### _unblock [toc] [#Blocklist-_unblock]
+#### [!toc] [#Blocklist-_unblock]
+<APIItemCompact
+  circuitSig='_unblock(account: Bytes<32>) → []'
+  kind="circuit"
+  complexity="k=9, rows=303"
+  modulePrefix="Blocklist"
+>
+  Removes `account` from the blocklist. Ungated: the implementing contract is responsible for protecting this circuit.
+
+  Discloses `account` to the ledger.
 </APIItemCompact>

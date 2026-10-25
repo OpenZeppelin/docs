@@ -1,0 +1,261 @@
+---
+title: Crypto
+---
+
+{/* links */}
+[ConfidentialFungibleToken guide]: ./confidential-fungible-token
+[ElGamal API]: api/crypto#ElGamal
+[EcdhMask API]: api/crypto#EcdhMask
+[secretToScalar]: api/crypto#ElGamal-secretToScalar
+[derivePk]: api/crypto#ElGamal-derivePk
+[expandRandomness]: api/crypto#ElGamal-expandRandomness
+[encrypt]: api/crypto#ElGamal-encrypt
+[encryptPoint]: api/crypto#ElGamal-encryptPoint
+[encryptZero]: api/crypto#ElGamal-encryptZero
+[add]: api/crypto#ElGamal-add
+[sub]: api/crypto#ElGamal-sub
+[scalarMul]: api/crypto#ElGamal-scalarMul
+[addEncrypted]: api/crypto#ElGamal-addEncrypted
+[subEncrypted]: api/crypto#ElGamal-subEncrypted
+[rerandomize]: api/crypto#ElGamal-rerandomize
+[assertKeyPair]: api/crypto#ElGamal-assertKeyPair
+[assertDecryptsTo]: api/crypto#ElGamal-assertDecryptsTo
+[assertDecryptsToPoint]: api/crypto#ElGamal-assertDecryptsToPoint
+[kdf]: api/crypto#EcdhMask-kdf
+[EcdhMask.encrypt]: api/crypto#EcdhMask-encrypt
+[EcdhMask.decrypt]: api/crypto#EcdhMask-decrypt
+
+The Crypto directory provides two stateless encryption primitives over Midnight's embedded Jubjub curve:
+ElGamal, an additively homomorphic encryption of small integers, and EcdhMask,
+a one-time pad derived from an ECDH key exchange that delivers a value to a recipient directly.
+Both are pure modules: they hold no ledger state, declare no witnesses,
+and take their keys, plaintexts, and randomness as explicit arguments.
+The importing contract decides what is stored, what is disclosed, and where its secrets come from.
+
+The [ConfidentialFungibleToken guide] shows the two primitives working together end to end:
+ElGamal keeps every balance as a ciphertext that the contract can update without decrypting it,
+and EcdhMask hands each recipient the plaintext amount of an incoming transfer.
+
+## ElGamal
+
+The [ElGamal API] implements single-receiver ElGamal encryption over Jubjub.
+A ciphertext is a pair of curve points `(c1, c2)` with `c1 = g^r` and `c2 = pk^r * m`,
+where `g` is the Jubjub generator, `pk` is the recipient's public key, `r` is the encryption randomness,
+and `m` is the message point.
+
+The module offers the scheme in two forms.
+
+* ***Exponential (lifted) form*** ([encrypt], [assertDecryptsTo]): a `Uint<128>` value `v` is encrypted as the point `g^v`.
+Because the message sits in the exponent, ciphertexts combine arithmetically:
+[add] turns ciphertexts of `a` and `b` into a ciphertext of `a + b`, [sub] yields `a - b`,
+and [scalarMul] multiplies the plaintext by a public scalar.
+[addEncrypted] and [subEncrypted] fold a known plaintext into an existing ciphertext in one call.
+Recovering `v` from `g^v` is a discrete-log search, so the lifted form only works for values small enough to search;
+the caller is responsible for keeping every encrypted value inside that bound.
+* ***General point form*** ([encryptPoint], [assertDecryptsToPoint]): an arbitrary Jubjub point is encrypted as is.
+There is no bound to respect, at the cost of decryption recovering only a point, never a scalar.
+
+[rerandomize] produces a fresh ciphertext of the same plaintext under the same key
+(it homomorphically adds an encryption of zero), so a stored ciphertext can be made unlinkable to its previous form
+without changing what it encrypts.
+[encryptZero] returns the fixed pair of identity points `(O, O)`, a convenient initial value for a fresh slot.
+
+<Callout type='warn'>
+`encryptZero()` is a constant, not a hiding encryption.
+A slot still holding it is publicly recognizable as never written.
+Credit it with fresh randomness, or rerandomize it, before treating it as private.
+</Callout>
+
+### Decryption by assertion
+
+No circuit returns a plaintext: a circuit cannot run the discrete-log search that recovers `v` from `g^v`.
+Instead, the owner's wallet keeps the plaintext of every ciphertext it holds
+and supplies it to the circuit through a witness, and the circuit calls [assertDecryptsTo]
+to prove that the claimed plaintext is correct: it re-derives `pk` from the secret `ek`,
+computes `c2 - ek * c1`, and asserts that the result equals `g^claimedValue`.
+A wrong secret fails the key check; a wrong plaintext fails the decryption check.
+[assertKeyPair] performs the key check alone, which lets a caller prove ownership of a public key
+without touching any ciphertext.
+
+`claimedValue` is a `Uint<248>` so that a balance accumulated through many homomorphic additions
+never outgrows the claim. The comparison happens on the curve, so two claims that are congruent modulo
+the Jubjub subgroup order `ℓ` are indistinguishable; `Uint<248>` stays below `ℓ`, so the claim domain is sound.
+
+### Keys and randomness
+
+The secret in this scheme is a 32-byte value `ek`. Everything else is derived from it.
+
+* [secretToScalar] maps the secret to a Jubjub scalar: `degradeToTransient(H("ElGamal:secretToScalar" || ek))`,
+where the tag is the 32-byte padded string and `H` is `persistentHash`.
+`degradeToTransient` truncates the hash to 31 bytes, which guarantees a valid Jubjub scalar.
+The tag is placed first so this derivation can never coincide with a call to [expandRandomness].
+It also keeps the encryption scalar unrelated to an account identifier computed as `H(secret)`,
+so a wallet may derive both roles from common key material.
+* [derivePk] computes the public key `pk = g^secretToScalar(ek)`. The public key is safe to publish
+and is normally stored on the ledger next to the ciphertexts encrypted under it.
+* [expandRandomness] derives encryption randomness from a seed: `degradeToTransient(H(seed || tag))`.
+One secret seed per circuit invocation can therefore yield as many distinct scalars as the circuit needs,
+one per `tag`.
+
+Every encryption takes its randomness `r` as a `Field` argument, and the module holds no record of which values have been used.
+The caller owns three obligations that no circuit can check:
+
+* `r` must be a valid Jubjub scalar (strictly less than `ℓ`); larger values fault `ecMul`.
+[expandRandomness] and [secretToScalar] always satisfy this.
+* `r` must be secret. Anyone who learns `r` for a ciphertext computes `pk^r` and strips the mask.
+* `r` must be fresh for every ciphertext. Reusing `r` under the same `pk` repeats `c1`,
+and `c2 - c2'` then reveals the difference of the two plaintexts.
+In practice this means the witness seed must be fresh per invocation and the tag distinct per encryption within an invocation.
+
+The module does reject the two inputs that would zero the mask altogether: `pk` equal to the identity point and `r = 0`.
+Both are asserted in [encryptPoint], which every encryption path goes through.
+
+## EcdhMask
+
+The [EcdhMask API] is the direct-decrypt counterpart to ElGamal. Where exponential ElGamal lets a contract add ciphertexts
+but makes recovery a search, EcdhMask delivers a `Uint<128>` value to whoever holds the secret behind a Jubjub public key,
+with no bound on the value and no search to recover it. The construction, for a recipient key `pk = g^ek` and a fresh ephemeral scalar `e`:
+
+```
+E    = g^e              (ephemeral public key, published with the ciphertext)
+S    = pk^e             (ECDH shared secret point)
+mask = kdf(S, domain)
+ct   = value + mask     (one-time pad in the field)
+```
+
+[kdf] hashes the shared point and the consumer's domain tag: `degradeToTransient(H(H(S) || domain))`,
+with `H` again `persistentHash`. The consumer chooses `domain` and must use the same value on both sides.
+[EcdhMask.encrypt] returns the `Ciphertext { ephemeralPk: E, ct }`; the recipient recovers `S = E^ek` and subtracts the mask with [EcdhMask.decrypt],
+passing its secret as the scalar produced by ElGamal's [secretToScalar].
+`decrypt` is a pure circuit meant for wallets and off-chain code: reading a received value needs no proof,
+and the on-chain path only ever calls `encrypt`.
+
+The same Jubjub key may serve both primitives, as the confidential token does.
+The schemes share only the public key, the KDF is domain-separated and keyed by the secret point,
+and neither exposes a decryption oracle.
+
+<Callout type='warn'>
+The ephemeral scalar `e` is a one-time pad key. It must be unique per ciphertext AND secret.
+Reusing `e` to the same recipient repeats the mask, and subtracting the two ciphertexts recovers both values.
+A unique but predictable `e` (a counter, a public nonce) is just as fatal, because `pk` is public and anyone can recompute `pk^e`.
+Derive `e` the way you derive ElGamal randomness: from a secret, per-invocation seed, with a distinct tag per memo.
+</Callout>
+
+The pad is malleable and the module adds no authentication. That is safe when the ciphertext is computed inside the same circuit
+that commits to the value elsewhere and is immutable once written, which is the intended on-chain use.
+A consumer with mutable storage or an in-transit attacker in its threat model must add its own authentication.
+As with ElGamal, the weak inputs that would zero the shared secret are rejected: `encrypt` asserts that `recipientPk` is not the identity
+and that the ephemeral point `g^e` is not the identity (which covers `e = 0` and any `e` congruent to zero modulo `ℓ`).
+
+## Jubjub facts a consumer must respect
+
+Both modules rely on two properties of Midnight's embedded-curve arithmetic.
+
+* ***Every point is constrained into the prime-order subgroup.*** The runtime assigns each `JubjubPoint` reaching a curve operation
+by cofactor clearing at the constraint level, so an off-curve, low-order, or mixed-order point makes the circuit unsatisfiable.
+This holds for points a caller passes as arguments or witnesses (a recipient `pk`, the message point of `encryptPoint`),
+which is why the modules perform no in-circuit membership check and why the homomorphic algebra is sound.
+The identity point is a valid subgroup member, so it is NOT caught by this guarantee; that is why the modules assert against it explicitly.
+* ***Negation is scalar multiplication by `ℓ - 1`, never by `-1`.*** A `Field` literal `-1` is the BLS scalar modulus minus one,
+which exceeds the Jubjub scalar order and faults `ecMul`. For any `P` in the subgroup, `(ℓ - 1) * P = -P`, and that identity is what
+`negate`, `sub`, and the decryption check build on. Do not multiply by `ℓ` itself either: it is out of range and faults as well.
+A consumer that needs to negate a point of its own should follow the same pattern.
+
+## Usage
+
+Both modules are imported like any other module; prefix them with `ElGamal_` and `EcdhMask_` to avoid circuit signature clashes.
+Each module exports a `Ciphertext` struct, which the prefix turns into `ElGamal_Ciphertext` and `EcdhMask_Ciphertext`.
+
+The witnesses below are declared by the importing contract; this library ships no TypeScript witness implementations
+(the ones in the repository are test-only), so consumers author their own.
+
+### An encrypted single-owner balance
+
+The contract stores the owner's public key and one ElGamal ciphertext on the ledger.
+The owner's wallet holds the encryption secret, the current plaintext, and a fresh randomness seed per call,
+and supplies them through witnesses.
+`credit` takes a public `value` and adds it to the ciphertext without knowing the balance;
+`debit` proves the claimed balance is correct before subtracting.
+
+```typescript
+pragma language_version >= {{compact_language_version}};
+
+import CompactStandardLibrary;
+import "./node_modules/@openzeppelin/compact-contracts/crypto/ElGamal"
+  prefix ElGamal_;
+
+export ledger _ownerPk: JubjubPoint;
+export ledger _balance: ElGamal_Ciphertext;
+
+// The owner's 32-byte encryption secret.
+witness wit_EncryptionKey(): Bytes<32>;
+// The wallet's cached plaintext for `ct`.
+witness wit_Plaintext(ct: ElGamal_Ciphertext): Uint<248>;
+// A fresh, secret 32-byte seed for every call.
+witness wit_RandomnessSeed(): Bytes<32>;
+
+export circuit register(): [] {
+  const pk = ElGamal_derivePk(wit_EncryptionKey());
+  _ownerPk = disclose(pk);
+  _balance = ElGamal_encryptZero();
+}
+
+export circuit credit(value: Uint<128>): [] {
+  const r = ElGamal_expandRandomness(wit_RandomnessSeed(), pad(32, "credit"));
+  _balance = disclose(ElGamal_addEncrypted(_balance, _ownerPk, value, r));
+}
+
+export circuit debit(value: Uint<128>): [] {
+  const ek = wit_EncryptionKey();
+  const ct = _balance;
+  const plaintext = wit_Plaintext(ct);
+  // Binds the private `ek` and `plaintext` to the public `_ownerPk` and `ct`.
+  ElGamal_assertDecryptsTo(ct, _ownerPk, ek, plaintext);
+  assert(plaintext >= value, "Balance: insufficient balance");
+
+  const r = ElGamal_expandRandomness(wit_RandomnessSeed(), pad(32, "debit"));
+  _balance = disclose(ElGamal_subEncrypted(ct, _ownerPk, value, r));
+}
+```
+
+What reaches the ledger: the public key and each new ciphertext. The `value` argument of an exported circuit is public,
+so these circuits hide the running balance, not the individual amounts;
+the confidential token layers escrow and memos on top of this pattern to hide amounts as well.
+The secret, the plaintext, and the seed never leave the witness, and `assertDecryptsTo` is what makes a dishonest plaintext unprovable.
+
+### Delivering a value with a memo
+
+A sender who credits a recipient's ciphertext has no way to tell the recipient how much arrived, since the recipient would
+otherwise face a discrete-log search over its own balance. An EcdhMask memo solves that: the circuit encrypts the amount
+to the recipient's public key and appends it to a per-recipient list the recipient's wallet reads and decrypts off chain.
+
+```typescript
+pragma language_version >= {{compact_language_version}};
+
+import CompactStandardLibrary;
+import "./node_modules/@openzeppelin/compact-contracts/crypto/ElGamal"
+  prefix ElGamal_;
+import "./node_modules/@openzeppelin/compact-contracts/crypto/EcdhMask"
+  prefix EcdhMask_;
+
+export ledger _recipientPks: Map<Bytes<32>, JubjubPoint>;
+export ledger _memos: Map<Bytes<32>, List<EcdhMask_Ciphertext>>;
+
+witness wit_RandomnessSeed(): Bytes<32>;
+
+export circuit notify(recipient: Bytes<32>, value: Uint<128>): [] {
+  const pk = _recipientPks.lookup(disclose(recipient));
+  // Secret, fresh per call, distinct tag per memo within a call.
+  const e = ElGamal_expandRandomness(wit_RandomnessSeed(), pad(32, "memo"));
+  const memo = EcdhMask_encrypt(pk, value, e, pad(32, "MyApp:memo:v1"));
+
+  if (!_memos.member(disclose(recipient))) {
+    _memos.insert(disclose(recipient), default<List<EcdhMask_Ciphertext>>);
+  }
+  _memos.lookup(disclose(recipient)).pushFront(disclose(memo));
+}
+```
+
+The recipient's wallet recovers the amount with the pure circuit
+`EcdhMask_decrypt(memo, ElGamal_secretToScalar(ek), pad(32, "MyApp:memo:v1"))`, using the same domain tag.
+Only the memo (the ephemeral point and the masked field element) reaches the ledger.
