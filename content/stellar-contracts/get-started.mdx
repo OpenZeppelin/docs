@@ -2,6 +2,102 @@
 title: Get Started
 ---
 
-Not sure where to start? Use the interactive generator below to bootstrap your contract and find about the components offered in OpenZeppelin Smart Contracts Suite for Stellar. You can also access the code generator from [here](https://wizard.openzeppelin.com/stellar).
+OpenZeppelin's Stellar library gives you audited Soroban building blocks: tokens, access control, smart accounts,
+the confidential token, governance and more. This page points you to the right starting place for what you want to
+build, then walks you through setting up, building and deploying your first contract.
+
+## Start Building
+
+Find what you want to build, start from the linked docs and examples, and check the last column before you go to
+production.
+
+| I want to build… | Start here | Before production |
+| --- | --- | --- |
+| **A token, stablecoin, NFT or vault** | The [Wizard](#generate-a-contract) below, then [Fungible](/stellar-contracts/tokens/fungible/fungible), [Non-Fungible](/stellar-contracts/tokens/non-fungible/non-fungible) or [Vault](/stellar-contracts/tokens/vault/vault) | Pin exact versions (see [Add the library](#add-the-library)) |
+| **Regulated assets** (permissioned, compliant tokens) | [Real World Assets](/stellar-contracts/tokens/rwa/rwa) and the [RWA example](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/rwa) | Plan identity and compliance with your issuer |
+| **Private balances and transfers** (hidden amounts, with auditing) | [Confidential Token: Start Building](/stellar-contracts/tokens/confidential/confidential#start-building) | The contracts are audited; the client SDK isn't yet. Read the [best practices](/stellar-contracts/tokens/confidential/best-practices/account-holders) |
+| **A wallet without seed phrases** (passkeys, shared accounts, recovery) | [Smart Account](/stellar-contracts/accounts/smart-account), [Policies](/stellar-contracts/accounts/policies) and the [multisig smart account example](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/multisig-smart-account) (WebAuthn verifier, threshold policies) | Your signing client must support the `stellar-accounts` version you deploy (see [the note on client versions](/stellar-contracts/accounts/smart-account#examples)) |
+| **An agent wallet with spending limits** | [Context Rules](/stellar-contracts/accounts/context-rules) and [Policies](/stellar-contracts/accounts/policies): a rule scoped to one token, with an expiry and the spending-limit policy | Same client-version check as above |
+| **Gasless transactions** | [Stellar Channels](https://docs.openzeppelin.com/relayer/1.8.x/guides/stellar-channels-guide) (managed relayer) and [Fee Abstraction](/stellar-contracts/fee-abstraction) | Review Channels' fair-use terms, or run your own [Relayer](https://docs.openzeppelin.com/relayer/1.8.x/stellar) |
+| **Paid APIs over x402** | The [x402 facilitator on Channels](https://docs.openzeppelin.com/relayer/1.8.x/guides/stellar-x402-facilitator-guide) | Test your payer type early: smart-account payers cost more in fees than classic accounts |
+| **Governance or a DAO** | [Governor](/stellar-contracts/governance/governor), [Votes](/stellar-contracts/governance/votes), [Timelock](/stellar-contracts/governance/timelock-controller) and the [governor example](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/fungible-governor) | Choose voting and timelock parameters deliberately |
+| **Proofs and allowlists** (Merkle airdrops, membership, voting) | [Cryptography](/stellar-contracts/utils/crypto/crypto), [Merkle Distributor](/stellar-contracts/utils/crypto/merkle-distributor) and the [Merkle voting example](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/merkle-voting) | N/A |
+| **Admin controls on a classic asset** | [SAC Admin](/stellar-contracts/tokens/fungible/sac-admin-wrapper) and the [wrapper example](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples/sac-admin-wrapper) | N/A |
+| **With a coding agent** | Point it at [llms.txt](https://docs.openzeppelin.com/llms.txt), or use the [Contracts MCP](https://mcp.openzeppelin.com/) and [OpenZeppelin Skills](https://github.com/OpenZeppelin/openzeppelin-skills) | Review generated code like any other |
+
+All [examples](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples) build with
+`stellar contract build` and deploy with the steps below.
+
+## Prototype or production?
+
+**Prototyping or building an MVP.** Use the library and its examples as they are, on testnet. Client tools that are
+still in development, such as the [Confidential Token SDK](https://github.com/brozorec/stellar-confidential-token-sdk),
+are fine for demos.
+
+**Going to production.** Rely on audited pieces and close the gaps around them:
+
+- Check the [audit reports](https://github.com/OpenZeppelin/stellar-contracts/tree/main/audits) for what each release
+  covers. The examples are starting points, not production deployments.
+- Pin exact versions, and don't use anything older than `0.7.3`
+  ([advisory](https://github.com/OpenZeppelin/stellar-contracts/security/advisories/GHSA-jpg9-m7w4-c7wc)).
+- Smart accounts: v0.8.0 changed the digest that signers commit to. Use a client that supports the version you deploy.
+- Confidential token: holders need a client that builds proofs. The available SDK is unaudited, so plan for a reviewed
+  client before handling real funds.
+
+## Set up your environment
+
+1. Install Rust and add the Soroban target:
+
+   ```bash
+   rustup target add wasm32v1-none
+   ```
+
+2. Install the [Stellar CLI](https://developers.stellar.org/docs/tools/cli/install-cli), version **25.2.0 or later**. Contracts built with soroban-sdk 28 need `stellar contract build`; plain `cargo build --target wasm32v1-none` fails.
+
+## Add the library
+
+Pin exact versions. The library iterates quickly, and minor versions can include breaking changes.
+
+```toml
+[dependencies]
+soroban-sdk = "=28.0.0"
+stellar-tokens = "=0.8.0"
+stellar-access = "=0.8.0"
+stellar-macros = "=0.8.0"
+```
+
+Add only the crates your contract uses: `stellar-accounts`, `stellar-confidential`, `stellar-contract-utils`, `stellar-fee-abstraction` and `stellar-governance` are also available.
+
+Add a release profile too. `stellar contract build` refuses to build without `overflow-checks = true`; this is the profile the library itself uses:
+
+```toml
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = 0
+strip = "symbols"
+debug-assertions = false
+panic = "abort"
+codegen-units = 1
+lto = true
+```
+
+## Build and deploy to testnet
+
+```bash
+stellar contract build
+stellar keys generate alice --network testnet --fund
+stellar contract deploy \
+  --wasm target/wasm32v1-none/release/<your_crate>.wasm \
+  --source alice --network testnet \
+  -- <constructor arguments>
+```
+
+For complete, deployable contracts, see the [examples](https://github.com/OpenZeppelin/stellar-contracts/tree/main/examples) in the library repository. Each one builds with `stellar contract build`.
+
+## Generate a contract
+
+Use the interactive generator to bootstrap a contract and explore the components in the suite. You can also open it
+[on its own](https://wizard.openzeppelin.com/stellar).
 
 <OZWizard lang="stellar" version="0.8.0"/>
