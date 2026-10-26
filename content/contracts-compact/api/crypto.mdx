@@ -74,12 +74,12 @@ None.
   wallet MAY safely derive its account secret and its encryption secret from
   common key material.
 
-  The tag is FIRST, deliberately. `expandRandomness` hashes
+  The tag is FIRST, deliberately. [expandRandomness](#ElGamal-expandRandomness) hashes
   `[seed, tag]` with both slots caller-supplied, so tagging this circuit as
   `[secret, tag]` would make `secretToScalar(x)` identical to
   `expandRandomness(x, <this tag>)` reachable by passing this domain string
   to the parameter that exists to receive domain strings. Leading with the
-  tag means reproducing this output through `expandRandomness` would require
+  tag means reproducing this output through [expandRandomness](#ElGamal-expandRandomness) would require
   passing the domain constant as the *seed*. Do not normalise the orderings.
 </APIItemCompact>
 
@@ -118,10 +118,12 @@ None.
   The identity ciphertext `Enc(0)` (both components are the
   curve identity). Useful for initializing a fresh balance.
 
-  This is a fixed, deterministic value `(O, O)` — NOT a hiding
-  encryption. It is publicly recognizable, so a slot left at `encryptZero` is
-  distinguishable as never-written. Rerandomize (or credit with fresh `r`)
-  before treating it as private.
+  <Callout type='info'>
+    This is a fixed, deterministic value `(O, O)` — NOT a hiding
+    encryption. It is publicly recognizable, so a slot left at [encryptZero](#ElGamal-encryptZero) is
+    distinguishable as never-written. Rerandomize (or credit with fresh `r`)
+    before treating it as private.
+  </Callout>
 </APIItemCompact>
 
 #### encryptPoint [toc] [#ElGamal-encryptPoint]
@@ -138,16 +140,18 @@ None.
 >
   Encrypts an arbitrary message point `m` under `pk` with
   randomness `r`, producing the ciphertext `(g^r, pk^r * m)`. This is the
-  general (non-lifted) ElGamal encryption; `encrypt` is the lifted special
+  general (non-lifted) ElGamal encryption; [encrypt](#ElGamal-encrypt) is the lifted special
   case `encryptPoint(pk, g^value, r)`.
 
-  `m` (like `pk`) is constrained into the prime-order subgroup by the
-  runtime (see the module-level subgroup note), so no in-circuit membership
-  check is performed. `pk` is asserted non-identity and `r` non-zero — the
-  two inputs that would zero the mask and expose `m` (see the weak-keys and
-  randomness notes). Decrypting `m` is only feasible when it is a known or
-  small-exponent point; the caller owns that concern (the lifted `encrypt`
-  bounds it via the discrete-log range).
+  <Callout type='info'>
+    `m` (like `pk`) is constrained into the prime-order subgroup by the
+    runtime (see the module-level subgroup note), so no in-circuit membership
+    check is performed. `pk` is asserted non-identity and `r` non-zero — the
+    two inputs that would zero the mask and expose `m` (see the weak-keys and
+    randomness notes). Decrypting `m` is only feasible when it is a known or
+    small-exponent point; the caller owns that concern (the lifted [encrypt](#ElGamal-encrypt)
+    bounds it via the discrete-log range).
+  </Callout>
 
   Requirements:
 
@@ -170,7 +174,7 @@ None.
   Produces a fresh ciphertext of `value` under `pk` with
   randomness `r`, lifting `value` to the point `g^value`. Randomness is taken
   as a `Field` directly to avoid a redundant `Bytes<32> -> Field` conversion
-  at every call site; `expandRandomness` produces `Field` for the same reason.
+  at every call site; [expandRandomness](#ElGamal-expandRandomness) produces `Field` for the same reason.
 
   Requirements:
 
@@ -187,7 +191,7 @@ None.
 >
   Negates a ciphertext componentwise: if `ct` encrypts `v` then
   the result encrypts `-v` under the same key (with negated randomness).
-  This is the building block `sub` rests on.
+  This is the building block [sub](#ElGamal-sub) rests on.
 </APIItemCompact>
 
 #### add [toc] [#ElGamal-add]
@@ -201,11 +205,13 @@ None.
   decrypts to `a + b`. This is the defining additive-homomorphism primitive
   and combines two independently produced ciphertexts componentwise.
 
-  Both inputs MUST be encrypted under the same public key for the
-  result to decrypt under that key's secret; combining ciphertexts under
-  different keys yields a ciphertext no single key can open. The randomness
-  of the result is the sum of the inputs' randomness, so the result is a
-  valid fresh ciphertext under that key.
+  <Callout type='info'>
+    Both inputs MUST be encrypted under the same public key for the
+    result to decrypt under that key's secret; combining ciphertexts under
+    different keys yields a ciphertext no single key can open. The randomness
+    of the result is the sum of the inputs' randomness, so the result is a
+    valid fresh ciphertext under that key.
+  </Callout>
 </APIItemCompact>
 
 #### sub [toc] [#ElGamal-sub]
@@ -218,9 +224,11 @@ None.
   Homomorphically subtracts two ciphertexts: `Enc(a) - Enc(b)`
   decrypts to `a - b`. Implemented as `add(a, negate(b))`.
 
-  Same-key requirement as `add`. The caller MUST ensure the
-  underlying plaintext subtraction does not underflow; this circuit cannot
-  check it (see `subEncrypted`).
+  <Callout type='info'>
+    Same-key requirement as [add](#ElGamal-add). The caller MUST ensure the
+    underlying plaintext subtraction does not underflow; this circuit cannot
+    check it (see [subEncrypted](#ElGamal-subEncrypted)).
+  </Callout>
 </APIItemCompact>
 
 #### scalarMul [toc] [#ElGamal-scalarMul]
@@ -237,13 +245,15 @@ None.
 
   This is the scalar-multiplication leg of the homomorphism, and the only way
   to express linear combinations: a weighted sum `Enc(3a + 5b)` is
-  `add(scalarMul(ca, 3), scalarMul(cb, 5))`, which repeated `add` cannot do
+  `add(scalarMul(ca, 3), scalarMul(cb, 5))`, which repeated [add](#ElGamal-add) cannot do
   for large weights.
 
-  `k` MUST be a valid Jubjub scalar (less than the subgroup order);
-  larger values fault `ecMul` (see the module-level hash-to-scalar note). The
-  caller also remains responsible for the discrete-log bound — `k * v` must
-  stay within the range a recovery search can clear.
+  <Callout type='info'>
+    `k` MUST be a valid Jubjub scalar (less than the subgroup order);
+    larger values fault `ecMul` (see the module-level hash-to-scalar note). The
+    caller also remains responsible for the discrete-log bound — `k * v` must
+    stay within the range a recovery search can clear.
+  </Callout>
 </APIItemCompact>
 
 #### addEncrypted [toc] [#ElGamal-addEncrypted]
@@ -261,7 +271,7 @@ None.
 >
   Homomorphically adds `value` to the plaintext encrypted by
   `old`, producing a fresh ciphertext under `pk` with new randomness `r`.
-  Convenience over `add` for folding a known plaintext into a ciphertext:
+  Convenience over [add](#ElGamal-add) for folding a known plaintext into a ciphertext:
   `add(old, encrypt(pk, value, r))`.
 
   Requirements:
@@ -284,12 +294,14 @@ None.
   stackParams="true"
 >
   Homomorphically subtracts `value` from the plaintext encrypted
-  by `old`. Convenience over `sub`: `sub(old, encrypt(pk, value, r))`.
+  by `old`. Convenience over [sub](#ElGamal-sub): `sub(old, encrypt(pk, value, r))`.
 
-  The caller MUST ensure the underlying plaintext subtraction does
-  not underflow; this circuit cannot check it. Callers verify sufficiency by
-  reading the plaintext via their own witness and asserting it with
-  `assertDecryptsTo` before calling.
+  <Callout type='info'>
+    The caller MUST ensure the underlying plaintext subtraction does
+    not underflow; this circuit cannot check it. Callers verify sufficiency by
+    reading the plaintext via their own witness and asserting it with
+    [assertDecryptsTo](#ElGamal-assertDecryptsTo) before calling.
+  </Callout>
 
   Requirements:
 
@@ -315,11 +327,13 @@ None.
   value) yet decrypts identically. Equivalent to homomorphically adding an
   encryption of zero.
 
-  `r = 0` is rejected (it would be a no-op via the `encryptPoint`
-  zero-randomness assert). One silent failure mode remains that the circuit
-  cannot catch: a `pk` that is not the key `ct` was encrypted under corrupts
-  the plaintext (the result no longer decrypts to the original value). Pass
-  fresh randomness and the matching `pk`.
+  <Callout type='info'>
+    `r = 0` is rejected (it would be a no-op via the [encryptPoint](#ElGamal-encryptPoint)
+    zero-randomness assert). One silent failure mode remains that the circuit
+    cannot catch: a `pk` that is not the key `ct` was encrypted under corrupts
+    the plaintext (the result no longer decrypts to the original value). Pass
+    fresh randomness and the matching `pk`.
+  </Callout>
 
   Requirements:
 
@@ -358,7 +372,7 @@ None.
 >
   Asserts that `ct` decrypts under `(pk, ek)` to the message
   point `m`, and that `ek` is the secret for `pk`. This is the general
-  (non-lifted) verification; `assertDecryptsTo` is the lifted special case
+  (non-lifted) verification; [assertDecryptsTo](#ElGamal-assertDecryptsTo) is the lifted special case
   with `m = g^claimedValue`.
 
   Requirements:
@@ -385,12 +399,14 @@ None.
   path an importing module uses to bind its witness-supplied `ek` and cached
   plaintext to publicly stored state: a wrong `ek` fails the key check, a
   wrong plaintext fails the decryption check. Lifted special case of
-  `assertDecryptsToPoint` with the message point `g^claimedValue`.
+  [assertDecryptsToPoint](#ElGamal-assertDecryptsToPoint) with the message point `g^claimedValue`.
 
-  `claimedValue` is the widest `Uint` Compact offers, so this parameter
-  never bounds a caller. A narrower value costs proportionally fewer rows: the
-  range constraint belongs to where the value is declared, not to this
-  signature.
+  <Callout type='info'>
+    `claimedValue` is the widest `Uint` Compact offers, so this parameter
+    never bounds a caller. A narrower value costs proportionally fewer rows: the
+    range constraint belongs to where the value is declared, not to this
+    signature.
+  </Callout>
 
   <Callout type='warn'>
     The claim domain must stay below the Jubjub subgroup order `l`:
@@ -480,7 +496,9 @@ None.
 >
   Encrypts `value` to `recipientPk` under ephemeral scalar `e`.
 
-  `e` MUST be fresh per call (see the module freshness precondition).
+  <Callout type='info'>
+    `e` MUST be fresh per call (see the module freshness precondition).
+  </Callout>
 
   Requirements:
 

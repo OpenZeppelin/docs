@@ -130,16 +130,18 @@ None.
 >
   Asserts that the given approval count meets the threshold.
 
-  `approvalCount` is supplied by the consuming contract and is
-  compared against the threshold only. This circuit never consults the signer
-  registry. Ensuring the count reflects distinct, currently-registered signers
-  is the consuming contract's responsibility, and a contract whose approval
-  accounting is not itself gated by `assertSigner` gets no protection here.
+  <Callout type='info'>
+    `approvalCount` is supplied by the consuming contract and is
+    compared against the threshold only. This circuit never consults the signer
+    registry. Ensuring the count reflects distinct, currently-registered signers
+    is the consuming contract's responsibility, and a contract whose approval
+    accounting is not itself gated by [assertSigner](#Signer-assertSigner) gets no protection here.
 
-  The count is deliberately left unbounded by `_signerCount`: approvals
-  collected before a signer was removed must still count toward a threshold
-  the remaining signers satisfy, and bounding the count would reject those.
-  See the stale-signer-set guidance in the module header.
+    The count is deliberately left unbounded by `_signerCount`: approvals
+    collected before a signer was removed must still count toward a threshold
+    the remaining signers satisfy, and bounding the count would reject those.
+    See the stale-signer-set guidance in the module header.
+  </Callout>
 
   Requirements:
 
@@ -191,9 +193,11 @@ None.
 >
   Adds a new signer to the registry.
 
-  Access control is NOT enforced here.
-  The consuming contract must gate this behind its own
-  authorization policy.
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
 
   Requirements:
 
@@ -209,9 +213,11 @@ None.
 >
   Removes a signer from the registry.
 
-  Access control is NOT enforced here.
-  The consuming contract must gate this behind its own
-  authorization policy.
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
 
   Requirements:
 
@@ -229,9 +235,11 @@ None.
 >
   Updates the approval threshold.
 
-  Access control is NOT enforced here.
-  The consuming contract must gate this behind its own
-  authorization policy.
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
 
   Requirements:
 
@@ -255,18 +263,20 @@ None.
     or custom setup flows where signers may not yet be registered.
 
     Leaving `newThreshold` above the signer count is permitted and expected
-    mid-setup, and is not self-enforcing: `assertThresholdMet` compares
+    mid-setup, and is not self-enforcing: [assertThresholdMet](#Signer-assertThresholdMet) compares
     `approvalCount` against the threshold alone, so a caller supplying a matching
     count satisfies it even against an empty registry. Contracts must not gate
-    operations on `assertThresholdMet` while setup is incomplete. Lower the
-    threshold with `_setThreshold`; `_changeThreshold` cannot lower one while the
+    operations on [assertThresholdMet](#Signer-assertThresholdMet) while setup is incomplete. Lower the
+    threshold with [_setThreshold](#Signer-_setThreshold); [_changeThreshold](#Signer-_changeThreshold) cannot lower one while the
     signer count is zero, because that would require a zero threshold.
   </Callout>
 
-  Access control is NOT enforced here.
-  The consuming contract must gate this behind its own
-  authorization policy. Use `_changeThreshold` for
-  operational threshold changes with signer count validation.
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy. Use [_changeThreshold](#Signer-_changeThreshold) for
+    operational threshold changes with signer count validation.
+  </Callout>
 
   Requirements:
 
@@ -298,7 +308,7 @@ import "./node_modules/@openzeppelin/compact-contracts/multisig/ProposalManager"
   id="ProposalManager-ProposalStatus"
 >
   Proposal lifecycle states. `Inactive` is the zero value and is
-  never stored: `_createProposal` writes `Active`, and every view asserts the
+  never stored: [_createProposal](#ProposalManager-_createProposal) writes `Active`, and every view asserts the
   proposal exists before reading, so a stored proposal can never read
   `Inactive`.
 </APIItemCompact>
@@ -475,18 +485,22 @@ None.
 
     - A `kind` the execution rail cannot accept (an `UnshieldedUser` recipient
     on a shielded treasury, say) creates a proposal that passes here and then
-    reverts in `toShieldedRecipient` at execution. It stays `Active` and
-    unexecutable on that rail until `_cancelProposal` retires it.
+    reverts in [toShieldedRecipient](#ProposalManager-toShieldedRecipient) at execution. It stays `Active` and
+    unexecutable on that rail until [_cancelProposal](#ProposalManager-_cancelProposal) retires it.
     - A zero or otherwise unspendable `address` is accepted, and funds sent to
     it on execution are unrecoverable.
   </Callout>
 
-  `_nextProposalId` is incremented and then read back for the map key,
-  making this a pinned read-modify-write.
+  <Callout type='info'>
+    `_nextProposalId` is incremented and then read back for the map key,
+    making this a pinned read-modify-write.
+  </Callout>
 
-  Access control is NOT enforced here.
-  The consuming contract must gate this behind its own
-  authorization policy.
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
 
   Requirements:
 
@@ -502,9 +516,11 @@ None.
 >
   Cancels a proposal.
 
-  Access control is NOT enforced here.
-  The consuming contract must gate this behind its own
-  authorization policy.
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
 
   Requirements:
 
@@ -520,9 +536,11 @@ None.
 >
   Marks a proposal as executed.
 
-  Access control is NOT enforced here.
-  The consuming contract must gate this behind its own
-  authorization policy.
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
 
   Requirements:
 
@@ -656,9 +674,11 @@ None.
   events are supported. They are not useful as privacy decoys, this
   treasury's holdings are public (see the module header).
 
-  Access control is NOT enforced here.
-  The consuming contract must gate this behind its own
-  authorization policy.
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
 
   Requirements:
 
@@ -687,15 +707,19 @@ None.
   belongs to the treasury and must not be re-spent by the caller (doing
   so would double-spend the recorded coin).
 
-  The returned `ShieldedSendResult` carries the sent and change coins
-  in plaintext, so sinking it (returning it from an entry point, writing it
-  to ledger, passing it cross-contract) discloses them. `_coins` publishes only
-  the retained change coin, and nothing at all when the send leaves no change,
-  so the sent coin's plaintext is disclosed beyond anything in public state.
+  <Callout type='info'>
+    The returned `ShieldedSendResult` carries the sent and change coins
+    in plaintext, so sinking it (returning it from an entry point, writing it
+    to ledger, passing it cross-contract) discloses them. `_coins` publishes only
+    the retained change coin, and nothing at all when the send leaves no change,
+    so the sent coin's plaintext is disclosed beyond anything in public state.
+  </Callout>
 
-  Access control is NOT enforced here.
-  The consuming contract must gate this behind its own
-  authorization policy.
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
 
   Requirements:
 
@@ -744,14 +768,16 @@ None.
 >
   Returns the difference between cumulative received
   and cumulative sent totals for a color. Should equal
-  `getTokenBalance` if accounting is consistent.
+  [getTokenBalance](#ShieldedTreasury-getTokenBalance) if accounting is consistent.
 
-  The subtraction is unguarded. `_send` cannot drive the sent total
-  past the received total. Change re-insertion never increments `_received`
-  so the invariant holds for any consumer that goes through `_deposit` and
-  `_send`. A consumer that writes the exported `_coins` directly can break
-  it, and this circuit then fails as an unprovable range violation rather
-  than a named assert.
+  <Callout type='info'>
+    The subtraction is unguarded. [_send](#ShieldedTreasury-_send) cannot drive the sent total
+    past the received total. Change re-insertion never increments `_received`
+    so the invariant holds for any consumer that goes through [_deposit](#ShieldedTreasury-_deposit) and
+    [_send](#ShieldedTreasury-_send). A consumer that writes the exported `_coins` directly can break
+    it, and this circuit then fails as an unprovable range violation rather
+    than a named assert.
+  </Callout>
 </APIItemCompact>
 
 ---
@@ -830,9 +856,11 @@ None.
     recoverable off-chain from the transaction's private proving state.
   </Callout>
 
-  Access control is NOT enforced here.
-  The consuming contract must gate this behind its own
-  authorization policy.
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
 
   Requirements:
 
@@ -890,11 +918,13 @@ None.
   economically, they may serve as signaling mechanisms when events
   are supported. On a color the treasury has not held, a zero-value
   operation creates a zero-valued `_balances` entry, which
-  `getTokenBalance` reports the same as absence.
+  [getTokenBalance](#UnshieldedTreasury-getTokenBalance) reports the same as absence.
 
-  Access control is NOT enforced here.
-  The consuming contract must gate this behind its own
-  authorization policy.
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
 
   Requirements:
 
@@ -927,14 +957,16 @@ None.
   <Callout type='warn'>
     Sending to this contract's own address zeroes the tracked balance
     while the funds stay held and spendable at the protocol level, after which
-    `_send` will refuse to touch them. Recovery is only possible outside this
+    [_send](#UnshieldedTreasury-_send) will refuse to touch them. Recovery is only possible outside this
     module: a consumer may reconcile the exported `_balances`, or spend the
     funds through its own `sendUnshielded` call.
   </Callout>
 
-  Access control is NOT enforced here.
-  The consuming contract must gate this behind its own
-  authorization policy.
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
 
   Requirements:
 
@@ -1053,7 +1085,7 @@ None.
   matching the stored commitment; the coin is sent as a plain shielded note,
   so the parent stays hidden on-chain. If `coin.value` exceeds `value`,
   `sendShielded` routes the change back to this contract as a self-owned
-  output; `_drain` returns it untouched via `result.change`. The
+  output; [_drain](#ForwarderPrivate-_drain) returns it untouched via `result.change`. The
   implementing contract chooses what to do with it: leave it dwelling at
   the contract for a future drain, or spend it onward to a different
   recipient in the same transaction via `sendImmediateShielded`.
@@ -1090,7 +1122,7 @@ None.
 >
   Computes the parent commitment from `(parentAddr, opSecret)`.
   Pure circuit — used off-chain by the deployer to compute the
-  constructor argument, and inside `_drain` for the preimage check.
+  constructor argument, and inside [_drain](#ForwarderPrivate-_drain) for the preimage check.
   Callable without initialization.
 
   The first hash input is a fixed domain tag
@@ -1126,7 +1158,7 @@ import "./node_modules/@openzeppelin/compact-contracts/multisig/ForwarderShielde
 >
   The parent recipient, stored generically as
   `Either<ZswapCoinPublicKey, ContractAddress>` for forward compatibility.
-  `initialize` only ever writes the `left` (coin public key) arm today. See
+  [initialize](#ForwarderShielded-initialize) only ever writes the `left` (coin public key) arm today. See
   the module header.
 </APIItemCompact>
 
@@ -1167,9 +1199,11 @@ None.
   - `parent` must not be the zero key. A zero parent would forward
     every deposit to an unspendable key with no recovery path.
 
-  Beyond the zero-key check, the caller must ensure `parent` can
-  spend forwarded coins. An unspendable parent strands every deposit with
-  no recovery path.
+  <Callout type='info'>
+    Beyond the zero-key check, the caller must ensure `parent` can
+    spend forwarded coins. An unspendable parent strands every deposit with
+    no recovery path.
+  </Callout>
 </APIItemCompact>
 
 #### _deposit [toc] [#ForwarderShielded-_deposit]
@@ -1217,7 +1251,7 @@ import "./node_modules/@openzeppelin/compact-contracts/multisig/ForwarderUnshiel
 >
   The parent recipient, stored generically as
   `Either<ContractAddress, UserAddress>` for forward compatibility.
-  `initialize` only ever writes the `right` (user address) arm today. See
+  [initialize](#ForwarderUnshielded-initialize) only ever writes the `right` (user address) arm today. See
   the module header.
 </APIItemCompact>
 
@@ -1258,9 +1292,11 @@ None.
   - `parent` must not be the zero address. A zero parent would forward
     every deposit to an unspendable address with no recovery path.
 
-  Beyond the zero-address check, the caller must ensure `parent`
-  can spend forwarded amounts. An unspendable parent strands every
-  deposit with no recovery path.
+  <Callout type='info'>
+    Beyond the zero-address check, the caller must ensure `parent`
+    can spend forwarded amounts. An unspendable parent strands every
+    deposit with no recovery path.
+  </Callout>
 </APIItemCompact>
 
 #### _deposit [toc] [#ForwarderUnshielded-_deposit]
