@@ -1,0 +1,43 @@
+name: llms.txt drift
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - "content/**"
+      - "src/navigation/**"
+      - "scripts/generate-llms-txt.ts"
+      - "public/llms.txt"
+
+jobs:
+  llms-txt:
+    name: llms.txt is up to date
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Regenerate llms.txt
+        run: pnpm run generate:llms-txt
+
+      - name: Fail on drift
+        run: |
+          if ! git diff --exit-code -- public/llms.txt; then
+            echo "::error file=public/llms.txt::public/llms.txt is out of date. Run 'pnpm run generate:llms-txt' and commit the result."
+            exit 1
+          fi
