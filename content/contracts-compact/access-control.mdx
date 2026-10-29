@@ -75,12 +75,13 @@ use [computeAccountId] from the [Utils] module:
 import "./node_modules/@openzeppelin/compact-contracts/utils/Utils"
   prefix Utils_;
 
-const accountId = Utils_computeAccountId(secretKey);
+export pure circuit computeAccountId(secretKey: Bytes<32>): Bytes<32> {
+  return Utils_computeAccountId(secretKey);
+}
 ```
 
-`computeAccountId` is a pure circuit, so it can be evaluated off-chain (for example through a contract simulator),
-or recomputed in TypeScript as a `persistentHash` over a `Vector<1, Bytes<32>>` containing the key
-(see the [Ownable] guide for a runtime snippet).
+A contract that re-exports it this way exposes `pureCircuits.computeAccountId(secretKey)` to its TypeScript side.
+The [Utils guide](./utils#deriving-an-identifier-off-chain) shows the equivalent computation with the Compact runtime.
 
 ### Using `AccessControl`
 

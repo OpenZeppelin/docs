@@ -93,10 +93,16 @@ Users who want cross-contract unlinkability can use a different secret key per c
 To derive an account identifier off-chain (for example, to pass as the `recipient` of a mint), use [computeAccountId] from the Utils module:
 
 ```typescript
-import "./node_modules/@openzeppelin/compact-contracts/utils/Utils" prefix Utils_;
+import "./node_modules/@openzeppelin/compact-contracts/utils/Utils"
+  prefix Utils_;
 
-const accountId = Utils_computeAccountId(secretKey);
+export pure circuit computeAccountId(secretKey: Bytes<32>): Bytes<32> {
+  return Utils_computeAccountId(secretKey);
+}
 ```
+
+A contract that re-exports it this way exposes `pureCircuits.computeAccountId(secretKey)` to its TypeScript side.
+The [Utils guide](./utils#deriving-an-identifier-off-chain) shows the equivalent computation with the Compact runtime.
 
 The TypeScript witness implementation lives with the DApp, not with the library.
 The witnesses in the `compact-contracts` repository are test-only and are not published;
