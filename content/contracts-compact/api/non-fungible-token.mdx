@@ -11,7 +11,7 @@ This module provides the full NonFungibleToken module API.
 ## NonFungibleToken [toc] [#NonFungibleToken]
 <APIGithubLinkHeader
     moduleName="NonFungibleToken"
-    link={`https://github.com/OpenZeppelin/compact-contracts/blob/main/contracts/src/token/NonFungibleToken.compact`}
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/token/NonFungibleToken.compact`}
 />
 
 ```ts
@@ -30,7 +30,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
   kind="sealed ledger"
   id="NonFungibleToken-_name"
 >
-  The immutable token name.
+  / Public state
 </APIItemCompact>
 
 #### _symbol [toc] [#NonFungibleToken-_symbol]
@@ -41,6 +41,18 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
   id="NonFungibleToken-_symbol"
 >
   The immutable token symbol.
+</APIItemCompact>
+
+#### _isInitialized [toc] [#NonFungibleToken-_isInitialized]
+#### [!toc] [#NonFungibleToken-_isInitialized]
+<APIItemCompact
+  circuitSig='_isInitialized: Boolean'
+  kind="ledger"
+  id="NonFungibleToken-_isInitialized"
+>
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
 </APIItemCompact>
 
 #### _owners [toc] [#NonFungibleToken-_owners]
@@ -112,17 +124,6 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
 ### Circuits [toc] [#NonFungibleToken-Circuits]
 ### Circuits [!toc] [#NonFungibleToken-Circuits]
 
-#### ZERO [toc] [#NonFungibleToken-ZERO]
-#### [!toc] [#NonFungibleToken-ZERO]
-<APIItemCompact
-  circuitSig="ZERO() → Either<Bytes<32>, ContractAddress>"
-  kind="pure"
-  modulePrefix="NonFungibleToken"
->
-  Returns a canonical zero `Either` value (left variant with zero `Bytes<32>`).
-  Used as the zero value for mint/burn operations and cleared approvals.
-</APIItemCompact>
-
 #### initialize [toc] [#NonFungibleToken-initialize]
 #### [!toc] [#NonFungibleToken-initialize]
 <APIItemCompact
@@ -153,7 +154,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
 
   Requirements:
 
-  * Contract is initialized.
+  * The contract is initialized.
 </APIItemCompact>
 
 #### ownerOf [toc] [#NonFungibleToken-ownerOf]
@@ -184,7 +185,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
 
   Requirements:
 
-  * Contract is initialized.
+  * The contract is initialized.
 </APIItemCompact>
 
 #### symbol [toc] [#NonFungibleToken-symbol]
@@ -199,7 +200,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
 
   Requirements:
 
-  * Contract is initialized.
+  * The contract is initialized.
 </APIItemCompact>
 
 #### tokenURI [toc] [#NonFungibleToken-tokenURI]
@@ -210,8 +211,8 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
   complexity="k=9, rows=326"
   modulePrefix="NonFungibleToken"
 >
-  Returns the token URI for the given `tokenId`.
-  Returns an empty string if a tokenURI does not exist.
+  Returns the token URI for the given `tokenId`. Returns the empty
+  string if a tokenURI does not exist.
 
   Requirements:
 
@@ -234,12 +235,16 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
   complexity="k=9, rows=289"
   modulePrefix="NonFungibleToken"
 >
-  Sets the URI as `tokenURI` for the given `tokenId`.
+  Sets the URI as [tokenURI](#NonFungibleToken-tokenURI) for the given `tokenId`.
 
   Requirements:
 
   * The contract is initialized.
   * The `tokenId` must exist.
+
+  <Callout type='info'>
+    The URI for a given NFT is usually set when the NFT is minted.
+  </Callout>
 </APIItemCompact>
 
 #### approve [toc] [#NonFungibleToken-approve]
@@ -247,14 +252,16 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
 <APIItemCompact
   circuitSig='approve(to: Either<Bytes<32>, ContractAddress>, tokenId: Uint<128>) → []'
   kind="circuit"
-  complexity="k=13, rows=3468"
+  complexity="k=13, rows=3415"
   modulePrefix="NonFungibleToken"
 >
   Gives permission to `to` to transfer `tokenId` token to another account.
   The approval is cleared when the token is transferred.
-  The caller's identity is derived from the `wit_NonFungibleTokenSK` witness as `persistentHash(secretKey)`.
 
   Only a single account can be approved at a time, so approving the zero value clears previous approvals.
+
+  In the case of an external (non-contract) caller, the caller's identity is derived from the [wit_NonFungibleTokenSK](#NonFungibleToken-wit_NonFungibleTokenSK)
+  witness as `persistentHash(secretKey)`.
 
   Requirements:
 
@@ -287,13 +294,15 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
     approved: Boolean
   ) → []'
   kind="circuit"
-  complexity="k=13, rows=2936"
+  complexity="k=13, rows=2947"
   modulePrefix="NonFungibleToken"
   stackParams="true"
 >
   Approve or remove `operator` as an operator for the caller.
   Operators can call [transferFrom](#NonFungibleToken-transferFrom) for any token owned by the caller.
-  The caller's identity is derived from the `wit_NonFungibleTokenSK` witness as `persistentHash(secretKey)`.
+
+  In the case of an external (non-contract) caller, the caller's identity is derived from the [wit_NonFungibleTokenSK](#NonFungibleToken-wit_NonFungibleTokenSK)
+  witness as `persistentHash(secretKey)`.
 
   Requirements:
 
@@ -322,16 +331,19 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
 <APIItemCompact
   circuitSig='transferFrom(fromAddress: Either<Bytes<32>, ContractAddress>, to: Either<Bytes<32>, ContractAddress>, tokenId: Uint<128>) → []'
   kind="circuit"
-  complexity="k=13, rows=4800"
+  complexity="k=13, rows=4739"
   stackParams="true"
   modulePrefix="NonFungibleToken"
 >
   Transfers `tokenId` token from `fromAddress` to `to`.
-  The caller's identity is derived from the `wit_NonFungibleTokenSK` witness as `persistentHash(secretKey)`.
 
   <Callout type='info'>
-    Transfers to contract addresses are currently disallowed until contract-to-contract interactions are supported in Compact.
-    This restriction prevents assets from being inadvertently locked in contracts that cannot currently handle token receipt.
+    Transfers to contract addresses are currently disallowed until contract-to-contract interactions
+    are supported in Compact. This restriction prevents assets from being inadvertently locked in contracts that cannot
+    currently handle token receipt.
+
+    In the case of an external (non-contract) caller, the caller's identity is derived from the [wit_NonFungibleTokenSK](#NonFungibleToken-wit_NonFungibleTokenSK)
+    witness as `persistentHash(secretKey)`.
   </Callout>
 
   Requirements:
@@ -349,16 +361,18 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
 <APIItemCompact
   circuitSig='_unsafeTransferFrom(fromAddress: Either<Bytes<32>, ContractAddress>, to: Either<Bytes<32>, ContractAddress>, tokenId: Uint<128>) → []'
   kind="circuit"
-  complexity="k=13, rows=4797"
+  complexity="k=13, rows=4736"
   stackParams="true"
   modulePrefix="NonFungibleToken"
 >
-  Unsafe variant of [transferFrom](#NonFungibleToken-transferFrom) which allows transfers to contract addresses.
-  The caller's identity is derived from the `wit_NonFungibleTokenSK` witness as `persistentHash(secretKey)`.
+  Transfers `tokenId` token from `fromAddress` to `to`. It does NOT check if the recipient is a ContractAddress.
+
+  In the case of an external (non-contract) caller, the caller's identity is derived from the [wit_NonFungibleTokenSK](#NonFungibleToken-wit_NonFungibleTokenSK)
+  witness as `persistentHash(secretKey)`.
 
   <Callout type='warn'>
-    Transfers to contract addresses are considered unsafe because contract-to-contract calls are not currently supported.
-    Tokens sent to a contract address may become irretrievable.
+    Transfers to contract addresses are considered unsafe because contract-to-contract calls
+    are not currently supported. Tokens sent to a contract address may become irretrievable.
     Once contract-to-contract calls are supported, this circuit may be deprecated.
   </Callout>
 
@@ -394,8 +408,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
   complexity="k=9, rows=308"
   modulePrefix="NonFungibleToken"
 >
-  Returns the approved address for `tokenId`.
-  Returns the zero value if `tokenId` is not minted.
+  Returns the approved address for `tokenId`. Returns the zero value if `tokenId` is not minted.
 
   Requirements:
 
@@ -411,15 +424,16 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
   stackParams="true"
   modulePrefix="NonFungibleToken"
 >
-  Returns whether `spender` is allowed to manage `owner`'s tokens,
-  or `tokenId` in particular (ignoring whether it is owned by `owner`).
+  Returns whether `spender` is allowed to manage `owner`'s tokens, or `tokenId` in
+  particular (ignoring whether it is owned by `owner`).
 
   Requirements:
 
   * The contract is initialized.
 
   <Callout type='warn'>
-    This function assumes that `owner` is the actual owner of `tokenId` and does not verify this assumption.
+    This function assumes that `owner` is the actual owner of `tokenId` and does not verify this
+    assumption.
   </Callout>
 </APIItemCompact>
 
@@ -440,27 +454,9 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
   * `spender` has approval from `owner` for `tokenId` OR `spender` has approval to manage all of `owner`'s assets.
 
   <Callout type='warn'>
-    This function assumes that `owner` is the actual owner of `tokenId` and does not verify this assumption.
+    This function assumes that `owner` is the actual owner of `tokenId` and does not verify this
+    assumption.
   </Callout>
-</APIItemCompact>
-
-#### _update [toc] [#NonFungibleToken-_update]
-#### [!toc] [#NonFungibleToken-_update]
-<APIItemCompact
-  circuitSig='_update(to: Either<Bytes<32>, ContractAddress>, tokenId: Uint<128>, auth: Either<Bytes<32>, ContractAddress>) → Either<Bytes<32>, ContractAddress>'
-  kind="internal"
-  stackParams="true"
-  modulePrefix="NonFungibleToken"
->
-  Transfers `tokenId` from its current owner to `to`,
-  or alternatively mints (or burns) if the current owner (or `to`) is the zero address.
-  Returns the owner of the `tokenId` before the update.
-
-  Requirements:
-
-  * The contract is initialized.
-  * If `auth` is non 0, then this function will check that `auth` is either the owner of the token,
-  or approved to operate on the token (by the owner).
 </APIItemCompact>
 
 #### _mint [toc] [#NonFungibleToken-_mint]
@@ -468,15 +464,10 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
 <APIItemCompact
   circuitSig='_mint(to: Either<Bytes<32>, ContractAddress>, tokenId: Uint<128>) → []'
   kind="circuit"
-  complexity="k=11, rows=1473"
+  complexity="k=11, rows=1411"
   modulePrefix="NonFungibleToken"
 >
   Mints `tokenId` and transfers it to `to`.
-
-  <Callout type='info'>
-    Transfers to contract addresses are currently disallowed until contract-to-contract interactions are supported in Compact.
-    This restriction prevents assets from being inadvertently locked in contracts that cannot currently handle token receipt.
-  </Callout>
 
   Requirements:
 
@@ -491,22 +482,22 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
 <APIItemCompact
   circuitSig='_unsafeMint(to: Either<Bytes<32>, ContractAddress>, tokenId: Uint<128>) → []'
   kind="circuit"
-  complexity="k=11, rows=1470"
+  complexity="k=11, rows=1408"
   modulePrefix="NonFungibleToken"
 >
-  Unsafe variant of [_mint](#NonFungibleToken-_mint) which allows transfers to contract addresses.
-
-  <Callout type='warn'>
-    Transfers to contract addresses are considered unsafe because contract-to-contract calls are not currently supported.
-    Tokens sent to a contract address may become irretrievable.
-    Once contract-to-contract calls are supported, this circuit may be deprecated.
-  </Callout>
+  Mints `tokenId` and transfers it to `to`. It does NOT check if the recipient is a ContractAddress.
 
   Requirements:
 
-  * Contract is initialized.
+  * The contract is initialized.
   * `tokenId` must not exist.
   * `to` is not zero.
+
+  <Callout type='warn'>
+    Transfers to contract addresses are considered unsafe because contract-to-contract
+    calls are not currently supported. Tokens sent to a contract address may become irretrievable.
+    Once contract-to-contract calls are supported, this circuit may be deprecated.
+  </Callout>
 </APIItemCompact>
 
 #### _burn [toc] [#NonFungibleToken-_burn]
@@ -514,7 +505,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
 <APIItemCompact
   circuitSig='_burn(tokenId: Uint<128>) → []'
   kind="circuit"
-  complexity="k=10, rows=509"
+  complexity="k=10, rows=512"
   modulePrefix="NonFungibleToken"
 >
   Destroys `tokenId`.
@@ -532,16 +523,17 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
 <APIItemCompact
   circuitSig='_transfer(fromAddress: Either<Bytes<32>, ContractAddress>, to: Either<Bytes<32>, ContractAddress>, tokenId: Uint<128>) → []'
   kind="circuit"
-  complexity="k=12, rows=2067"
+  complexity="k=11, rows=2005"
   stackParams="true"
   modulePrefix="NonFungibleToken"
 >
-  Transfers `tokenId` from `fromAddress` to `to`. As opposed to [transferFrom](#NonFungibleToken-transferFrom),
-  this imposes no restrictions on the caller's identity.
+  Transfers `tokenId` from `fromAddress` to `to`.
+  As opposed to [transferFrom](#NonFungibleToken-transferFrom), this imposes no restrictions on the caller's identity.
 
   <Callout type='info'>
-    Transfers to contract addresses are currently disallowed until contract-to-contract interactions are supported in Compact.
-    This restriction prevents assets from being inadvertently locked in contracts that cannot currently handle token receipt.
+    Transfers to contract addresses are currently disallowed until contract-to-contract
+    interactions are supported in Compact. This restriction prevents assets from being inadvertently
+    locked in contracts that cannot currently handle token receipt.
   </Callout>
 
   Requirements:
@@ -557,25 +549,25 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
 <APIItemCompact
   circuitSig='_unsafeTransfer(fromAddress: Either<Bytes<32>, ContractAddress>, to: Either<Bytes<32>, ContractAddress>, tokenId: Uint<128>) → []'
   kind="circuit"
-  complexity="k=12, rows=2064"
+  complexity="k=11, rows=2002"
   stackParams="true"
   modulePrefix="NonFungibleToken"
 >
-  Unsafe variant of [_transfer](#NonFungibleToken-_transfer) which allows transfers to contract addresses.
-
-  Transfers `tokenId` from `fromAddress` to `to`. As opposed to [_unsafeTransferFrom](#NonFungibleToken-_unsafeTransferFrom), this imposes no restrictions on the caller's identity. It does NOT check if the recipient is a `ContractAddress`.
-
-  <Callout type='warn'>
-    Transfers to contract addresses are considered unsafe because contract-to-contract calls are not currently supported.
-    Tokens sent to a contract address may become irretrievable.
-    Once contract-to-contract calls are supported, this circuit may be deprecated.
-  </Callout>
+  Transfers `tokenId` from `fromAddress` to `to`.
+  As opposed to [_unsafeTransferFrom](#NonFungibleToken-_unsafeTransferFrom), this imposes no restrictions on the caller's identity.
+  It does NOT check if the recipient is a ContractAddress.
 
   Requirements:
 
-  * Contract is initialized.
+  * The contract is initialized.
   * `to` is not zero.
   * `tokenId` token must be owned by `fromAddress`.
+
+  <Callout type='warn'>
+    Transfers to contract addresses are considered unsafe because contract-to-contract
+    calls are not currently supported. Tokens sent to a contract address may become irretrievable.
+    Once contract-to-contract calls are supported, this circuit may be deprecated.
+  </Callout>
 </APIItemCompact>
 
 #### _approve [toc] [#NonFungibleToken-_approve]
@@ -583,7 +575,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
 <APIItemCompact
   circuitSig='_approve(to: Either<Bytes<32>, ContractAddress>, tokenId: Uint<128>, auth: Either<Bytes<32>, ContractAddress>) → []'
   kind="circuit"
-  complexity="k=11, rows=1810"
+  complexity="k=11, rows=1757"
   stackParams="true"
   modulePrefix="NonFungibleToken"
 >
@@ -592,6 +584,43 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
   Requirements:
 
   * The contract is initialized.
+  * `tokenId` must exist.
+  * If `auth` is non 0, then this function will check that `auth` is either the owner of the token,
+  or approved to operate on the token (by the owner).
+</APIItemCompact>
+
+#### _unsafeApprove [toc] [#NonFungibleToken-_unsafeApprove]
+#### [!toc] [#NonFungibleToken-_unsafeApprove]
+<APIItemCompact
+  circuitSig='_unsafeApprove(
+    to: Either<Bytes<32>, ContractAddress>,
+    tokenId: Uint<128>,
+    auth: Either<Bytes<32>, ContractAddress>,
+    isExistenceRequired: Boolean
+  ) → []'
+  kind="circuit"
+  complexity="k=11, rows=1870"
+  stackParams="true"
+  modulePrefix="NonFungibleToken"
+>
+  Approve `to` to operate on `tokenId`, requiring the token to exist
+  only when `isExistenceRequired` is true.
+
+  <Callout type='warn'>
+    Passing false skips the check that `tokenId` was minted. Both
+    [_unsafeTransferFrom](#NonFungibleToken-_unsafeTransferFrom) and `_update` read that invariant back, so a planted approval
+    can mint a token nobody authorized or outlive a later mint. Pass false only where
+    the owner has already been read, as `_update` does.
+  </Callout>
+
+  Counterpart to Solidity's `_approve(to, tokenId, auth, bool emitEvent)`, where
+  the flag also suppresses the `Approval` event. Compact has no events, so it carries
+  the existence check alone.
+
+  Requirements:
+
+  * The contract is initialized.
+  * `tokenId` must exist, unless `isExistenceRequired` is false and `auth` is zero.
   * If `auth` is non 0, then this function will check that `auth` is either the owner of the token,
   or approved to operate on the token (by the owner).
 </APIItemCompact>
@@ -601,7 +630,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
 <APIItemCompact
   circuitSig='_setApprovalForAll(owner: Either<Bytes<32>, ContractAddress>, operator: Either<Bytes<32>, ContractAddress>, approved: Boolean) → []'
   kind="circuit"
-  complexity="k=11, rows=1261"
+  complexity="k=11, rows=1282"
   stackParams="true"
   modulePrefix="NonFungibleToken"
 >
@@ -631,47 +660,3 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NonFungibleToken";
   * `tokenId` must exist.
 </APIItemCompact>
 
-#### _computeAccountId [toc] [#NonFungibleToken-_computeAccountId]
-#### [!toc] [#NonFungibleToken-_computeAccountId]
-<APIItemCompact
-  circuitSig="_computeAccountId() → Bytes<32>"
-  kind="internal"
-  modulePrefix="NonFungibleToken"
->
-  Computes the caller's account identifier from the `wit_NonFungibleTokenSK` witness.
-
-  ID Derivation: `accountId = persistentHash(secretKey)`
-
-  The result is a 32-byte commitment that uniquely identifies the caller.
-</APIItemCompact>
-
-#### computeAccountId [toc] [#NonFungibleToken-computeAccountId]
-#### [!toc] [#NonFungibleToken-computeAccountId]
-<APIItemCompact
-  circuitSig="computeAccountId(secretKey: Bytes<32>) → Bytes<32>"
-  kind="pure"
-  modulePrefix="NonFungibleToken"
->
-  Computes an account identifier without on-chain state, allowing a user to derive
-  their identity commitment before submitting it in a token operation.
-  This is the off-chain counterpart to the internal `_computeAccountId` and produces an identical result
-  given the same inputs.
-
-  ID Derivation: `accountId = persistentHash(secretKey)`
-
-  <Callout type='warn'>
-    The `secretKey` parameter is a sensitive secret. Mishandling it can permanently compromise the security of this system.
-    Never log or persist the key in plaintext. Use cryptographically secure randomness to generate keys.
-    Treat key loss as identity loss — a lost key cannot be recovered.
-  </Callout>
-</APIItemCompact>
-
-#### _isTargetZero [toc] [#NonFungibleToken-_isTargetZero]
-#### [!toc] [#NonFungibleToken-_isTargetZero]
-<APIItemCompact
-  circuitSig="_isTargetZero(target: Either<Bytes<32>, ContractAddress>) → Boolean"
-  kind="internal"
-  modulePrefix="NonFungibleToken"
->
-  Returns `true` if `target`'s active branch (as indicated by `is_left`) holds the zero value.
-</APIItemCompact>
