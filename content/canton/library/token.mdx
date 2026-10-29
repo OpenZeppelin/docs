@@ -2,110 +2,109 @@
 title: Token (CIP-0112)
 ---
 
-The token package implements the Token Standard V2 interfaces from [CIP-0112](https://github.com/canton-foundation/cips). It provides holdings, transfer instructions, allocations with batch settlement, allocation requests, registry rules, event logging, compliance hooks, and [CIP-0086](https://github.com/canton-foundation/cips/blob/main/cip-0086/cip-0086.md) allowances. Its closest Solidity analogue is a partial `ERC20`.
+The token packages implement a registry on the Token Standard V2 interfaces from [CIP-0112](https://github.com/canton-foundation/cips): holdings, transfer instructions, allocations with batch and iterated settlement, mint offers, and an event log. Its closest Solidity analogue is a partial `ERC20`.
 
-The package has no dependency on other OpenZeppelin packages. It depends on the Token Standard V2 interface DARs.
+Use the ready-to-use templates, or own your templates and reuse only the choice bodies.
 
 <Callout type="warn">
-  Experimental. Version 0.x, unaudited, and subject to a redesign before
-  release. The upstream Token Standard V2 interfaces are at devnet stage. The
-  interface DARs in `dars/vendor/` are local builds from a pinned
-  [splice](https://github.com/hyperledger-labs/splice) commit, and every
-  package ID changes when upstream publishes a release. Source:
-  [`experiments/token/tokenCIP112-v1`](https://github.com/OpenZeppelin/canton-contracts/tree/main/experiments/token/tokenCIP112-v1)
+  Pre-release and unaudited. The packages have no release yet. Source:
+  [`packages/token`](https://github.com/OpenZeppelin/canton-contracts/tree/main/packages/token)
   in `OpenZeppelin/canton-contracts`.
 </Callout>
 
-## Modules
+## Packages
 
-The package has no root module. Import the submodules that you need, for example:
-
-```daml
-import OpenZeppelin.TokenCIP112V1.Holding
-```
-
-Each module implements the matching `Splice.Api.Token.*V2` interfaces.
-
-| Module | Templates | Purpose |
+| Package | Modules | Contents |
 | --- | --- | --- |
-| `.Holding` | `TokenHolding` | An asset holding, maintained jointly by the instrument admin and the account parties, with an optional lock. |
+| `openzeppelin-token-cip112-types-v1` | `OpenZeppelin.Token.Cip112.TypesV1` | The records that the templates store: `RegistryConfig`, `TransferInstructionState`, and `AllocationState`. |
+| `openzeppelin-token-cip112-utils` | `OpenZeppelin.Token.Cip112.Utils.Holding`, `.Transfer`, `.Allocation`, `.Registry` | The choice bodies of a registry as functions over your own templates. |
+| `openzeppelin-token-cip112-v1` | `OpenZeppelin.Token.Cip112.V1.Holding`, `.Transfer`, `.Allocation`, `.Registry`, `.Base` | Ready-to-use templates over the utils. |
+
+The packages depend on the Splice Token Standard V2 interface DARs. The DARs in `dars/vendor/` are byte-identical copies of the Splice `0.8.3` release, so their package IDs are the ones that Splice deployments already vet.
+
+## Templates
+
+`openzeppelin-token-cip112-v1` implements the matching `Splice.Api.Token.*V2` interfaces. Each choice body is a function of the utils package.
+
+| Module | Template | Purpose |
+| --- | --- | --- |
+| `.Holding` | `TokenHolding` | An asset holding, maintained jointly by the instrument admin and the account parties, with optional locks and an owner-unlock choice. |
 | `.Transfer` | `TokenTransferInstruction` | The transfer-instruction lifecycle: accept, reject, withdraw, and expire. |
-| `.Allocation` | `TokenAllocation`, `BatchSettlementAuthorization` | Allocations backed by locked holdings, and all-or-nothing batch settlement. A batch must exactly cover its allocations. |
-| `.AllocationRequest` | `TokenAllocationRequest` | The request from an application that a wallet turns into an allocation. |
-| `.Allowance` | `TokenAllowance` | A CIP-0086 spending budget with ERC-20 `approve` and `transferFrom` behavior. |
-| `.Registry` | `TokenRules` | The registry rules: transfer, allocation, and settlement factories, plus mint, burn, and allowance choices. |
+| `.Allocation` | `TokenAllocation` | Allocations backed by locked holdings, with exact-cover batch settlement and iterated settlement. |
+| `.Registry` | `TokenRules` | The registry rules: transfer, allocation, and settlement factories, mint offers, and expiry. |
 | `.Base` | `TokenEventLog` | The event log for holding changes. |
-| `.D1` | `TrustedAttesterRegistry`, `ComplianceAttestation`, `SeizureOrder` | Compliance attestation (D1) and lawful-process seizure authority (D2). |
 
-The package defines no Daml interfaces or exceptions of its own, so it ships as one implementation package.
+## Lifecycle
 
-## Authority
+- **Transfer.** A transfer completes in one step when the receiver's account parties authorize the same transaction. Otherwise the receiver accepts a pending instruction before `executeBefore`. The sender can withdraw a pending instruction at any time. After `executeBefore`, the admin can also return the funds with `TokenTransferInstruction_Expire`.
+- **Mint.** The admin offers supply with `TokenRules_OfferMint`: a pending instruction from the CIP-0112 mint account (`cip-112/mint`) that locks nothing. The receiver accepts or rejects it. A mint is always two-step.
+- **Burn.** A holder transfers to the CIP-0112 burn account (`cip-112/burn`). The admin accepts or rejects the burn request; the holder and the admin acting together burn in one step.
+- **Settlement.** `SettlementFactory_SettleBatch` settles allocations together and checks exact cover: every leg needs a sending and a receiving allocation of the same amount.
+- **Iterated settlement.** An allocation with `nextIterationFunding` lets the executors add legs in each iteration, bounded by the locked reserve plus incoming credits, and reserve funding for a successor allocation.
+- **Canonical rules.** The application selects and discloses the one `TokenRules` contract for its instrument.
 
-- The instrument admin and the account parties jointly maintain holdings. `TokenRules_Mint` and `TokenRules_Burn` need both.
-- Wallets act through the Token Standard V2 interface choices. The choices check identity, funding, and expiry before they move value.
-- The application selects and discloses the canonical `TokenRules` contract for its instrument.
-- If `allowedExecutors` on `TokenRules` is `None`, any party can be named as a settlement executor. Set it when that matters for your deployment.
+## Using the Utils With Your Own Templates
 
-## Compliance Hooks
+The utils package defines no templates, interfaces, or serializable types, so SCU ignores it and your contracts do not reference it. Build a `HoldingOps` record inside your choice bodies, and call the `*Impl` functions, for example `transferFactoryImpl`, `allocationFactoryImpl`, `settleBatchImpl`, and `offerMintImpl`.
 
-- **D1 attestation.** If `requiredAttesterRegistryCid` is set on `TokenRules`, every batch settlement must present a valid `ComplianceAttestation` from an attester in that `TrustedAttesterRegistry`.
-- **D2 seizure.** The admin can mark an allocation for seizure. A sweep of the locked holdings also needs a `SeizureOrder` from a party other than the admin.
+The functions trust only what your templates supply:
 
-## Allowances
+- **Consume holdings safely.** Use `consumeByArchive @YourHolding`, or a spend choice reached through `fetchFromInterface @YourHolding`. Never archive a caller-supplied contract ID through the interface.
+- **Pin allocations.** Pass `pinAllocationTo @YourAllocation` to `settleBatchImpl` and `expireAllocationsImpl`.
+- **Keep exact cover.** Settle through `settleBatchImpl`. No other choice may exercise `Allocation_Settle` with the admin's authority.
+- **Guard mint offers.** Only `offerMintImpl`, from a choice that the admin alone controls, may create an instruction from the mint account.
 
-The owner approves a `TokenAllowance` for a spender with `TokenRules_ApproveAllowance`. The spender draws on it with `TokenRules_TransferFrom`, and the registry applies the current configuration.
+[`examples/token/token-cip112-custom`](https://github.com/OpenZeppelin/canton-contracts/tree/main/examples/token/token-cip112-custom) owns its templates and adds roles, an auditor, a compliance freeze, a pause switch, a transfer fee, and an executor allowlist.
 
-- A transfer to the spender's own account completes in one step. A transfer to another receiver creates a pending `TokenTransferInstruction` that the receiver accepts.
-- Each spend writes the spender party into the transfer metadata under the key `openzeppelin.com/spender`.
-- Each spend needs explicit disclosure of the owner's funding holdings. A partial spend returns change at a new holding contract ID, so a disclosure cannot be used twice.
-- A spend archives the allowance and creates the remaining budget at a new contract ID. Wallets must track the new ID.
+## Security Considerations
 
-The owner's account parties can revoke an allowance in three ways. The admin cannot revoke it.
-
-- `TokenAllowance_Revoke`.
-- `TokenAllowance_SetRemaining` with zero. A positive value creates the allowance again at a new contract ID.
-- `TokenRules_ApproveAllowance` with amount zero and the current contract ID, as with ERC-20 `approve(spender, 0)`.
+- **Admin co-signing.** The exact-cover check runs only inside `SettlementFactory_SettleBatch`. A direct `Allocation_Settle` by the admin and the executors bypasses it and can create or destroy value. Operate the admin so that it signs settles only through the settlement factory.
+- **Iterated settlement.** The executors control the reserve in each iteration. Enable it only with executors that you trust with the reserved amount, and bound it with a settlement deadline.
+- **Supply-change allocations.** A mint-account or burn-account allocation commits the admin to that supply change until the settlement deadline or a withdrawal.
+- **Lock parameters.** Size `lockGrace` to the reaction time of the admin's cleanup automation, and `maxTTL` to the longest workflow that the registry accepts.
+- **Owner recovery.** `TokenHolding_OwnerUnlock` needs every account party, so an unresponsive provider blocks recovery.
 
 ## V1 Compatibility
 
-The V2 interfaces are separate from V1. They share only `splice-api-token-metadata-v1`, so V1 tooling cannot see this token. To support V1, add the V1 interface instances to the same templates. The V1 DARs are in `dars/vendor/`, and the vendored `splice-token-standard-utils` DAR has helpers for this.
+The V2 interfaces share only `splice-api-token-metadata-v1` with V1, so V1 tooling cannot see this token. To support V1, add the V1 interface instances to the same templates. The vendored `splice-token-standard-utils` DAR has the `...V1...DefaultImplUsingV2` helpers for this.
 
 ## Build and Consume
 
 From the root of `canton-contracts`:
 
 ```bash
-DAML_PACKAGE=experiments/token/tokenCIP112-v1 dpm build
+DAML_PACKAGE=packages/token/token-cip112-types-v1 dpm build
+DAML_PACKAGE=packages/token/token-cip112-utils dpm build
+DAML_PACKAGE=packages/token/token-cip112-v1 dpm build
 ```
 
-In your project, add the token DAR and the vendored interface DARs as `data-dependencies`:
+In your project, add the token DARs and the vendored interface DARs as `data-dependencies`. A project that owns its templates leaves out `openzeppelin-token-cip112-v1`.
 
 ```yaml
 data-dependencies:
-  - ../canton-contracts/experiments/token/tokenCIP112-v1/.daml/dist/openzeppelin-tokenCIP112-v1-0.1.0.dar
+  - ../canton-contracts/packages/token/token-cip112-types-v1/.daml/dist/openzeppelin-token-cip112-types-v1-0.1.0.dar
+  - ../canton-contracts/packages/token/token-cip112-utils/.daml/dist/openzeppelin-token-cip112-utils-0.1.0.dar
+  - ../canton-contracts/packages/token/token-cip112-v1/.daml/dist/openzeppelin-token-cip112-v1-0.1.0.dar
   - ../canton-contracts/dars/vendor/splice-api-token-metadata-v1-1.0.0.dar
-  - ../canton-contracts/dars/vendor/splice-api-token-holding-v1-1.0.0.dar
   - ../canton-contracts/dars/vendor/splice-api-token-holding-v2-1.0.0.dar
   - ../canton-contracts/dars/vendor/splice-api-token-transfer-events-v2-1.0.0.dar
-  - ../canton-contracts/dars/vendor/splice-api-token-allocation-v1-1.0.0.dar
   - ../canton-contracts/dars/vendor/splice-api-token-allocation-v2-1.0.0.dar
-  - ../canton-contracts/dars/vendor/splice-api-token-transfer-instruction-v1-1.0.0.dar
   - ../canton-contracts/dars/vendor/splice-api-token-transfer-instruction-v2-1.0.0.dar
-  - ../canton-contracts/dars/vendor/splice-api-token-allocation-instruction-v1-1.0.0.dar
   - ../canton-contracts/dars/vendor/splice-api-token-allocation-instruction-v2-1.0.0.dar
-  - ../canton-contracts/dars/vendor/splice-api-token-allocation-request-v1-1.0.0.dar
-  - ../canton-contracts/dars/vendor/splice-api-token-allocation-request-v2-1.0.0.dar
   - ../canton-contracts/dars/vendor/splice-token-standard-utils-2.0.0.dar
 build-options:
   - --target=2.1
 ```
 
-The vendored DARs are built with SDK 3.5.1 and used from the 3.5.8 baseline. Both target Daml-LF 2.1, so `--target=2.1` is required. `dars/manifest.yaml` records the source commit and digest of each vendored DAR.
+```daml
+import OpenZeppelin.Token.Cip112.V1.Registry
+```
 
 ## Testing
 
-- **Unit tests.** `DAML_PACKAGE=experiments/test/tokenCIP112-v1-test dpm test` runs the Daml Script suites on an in-memory ledger. CI requires full template and choice coverage.
-- **Sandbox gate.** `scripts/check-sandbox.sh` runs token creation, transfer, allowance, query, and burn scripts against a static-time Canton sandbox over the Ledger API. It needs `dpm`, Java 21 or newer, `lsof`, and a free Ledger API port (`6865` by default, or set `OZ_LEDGER_PORT`). CI runs this gate on every pull request.
+- **Unit tests.** `DAML_PACKAGE=test/token-cip112-v1-test dpm test` runs the Daml Script suites on an in-memory ledger. CI requires full template and choice coverage.
+- **Sandbox gate.** `scripts/check-sandbox.sh` runs mint offers, transfers, queries, and burns against a static-time Canton sandbox over the Ledger API. It needs `dpm`, Java 21 or newer, `lsof`, and a free Ledger API port (`6865` by default, or set `OZ_LEDGER_PORT`). CI runs this gate on every pull request.
+- **Example.** [`examples/token/token-cip112-trading-test`](https://github.com/OpenZeppelin/canton-contracts/tree/main/examples/token/token-cip112-trading-test) launches a registry and drives it through the standard interfaces: funded allocations, DvP batch settlement, and the iterated-settlement deposit flow.
 
 ## Related
 

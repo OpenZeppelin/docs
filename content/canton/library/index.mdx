@@ -5,13 +5,9 @@ title: Library
 The OpenZeppelin library for Canton brings the patterns of the OpenZeppelin Solidity contracts to Daml: scoped authorization, an emergency stop, and a standard token. Each package follows the Canton authorization and privacy model. Where Daml differs from the EVM, the package page explains the difference.
 
 <Callout type="warn">
-  No package has a release or an audit yet. Packages under
+  No package has a release or an audit yet. The packages under
   [`packages/`](https://github.com/OpenZeppelin/canton-contracts/tree/main/packages)
-  are pre-release. Packages under
-  [`experiments/`](https://github.com/OpenZeppelin/canton-contracts/tree/main/experiments)
-  will be redesigned and rewritten before they move to `packages/`. The rewrite
-  will change module names, template and choice signatures, and package IDs,
-  and there is no upgrade path from the experiments.
+  are pre-release.
 </Callout>
 
 ## Packages
@@ -20,19 +16,19 @@ The OpenZeppelin library for Canton brings the patterns of the OpenZeppelin Soli
 | --- | --- | --- | --- |
 | [Scoped Authorization Grant](/canton/library/scoped-authorization-grant) | `OpenZeppelin.ScopedAuthorizationGrantV1` | `AccessControl` (no role hierarchy) | Pre-release |
 | [Pausable](/canton/library/pausable) | `OpenZeppelin.Api.PausableV1`, `OpenZeppelin.PausableV1` | `Pausable` | Pre-release |
-| [Token (CIP-0112)](/canton/library/token) | `OpenZeppelin.TokenCIP112V1.*` | `ERC20` (partial) | Experimental |
+| [Token (CIP-0112)](/canton/library/token) | `OpenZeppelin.Token.Cip112.V1.*`, `OpenZeppelin.Token.Cip112.Utils.*`, `OpenZeppelin.Token.Cip112.TypesV1` | `ERC20` (partial) | Pre-release |
 
 ## Design Rules
 
-**One package, one DAR.** Daml has no inheritance. The unit of reuse is the DAR. Each component is a separate package, or a pair of packages, with no dependency on other components. Applications build, upload, and vet only the DARs they use.
+**One package, one DAR.** Daml has no inheritance. The unit of reuse is the DAR. Each component is a separate package, or a small set of packages, with no dependency on other components. Applications build, upload, and vet only the DARs they use.
 
 **Versioned names.** A package is named `openzeppelin-<component>-v1`, and its module is `OpenZeppelin.<Component>V1`. A compatible upgrade (a smart contract upgrade, or SCU) keeps the package name and increments the package version. A breaking change creates a new `-v2` package with a `V2` module.
 
 **Interfaces in a separate package.** Daml cannot upgrade an interface. A component that defines Daml interfaces puts them in a frozen `openzeppelin-api-<component>-v1` package with modules under `OpenZeppelin.Api.<Component>V1`. The implementation package depends on it and can take SCU fixes. API packages depend only on other API packages. Pausable follows this model. A component with templates and no interfaces ships one package.
 
-**Composition in the application.** Implementation packages do not depend on each other. Applications combine them directly or through interfaces.
+**Composition in the application.** Packages of different components do not depend on each other. Applications combine them directly or through interfaces.
 
-**No Daml Script in production DARs.** The shipped packages do not depend on `daml-script`. Each component has its own `-test` package under `test/` or `experiments/test/`. Test packages are never released or uploaded.
+**No Daml Script in production DARs.** The shipped packages do not depend on `daml-script`. Each package has its own `-test` package under `test/`. Test packages are never released or uploaded.
 
 **Public and internal modules.** The documented modules are the public API. Implementation modules use an `.Internal` suffix. This is a naming convention; the ledger does not enforce it.
 

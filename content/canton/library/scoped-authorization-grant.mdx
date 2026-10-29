@@ -61,6 +61,8 @@ nonconsuming choice ProtectedOperation : ()
 
 `requireAuthorization` fetches the grant, checks the authority, the grantee, and the scope, then exercises `AuthorizationGrant_Use`. It returns the grant.
 
+The grantee is usually not a stakeholder of the protected contract, so a stakeholder has to disclose that contract to the grantee before it can exercise the choice. Each guarded call also brings in the grant's `authority` as a confirming party, so the authority's participant must be online for every protected call. Prefer an authority that already signs the protected contract.
+
 <Callout type="warn">
   Never take the expected authority, resource, permission, or epoch from choice
   arguments. A caller that supplies the requirement chooses the policy that it
@@ -99,7 +101,7 @@ Use a check function to choose between candidate grants, then call the matching 
 Every scope field must match exactly.
 
 - `resourceInstanceCid = None` matches by logical fields only, so a grant applies to successor contracts.
-- `resourceInstanceCid = Some cid` binds the grant to one contract ID. The guard compares IDs; it does not fetch the resource.
+- `resourceInstanceCid = Some (coerceContractId cid)` binds the grant to one contract ID. The guard compares IDs; it does not fetch the resource.
 - To invalidate grants, increase the expected `policyEpoch` in the resource state. Do not reuse an earlier epoch: that reactivates old grants.
 
 ## Failure Statuses
