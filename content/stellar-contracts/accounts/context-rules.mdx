@@ -22,6 +22,11 @@ Defines the scope where the rule applies:
 - `Default`: Applies to any context. Used for admin-like authorization that spans all operations.
 - `CallContract(Address)`: Applies to specific contract calls. Useful for scoped permissions like session logins to a particular dApp.
 - `CreateContract(BytesN<32>)`: Applies to contract deployments with a specific WASM hash. Enables control over which contracts can be deployed.
+- `CreateContractExternalRef(Address, String)`: Applies to contract deployments from the executable reference that an owner contract stores under a tag (Protocol 28, [CAP-85](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0085.md)).
+
+<Callout type="warning">
+With `CreateContractExternalRef(owner, tag)`, the WASM hash is resolved at deployment time and the `owner` contract can change it later, so the rule trusts the owner contract to point the tag at acceptable code. A deployment is matched by how its executable is referenced, not by the code it resolves to: a `CreateContract(hash)` rule does not cover a deployment through an external reference, even if that reference resolves to the same hash.
+</Callout>
 
 #### Valid Until
 Optional expiration defined by a ledger sequence. Rules with expiration automatically become invalid after the specified ledger, enabling time-limited permissions like 24-hour sessions.
@@ -49,6 +54,10 @@ Rules are not iterated or auto-discovered. Instead, off-chain clients specify ex
 
 ### Automatic Expiration
 Expired rules are rejected during authorization evaluation.
+
+<Callout type="warning">
+By default, the `SmartAccount` management functions (adding, updating or removing context rules, signers and policies) require authorization from the smart account itself, so they need a valid rule that matches a call to the account: a `Default` rule, or a `CallContract` rule for the account's own address. The library does not ensure that such a rule remains. `add_context_rule` and `update_context_rule_valid_until` accept any expiry that is not already in the past, and `remove_context_rule` accepts the last such rule. Once no valid rule covers calls to the account, nothing can authorize a management function again, including adding a new rule, and the account is locked permanently. Rules scoped to other contracts keep working, but cannot restore access. Before setting a rule's expiry or removing a rule, check that another valid rule still covers the account itself.
+</Callout>
 
 ## Context Rule Limits
 
@@ -94,22 +103,27 @@ graph TD
 
 
 ```rust
-use soroban_sdk::{map, vec, Env, String}
-use stellar_accounts::smart_account::{self as smart_account, ContextRuleType};
+use soroban_sdk::{map, vec, Env, String};
+use stellar_accounts::smart_account::{self as smart_account, ContextRuleType, Signer};
+
+// ~5 seconds per ledger
+const DAY_IN_LEDGERS: u32 = 17_280;
+
+let current_ledger = e.ledger().sequence();
 
 // This rule applies to all contexts and requires 2-of-3 signatures from Alice, Bob, or Dave.
 smart_account::add_context_rule(
     e,
-    ContextRuleType::Default,
-    String::from_str(e, "Sudo"),
+    &ContextRuleType::Default,
+    &String::from_str(e, "Sudo"),
     None, // No expiration
-    vec![
+    &vec![
         e,
-        Signer::External(bls_verifier, alice_key),
+        Signer::External(bls_verifier.clone(), alice_key),
         Signer::External(bls_verifier, bob_key),
         Signer::Delegated(dave_addr)
     ],
-    map![
+    &map![
         e,
         (threshold_policy, threshold_params) // 2-of-3 Threshold
     ],
@@ -119,14 +133,14 @@ smart_account::add_context_rule(
 // requires a dapp1 key signature, and enforces spending limits.
 smart_account::add_context_rule(
     e,
-    ContextRuleType::CallContract(usdc_addr),
-    String::from_str(e, "Dapp1 Subscription"),
-    Some(current_ledger + 1_year),
-    vec![
+    &ContextRuleType::CallContract(usdc_addr),
+    &String::from_str(e, "Dapp1 Subscription"),
+    Some(current_ledger + 365 * DAY_IN_LEDGERS),
+    &vec![
         e,
-        Signer::External(ed25519_verifier, dapp1_key)
+        Signer::External(ed25519_verifier.clone(), dapp1_key)
     ],
-    map![
+    &map![
         e,
         (spending_limit_policy, spending_params)
     ],
@@ -136,14 +150,14 @@ smart_account::add_context_rule(
 // requires a dapp2 key signature, and enforces rate limiting and time window policies.
 smart_account::add_context_rule(
     e,
-    ContextRuleType::CallContract(dapp_addr),
-    String::from_str(e, "Dapp2 Session"),
-    Some(current_ledger + 7_days),
-    vec![
+    &ContextRuleType::CallContract(dapp_addr),
+    &String::from_str(e, "Dapp2 Session"),
+    Some(current_ledger + 7 * DAY_IN_LEDGERS),
+    &vec![
         e,
         Signer::External(ed25519_verifier, dapp2_key)
     ],
-    map![
+    &map![
         e,
         (rate_limit_policy, rate_limit_params),
         (time_window_policy, time_window_params)
@@ -154,14 +168,14 @@ smart_account::add_context_rule(
 // requires an AI agent key signature, and enforces volume caps.
 smart_account::add_context_rule(
     e,
-    ContextRuleType::CallContract(some_addr),
-    String::from_str(e, "AI Agent"),
-    Some(current_ledger + 12_hours),
-    vec![
+    &ContextRuleType::CallContract(some_addr),
+    &String::from_str(e, "AI Agent"),
+    Some(current_ledger + DAY_IN_LEDGERS / 2),
+    &vec![
         e,
         Signer::External(secp256r1_verifier, agent_key)
     ],
-    map![
+    &map![
         e,
         (volume_cap_policy, volume_cap_params)
     ],
