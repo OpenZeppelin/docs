@@ -156,6 +156,9 @@ by cofactor clearing at the constraint level, so an off-curve, low-order, or mix
 This holds for points a caller passes as arguments or witnesses (a recipient `pk`, the message point of `encryptPoint`),
 which is why the modules perform no in-circuit membership check and why the homomorphic algebra is sound.
 The identity point is a valid subgroup member, so it is NOT caught by this guarantee; that is why the modules assert against it explicitly.
+This is a substantiated-but-unaudited assumption:
+it was verified in the source of the pinned Midnight runtime and is regression-tested by the library's runtime canary test,
+but compactc and midnight-ledger are unaudited, so re-verify it before using the modules on a newer runtime.
 * ***Negation is scalar multiplication by `ℓ - 1`, never by `-1`.*** A `Field` literal `-1` is the BLS scalar modulus minus one,
 which exceeds the Jubjub scalar order and faults `ecMul`. For any `P` in the subgroup, `(ℓ - 1) * P = -P`, and that identity is what
 `negate`, `sub`, and the decryption check build on. Do not multiply by `ℓ` itself either: it is out of range and faults as well.
