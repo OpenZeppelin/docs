@@ -29,7 +29,7 @@ sequenceDiagram
     V->>Tr: safeTransferChecked(exit fee)
 `} />
 
-The deposit pulls assets in with `safeTransferFrom`, but every outbound transfer uses `safeTransferChecked`. That asymmetry is the heart of this guide.
+Assets come in with `safeTransferFrom`, because USDT-TRON's `transferFrom` behaves like any other TRC-20. Assets go out with `safeTransferChecked`, because its `transfer` returns `false` even when it succeeds. Only the outbound direction needs the special treatment, and handling it correctly is what this guide is about.
 
 You build the project from scratch as you go. Every file appears here in full, so there is nothing to clone. Follow the steps in order and you end up with a working project.
 
@@ -58,8 +58,6 @@ npm install @openzeppelin/tron-contracts
 </Callout>
 
 This installs the audited `latest` release of the library (5.6.0 at the time of writing). See [Release Tags](/tron-contracts#release-tags) for the `dev` and `next` channels.
-
-Tested with `@openzeppelin/tron-contracts` 5.6.0, `@openzeppelin/hardhat-tron` 0.1.0, `@openzeppelin/hardhat-tron-upgrades` 0.1.1, Hardhat 2.29.1, ethers 6.17.0, tronweb 6.5.1, Node.js 24.13.0 (22 is the minimum), and the `tronbox/tre:dev` image at digest `sha256:f4332e11…`.
 
 Create `hardhat.config.cjs`:
 
@@ -105,7 +103,7 @@ module.exports = {
 };
 ```
 
-Three settings do the TRON-specific work:
+Note the following TRON-specific settings:
 
 - `tre.compiler.target: 'tron'` compiles with `tron-solc`, TRON's fork of `solc`, instead of the standard compiler. The first compile downloads it and checks its SHA-256.
 - `tre.autoStart` makes `npx hardhat test` start a TRON node (TRE, the TRON Runtime Environment) in Docker and remove it afterwards.
@@ -138,7 +136,7 @@ contract UsdtVault is TRC4626 {
 
 That's a complete, standard-compliant vault. `TRC4626` handles share accounting, the preview functions and rounding. You don't write transfer code: deposits pull USDT with `SafeTRC20.safeTransferFrom`, and withdrawals pay out through `SafeTRC20.safeTransferChecked`, which works with USDT-TRON (more on that below).
 
-`_decimalsOffset()` deepens the defence against the **inflation attack**, where someone deposits a tiny amount into an empty vault and then donates a large amount directly to it, so the next depositor's shares round down in the attacker's favour. `TRC4626` already blunts this with virtual shares. An offset of 6 gives shares 6 more decimals than USDT (12 instead of 6), which raises the cost of the attack by a factor of 10⁶. The [TRC-4626 page](/tron-contracts/trc4626#defending-with-a-virtual-offset) works through the math.
+`_decimalsOffset()` deepens the defense against the **inflation attack**, where someone deposits a tiny amount into an empty vault and then donates a large amount directly to it, so the next depositor's shares round down in the attacker's favor. `TRC4626` already blunts this with virtual shares. An offset of 6 gives shares 6 more decimals than USDT (12 instead of 6), which raises the cost of the attack by a factor of 10⁶. The [TRC-4626 page](/tron-contracts/trc4626#defending-with-a-virtual-offset) works through the math.
 
 <Callout>
 USDT-TRON has **6 decimals**, and so does TRX (1 TRX = 1,000,000 SUN). Write amounts as `ethers.parseUnits('10', 6)` in JavaScript, or `10 * 10**6` in Solidity. Never use `parseEther` or the `ether` unit: `1 ether` is 10¹⁸ base units, which is 10¹² TRX or a trillion USDT.
@@ -551,7 +549,7 @@ describe('UsdtVault', function () {
     let feeless;
 
     beforeEach(async function () {
-      // No fees, so the numbers isolate the offset defence.
+      // No fees, so the numbers isolate the offset defense.
       feeless = await ethers.deployContract('UsdtVault', [await token.getAddress(), treasury.address, 0n, 0n]);
       await token.mint(bob.address, usdt('1000'));
       await token.connect(bob).approve(await feeless.getAddress(), ethers.MaxUint256);
@@ -849,7 +847,7 @@ Open the contract on Tronscan, go to the verification form, and upload that file
 
 ## Optional: make it upgradeable
 
-To upgrade the vault later, deploy it behind a proxy. Use `@openzeppelin/tron-contracts-upgradeable` for the contracts and `@openzeppelin/hardhat-tron-upgrades` for deployment. The Ethereum Upgrades plugins don't work on TRON.
+To upgrade the vault later, deploy it behind a proxy. Use `@openzeppelin/tron-contracts-upgradeable` for the contracts and `@openzeppelin/hardhat-tron-upgrades` for deployment.
 
 ```bash title="Shell"
 npm install @openzeppelin/tron-contracts-upgradeable
