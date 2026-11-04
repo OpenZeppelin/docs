@@ -4,8 +4,12 @@ title: Crypto
 
 {/* links */}
 [ConfidentialFungibleToken guide]: ./confidential-fungible-token
+[Multisig guide]: ./multisig
 [ElGamal API]: api/crypto#ElGamal
 [EcdhMask API]: api/crypto#EcdhMask
+[Ecdsa API]: api/crypto#Ecdsa
+[Eip712 API]: api/crypto#Eip712
+[EvmAbi API]: api/utils#EvmAbi
 [secretToScalar]: api/crypto#ElGamal-secretToScalar
 [derivePk]: api/crypto#ElGamal-derivePk
 [expandRandomness]: api/crypto#ElGamal-expandRandomness
@@ -24,17 +28,34 @@ title: Crypto
 [kdf]: api/crypto#EcdhMask-kdf
 [EcdhMask.encrypt]: api/crypto#EcdhMask-encrypt
 [EcdhMask.decrypt]: api/crypto#EcdhMask-decrypt
+[isLowS]: api/crypto#Ecdsa-isLowS
+[assertLowS]: api/crypto#Ecdsa-assertLowS
+[secp256k1EcdsaVerifyLowS]: api/crypto#Ecdsa-secp256k1EcdsaVerifyLowS
+[domainSeparator]: api/crypto#Eip712-domainSeparator
+[hashTypedData]: api/crypto#Eip712-hashTypedData
+[LFDT-Minokawa/compact#757]: https://github.com/LFDT-Minokawa/compact/issues/757
+[LFDT-Minokawa/compact#616]: https://github.com/LFDT-Minokawa/compact/issues/616
 
 The Crypto directory provides two stateless encryption primitives over Midnight's embedded Jubjub curve:
 ElGamal, an additively homomorphic encryption of small integers, and EcdhMask,
 a one-time pad derived from an ECDH key exchange that delivers a value to a recipient directly.
-Both are pure modules: they hold no ledger state, declare no witnesses,
-and take their keys, plaintexts, and randomness as explicit arguments.
+It also provides two modules for verifying secp256k1 signatures produced by Ethereum signing infrastructure:
+Ecdsa, which enforces the low-s encoding, and Eip712, which builds the typed-data digest an EVM signer signs.
+All four are pure modules: they hold no ledger state, declare no witnesses,
+and take their keys, messages, and randomness as explicit arguments.
 The importing contract decides what is stored, what is disclosed, and where its secrets come from.
 
 The [ConfidentialFungibleToken guide] shows the two primitives working together end to end:
 ElGamal keeps every balance as a ciphertext that the contract can update without decrypting it,
 and EcdhMask hands each recipient the plaintext amount of an incoming transfer.
+
+<Callout type='info'>
+Ecdsa and Eip712 require ZKIR v3: the `Secp256k1` types and `keccak256` are unavailable on the v2 backend,
+which compiler 0.34.0 emits by default. Compile a contract that imports either with `--feature-zkir-v3`;
+the library's `compile:crypto` script passes it.
+ElGamal and EcdhMask target v2. Under v3, an impure circuit that reaches [encryptPoint] fails at key generation
+([LFDT-Minokawa/compact#757]), and exporting [derivePk] as an impure circuit panics ([LFDT-Minokawa/compact#616]).
+</Callout>
 
 ## ElGamal
 
@@ -97,10 +118,10 @@ and is normally stored on the ledger next to the ciphertexts encrypted under it.
 One secret seed per circuit invocation can therefore yield as many distinct scalars as the circuit needs,
 one per `tag`.
 
-Every encryption takes its randomness `r` as a `Field` argument, and the module holds no record of which values have been used.
+Every encryption takes its randomness `r` as a `JubjubScalar` argument, and the module holds no record of which values have been used.
 The caller owns three obligations that no circuit can check:
 
-* `r` must be a valid Jubjub scalar (strictly less than `ℓ`); larger values fault `ecMul`.
+* `r` must be a valid Jubjub scalar (strictly less than `ℓ`), derived rather than cast from a `Field` (see below).
 [expandRandomness] and [secretToScalar] always satisfy this.
 * `r` must be secret. Anyone who learns `r` for a ciphertext computes `pk^r` and strips the mask.
 * `r` must be fresh for every ciphertext. Reusing `r` under the same `pk` repeats `c1`,
@@ -146,10 +167,68 @@ that commits to the value elsewhere and is immutable once written, which is the 
 A consumer with mutable storage or an in-transit attacker in its threat model must add its own authentication.
 As with ElGamal, the weak inputs that would zero the shared secret are rejected: `encrypt` asserts that `recipientPk` is not the identity
 and that the ephemeral point `g^e` is not the identity (which covers `e = 0` and any `e` congruent to zero modulo `ℓ`).
+`decrypt` guards the same point: it refuses an identity ephemeral rather than unmasking against that public constant.
+
+## Ecdsa
+
+The [Ecdsa API] supplies the low-s rule for secp256k1 ECDSA signatures.
+The standard library's `secp256k1EcdsaVerify` accepts both `(r, s)` and `(r, n - s)`, where `n` is the secp256k1 group order,
+so every valid signature has a second valid encoding that anyone can derive without the signing key.
+`secp256k1EcdsaVerify` leaves the low-s constraint to its caller, and this module is that constraint:
+rejecting `s > n / 2` gives each signature one encoding, which is what replay sets, nullifiers,
+and signature-derived identifiers rely on.
+
+* [isLowS] returns whether `s <= n / 2`.
+* [assertLowS] reverts with `Ecdsa: high-s signature` on a signature in the high half.
+* [secp256k1EcdsaVerifyLowS] verifies a signature and accepts only the low-s encoding.
+It reports the result instead of asserting, so a caller can fold it into a count or a threshold.
+
+## Eip712
+
+The [Eip712 API] implements the EIP-712 typed-data envelope, for verifying signatures produced by Ethereum signing infrastructure.
+A typed-data signature covers:
+
+```
+digest = keccak256(0x1901 || domainSeparator || structHash)
+```
+
+The domain separator binds the signature to one application, so a signature obtained for any other domain cannot be replayed here.
+`personal_sign` does not provide that binding, since it signs an opaque hash.
+
+* [domainSeparator] computes the separator for `(name, version, salt)`.
+EIP-712 encodes a `string` field as the keccak hash of its UTF-8 bytes and Compact has no dynamic types,
+so the consumer hashes its own fixed-length name and version literals and passes the hashes in.
+* [hashTypedData] wraps a struct hash in the envelope and returns the digest the signer actually signed.
+It reverts with `Eip712: domain separator not set` on a zero separator, which is what an uninitialized ledger cell reads as.
+
+The struct hash is `keccak256` over EVM ABI words with the operation's type hash as the first word;
+the [EvmAbi API] supplies the word encoders. The multisig presets build their approval digests this way (see the [Multisig guide]).
+
+### The domain
+
+The domain is `(name, version, salt)`, with the type string `EIP712Domain(string name,string version,bytes32 salt)`.
+The signer's domain must have exactly these fields: a type string that differs by one character yields a different separator, and every signature fails.
+`chainId` and `verifyingContract` are omitted, which EIP-712 permits since every domain field is optional.
+Neither is expressible: a Midnight contract address is 32 bytes and does not fit `verifyingContract`'s `address` type,
+and no network identifier is available in-circuit.
+
+On an EVM chain, `verifyingContract` is what makes a domain identify one deployment rather than one application.
+Without it, the consumer has to get that binding elsewhere, and the two places to put it are not equivalent:
+
+* ***As a field of the operation struct***, holding the contract's own address (`kernel.self()`).
+This is the stronger option and the one to reach for by default: a Midnight address is randomized at deployment and cannot be predicted,
+so no two instances share one, and a signature for one deployment cannot authorize another.
+* ***As `salt`***, a per-deployment value in the domain. This is weaker, because it separates domains rather than messages.
+It is worth adding when the signer gates on domains but cannot read struct fields, since that is the only level at which it is visible.
+
+<Callout type='warn'>
+A consumer that binds the deployment in neither place has one domain shared by every deployment of the contract,
+and nothing distinguishes them: a signature for one deployment verifies on all of them.
+</Callout>
 
 ## Jubjub facts a consumer must respect
 
-Both modules rely on two properties of Midnight's embedded-curve arithmetic.
+ElGamal and EcdhMask rely on two properties of Midnight's embedded-curve arithmetic.
 
 * ***Every point is constrained into the prime-order subgroup.*** The runtime assigns each `JubjubPoint` reaching a curve operation
 by cofactor clearing at the constraint level, so an off-curve, low-order, or mixed-order point makes the circuit unsatisfiable.
@@ -159,15 +238,16 @@ The identity point is a valid subgroup member, so it is NOT caught by this guara
 This is a substantiated-but-unaudited assumption:
 it was verified in the source of the pinned Midnight runtime and is regression-tested by the library's runtime canary test,
 but compactc and midnight-ledger are unaudited, so re-verify it before using the modules on a newer runtime.
-* ***Negation is scalar multiplication by `ℓ - 1`, never by `-1`.*** A `Field` literal `-1` is the BLS scalar modulus minus one,
-which exceeds the Jubjub scalar order and faults `ecMul`. For any `P` in the subgroup, `(ℓ - 1) * P = -P`, and that identity is what
-`negate`, `sub`, and the decryption check build on. Do not multiply by `ℓ` itself either: it is out of range and faults as well.
-A consumer that needs to negate a point of its own should follow the same pattern.
+* ***Scalars are typed `JubjubScalar`, not `Field`.*** Every scalar parameter of both modules (`r`, `k`, `e`, `ekScalar`) is a `JubjubScalar`.
+A `Field as JubjubScalar` cast reduces modulo `ℓ`, so casting at a call site silently accepts an out-of-range value that the typed parameter rejects.
+Derive scalars with [secretToScalar] and [expandRandomness] instead of casting; their 31-byte output is always below `ℓ`.
+Point negation uses the standard library's `ecNeg`, so no circuit needs a negative scalar.
 
 ## Usage
 
-Both modules are imported like any other module; prefix them with `ElGamal_` and `EcdhMask_` to avoid circuit signature clashes.
-Each module exports a `Ciphertext` struct, which the prefix turns into `ElGamal_Ciphertext` and `EcdhMask_Ciphertext`.
+The modules are imported like any other module; prefix each with its name (`ElGamal_`, `EcdhMask_`, `Ecdsa_`, `Eip712_`)
+to avoid circuit signature clashes.
+ElGamal and EcdhMask each export a `Ciphertext` struct, which the prefix turns into `ElGamal_Ciphertext` and `EcdhMask_Ciphertext`.
 
 The witnesses below are declared by the importing contract; this library ships no TypeScript witness implementations
 (the ones in the repository are test-only), so consumers author their own.
@@ -262,3 +342,72 @@ export circuit notify(recipient: Bytes<32>, value: Uint<128>): [] {
 The recipient's wallet recovers the amount with the pure circuit
 `EcdhMask_decrypt(memo, ElGamal_secretToScalar(ek), pad(32, "MyApp:memo:v1"))`, using the same domain tag.
 Only the memo (the ephemeral point and the masked field element) reaches the ledger.
+
+### Verifying an EVM-signed approval
+
+A contract that accepts approvals from an Ethereum key rebuilds the digest the signer signed and checks the signature against it.
+The struct hash covers the type hash, the contract's own address, a nonce, and the operation's fields, each as an EVM ABI word.
+The domain separator is computed once in the constructor and sealed.
+
+```typescript
+pragma language_version >= {{compact_language_version}};
+
+import CompactStandardLibrary;
+import "./node_modules/@openzeppelin/compact-contracts/crypto/Ecdsa"
+  prefix Ecdsa_;
+import "./node_modules/@openzeppelin/compact-contracts/crypto/Eip712"
+  prefix Eip712_;
+import "./node_modules/@openzeppelin/compact-contracts/utils/EvmAbi"
+  prefix EvmAbi_;
+
+export sealed ledger _domainSeparator: Bytes<32>;
+export sealed ledger _approver: Secp256k1Point;
+export ledger _nonce: Counter;
+export ledger _limit: Uint<128>;
+export ledger _enabled: Boolean;
+
+constructor(approver: Secp256k1Point, salt: Bytes<32>) {
+  _approver = disclose(approver);
+  _domainSeparator = Eip712_domainSeparator(
+    keccak256<Bytes<5>>(pad(5, "MyApp")),
+    keccak256<Bytes<1>>(pad(1, "1")),
+    disclose(salt)
+  );
+}
+
+export circuit setLimit(
+  limit: Uint<128>,
+  enabled: Boolean,
+  sig: Secp256k1EcdsaSignature
+): [] {
+  const nonce = _nonce;
+  _nonce.increment(1);
+
+  // The type string must match the signer's byte for byte.
+  // A precomputed literal word saves one keccak permutation per call.
+  const typeHash = keccak256<Bytes<74>>(
+    pad(74, "SetLimit(bytes32 contractAddress,uint256 nonce,uint256 limit,bool enabled)")
+  );
+  const structHash = keccak256<Vector<5, Bytes<32>>>([
+    typeHash,
+    kernel.self().bytes,
+    EvmAbi_uint64Word(nonce),
+    EvmAbi_uint128Word(limit),
+    EvmAbi_boolWord(enabled)
+  ]);
+  const digest = Eip712_hashTypedData(_domainSeparator, structHash);
+
+  assert(
+    Ecdsa_secp256k1EcdsaVerifyLowS(digest, sig, _approver),
+    "MyApp: invalid approval"
+  );
+  _limit = disclose(limit);
+  _enabled = disclose(enabled);
+}
+```
+
+The signer signs the `SetLimit` struct as typed data (`eth_signTypedData_v4`) under the domain `{ name: "MyApp", version: "1", salt }`.
+`kernel.self()` in the struct binds each signature to this deployment, and the nonce makes it single-use.
+The type string declares `uint256` fields while the encoders read the values at their own width; the resulting word is the same.
+`pad(n, s)` zero-pads a string shorter than `n`, so `n` must equal the string's byte length or the hash no longer matches the signer's.
+Compile the contract with `--feature-zkir-v3`.

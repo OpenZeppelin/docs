@@ -5,8 +5,8 @@ title: Multisig
 {/* links */}
 [Module/Contract Pattern]: ./extensibility#the-modulecontract-pattern
 [Ownable]: ./ownable
+[NativeShieldedToken]: ./native-shielded-token
 [Signer API]: api/multisig#Signer
-[initialize]: api/multisig#Signer-initialize
 [assertSigner]: api/multisig#Signer-assertSigner
 [assertThresholdMet]: api/multisig#Signer-assertThresholdMet
 [isSigner]: api/multisig#Signer-isSigner
@@ -14,10 +14,17 @@ title: Multisig
 [_removeSigner]: api/multisig#Signer-_removeSigner
 [_changeThreshold]: api/multisig#Signer-_changeThreshold
 [_setThreshold]: api/multisig#Signer-_setThreshold
+[Secp256k1EcdsaMultisig]: api/multisig#Secp256k1EcdsaMultisig
+[Secp256k1EcdsaMultisig API]: api/multisig#Secp256k1EcdsaMultisig
+[Secp256k1EcdsaMultisig initialize]: api/multisig#Secp256k1EcdsaMultisig-initialize
+[assertApprovals]: api/multisig#Secp256k1EcdsaMultisig-assertApprovals
+[calculateSignerId]: api/multisig#Secp256k1EcdsaMultisig-calculateSignerId
 [ProposalManager API]: api/multisig#ProposalManager
 [_createProposal]: api/multisig#ProposalManager-_createProposal
 [_cancelProposal]: api/multisig#ProposalManager-_cancelProposal
 [_markExecuted]: api/multisig#ProposalManager-_markExecuted
+[assertProposalActive]: api/multisig#ProposalManager-assertProposalActive
+[getProposalStatus]: api/multisig#ProposalManager-getProposalStatus
 [toShieldedRecipient]: api/multisig#ProposalManager-toShieldedRecipient
 [toUnshieldedRecipient]: api/multisig#ProposalManager-toUnshieldedRecipient
 [ShieldedTreasury API]: api/multisig#ShieldedTreasury
@@ -29,24 +36,43 @@ title: Multisig
 [UnshieldedTreasury _deposit]: api/multisig#UnshieldedTreasury-_deposit
 [UnshieldedTreasury _send]: api/multisig#UnshieldedTreasury-_send
 [ForwarderShielded API]: api/multisig#ForwarderShielded
+[ForwarderShielded _deposit]: api/multisig#ForwarderShielded-_deposit
 [ForwarderUnshielded API]: api/multisig#ForwarderUnshielded
 [ForwarderPrivate API]: api/multisig#ForwarderPrivate
 [_drain]: api/multisig#ForwarderPrivate-_drain
 [_calculateParentCommitment]: api/multisig#ForwarderPrivate-_calculateParentCommitment
+[ShieldedMultiSigV2 API]: api/multisig#ShieldedMultiSigV2
+[execute]: api/multisig#ShieldedMultiSigV2-execute
+[NativeShieldedTokenIssuer API]: api/multisig#NativeShieldedTokenIssuer
+[mint]: api/multisig#NativeShieldedTokenIssuer-mint
+[mintToSelf]: api/multisig#NativeShieldedTokenIssuer-mintToSelf
+[burn]: api/multisig#NativeShieldedTokenIssuer-burn
+[burnFromSelf]: api/multisig#NativeShieldedTokenIssuer-burnFromSelf
+[Eip712]: api/crypto#Eip712
+[Ecdsa]: api/crypto#Ecdsa
+[EvmAbi]: api/utils#EvmAbi
 [presets directory]: https://github.com/OpenZeppelin/compact-contracts/tree/v0.4.0/contracts/src/multisig/presets
+[examples directory]: https://github.com/OpenZeppelin/compact-contracts/tree/v0.4.0/contracts/src/multisig/examples
 
 The multisig directory provides building blocks for M-of-N governance over funds held by a contract:
-a `Signer` registry with an approval threshold, a `ProposalManager` that tracks transfer proposals,
+a `Signer` registry with an approval threshold, a `Secp256k1EcdsaMultisig` signer set that verifies ECDSA approvals,
+a `ProposalManager` that tracks transfer proposals,
 three treasuries that hold and move shielded or unshielded tokens,
 and three forwarders that pass every deposit on to a parent.
-The modules are independent of one another.
+Apart from `Secp256k1EcdsaMultisig`, which wraps `Signer`, the modules are independent of one another.
 A contract composes the ones it needs, following the [Module/Contract Pattern],
 and supplies its own authorization policy on top.
-The package also ships reference compositions of these modules; see [Presets](#presets).
+The package also ships two presets, modules that compose these into a ready-made ECDSA policy; see [Presets](#presets).
 
 None of the multisig modules declares a witness.
 Every input is a circuit parameter, so what reaches the public ledger is decided by the `disclose` calls inside each circuit.
 The sections below name what each module publishes.
+
+<Callout type='info'>
+  `Secp256k1EcdsaMultisig`, the presets, and the contracts in the [examples directory] require ZKIR v3 (`--feature-zkir-v3`):
+  the `Secp256k1` types and `keccak256` are unavailable on the v2 backend.
+  The library's `compile:multisig` script passes the flag for the whole directory, but the other multisig modules do not need it.
+</Callout>
 
 ## Signer
 
@@ -66,18 +92,18 @@ import "./node_modules/@openzeppelin/compact-contracts/multisig/Signer"<Bytes<32
 ### Public ledger state
 
 Everything the module keeps is public:
-`_signers` (the full set of registered identities), `_signerCount`, `_threshold`, and `_isInitialized`.
+`_signers` (the full set of registered identities), `_signerCount`, and `_threshold`.
 [isSigner], [_addSigner], and [_removeSigner] disclose the identity they are given, since it is the key of the set lookup or insertion,
 and [_setThreshold] discloses the new threshold.
 The signer count and threshold are `Uint<8>`, so a registry holds at most 255 signers.
 
 ### Who may call what
 
-* [initialize] registers an initial signer vector and sets the threshold.
-  It runs once and MUST only be called from the constructor; calling it later would corrupt the signer set.
-  A contract may skip it entirely and configure signers through its own flow with [_addSigner] and [_setThreshold].
+* The module has no `initialize`.
+  The consuming contract registers signers with [_addSigner] and sets the threshold with [_changeThreshold] or [_setThreshold],
+  either from the constructor or behind its own authorization policy.
 * The guards [assertSigner] and [assertThresholdMet] and the views `getSignerCount`, `getThreshold`, and [isSigner] are open to anyone
-  and deliberately do not check initialization.
+  and carry no "configured" flag.
   Safety comes from the state rather than from a flag:
   an empty registry makes [isSigner] false for every input, so [assertSigner] rejects every caller,
   and a zero threshold makes [assertThresholdMet] reject before it compares any approval count.
@@ -121,7 +147,10 @@ constructor(
   thresh: Uint<8>
 ) {
   Ownable_initialize(initialOwner);
-  Signer_initialize<3>(signers, thresh);
+  for (const signer of signers) {
+    Signer__addSigner(signer);
+  }
+  Signer__changeThreshold(thresh);
 }
 
 export circuit addSigner(signer: Bytes<32>): [] {
@@ -148,11 +177,57 @@ export circuit getThreshold(): Uint<8> {
 }
 ```
 
+## Secp256k1EcdsaMultisig
+
+The [Secp256k1EcdsaMultisig API] is a `t`-of-`n` signer set over secp256k1 ECDSA, built on a `Signer<Bytes<32>>` registry.
+`n` signer commitments are registered at deployment, and a call passes when `t` distinct registered signers have signed its digest.
+The threshold `t` is the module generic, fixed at import, and [Secp256k1EcdsaMultisig initialize] fixes `n`.
+No circuit takes a threshold argument, and `t = 0` does not compile.
+
+```typescript
+import "./node_modules/@openzeppelin/compact-contracts/multisig/Secp256k1EcdsaMultisig"<2>
+  prefix Secp256k1EcdsaMultisig_;
+```
+
+A signer commitment is [calculateSignerId] over the public key's affine coordinates, a per-deployment salt, and the domain `Secp256k1EcdsaMultisig:signer`.
+It hashes the Compact encoding of a struct, not a byte concatenation,
+so derive commitments with the pure circuit rather than reimplementing it: a wrong derivation registers commitments no key can satisfy.
+
+[assertApprovals] takes the digest, `t` public keys, and `t` signatures in matching positions.
+It checks the threshold first, so an uninitialized registry fails before any signature work,
+then rejects a repeated signer, then checks each commitment against the registry and each signature through the low-s verifier in [Ecdsa].
+The high-s encoding of an otherwise valid signature is rejected.
+The module verifies whatever digest it is handed: replay, domain, and instance binding belong in the consumer's digest (see [Signing approvals](#signing-approvals)).
+
+### Public ledger state
+
+The registry fields `_signers`, `_signerCount`, and `_threshold` are re-exported unprefixed, and `_instanceSalt` is sealed.
+[assertApprovals] discloses the `t` approving commitments, so which signers approved each call is public.
+Public keys and signatures are verified in-circuit and never disclosed.
+The salt is public, so an observer holding a candidate key can test membership; one without cannot correlate a signer across deployments.
+
+### Who may call what
+
+* [Secp256k1EcdsaMultisig initialize] writes the sealed salt, so it MUST only be called from the constructor.
+  It rejects a second call while signers are registered.
+* [assertApprovals], [calculateSignerId], and the views are open.
+* No signer or threshold change is exported, so the signer set is final once deployed.
+
+Import the module at exactly one width per contract.
+Two widths instantiate two modules over one shared `Signer<Bytes<32>>` registry, so the second `initialize` trips the once-only guard.
+Do not import `Signer` alongside it either: a direct import instantiates a separate registry that [assertApprovals] never reads.
+
+<Callout type='warn'>
+  Losing more than `n - t` keys freezes every circuit gated by [assertApprovals].
+  There is no rotation or recovery path.
+</Callout>
+
 ## ProposalManager
 
 The [ProposalManager API] tracks the lifecycle of transfer proposals independently of the token kind.
-A `Proposal` records a `Recipient`, a token `color`, an `amount`, and a `ProposalStatus` (`Active`, `Executed`, or `Cancelled`;
-`Inactive` is the zero value and is never stored).
+A `Proposal` records a `Recipient`, a token `color`, an `amount`, an `expiry`, and a stored `ProposalStatus` (`Active`, `Executed`, or `Cancelled`).
+[getProposalStatus] derives the other two values and never stores them:
+`Inactive` for an id that was never created, and `Expired` for an `Active` proposal past its deadline.
 A `Recipient` pairs 32 address bytes with a `RecipientKind` tag (`ShieldedUser`, `UnshieldedUser`, or `Contract`)
 that says how those bytes are to be read.
 Build recipients with `shieldedUserRecipient`, `unshieldedUserRecipient`, and `contractRecipient`,
@@ -161,11 +236,18 @@ or [toUnshieldedRecipient] (accepts `UnshieldedUser` and `Contract`).
 Because `Contract` is accepted by both, the tag alone does not decide the rail;
 a contract composing both treasuries chooses which one a proposal executes on.
 
+`expiry` is a deadline in seconds since the Unix epoch, and [_createProposal] rejects one that is not in the future.
+An `Active` proposal is executable while the block time is below it and inert from then on:
+[assertProposalActive] fails once it passes, and so do [_cancelProposal] and [_markExecuted].
+Expiry is terminal, since block time only moves forward and rebuilding the transaction cannot help.
+The module sets no maximum horizon and no execution delay; a contract that needs a bounded lifetime or a minimum wait imposes its own.
+
 ### Public ledger state
 
 Proposals are public.
-`_proposals` is exported ledger state, so every proposal's recipient address, color, amount, and status is readable off-chain,
+`_proposals` is exported ledger state, so every proposal's recipient address, color, amount, expiry, and status is readable off-chain,
 and `_nextProposalId` reveals how many have been created.
+An off-chain reader takes `status` as stored and, when it is `Active`, compares `expiry` with the current block time.
 This holds whichever treasury the contract composes: pairing the module with `ShieldedTreasuryStateless` still publishes
 the full intent of every transfer.
 The transfer is private; the plan is not.
@@ -179,7 +261,7 @@ so two transactions that create proposals against the same ledger state conflict
 
 [_createProposal] validates nothing about the recipient beyond its type.
 A kind the execution rail cannot accept (an `UnshieldedUser` recipient on a shielded treasury)
-creates a proposal that stays `Active` and unexecutable until [_cancelProposal] retires it,
+creates a proposal that stays `Active` and unexecutable until [_cancelProposal] retires it or its `expiry` lapses,
 and a zero or otherwise unspendable address is accepted, so funds sent to it on execution are unrecoverable.
 
 ## Treasuries
@@ -194,7 +276,9 @@ together with cumulative `_received` and `_sent` totals per color.
 [ShieldedTreasury _deposit] claims the incoming coin with `receiveShielded`
 and merges it into the stored coin of the same color (`mergeCoinImmediate`), or inserts it when the color is new,
 so the contract never has to choose between several UTXOs of one color at spend time.
-[ShieldedTreasury _send] looks the coin up by color, checks it covers the amount, and calls `sendShielded`,
+[ShieldedTreasury _send] rejects the contract's own address as recipient,
+since a self-addressed coin would be auto-received but never recorded in `_coins`.
+It looks the coin up by color, checks it covers the amount, and calls `sendShielded`,
 which routes any change back to the contract as a self-owned output.
 The treasury retains that change: it is written back to `_coins` for the next spend,
 and the color's entry is removed when the send leaves none.
@@ -231,7 +315,11 @@ The only rule is that the change must never be re-spent and still treated as hel
 Writing it to the ledger would publish its nonce, color, and value.
 
 Deposits disclose the incoming coin; sends disclose the spent coin, recipient, and amount.
-A coin commitment is a hash of the coin's data, so a receive can be linked to its later spend.
+"No ledger state" is not the same as "unobservable".
+A coin's nullifier is a hash of the coin and the contract's address,
+and `sendShielded` derives the nonces of the sent coin and of the change from a public hash of the spent coin's nonce.
+Whoever knows a deposited coin can therefore find the spend that consumes it, recover the amount sent,
+test candidate recipients against the sent coin's commitment, and repeat from the change for every later spend descending from it.
 
 ### UnshieldedTreasury
 
@@ -244,8 +332,9 @@ Route every unshielded credit and debit through the module:
 a direct `receiveUnshielded` or `sendUnshielded` leaves `_balances` out of step and `getTokenBalance` misreports.
 
 Unshielded transfers are fully public: depositor, recipient, color, and amount all appear on the transcript.
-Recipients are not validated, so an unspendable recipient permanently removes the funds,
-and a send to the contract's own address zeroes the tracked balance while the funds stay held at the protocol level.
+[UnshieldedTreasury _send] rejects the contract's own address, since a self-addressed send would be auto-received
+but still debited from `_balances`, and a zero amount, which the ledger refuses as a zero-value output.
+Other recipients are not validated, so an unspendable recipient permanently removes the funds.
 
 ### Usage
 
@@ -296,6 +385,7 @@ export circuit getSentTotal(color: Bytes<32>): Uint<128> {
 A forwarder is bound to a single parent at deployment and passes every deposit on to it.
 The modules are permissionless: the recipient is fixed, so any caller may deposit without compromising the parent.
 None of them exposes a setter; a contract that needs to change the parent adds its own circuit, or deploys a new forwarder.
+The [examples directory] has one deployable contract per forwarder.
 
 ### ForwarderShielded and ForwarderUnshielded
 
@@ -313,9 +403,14 @@ and a third-party contract would never claim the output.
 The deployer must set a parent that can actually spend the forwarded coins; forwarding to a key no one controls strands every deposit.
 The shielded forwarder discloses the incoming coin; the unshielded forwarder discloses depositor, recipient, color, and amount.
 
+[ForwarderShielded _deposit] returns the forwarded coin as a `ShieldedSendResult`.
+The depositor must encrypt the forwarded output to the parent's encryption public key, obtained off-chain.
+The ledger cannot check that key against `_parent`, so a wrong or missing key leaves the coin spendable by the parent but invisible to its wallet.
+If unsure, hand the returned result to the parent so it can recover the coin.
+
 ### ForwarderPrivate
 
-The [ForwarderPrivate API] hides the parent.
+The [ForwarderPrivate API] hides the parent from the public.
 The ledger holds `_parentCommitment`, computed off-chain by the deployer as
 `H(pad(32, "ForwarderPrivate:commitment") || parent || opSecret)` with the pure [_calculateParentCommitment],
 plus `_isInitialized`.
@@ -329,8 +424,14 @@ Any change is routed back to the contract and returned untouched in `result.chan
 to leave dwelling for a future drain or to route onward with `sendImmediateShielded`.
 
 Knowledge of the preimage is the sole authorization gate.
-Two forwarders bound to the same parent with different operational secrets produce different commitments and are unlinkable on-chain.
+Two forwarders bound to the same parent with different operational secrets produce different commitments, so the ledger does not link them.
 Deposits disclose the incoming coin; drains disclose the spent coin and the value.
+
+The commitment hides the parent from the public, not from a depositor.
+A contract-owned coin's nullifier is a hash of the coin and the contract address,
+and `sendShielded` derives the nonces of the sent coin and of the change from a public hash of the spent coin's nonce.
+Whoever knows a deposited coin can therefore find the drain that spends it, recover the drained amount,
+and test candidate parent keys against the sent coin's commitment: a depositor who can guess the parent can confirm it.
 
 <Callout type='warn'>
   Losing the operational secret is permanent fund loss.
@@ -341,15 +442,210 @@ Deposits disclose the incoming coin; drains disclose the spent coin and the valu
 
 ## Presets
 
-The package ships six standalone contracts under its [presets directory]:
-`ShieldedMultiSig`, `ShieldedMultiSigV2`, `ShieldedMultiSigV3`, and one forwarder preset per forwarder module.
-They are reference compositions that show how the modules above fit together, and they are compiled and deployed as-is rather than imported.
-They are not covered by the API reference.
+The package ships two presets under its [presets directory]: `ShieldedMultiSigV2` and `NativeShieldedTokenIssuer`.
+Each is a module that composes [Secp256k1EcdsaMultisig] with a treasury or a token and gates every state-changing circuit on `t` ECDSA approvals.
+The threshold `t` is the import generic, and the preset's `initialize` fixes the signer count `n`.
+A deployable contract imports the preset at one width, calls `initialize` from its constructor, and re-exports the circuits it needs;
+the [examples directory] holds a 2-of-3 contract for each preset.
+
+* `initialize` writes sealed fields, so it MUST only be called from the constructor and never exposed as a post-deploy circuit.
+* Implementing contracts MUST NOT import `Signer` or `Secp256k1EcdsaMultisig` directly, and import one width per contract.
+* No signer or threshold change is exported. Losing more than `n - t` keys freezes the contract.
+
+### Signing approvals
+
+Signers approve an operation off-chain by signing an EIP-712 typed-data digest.
+The circuit rebuilds the same digest with [Eip712] and [EvmAbi], then passes it to [assertApprovals].
+
+* Before deployment, pick a random `instanceSalt`, derive each signer commitment with the preset's `_calculateSignerId(pk, instanceSalt)`,
+  and pass the commitments to `initialize`.
+  A fresh salt per deployment keeps one public key from producing the same commitment in two deployments.
+* The EIP-712 domain is `(name, version, salt)`: the preset name, `"1"`, and `instanceSalt`.
+  `chainId` and `verifyingContract` are absent, because no network identifier is available in-circuit
+  and a 32-byte Midnight address does not fit the `address` type.
+* Every operation struct starts with `bytes32 contractAddress`, filled in-circuit with `kernel.self()`.
+  The ledger randomizes a contract's address at deployment, so a signature for one deployment cannot authorize another.
+* Each preset keeps a replay counter that every gated circuit reads into its digest as `nonce` and then increments.
+  `getNonce` returns the value the next digest binds to.
+  The read pins the counter, so two operations in one block conflict and the losing signers re-sign at the next nonce.
+* Integers are big-endian ABI words, so an EVM signer's typed-data encoder reproduces the digest.
+* Each call carries exactly `t` public keys and `t` low-s signatures from distinct signers, in matching `Vector<t>` positions.
+  A high-s signature is rejected.
+
+`contracts/src/multisig/test/EcdsaTestUtils.ts` in the library repository rebuilds every preset digest through ethers' `TypedDataEncoder`,
+which shows what the off-chain signer must produce
+(like the witness implementations, it is test-only and is not published).
+
+### ShieldedMultiSigV2
+
+The [ShieldedMultiSigV2 API] is a shielded wallet with no proposal lifecycle: one [execute] call verifies `t` approvals and spends.
+It composes [Secp256k1EcdsaMultisig] with `ShieldedTreasuryStateless`, so coin data never reaches the public ledger.
+Anyone may `deposit`.
+The operator tracks the wallet's coins off-chain from `ZswapOutput` events and passes the coin to spend as an argument.
+
+The digest is the struct
+`Execute(bytes32 contractAddress,uint256 nonce,uint8 recipientKind,bytes32 recipient,bytes32 coinColor,uint256 amount)`
+under the domain `("ShieldedMultiSigV2", "1", instanceSalt)`,
+so a signature binds the full recipient (kind and address), the coin color, and the amount.
+[execute] accepts only a `ShieldedUser` recipient: a coin addressed to a contract would be unclaimable.
+It returns the `ShieldedSendResult` of [ShieldedTreasuryStateless _send], whose warning on returning that result applies here.
+
+Each execution publishes which signers approved and what `ShieldedTreasuryStateless` discloses for the spend.
+Keeping coin data off the ledger hides the balance from the public, not from a depositor:
+whoever knows a deposited coin can follow every spend descending from it (see [ShieldedTreasuryStateless](#shieldedtreasurystateless)).
+
+### NativeShieldedTokenIssuer
+
+The [NativeShieldedTokenIssuer API] mints and burns one [NativeShieldedToken], for tokenized deposits, with every operation carrying `t` approvals.
+Value enters only through [mint] (to a holder's coin public key) or [mintToSelf] (a coin the contract holds),
+and leaves only through [burn] (a holder's coin paid into the transaction, with any change refunded to `refundTo`)
+or [burnFromSelf] (a coin the contract holds).
+Coins minted to holders are ordinary Zswap coins that holders transfer without the issuer.
+No send circuit exists, so contract-held coins leave only through [burnFromSelf], and no supply is tracked.
+
+The four digests share the domain `("NativeShieldedTokenIssuer", "1", instanceSalt)`:
+
+* `Mint(bytes32 contractAddress,bytes32 recipient,uint256 nonce,uint256 amount)`
+* `MintToSelf(bytes32 contractAddress,uint256 nonce,uint256 amount)`
+* `Burn(bytes32 contractAddress,bytes32 refundTo,uint256 nonce,uint256 amount)`
+* `BurnFromSelf(bytes32 contractAddress,uint256 nonce,uint256 amount,bytes32 coinNonce,uint256 coinValue)`
+
+`BurnFromSelf` binds the coin's nonce and value, so approvals authorize one holding: pick the coin before collecting signatures.
+[mint] and [burn] return the only copy of the new coin or refund; hand it to its owner out of band,
+since a contract-initiated mint creates no ciphertext a wallet can find by scanning.
+[mintToSelf] and a partial [burnFromSelf] return the contract's new holding, which the operator must persist
+together with its `mt_index` from the indexer.
+
+Every mint amount is public.
+Coin nonces derive from the public `_derivedNonceCounter`, so anyone can test a candidate recipient against a minted coin's commitment,
+and [burnFromSelf] amounts are recoverable by trial.
 
 <Callout type='warn'>
-  The three `ShieldedMultiSig` presets do not verify real signatures.
-  `ShieldedMultiSigV2` and `ShieldedMultiSigV3` call a `stubVerifySignature` that accepts every signature
-  (to be replaced with `ecdsaVerify` and `keccak256` once those primitives are available),
-  and `ShieldedMultiSig` identifies the caller by `ownPublicKey()` alone.
-  Do not deploy them as multisigs.
+  A coin burned exactly as it was minted is linkable to its mint,
+  which exposes the burn `amount`, the coin value, and `refundTo` by trial.
+  For an unlinkable [burn], the holder re-nonces the coin first with a wallet self-transfer.
+  The contract cannot enforce this.
 </Callout>
+
+### A 2-of-3 shielded multisig
+
+The following contract trims `ShieldedMultiSigV2Example` from the [examples directory].
+It fixes `t = 2` at import and `n = 3` in the constructor, and surfaces the preset's domain separator unprefixed for `ledger()` readers.
+
+```typescript
+pragma language_version >= {{compact_language_version}};
+
+import CompactStandardLibrary;
+import "./node_modules/@openzeppelin/compact-contracts/multisig/presets/ShieldedMultiSigV2"<2>
+  prefix Multisig_;
+
+export { ShieldedCoinInfo, QualifiedShieldedCoinInfo, ShieldedSendResult };
+
+import { _domainSeparator } from "./node_modules/@openzeppelin/compact-contracts/multisig/presets/ShieldedMultiSigV2"<2>;
+export { _domainSeparator };
+
+constructor(
+  instanceSalt: Bytes<32>,
+  signerCommitments: Vector<3, Bytes<32>>
+) {
+  Multisig_initialize<3>(instanceSalt, signerCommitments);
+}
+
+export circuit deposit(coin: ShieldedCoinInfo): [] {
+  return Multisig_deposit(coin);
+}
+
+export circuit execute(
+  to: Multisig_Proposal_Recipient,
+  amount: Uint<128>,
+  coin: QualifiedShieldedCoinInfo,
+  pubkeys: Vector<2, Secp256k1Point>,
+  signatures: Vector<2, Secp256k1EcdsaSignature>
+): ShieldedSendResult {
+  return Multisig_execute(to, amount, coin, pubkeys, signatures);
+}
+
+export pure circuit _calculateSignerId(pk: Secp256k1Point, salt: Bytes<32>): Bytes<32> {
+  return Multisig__calculateSignerId(pk, salt);
+}
+
+export circuit getNonce(): Uint<64> {
+  return Multisig_getNonce();
+}
+```
+
+### A 2-of-3 token issuer
+
+The following contract trims `NativeShieldedTokenIssuerExample` from the [examples directory].
+The constructor also fixes the token domain and metadata.
+The published example additionally re-exports the preset's ledger fields unprefixed and the remaining views.
+
+```typescript
+pragma language_version >= {{compact_language_version}};
+
+import CompactStandardLibrary;
+import "./node_modules/@openzeppelin/compact-contracts/multisig/presets/NativeShieldedTokenIssuer"<2>
+  prefix Issuer_;
+
+export { ZswapCoinPublicKey, ContractAddress, Either, Maybe };
+export { ShieldedCoinInfo, QualifiedShieldedCoinInfo };
+
+constructor(
+  instanceSalt: Bytes<32>,
+  tokenDomain: Bytes<32>,
+  name_: Opaque<"string">,
+  symbol_: Opaque<"string">,
+  decimals_: Uint<8>,
+  signerCommitments: Vector<3, Bytes<32>>
+) {
+  Issuer_initialize<3>(instanceSalt, tokenDomain, name_, symbol_, decimals_, signerCommitments);
+}
+
+export circuit mint(
+  amount: Uint<64>,
+  recipient: ZswapCoinPublicKey,
+  pubkeys: Vector<2, Secp256k1Point>,
+  signatures: Vector<2, Secp256k1EcdsaSignature>
+): ShieldedCoinInfo {
+  return Issuer_mint(amount, recipient, pubkeys, signatures);
+}
+
+export circuit mintToSelf(
+  amount: Uint<64>,
+  pubkeys: Vector<2, Secp256k1Point>,
+  signatures: Vector<2, Secp256k1EcdsaSignature>
+): ShieldedCoinInfo {
+  return Issuer_mintToSelf(amount, pubkeys, signatures);
+}
+
+export circuit burn(
+  coin: ShieldedCoinInfo,
+  amount: Uint<128>,
+  refundTo: ZswapCoinPublicKey,
+  pubkeys: Vector<2, Secp256k1Point>,
+  signatures: Vector<2, Secp256k1EcdsaSignature>
+): Maybe<ShieldedCoinInfo> {
+  return Issuer_burn(coin, amount, refundTo, pubkeys, signatures);
+}
+
+export circuit burnFromSelf(
+  coin: QualifiedShieldedCoinInfo,
+  amount: Uint<128>,
+  pubkeys: Vector<2, Secp256k1Point>,
+  signatures: Vector<2, Secp256k1EcdsaSignature>
+): Maybe<ShieldedCoinInfo> {
+  return Issuer_burnFromSelf(coin, amount, pubkeys, signatures);
+}
+
+export pure circuit _calculateSignerId(pk: Secp256k1Point, salt: Bytes<32>): Bytes<32> {
+  return Issuer__calculateSignerId(pk, salt);
+}
+
+export circuit getNonce(): Uint<64> {
+  return Issuer_getNonce();
+}
+
+export circuit tokenColor(): Bytes<32> {
+  return Issuer_tokenColor();
+}
+```

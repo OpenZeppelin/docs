@@ -36,6 +36,7 @@ title: ConfidentialFungibleToken
 [_addSupply]: api/confidential-fungible-token#ConfidentialFungibleTokenPublicSupply-_addSupply
 [_subSupply]: api/confidential-fungible-token#ConfidentialFungibleTokenPublicSupply-_subSupply
 [totalSupply]: api/confidential-fungible-token#ConfidentialFungibleTokenPublicSupply-totalSupply
+[compact#757]: https://github.com/LFDT-Minokawa/compact/issues/757
 
 ConfidentialFungibleToken is an account-based fungible token whose balances live on the public ledger
 as [ElGamal] ciphertexts over the Jubjub curve, so no amount is ever written in the clear.
@@ -65,6 +66,7 @@ Every ledger field of the module is exported, so an observer can read all of the
 * **Credit counters** (`_creditEpochs`): per account, the lifetime number of credits received. It never resets.
 * **Escrow-spend counters** (`_escrowSpendEpochs`): per (owner, spender), the number of times the escrow was drawn on. It never resets.
 * **Metadata** (`_name`, `_symbol`, `_decimals`) and the `_isInitialized` flag.
+  `_decimals` is presentational only; no circuit scales by it.
 
 The module keeps no nullifier sets; the two counters above are the only monotonic state it writes,
 and both exist to keep per-operation randomness distinct (see below), not to prevent replay.
@@ -120,6 +122,7 @@ Escrow claims are narrowed back to `Uint<128>`, since an allowance is set by one
 and initializes both the spendable and the pending balance to an encryption of zero.
 It discloses the `accountId` and the public key. Registration is required before an account can send **or** receive:
 a credit needs the recipient's public key to encrypt under.
+Registration is one-shot: a second [register] for the same `accountId` is rejected, so the stored key cannot be replaced.
 
 Before any on-chain call, a wallet derives its own id with the pure [computeAccountId] circuit (no proof needed):
 
@@ -197,10 +200,17 @@ no plaintext needed) and then escrows the new amount, so allowances replace rath
 Revoking is `approve(spender, 0)`. What reaches the ledger: the owner's and spender's ids, the owner's new balance ciphertext,
 and the entry; the cap is not disclosed.
 
+Funding the allowance up front is required. The spender holds no owner encryption key, so at spend time it can only prove
+against its own escrow copy, never that the owner's balance covers the allowance.
+An approve conserves the owner's holdings (spendable balance plus every outstanding escrow),
+so allowances across spenders can sum to the whole holding but never exceed it.
+
 [transferFrom] is called by the spender. It proves the plaintext of `spenderCt`, checks it is at least `value`,
 reduces **both** escrow copies by `value`, refreshes `ownerMemo` with the new remaining amount
 (computed in-circuit from the verified plaintext, so the spender cannot forge it), increments the (owner, spender) spend counter,
 and credits `to` exactly as [transfer] does. [_burnFrom] is the same escrow spend with no credit.
+Both require the owner and the spender to be registered, so an `_escrow` entry written for an unregistered account
+(by a composing contract, for instance) is unspendable.
 
 ### What a partial spend leaves behind
 
@@ -210,8 +220,10 @@ The owner receives no balance memo (its spendable balance did not change) and in
 to learn how much is left in escrow. That is what lets the owner prove its post-refund balance on the next `approve`,
 when the remainder flows back into `_balances`. Without the memo a partial spend would strand the escrow.
 
-[allowance] returns the entry, or a well-formed encrypted-zero entry when none exists. "No allowance" and "an allowance of zero"
-read the same through the getter; a caller that must distinguish them reads `_escrow` membership off chain.
+[allowance] returns the entry, or an on-curve placeholder when none exists. The placeholder's `spenderCt` and `ownerCt`
+are genuine encryptions of zero, but its `ownerMemo` is a sentinel whose `ephemeralPk` is the identity point,
+which `EcdhMask_decrypt` rejects. A wallet tests for the sentinel instead of decrypting it.
+The sentinel is also what tells "no allowance" from "an allowance of zero", since `approve` stores a real memo even for zero.
 Granting nothing is safe because the spend path gates on escrow membership independently.
 
 ## Minting, burning and supply
@@ -405,3 +417,11 @@ A wallet integrating this contract typically:
 * The value circuits are large. A deployment that exposes the full surface may exceed a network's per-transaction byte budget;
   confirm deployability against the target network and expose only the operations the contract needs.
 * Contract-to-contract holdings are out of scope, as described under [Gating on the caller](#gating-on-the-caller).
+* An upgrade may add operations but must not change how existing state is derived or laid out.
+  Key derivation is the quiet case: [register] stores the key `ElGamal.derivePk` returns and refuses a second one,
+  and the account id does not move, so an upgrade that derives keys differently leaves every balance, pending balance,
+  escrow and memo permanently unreachable. A changed derivation applies to fresh deployments only,
+  and off-chain code that mirrors `derivePk` must keep the instance's derivation for its lifetime.
+* The library targets ZKIR v2, which compiler 0.34.0 emits by default.
+  Under `--feature-zkir-v3`, key generation fails with `Unsupported test_eq: JubjubScalar == JubjubScalar`
+  for any impure circuit that reaches `ElGamal.encryptPoint`, which every value circuit of this module does ([compact#757]).

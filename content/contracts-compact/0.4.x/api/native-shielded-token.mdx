@@ -128,7 +128,7 @@ None.
 <APIItemCompact
   circuitSig='isInitialized() → Boolean'
   kind="circuit"
-  complexity="k=6, rows=26"
+  complexity="k=6, rows=24"
   modulePrefix="NativeShieldedToken"
 >
   Returns whether the contract has been initialized.
@@ -139,7 +139,7 @@ None.
 <APIItemCompact
   circuitSig='name() → Opaque<"string">'
   kind="circuit"
-  complexity="k=6, rows=28"
+  complexity="k=6, rows=26"
   modulePrefix="NativeShieldedToken"
 >
   Returns the token name.
@@ -154,7 +154,7 @@ None.
 <APIItemCompact
   circuitSig='symbol() → Opaque<"string">'
   kind="circuit"
-  complexity="k=6, rows=28"
+  complexity="k=6, rows=26"
   modulePrefix="NativeShieldedToken"
 >
   Returns the symbol of the token.
@@ -169,7 +169,7 @@ None.
 <APIItemCompact
   circuitSig='decimals() → Uint<8>'
   kind="circuit"
-  complexity="k=6, rows=28"
+  complexity="k=6, rows=26"
   modulePrefix="NativeShieldedToken"
 >
   Returns the number of decimals used to get its user representation.
@@ -184,7 +184,7 @@ None.
 <APIItemCompact
   circuitSig='tokenColor() → Bytes<32>'
   kind="circuit"
-  complexity="k=13, rows=3971"
+  complexity="k=13, rows=3962"
   modulePrefix="NativeShieldedToken"
 >
   Returns this token's coin color:
@@ -204,7 +204,7 @@ None.
     nonce: Bytes<32>
   ) → ShieldedCoinInfo'
   kind="circuit"
-  complexity="k=14, rows=10473"
+  complexity="k=14, rows=10450"
   modulePrefix="NativeShieldedToken"
   stackParams="true"
 >
@@ -235,7 +235,7 @@ None.
 <APIItemCompact
   circuitSig='_mintToSelf(amount: Uint<64>, nonce: Bytes<32>) → ShieldedCoinInfo'
   kind="circuit"
-  complexity="k=14, rows=16070"
+  complexity="k=14, rows=10221"
   modulePrefix="NativeShieldedToken"
 >
   Mints `amount` to this contract itself, claiming the coin in
@@ -248,7 +248,12 @@ None.
   <Callout type='info'>
     The consumer SHOULD persist the returned coin info in its own
     ledger state: it is the contract's holding and is not otherwise
-    recoverable.
+    recoverable. The coin is already claimed as a receive by the mint, so a
+    custody module must record it without calling `receiveShielded` on it
+    again. [ShieldedTreasury._deposit](./multisig#ShieldedTreasury-_deposit) claims on the way in and is not that path;
+    a record-only circuit is tracked in compact-contracts#1112. Until a
+    custody module is composed, the only spend of a contract-held coin is
+    [_burnFromSelf](#NativeShieldedToken-_burnFromSelf).
   </Callout>
 
   Requirements:
@@ -265,7 +270,7 @@ None.
     refundTo: ZswapCoinPublicKey
   ) → Maybe<ShieldedCoinInfo>'
   kind="circuit"
-  complexity="k=16, rows=41492"
+  complexity="k=16, rows=41327"
   modulePrefix="NativeShieldedToken"
   stackParams="true"
 >
@@ -302,7 +307,7 @@ None.
 <APIItemCompact
   circuitSig='_burnFromSelf(coin: QualifiedShieldedCoinInfo, amount: Uint<128>) → Maybe<ShieldedCoinInfo>'
   kind="circuit"
-  complexity="k=15, rows=23307"
+  complexity="k=15, rows=23208"
   modulePrefix="NativeShieldedToken"
 >
   Burns `amount` from `coin`, a coin this contract already
@@ -311,7 +316,9 @@ None.
 
   The consumer SHOULD persist the returned change coin info in its own
   ledger state: the change replaces `coin` as the contract's holding, and
-  its info is not otherwise recoverable.
+  its info is not otherwise recoverable. Like a [_mintToSelf](#NativeShieldedToken-_mintToSelf) coin, the
+  change is already claimed as a receive, so a custody module must record
+  it without a second `receiveShielded`.
 
   Requirements:
 
@@ -411,7 +418,7 @@ None.
 <APIItemCompact
   circuitSig='isInitialized() → Boolean'
   kind="circuit"
-  complexity="k=6, rows=26"
+  complexity="k=6, rows=24"
   modulePrefix="NativeShieldedTokenFamily"
 >
   Returns whether the contract has been initialized.
@@ -422,7 +429,7 @@ None.
 <APIItemCompact
   circuitSig='name() → Opaque<"string">'
   kind="circuit"
-  complexity="k=6, rows=28"
+  complexity="k=6, rows=26"
   modulePrefix="NativeShieldedTokenFamily"
 >
   Returns the family name shared by all token types of this
@@ -439,7 +446,7 @@ None.
 <APIItemCompact
   circuitSig='symbol() → Opaque<"string">'
   kind="circuit"
-  complexity="k=6, rows=28"
+  complexity="k=6, rows=26"
   modulePrefix="NativeShieldedTokenFamily"
 >
   Returns the family symbol shared by all token types of this
@@ -455,7 +462,7 @@ None.
 <APIItemCompact
   circuitSig='decimals() → Uint<8>'
   kind="circuit"
-  complexity="k=6, rows=28"
+  complexity="k=6, rows=26"
   modulePrefix="NativeShieldedTokenFamily"
 >
   Returns the family-wide number of decimals used to get the
@@ -471,7 +478,7 @@ None.
 <APIItemCompact
   circuitSig='tokenColor(domain: Bytes<32>) → Bytes<32>'
   kind="circuit"
-  complexity="k=13, rows=4248"
+  complexity="k=13, rows=4239"
   modulePrefix="NativeShieldedTokenFamily"
 >
   Returns the coin color (token type) for `domain` under this
@@ -492,7 +499,7 @@ None.
     nonce: Bytes<32>
   ) → ShieldedCoinInfo'
   kind="circuit"
-  complexity="k=14, rows=10750"
+  complexity="k=14, rows=10727"
   modulePrefix="NativeShieldedTokenFamily"
   stackParams="true"
 >
@@ -527,7 +534,7 @@ None.
     nonce: Bytes<32>
   ) → ShieldedCoinInfo'
   kind="circuit"
-  complexity="k=14, rows=16346"
+  complexity="k=14, rows=10497"
   modulePrefix="NativeShieldedTokenFamily"
   stackParams="true"
 >
@@ -559,7 +566,7 @@ None.
     refundTo: ZswapCoinPublicKey
   ) → Maybe<ShieldedCoinInfo>'
   kind="circuit"
-  complexity="k=16, rows=41768"
+  complexity="k=16, rows=41603"
   modulePrefix="NativeShieldedTokenFamily"
   stackParams="true"
 >
@@ -600,7 +607,7 @@ None.
     amount: Uint<128>
   ) → Maybe<ShieldedCoinInfo>'
   kind="circuit"
-  complexity="k=15, rows=23583"
+  complexity="k=15, rows=23484"
   modulePrefix="NativeShieldedTokenFamily"
   stackParams="true"
 >
@@ -655,7 +662,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NativeShieldedToken
   kind="sealed ledger"
   id="NativeShieldedTokenCore-_name"
 >
-  The immutable token name.
+  The token's human-readable name, set once at construction.
 </APIItemCompact>
 
 #### _symbol [toc] [#NativeShieldedTokenCore-_symbol]
@@ -665,7 +672,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NativeShieldedToken
   kind="sealed ledger"
   id="NativeShieldedTokenCore-_symbol"
 >
-  The immutable token symbol.
+  The token's ticker symbol, set once at construction.
 </APIItemCompact>
 
 #### _decimals [toc] [#NativeShieldedTokenCore-_decimals]
@@ -675,7 +682,8 @@ import "./node_modules/@openzeppelin/compact-contracts/token/NativeShieldedToken
   kind="sealed ledger"
   id="NativeShieldedTokenCore-_decimals"
 >
-  The immutable token decimals.
+  The number of decimals used to display balances, set once at
+  construction. Purely presentational; no circuit scales by it.
 </APIItemCompact>
 
 ### Witnesses [toc] [#NativeShieldedTokenCore-Witnesses]
@@ -739,7 +747,7 @@ None.
 <APIItemCompact
   circuitSig='isInitialized() → Boolean'
   kind="circuit"
-  complexity="k=6, rows=26"
+  complexity="k=6, rows=24"
   modulePrefix="NativeShieldedTokenCore"
 >
   Returns whether the contract has been initialized.
@@ -752,7 +760,7 @@ None.
 <APIItemCompact
   circuitSig='name() → Opaque<"string">'
   kind="circuit"
-  complexity="k=6, rows=28"
+  complexity="k=6, rows=26"
   modulePrefix="NativeShieldedTokenCore"
 >
   Returns the token name.
@@ -767,7 +775,7 @@ None.
 <APIItemCompact
   circuitSig='symbol() → Opaque<"string">'
   kind="circuit"
-  complexity="k=6, rows=28"
+  complexity="k=6, rows=26"
   modulePrefix="NativeShieldedTokenCore"
 >
   Returns the symbol of the token.
@@ -782,7 +790,7 @@ None.
 <APIItemCompact
   circuitSig='decimals() → Uint<8>'
   kind="circuit"
-  complexity="k=6, rows=28"
+  complexity="k=6, rows=26"
   modulePrefix="NativeShieldedTokenCore"
 >
   Returns the number of decimals used to get its user representation.
@@ -799,7 +807,7 @@ None.
 <APIItemCompact
   circuitSig='tokenColor(domain: Bytes<32>) → Bytes<32>'
   kind="circuit"
-  complexity="k=13, rows=4248"
+  complexity="k=13, rows=4239"
   modulePrefix="NativeShieldedTokenCore"
 >
   Returns the coin color for `domain` under this contract's
@@ -820,7 +828,7 @@ None.
     nonce: Bytes<32>
   ) → ShieldedCoinInfo'
   kind="circuit"
-  complexity="k=15, rows=17017"
+  complexity="k=14, rows=11109"
   modulePrefix="NativeShieldedTokenCore"
   stackParams="true"
 >
@@ -830,7 +838,7 @@ None.
   The caller is fully responsible for nonce uniqueness. Reusing a
   nonce for the same (domain, value, recipient) produces a duplicate
   commitment, which the protocol rejects. A `right(kernel.self())` recipient
-  is claimed via `receiveShielded` in this same call, so the consumer SHOULD
+  is claimed by `mintShieldedToken` in this same call, so the consumer SHOULD
   persist the returned coin info: it is the contract's holding and is not
   otherwise recoverable.
 
@@ -857,7 +865,7 @@ None.
     refundTo: Either<ZswapCoinPublicKey, ContractAddress>
   ) → Maybe<ShieldedCoinInfo>'
   kind="circuit"
-  complexity="k=16, rows=53832"
+  complexity="k=16, rows=47764"
   modulePrefix="NativeShieldedTokenCore"
   stackParams="true"
 >
@@ -872,8 +880,8 @@ None.
   The coin is received by the contract and spent in the same
   transaction, so the spend goes through `sendImmediateShielded` (the
   transient path). For coins the contract already holds, use
-  [_burnFromSelf](#NativeShieldedTokenCore-_burnFromSelf) instead. A `right(kernel.self())` refund is claimed via
-  `receiveShielded` in this same call.
+  [_burnFromSelf](#NativeShieldedTokenCore-_burnFromSelf) instead. A `right(kernel.self())` refund is claimed by
+  `sendImmediateShielded` in this same call.
 
   <Callout type='info'>
     The returned refund coin info is the only copy available to
@@ -900,7 +908,7 @@ None.
     amount: Uint<128>
   ) → Maybe<ShieldedCoinInfo>'
   kind="circuit"
-  complexity="k=15, rows=23583"
+  complexity="k=15, rows=23484"
   modulePrefix="NativeShieldedTokenCore"
   stackParams="true"
 >
@@ -969,7 +977,7 @@ None.
 <APIItemCompact
   circuitSig='_addMinted(amount: Uint<64>) → []'
   kind="circuit"
-  complexity="k=9, rows=375"
+  complexity="k=9, rows=373"
   modulePrefix="NativeShieldedTokenPublicSupply"
 >
   Adds `amount` to the exact minted total. Call once per
@@ -981,7 +989,7 @@ None.
 <APIItemCompact
   circuitSig='_addBurned(amount: Uint<128>) → []'
   kind="circuit"
-  complexity="k=9, rows=477"
+  complexity="k=9, rows=475"
   modulePrefix="NativeShieldedTokenPublicSupply"
 >
   Adds `amount` to the contract-mediated burned total. Call once
@@ -994,7 +1002,7 @@ None.
 <APIItemCompact
   circuitSig='totalMinted() → Uint<128>'
   kind="circuit"
-  complexity="k=7, rows=65"
+  complexity="k=7, rows=63"
   modulePrefix="NativeShieldedTokenPublicSupply"
 >
   Returns the exact amount ever minted.
@@ -1005,7 +1013,7 @@ None.
 <APIItemCompact
   circuitSig='totalBurned() → Uint<128>'
   kind="circuit"
-  complexity="k=7, rows=62"
+  complexity="k=7, rows=60"
   modulePrefix="NativeShieldedTokenPublicSupply"
 >
   Returns the contract-mediated amount burned.
@@ -1020,7 +1028,7 @@ None.
 <APIItemCompact
   circuitSig='totalSupply() → Uint<128>'
   kind="circuit"
-  complexity="k=9, rows=160"
+  complexity="k=9, rows=158"
   modulePrefix="NativeShieldedTokenPublicSupply"
 >
   Returns `totalMinted() - totalBurned()`.
@@ -1080,7 +1088,7 @@ None.
 <APIItemCompact
   circuitSig='_addMinted(domain: Bytes<32>, amount: Uint<64>) → []'
   kind="circuit"
-  complexity="k=10, rows=653"
+  complexity="k=10, rows=645"
   modulePrefix="NativeShieldedTokenFamilyPublicSupply"
 >
   Adds `amount` to the exact minted total for `domain`. Call
@@ -1092,7 +1100,7 @@ None.
 <APIItemCompact
   circuitSig='_addBurned(domain: Bytes<32>, amount: Uint<128>) → []'
   kind="circuit"
-  complexity="k=10, rows=755"
+  complexity="k=10, rows=747"
   modulePrefix="NativeShieldedTokenFamilyPublicSupply"
 >
   Adds `amount` to the contract-mediated burned total for
@@ -1107,7 +1115,7 @@ None.
 <APIItemCompact
   circuitSig='totalMinted(domain: Bytes<32>) → Uint<128>'
   kind="circuit"
-  complexity="k=9, rows=344"
+  complexity="k=9, rows=342"
   modulePrefix="NativeShieldedTokenFamilyPublicSupply"
 >
   Returns the exact amount ever minted for `domain`.
@@ -1118,7 +1126,7 @@ None.
 <APIItemCompact
   circuitSig='totalBurned(domain: Bytes<32>) → Uint<128>'
   kind="circuit"
-  complexity="k=9, rows=341"
+  complexity="k=9, rows=339"
   modulePrefix="NativeShieldedTokenFamilyPublicSupply"
 >
   Returns the contract-mediated amount burned for `domain`.
@@ -1133,7 +1141,7 @@ None.
 <APIItemCompact
   circuitSig='totalSupply(domain: Bytes<32>) → Uint<128>'
   kind="circuit"
-  complexity="k=9, rows=439"
+  complexity="k=9, rows=437"
   modulePrefix="NativeShieldedTokenFamilyPublicSupply"
 >
   Returns `totalMinted(domain) - totalBurned(domain)`.
@@ -1193,7 +1201,7 @@ None.
 <APIItemCompact
   circuitSig='_addMinted(domain: Bytes<32>, amount: Uint<64>) → []'
   kind="circuit"
-  complexity="k=10, rows=653"
+  complexity="k=10, rows=645"
   modulePrefix="NativeShieldedTokenPublicSupplyCore"
 >
   Adds `amount` to the exact minted total for `domain`. Call
@@ -1206,7 +1214,7 @@ None.
 <APIItemCompact
   circuitSig='_addBurned(domain: Bytes<32>, amount: Uint<128>) → []'
   kind="circuit"
-  complexity="k=10, rows=755"
+  complexity="k=10, rows=747"
   modulePrefix="NativeShieldedTokenPublicSupplyCore"
 >
   Adds `amount` to the contract-mediated burned total for
@@ -1222,7 +1230,7 @@ None.
 <APIItemCompact
   circuitSig='totalMinted(domain: Bytes<32>) → Uint<128>'
   kind="circuit"
-  complexity="k=9, rows=344"
+  complexity="k=9, rows=342"
   modulePrefix="NativeShieldedTokenPublicSupplyCore"
 >
   Returns the exact amount ever minted for `domain`.
@@ -1233,7 +1241,7 @@ None.
 <APIItemCompact
   circuitSig='totalBurned(domain: Bytes<32>) → Uint<128>'
   kind="circuit"
-  complexity="k=9, rows=341"
+  complexity="k=9, rows=339"
   modulePrefix="NativeShieldedTokenPublicSupplyCore"
 >
   Returns the contract-mediated amount burned for `domain`.
@@ -1248,7 +1256,7 @@ None.
 <APIItemCompact
   circuitSig='totalSupply(domain: Bytes<32>) → Uint<128>'
   kind="circuit"
-  complexity="k=9, rows=439"
+  complexity="k=9, rows=437"
   modulePrefix="NativeShieldedTokenPublicSupplyCore"
 >
   Returns `totalMinted(domain) - totalBurned(domain)`, or 0 if
@@ -1303,7 +1311,7 @@ None.
 <APIItemCompact
   circuitSig='_deriveNonce() → Bytes<32>'
   kind="circuit"
-  complexity="k=9, rows=451"
+  complexity="k=9, rows=447"
   modulePrefix="NativeShieldedTokenDerivedNonce"
 >
   Advances the counter and returns the next derived coin nonce,
@@ -1514,7 +1522,7 @@ test-only and are not published.
     nonce: Bytes<32>
   ) → ShieldedCoinInfo'
   kind="circuit"
-  complexity="k=15, rows=21354"
+  complexity="k=15, rows=21252"
   modulePrefix="ZOwnableNativeShieldedToken"
   stackParams="true"
 >
@@ -1536,7 +1544,7 @@ test-only and are not published.
     refundTo: ZswapCoinPublicKey
   ) → Maybe<ShieldedCoinInfo>'
   kind="circuit"
-  complexity="k=16, rows=52024"
+  complexity="k=16, rows=51814"
   modulePrefix="ZOwnableNativeShieldedToken"
   stackParams="true"
 >
@@ -1556,7 +1564,7 @@ test-only and are not published.
 <APIItemCompact
   circuitSig='transferOwnership(newOwnerId: Bytes<32>) → []'
   kind="circuit"
-  complexity="k=15, rows=17096"
+  complexity="k=15, rows=17023"
   modulePrefix="ZOwnableNativeShieldedToken"
 >
   Transfers ownership to `newOwnerId`. Owner only.
@@ -1579,7 +1587,7 @@ test-only and are not published.
 <APIItemCompact
   circuitSig='renounceOwnership() → []'
   kind="circuit"
-  complexity="k=14, rows=10622"
+  complexity="k=14, rows=10579"
   modulePrefix="ZOwnableNativeShieldedToken"
 >
   Clears the owner. Owner only.
@@ -1598,7 +1606,7 @@ test-only and are not published.
 <APIItemCompact
   circuitSig='owner() → Bytes<32>'
   kind="circuit"
-  complexity="k=6, rows=50"
+  complexity="k=6, rows=48"
   modulePrefix="ZOwnableNativeShieldedToken"
 >
   Returns the current owner commitment.
@@ -1627,7 +1635,7 @@ test-only and are not published.
 <APIItemCompact
   circuitSig='totalMinted() → Uint<128>'
   kind="circuit"
-  complexity="k=7, rows=65"
+  complexity="k=7, rows=63"
   modulePrefix="ZOwnableNativeShieldedToken"
 >
   Returns the total amount ever minted.
@@ -1638,7 +1646,7 @@ test-only and are not published.
 <APIItemCompact
   circuitSig='name() → Opaque<"string">'
   kind="circuit"
-  complexity="k=6, rows=28"
+  complexity="k=6, rows=26"
   modulePrefix="ZOwnableNativeShieldedToken"
 >
   Returns the token name.
@@ -1653,7 +1661,7 @@ test-only and are not published.
 <APIItemCompact
   circuitSig='symbol() → Opaque<"string">'
   kind="circuit"
-  complexity="k=6, rows=28"
+  complexity="k=6, rows=26"
   modulePrefix="ZOwnableNativeShieldedToken"
 >
   Returns the token symbol.
@@ -1668,7 +1676,7 @@ test-only and are not published.
 <APIItemCompact
   circuitSig='decimals() → Uint<8>'
   kind="circuit"
-  complexity="k=6, rows=28"
+  complexity="k=6, rows=26"
   modulePrefix="ZOwnableNativeShieldedToken"
 >
   Returns the token decimals.
@@ -1683,7 +1691,7 @@ test-only and are not published.
 <APIItemCompact
   circuitSig='tokenColor() → Bytes<32>'
   kind="circuit"
-  complexity="k=13, rows=3971"
+  complexity="k=13, rows=3962"
   modulePrefix="ZOwnableNativeShieldedToken"
 >
   Returns this contract's token color,

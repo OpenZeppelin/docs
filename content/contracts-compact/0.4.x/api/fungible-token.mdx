@@ -62,7 +62,8 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   kind="ledger"
   id="FungibleToken-_totalSupply"
 >
-  The total token supply.
+  Total tokens in circulation. `_update` raises it on a mint and
+  lowers it on a burn, rejecting an increase that would overflow `Uint<128>`.
 </APIItemCompact>
 
 #### _name [toc] [#FungibleToken-_name]
@@ -72,7 +73,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   kind="sealed ledger"
   id="FungibleToken-_name"
 >
-  The immutable token name.
+  The token's human-readable name, set once at construction.
 </APIItemCompact>
 
 #### _symbol [toc] [#FungibleToken-_symbol]
@@ -82,7 +83,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   kind="sealed ledger"
   id="FungibleToken-_symbol"
 >
-  The immutable token symbol.
+  The token's ticker symbol, set once at construction.
 </APIItemCompact>
 
 #### _decimals [toc] [#FungibleToken-_decimals]
@@ -92,7 +93,8 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
   kind="sealed ledger"
   id="FungibleToken-_decimals"
 >
-  The immutable token decimals.
+  The number of decimals used to display balances, set once at
+  construction. Purely presentational; no circuit scales by it.
 </APIItemCompact>
 
 ### Witnesses [toc] [#FungibleToken-Witnesses]
@@ -123,13 +125,16 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
     decimals_: Uint<8>
   ) → []'
   kind="circuit"
-  complexity="k=10, rows=71"
   modulePrefix="FungibleToken"
   stackParams="true"
 >
   Initializes the contract by setting the name, symbol, and decimals.
   This MUST be called in the implementing contract's constructor. Failure to do so
   can lead to an irreparable contract.
+
+  Requirements:
+
+  * Contract is not initialized.
 </APIItemCompact>
 
 #### name [toc] [#FungibleToken-name]
@@ -137,7 +142,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 <APIItemCompact
   circuitSig='name() → Opaque<"string">'
   kind="circuit"
-  complexity="k=6, rows=28"
+  complexity="k=6, rows=26"
   modulePrefix="FungibleToken"
 >
   Returns the token name.
@@ -152,7 +157,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 <APIItemCompact
   circuitSig='symbol() → Opaque<"string">'
   kind="circuit"
-  complexity="k=6, rows=28"
+  complexity="k=6, rows=26"
   modulePrefix="FungibleToken"
 >
   Returns the symbol of the token.
@@ -167,7 +172,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 <APIItemCompact
   circuitSig="decimals() → Uint<8>"
   kind="circuit"
-  complexity="k=6, rows=28"
+  complexity="k=6, rows=26"
   modulePrefix="FungibleToken"
 >
   Returns the number of decimals used to get its user representation.
@@ -182,7 +187,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 <APIItemCompact
   circuitSig="totalSupply() → Uint<128>"
   kind="circuit"
-  complexity="k=6, rows=28"
+  complexity="k=6, rows=26"
   modulePrefix="FungibleToken"
 >
   Returns the value of tokens in existence.
@@ -197,7 +202,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 <APIItemCompact
   circuitSig="balanceOf(account: Either<Bytes<32>, ContractAddress>) → Uint<128>"
   kind="circuit"
-  complexity="k=10, rows=673"
+  complexity="k=10, rows=668"
   modulePrefix="FungibleToken"
 >
   Returns the value of tokens owned by `account`.
@@ -214,7 +219,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 <APIItemCompact
   circuitSig="transfer(to: Either<Bytes<32>, ContractAddress>, value: Uint<128>) → Boolean"
   kind="circuit"
-  complexity="k=13, rows=3985"
+  complexity="k=13, rows=3743"
   modulePrefix="FungibleToken"
 >
   Moves a `value` amount of tokens from the caller's account to `to`.
@@ -238,7 +243,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 <APIItemCompact
   circuitSig="_unsafeTransfer(to: Either<Bytes<32>, ContractAddress>, value: Uint<128>) → Boolean"
   kind="circuit"
-  complexity="k=13, rows=3982"
+  complexity="k=13, rows=3740"
   modulePrefix="FungibleToken"
 >
   Unsafe variant of [transfer](#FungibleToken-transfer) which allows transfers to contract addresses.
@@ -261,7 +266,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 <APIItemCompact
   circuitSig="allowance(owner: Either<Bytes<32>, ContractAddress>, spender: Either<Bytes<32>, ContractAddress>) → Uint<128>"
   kind="circuit"
-  complexity="k=11, rows=1346"
+  complexity="k=11, rows=1350"
   modulePrefix="FungibleToken"
   stackParams="true"
 >
@@ -280,7 +285,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 <APIItemCompact
   circuitSig="approve(spender: Either<Bytes<32>, ContractAddress>, value: Uint<128>) → Boolean"
   kind="circuit"
-  complexity="k=13, rows=3072"
+  complexity="k=13, rows=3066"
   modulePrefix="FungibleToken"
 >
   Sets a `value` amount of tokens as allowance of `spender` over the caller's tokens.
@@ -300,7 +305,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
     value: Uint<128>
   ) → Boolean"
   kind="circuit"
-  complexity="k=13, rows=4960"
+  complexity="k=13, rows=4906"
   stackParams="true"
   modulePrefix="FungibleToken"
 >
@@ -332,7 +337,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
     value: Uint<128>
   ) → Boolean"
   kind="circuit"
-  complexity="k=13, rows=4957"
+  complexity="k=13, rows=4903"
   stackParams="true"
   modulePrefix="FungibleToken"
 >
@@ -362,7 +367,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
     value: Uint<128>
   ) → []"
   kind="circuit"
-  complexity="k=12, rows=2345"
+  complexity="k=12, rows=2125"
   stackParams="true"
   modulePrefix="FungibleToken"
 >
@@ -394,7 +399,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
     value: Uint<128>
   ) → []"
   kind="circuit"
-  complexity="k=12, rows=2342"
+  complexity="k=12, rows=2122"
   modulePrefix="FungibleToken"
   stackParams="true"
 >
@@ -418,7 +423,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 <APIItemCompact
   circuitSig="_mint(account: Either<Bytes<32>, ContractAddress>, value: Uint<128>) → []"
   kind="circuit"
-  complexity="k=11, rows=1437"
+  complexity="k=11, rows=1328"
   modulePrefix="FungibleToken"
 >
   Creates a `value` amount of tokens and assigns them to `account`,
@@ -442,7 +447,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 <APIItemCompact
   circuitSig="_unsafeMint(account: Either<Bytes<32>, ContractAddress>, value: Uint<128>) → []"
   kind="circuit"
-  complexity="k=11, rows=1434"
+  complexity="k=11, rows=1325"
   modulePrefix="FungibleToken"
 >
   Unsafe variant of [_mint](#FungibleToken-_mint) which allows transfers to contract addresses.
@@ -464,7 +469,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
 <APIItemCompact
   circuitSig="_burn(account: Either<Bytes<32>, ContractAddress>, value: Uint<128>) → []"
   kind="circuit"
-  complexity="k=11, rows=1377"
+  complexity="k=11, rows=1268"
   modulePrefix="FungibleToken"
 >
   Destroys a `value` amount of tokens from `account`, lowering the total supply.
@@ -486,7 +491,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
     value: Uint<128>
   ) → []"
   kind="circuit"
-  complexity="k=11, rows=1406"
+  complexity="k=11, rows=1407"
   modulePrefix="FungibleToken"
   stackParams="true"
 >
@@ -510,7 +515,7 @@ import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken";
     value: Uint<128>
   ) → []"
   kind="circuit"
-  complexity="k=11, rows=1729"
+  complexity="k=11, rows=1935"
   modulePrefix="FungibleToken"
   stackParams="true"
 >

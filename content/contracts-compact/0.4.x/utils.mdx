@@ -8,12 +8,20 @@ title: Utils
 [zeroAccount]: ./api/utils#Utils-zeroAccount
 [isTargetZero]: ./api/utils#Utils-isTargetZero
 [selfAsRecipient]: ./api/utils#Utils-selfAsRecipient
+[EvmAbi API]: ./api/utils#EvmAbi
+[uint8Word]: ./api/utils#EvmAbi-uint8Word
+[uint64Word]: ./api/utils#EvmAbi-uint64Word
+[uint128Word]: ./api/utils#EvmAbi-uint128Word
+[boolWord]: ./api/utils#EvmAbi-boolWord
 [Ownable]: ./ownable
 [AccessControl]: ./access-control
+[Crypto guide]: ./crypto
 
+The Utils directory contains two modules.
 The Utils module provides miscellaneous circuits and common utilities for Compact contract development.
 Most of them are pure circuits with no ledger state, so they can be called from a circuit,
 from a constructor, or off-chain through the compiled contract.
+The EvmAbi module encodes values as Ethereum ABI words, for messages that must hash identically in Compact and on the EVM.
 
 ## Account identifiers
 
@@ -82,6 +90,31 @@ which the token modules use as the mint and burn sentinel and for cleared approv
 
 [selfAsRecipient] wraps the executing contract's own address as an `Either<ZswapCoinPublicKey, ContractAddress>`,
 the recipient shape expected by shielded send operations, for deposits into the contract and for receiving change.
+
+## EvmAbi
+
+The [EvmAbi API] supplies the encoders a contract needs to hash the exact bytes an EVM signer hashed.
+`keccak256<T>(value)` hashes Compact's binary representation of `T`, which coincides with `abi.encode` for some types
+and diverges for others:
+
+* `Bytes<n>` is emitted as exactly `n` bytes. A `Bytes<32>` already is an ABI word,
+and `keccak256<Vector<n, Bytes<32>>>(words)` is byte-identical to Solidity's `keccak256(abi.encode(word0, ..., wordN))`.
+* Integers cast with `as Bytes<n>` are emitted little-endian at their own width (a `Uint<64>` occupies 8 bytes),
+while `abi.encode(uint256)` is a big-endian 32-byte word. [uint8Word], [uint64Word], and [uint128Word] produce that word.
+* `Boolean` is emitted as a single byte, while `abi.encode(bool)` is a full word holding 0 or 1 in its least significant byte.
+[boolWord] produces that word.
+
+A message is assembled as a `Vector<n, Bytes<32>>` of ABI words and hashed with `keccak256` to reproduce an EVM digest exactly.
+A Compact `enum` reaches a digest as `uint8Word(kind as Uint<8>)`, matching Solidity, where an enum ABI-encodes as its `uint8` ordinal.
+Pick the narrowest encoder that fits the value: [uint128Word] costs roughly twice [uint64Word] for the same 32-byte word.
+
+These are encoding primitives only. The signing envelope (a raw digest, EIP-191, or EIP-712 typed data)
+belongs to the contract that owns the message; the [Crypto guide] composes EvmAbi with the Eip712 and Ecdsa modules.
+
+<Callout type='info'>
+EvmAbi needs no `keccak256` of its own and compiles on either ZKIR backend.
+Hashing its words with `keccak256` requires ZKIR v3 (`--feature-zkir-v3`).
+</Callout>
 
 ## Usage
 

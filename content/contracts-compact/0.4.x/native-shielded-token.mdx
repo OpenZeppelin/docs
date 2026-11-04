@@ -28,6 +28,8 @@ title: NativeShieldedToken
 [ZOwnableNativeShieldedToken]: api/native-shielded-token#ZOwnableNativeShieldedToken
 [mint]: api/native-shielded-token#ZOwnableNativeShieldedToken-mint
 [burn]: api/native-shielded-token#ZOwnableNativeShieldedToken-burn
+[ShieldedTreasury _deposit]: api/multisig#ShieldedTreasury-_deposit
+[compact-contracts#1112]: https://github.com/OpenZeppelin/compact-contracts/issues/1112
 
 A native shielded token is a token whose units are Midnight's own shielded coins (Zswap UTXOs)
 rather than entries in a contract-owned map.
@@ -118,13 +120,19 @@ and expose [_mintToSelf] for the contract's own coins.
 and returns the new coin's `ShieldedCoinInfo`. The recipient must not be the zero key.
 
 **Recipients.** A coin can be minted to any user's coin public key, or to the issuing contract itself through [_mintToSelf],
-which mints to `kernel.self()` and claims the coin with `receiveShielded` in the same call.
+which mints to `kernel.self()`.
+`mintShieldedToken` itself claims a self-addressed coin as the contract's receive in the same call.
 No other contract can receive a mint: the ledger only accepts a contract-addressed commitment when that contract claims it
 in the same transaction, and no primitive can claim a receive on another contract's behalf.
 The core enforces this directly ([Core__mint] rejects any `ContractAddress` other than the contract's own),
 and the flavors do not expose the address arm at all.
-A coin minted to the contract is the contract's holding: persist the returned coin info in your own ledger state,
-and spend it later with [_burnFromSelf] once it carries a Merkle-tree index.
+A coin minted to the contract is the contract's holding: persist the returned coin info in your own ledger state.
+Because the mint already claimed it, a custody module must record the coin without calling `receiveShielded` again.
+A second receive emits a duplicate Zswap output for the same commitment.
+[ShieldedTreasury _deposit] claims coins on the way in, so it is not that path.
+A record-only path is tracked in [compact-contracts#1112].
+Until a custody module is composed, the only way to spend a contract-held coin is [_burnFromSelf],
+once it carries a Merkle-tree index.
 
 **Nonces.** The caller is responsible for nonce uniqueness. Reusing a nonce for the same (domain, value, recipient)
 produces a duplicate commitment, which the ledger rejects.
@@ -151,6 +159,7 @@ so a zero `refundTo` would silently burn the change as well.
 (a coin with a valid Merkle-tree index). It spends through `sendShielded`; any change is received by the contract
 automatically and returned so the consumer can persist it. The change coin replaces the original as the contract's holding,
 and its info is not otherwise recoverable.
+Like a coin minted to self, the change is already claimed, so a custody module records it without a second `receiveShielded`.
 
 Both paths put the spent coin's nullifier and the new output commitments on the ledger.
 Neither puts the burned amount on the ledger: the `disclose()` calls in the module are compiler permission markers

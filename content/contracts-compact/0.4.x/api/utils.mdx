@@ -5,8 +5,13 @@ title: Utils
 This package provides the API for all Utils modules.
 
 <Callout type='info'>
-  For an overview of the module, read the [Utils guide](../utils).
+  For an overview of the modules, read the [Utils guide](../utils).
 </Callout>
+
+The page covers the following modules:
+
+- [Utils](#Utils): miscellaneous circuits and common utilities for Compact contract development.
+- [EvmAbi](#EvmAbi): Ethereum ABI word encoding, for messages that must hash identically in Compact and on the EVM.
 
 ## Utils [toc] [#Utils]
 <APIGithubLinkHeader
@@ -196,4 +201,88 @@ None.
   <Callout type='info'>
     TODO: Remove once a math module providing this constant is available.
   </Callout>
+</APIItemCompact>
+
+---
+
+## EvmAbi [toc] [#EvmAbi]
+<APIGithubLinkHeader
+    moduleName="EvmAbi"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.4.0/contracts/src/utils/EvmAbi.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/utils/EvmAbi";
+```
+
+The module needs no `keccak256` of its own and compiles on either ZKIR backend.
+Every circuit size below is a ZKIR v3 figure.
+
+---
+
+### Ledger [toc] [#EvmAbi-Ledger]
+### Ledger [!toc] [#EvmAbi-Ledger]
+
+None.
+
+### Witnesses [toc] [#EvmAbi-Witnesses]
+### Witnesses [!toc] [#EvmAbi-Witnesses]
+
+None.
+
+### Circuits [toc] [#EvmAbi-Circuits]
+### Circuits [!toc] [#EvmAbi-Circuits]
+
+#### uint8Word [toc] [#EvmAbi-uint8Word]
+#### [!toc] [#EvmAbi-uint8Word]
+<APIItemCompact
+  circuitSig='uint8Word(value: Uint<8>) → Bytes<32>'
+  kind="pure"
+  complexity="k=6, rows=55"
+  modulePrefix="EvmAbi"
+>
+  Encodes a `Uint<8>` as an `abi.encode(uint8)` word: the
+  value in the least significant byte, zero elsewhere.
+
+  This is also how a Compact `enum` should reach a digest, matching Solidity,
+  where an enum ABI-encodes as its `uint8` ordinal: `uint8Word(kind as Uint<8>)`.
+</APIItemCompact>
+
+#### uint64Word [toc] [#EvmAbi-uint64Word]
+#### [!toc] [#EvmAbi-uint64Word]
+<APIItemCompact
+  circuitSig='uint64Word(value: Uint<64>) → Bytes<32>'
+  kind="pure"
+  complexity="k=11, rows=1348"
+  modulePrefix="EvmAbi"
+>
+  Encodes a `Uint<64>` as an `abi.encode(uint256)` word: the
+  value big-endian in the low 8 bytes, zero-padded on the left.
+</APIItemCompact>
+
+#### uint128Word [toc] [#EvmAbi-uint128Word]
+#### [!toc] [#EvmAbi-uint128Word]
+<APIItemCompact
+  circuitSig='uint128Word(value: Uint<128>) → Bytes<32>'
+  kind="pure"
+  complexity="k=12, rows=2503"
+  modulePrefix="EvmAbi"
+>
+  Encodes a `Uint<128>` as an `abi.encode(uint256)` word: the
+  value big-endian in the low 16 bytes, zero-padded on the left.
+
+  Costs roughly twice [uint64Word](#EvmAbi-uint64Word), so prefer the narrower
+  encoder when the value fits in 64 bits.
+</APIItemCompact>
+
+#### boolWord [toc] [#EvmAbi-boolWord]
+#### [!toc] [#EvmAbi-boolWord]
+<APIItemCompact
+  circuitSig='boolWord(value: Boolean) → Bytes<32>'
+  kind="pure"
+  complexity="k=6, rows=54"
+  modulePrefix="EvmAbi"
+>
+  Encodes a `Boolean` as an `abi.encode(bool)` word: zero
+  everywhere except the least significant byte, which is 1 for true.
 </APIItemCompact>

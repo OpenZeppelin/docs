@@ -12,6 +12,8 @@ The page covers the following modules:
 
 - [ElGamal](#ElGamal): exponential ElGamal encryption over Jubjub with homomorphic addition and re-randomization.
 - [EcdhMask](#EcdhMask): an ECDH-derived mask for encrypting a value to a recipient's public key.
+- [Ecdsa](#Ecdsa): the low-s rule for secp256k1 ECDSA signatures.
+- [Eip712](#Eip712): the EIP-712 typed-data envelope, for verifying signatures produced by Ethereum signing infrastructure.
 
 ## ElGamal [toc] [#ElGamal]
 <APIGithubLinkHeader
@@ -22,6 +24,9 @@ The page covers the following modules:
 ```ts
 import "./node_modules/@openzeppelin/compact-contracts/crypto/ElGamal";
 ```
+
+Scalars are typed `JubjubScalar`, not `Field`. A `Field as JubjubScalar` cast reduces modulo the subgroup order,
+so casting at a call site would silently accept an out-of-range scalar the typed parameter rejects.
 
 ---
 
@@ -56,7 +61,7 @@ None.
 #### secretToScalar [toc] [#ElGamal-secretToScalar]
 #### [!toc] [#ElGamal-secretToScalar]
 <APIItemCompact
-  circuitSig='secretToScalar(secret: Bytes<32>) → Field'
+  circuitSig='secretToScalar(secret: Bytes<32>) → JubjubScalar'
   kind="pure"
   modulePrefix="ElGamal"
 >
@@ -97,7 +102,7 @@ None.
 #### expandRandomness [toc] [#ElGamal-expandRandomness]
 #### [!toc] [#ElGamal-expandRandomness]
 <APIItemCompact
-  circuitSig='expandRandomness(seed: Bytes<32>, tag: Bytes<32>) → Field'
+  circuitSig='expandRandomness(seed: Bytes<32>, tag: Bytes<32>) → JubjubScalar'
   kind="pure"
   modulePrefix="ElGamal"
 >
@@ -132,7 +137,7 @@ None.
   circuitSig='encryptPoint(
     pk: JubjubPoint,
     m: JubjubPoint,
-    r: Field
+    r: JubjubScalar
   ) → Ciphertext'
   kind="pure"
   modulePrefix="ElGamal"
@@ -165,7 +170,7 @@ None.
   circuitSig='encrypt(
     pk: JubjubPoint,
     value: Uint<128>,
-    r: Field
+    r: JubjubScalar
   ) → Ciphertext'
   kind="pure"
   modulePrefix="ElGamal"
@@ -173,8 +178,8 @@ None.
 >
   Produces a fresh ciphertext of `value` under `pk` with
   randomness `r`, lifting `value` to the point `g^value`. Randomness is taken
-  as a `Field` directly to avoid a redundant `Bytes<32> -> Field` conversion
-  at every call site; [expandRandomness](#ElGamal-expandRandomness) produces `Field` for the same reason.
+  as a scalar directly to avoid a redundant conversion at every call site;
+  [expandRandomness](#ElGamal-expandRandomness) produces one for the same reason.
 
   Requirements:
 
@@ -234,7 +239,7 @@ None.
 #### scalarMul [toc] [#ElGamal-scalarMul]
 #### [!toc] [#ElGamal-scalarMul]
 <APIItemCompact
-  circuitSig='scalarMul(ct: Ciphertext, k: Field) → Ciphertext'
+  circuitSig='scalarMul(ct: Ciphertext, k: JubjubScalar) → Ciphertext'
   kind="pure"
   modulePrefix="ElGamal"
 >
@@ -263,7 +268,7 @@ None.
     old: Ciphertext,
     pk: JubjubPoint,
     value: Uint<128>,
-    r: Field
+    r: JubjubScalar
   ) → Ciphertext'
   kind="pure"
   modulePrefix="ElGamal"
@@ -287,7 +292,7 @@ None.
     old: Ciphertext,
     pk: JubjubPoint,
     value: Uint<128>,
-    r: Field
+    r: JubjubScalar
   ) → Ciphertext'
   kind="pure"
   modulePrefix="ElGamal"
@@ -315,7 +320,7 @@ None.
   circuitSig='rerandomize(
     ct: Ciphertext,
     pk: JubjubPoint,
-    r: Field
+    r: JubjubScalar
   ) → Ciphertext'
   kind="pure"
   modulePrefix="ElGamal"
@@ -487,7 +492,7 @@ None.
   circuitSig='encrypt(
     recipientPk: JubjubPoint,
     value: Uint<128>,
-    e: Field,
+    e: JubjubScalar,
     domain: Bytes<32>
   ) → Ciphertext'
   kind="pure"
@@ -511,7 +516,7 @@ None.
 <APIItemCompact
   circuitSig='decrypt(
     ciphertext: Ciphertext,
-    ekScalar: Field,
+    ekScalar: JubjubScalar,
     domain: Bytes<32>
   ) → Field'
   kind="pure"
@@ -520,4 +525,158 @@ None.
 >
   Recovers the value from a ciphertext using the recipient's
   secret scalar. Pure and off-chain (no proof needed to read a received value).
+
+  Requirements:
+
+  * `ciphertext.ephemeralPk` is not the identity point.
+</APIItemCompact>
+
+---
+
+## Ecdsa [toc] [#Ecdsa]
+<APIGithubLinkHeader
+    moduleName="Ecdsa"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.4.0/contracts/src/crypto/Ecdsa.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/crypto/Ecdsa";
+```
+
+`secp256k1EcdsaVerify` accepts both `(r, s)` and `(r, n - s)`, where `n` is the secp256k1 group order.
+This module rejects `s > n / 2`, so each signature has one encoding.
+Requires ZKIR v3: the `Secp256k1` types are unavailable on the v2 backend.
+
+---
+
+### Ledger [toc] [#Ecdsa-Ledger]
+### Ledger [!toc] [#Ecdsa-Ledger]
+
+None.
+
+### Witnesses [toc] [#Ecdsa-Witnesses]
+### Witnesses [!toc] [#Ecdsa-Witnesses]
+
+None.
+
+### Circuits [toc] [#Ecdsa-Circuits]
+### Circuits [!toc] [#Ecdsa-Circuits]
+
+#### isLowS [toc] [#Ecdsa-isLowS]
+#### [!toc] [#Ecdsa-isLowS]
+<APIItemCompact
+  circuitSig='isLowS(s: Secp256k1Scalar) → Boolean'
+  kind="pure"
+  complexity="k=13, rows=5125"
+  modulePrefix="Ecdsa"
+>
+  Returns whether `s` is canonical, i.e. `s <= n / 2` where `n`
+  is the secp256k1 group order.
+</APIItemCompact>
+
+#### assertLowS [toc] [#Ecdsa-assertLowS]
+#### [!toc] [#Ecdsa-assertLowS]
+<APIItemCompact
+  circuitSig='assertLowS(sig: Secp256k1EcdsaSignature) → []'
+  kind="pure"
+  complexity="k=13, rows=5156"
+  modulePrefix="Ecdsa"
+>
+  Rejects a signature in the high half.
+
+  Requirements:
+
+  * `sig.s` must satisfy `s <= n / 2`.
+</APIItemCompact>
+
+#### secp256k1EcdsaVerifyLowS [toc] [#Ecdsa-secp256k1EcdsaVerifyLowS]
+#### [!toc] [#Ecdsa-secp256k1EcdsaVerifyLowS]
+<APIItemCompact
+  circuitSig='secp256k1EcdsaVerifyLowS(
+    msgHash: Bytes<32>,
+    sig: Secp256k1EcdsaSignature,
+    pk: Secp256k1Point
+  ) → Boolean'
+  kind="pure"
+  complexity="k=16, rows=34056"
+  modulePrefix="Ecdsa"
+  stackParams="true"
+>
+  Verifies `sig` over `msgHash` under `pk`, accepting only the
+  low-s encoding. Reports the result instead of asserting, so a caller can
+  fold it into a count or a threshold.
+</APIItemCompact>
+
+---
+
+## Eip712 [toc] [#Eip712]
+<APIGithubLinkHeader
+    moduleName="Eip712"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.4.0/contracts/src/crypto/Eip712.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/crypto/Eip712";
+```
+
+The domain is `(name, version, salt)`; `chainId` and `verifyingContract` are omitted.
+Requires ZKIR v3: `keccak256` is unavailable on the v2 backend.
+
+---
+
+### Ledger [toc] [#Eip712-Ledger]
+### Ledger [!toc] [#Eip712-Ledger]
+
+None.
+
+### Witnesses [toc] [#Eip712-Witnesses]
+### Witnesses [!toc] [#Eip712-Witnesses]
+
+None.
+
+### Circuits [toc] [#Eip712-Circuits]
+### Circuits [!toc] [#Eip712-Circuits]
+
+#### domainSeparator [toc] [#Eip712-domainSeparator]
+#### [!toc] [#Eip712-domainSeparator]
+<APIItemCompact
+  circuitSig='domainSeparator(
+    hashedName: Bytes<32>,
+    hashedVersion: Bytes<32>,
+    salt: Bytes<32>
+  ) → Bytes<32>'
+  kind="pure"
+  complexity="k=14, rows=4561"
+  modulePrefix="Eip712"
+  stackParams="true"
+>
+  Computes the domain separator for `(name, version, salt)`.
+
+  EIP-712 encodes a `string` field as the keccak hash of its UTF-8 bytes,
+  so the name and version arrive already hashed: `hashedName` is `keccak256(bytes(name))`
+  and `hashedVersion` is `keccak256(bytes(version))`. Compact has no dynamic types,
+  so a consumer hashes its own fixed-length literals. `salt` is a per-deployment,
+  per-network random value.
+</APIItemCompact>
+
+#### hashTypedData [toc] [#Eip712-hashTypedData]
+#### [!toc] [#Eip712-hashTypedData]
+<APIItemCompact
+  circuitSig='hashTypedData(separator: Bytes<32>, structHash: Bytes<32>) → Bytes<32>'
+  kind="pure"
+  complexity="k=14, rows=4463"
+  modulePrefix="Eip712"
+>
+  Wraps a struct hash in the typed-data envelope `keccak256(0x1901 || separator || structHash)`,
+  yielding the digest an EVM signer actually signs. `structHash` is
+  `keccak256(typeHash || the operation's ABI words)`.
+
+  <Callout type='info'>
+    A zero separator is what an uninitialized ledger cell reads as, and a digest
+    built from one still verifies signatures, so this circuit fails closed on it.
+  </Callout>
+
+  Requirements:
+
+  * `separator` must be non-zero, which an initialized domain always is.
 </APIItemCompact>
