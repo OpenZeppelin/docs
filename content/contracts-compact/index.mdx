@@ -2,174 +2,78 @@
 title: Contracts for Compact
 ---
 
-{/* links */}
-[Midnight]: https://midnight.network/
-[nvm]: https://github.com/nvm-sh/nvm
-[yarn]: https://yarnpkg.com/getting-started/install
-[compact-dev-tools]: https://docs.midnight.network/blog/compact-developer-tools
+import { latestStable } from "./latest-versions.js";
 
-**A library for secure smart contract development** written in Compact for [Midnight].
-This library consists of modules to build custom smart contracts.
+**OpenZeppelin Contracts for Compact** is a library of modules for secure smart contract development on Midnight.
 
-<Callout type="warn">
-This repo contains highly experimental code.
-Expect rapid iteration. **Use at your own risk.**
-</Callout>
+## Getting Started
 
-## Usage
+<Cards>
+  <Card href={`/contracts-compact/${latestStable}`} title={`Overview (${latestStable})`}>
+    Install the library, write a contract from its modules, and compile it.
+  </Card>
+  <Card href={`/contracts-compact/${latestStable}/extensibility`} title="Extensibility">
+    Compose contracts from modules with the Module/Contract pattern.
+  </Card>
+  <Card href={`/contracts-compact/${latestStable}/zk-circuits-101`} title="ZK Circuits 101">
+    Learn how Compact code compiles to circuits and what drives their cost.
+  </Card>
+</Cards>
 
-Make sure you have [nvm] and [yarn] installed on your machine.
+## Modules
 
-Follow Midnight's [Compact Developer Tools][compact-dev-tools] installation guide and confirm that `compact` is in the `PATH` env variable.
+<Cards>
+  <Card href={`/contracts-compact/${latestStable}/ownable`} title="Ownable">
+    Restrict circuits to a single owner, with a shielded-owner variant.
+  </Card>
+  <Card href={`/contracts-compact/${latestStable}/access-control`} title="AccessControl">
+    Grant and enforce permissions with role-based access control.
+  </Card>
+  <Card href={`/contracts-compact/${latestStable}/shielded-access-control`} title="ShieldedAccessControl">
+    Role-based access control that hides who holds each role.
+  </Card>
+  <Card href={`/contracts-compact/${latestStable}/security`} title="Security">
+    Initializable, Pausable, Allowlist, and Blocklist modules.
+  </Card>
+  <Card href={`/contracts-compact/${latestStable}/fungible-token`} title="FungibleToken">
+    Fungible tokens, an approximation of EIP-20.
+  </Card>
+  <Card href={`/contracts-compact/${latestStable}/non-fungible-token`} title="NonFungibleToken">
+    Non-fungible tokens, an approximation of EIP-721.
+  </Card>
+  <Card href={`/contracts-compact/${latestStable}/multi-token`} title="MultiToken">
+    Multiple token types in one contract, an approximation of EIP-1155.
+  </Card>
+  <Card href={`/contracts-compact/${latestStable}/utils`} title="Utils">
+    Account identifiers and common helper circuits.
+  </Card>
+</Cards>
 
-```bash
-$ compact compile --version
+## API Reference
 
-Compactc version: {{compact_compiler_version}}
-{{compact_compiler_version}}
-```
-
-### Installation
-
-Create a directory for your project.
-
-```bash
-mkdir my-project
-cd my-project
-```
-
-Install the library.
-
-```bash
-yarn add @openzeppelin/compact-contracts
-```
-
-### Write a custom contract using library modules
-
-In the root of `my-project`, create a custom contract using OpenZeppelin Compact modules.
-Import the modules through `./node_modules/@openzeppelin/compact-contracts/...`.
-
-```typescript
-// MyContract.compact
-
-pragma language_version >= {{compact_language_version}};
-
-import CompactStandardLibrary;
-import "./node_modules/@openzeppelin/compact-contracts/access/Ownable"
-  prefix Ownable_;
-import "./node_modules/@openzeppelin/compact-contracts/security/Pausable"
-  prefix Pausable_;
-import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken"
-  prefix FungibleToken_;
-
-constructor(
-  _name: Opaque<"string">,
-  _symbol: Opaque<"string">,
-  _decimals: Uint<8>,
-  _recipient: Either<Bytes<32>, ContractAddress>,
-  _amount: Uint<128>,
-  _initOwner: Either<Bytes<32>, ContractAddress>,
-) {
-  Ownable_initialize(_initOwner);
-  FungibleToken_initialize(_name, _symbol, _decimals);
-  FungibleToken__mint(_recipient, _amount);
-}
-
-/** IFungibleToken */
-
-export circuit name(): Opaque<"string"> {
-  return FungibleToken_name();
-}
-
-export circuit symbol(): Opaque<"string"> {
-  return FungibleToken_symbol();
-}
-
-export circuit decimals(): Uint<8> {
-  return FungibleToken_decimals();
-}
-
-export circuit totalSupply(): Uint<128> {
-  return FungibleToken_totalSupply();
-}
-
-export circuit balanceOf(account: Either<Bytes<32>, ContractAddress>): Uint<128> {
-  return FungibleToken_balanceOf(account);
-}
-
-export circuit allowance(
-  owner: Either<Bytes<32>, ContractAddress>,
-  spender: Either<Bytes<32>, ContractAddress>
-): Uint<128> {
-  return FungibleToken_allowance(owner, spender);
-}
-
-export circuit transfer(
-  to: Either<Bytes<32>, ContractAddress>,
-  value: Uint<128>,
-): Boolean {
-  Pausable_assertNotPaused();
-  return FungibleToken_transfer(to, value);
-}
-
-export circuit transferFrom(
-  fromAddress: Either<Bytes<32>, ContractAddress>,
-  to: Either<Bytes<32>, ContractAddress>,
-  value: Uint<128>
-): Boolean {
-  Pausable_assertNotPaused();
-  return FungibleToken_transferFrom(fromAddress, to, value);
-}
-
-export circuit approve(spender: Either<Bytes<32>, ContractAddress>, value: Uint<128>): Boolean {
-  Pausable_assertNotPaused();
-  return FungibleToken_approve(spender, value);
-}
-
-/** IOwnable */
-
-export circuit owner(): Either<Bytes<32>, ContractAddress> {
-  return Ownable_owner();
-}
-
-export circuit transferOwnership(newOwner: Either<Bytes<32>, ContractAddress>): [] {
-  return Ownable_transferOwnership(newOwner);
-}
-
-export circuit renounceOwnership(): [] {
-  return Ownable_renounceOwnership();
-}
-
-/** IPausable */
-
-export circuit pause(): [] {
-  Ownable_assertOnlyOwner();
-  Pausable__pause();
-}
-
-export circuit unpause(): [] {
-  Ownable_assertOnlyOwner();
-  Pausable__unpause();
-}
-```
-
-### Compile the contract
-
-In the project root, compile the contract.
-
-```bash
-% compact compile MyContract.compact artifacts/MyContract
-Compiling 11 circuits:
-  circuit "allowance" (k=11, rows=1352)
-  circuit "approve" (k=13, rows=3075)
-  circuit "balanceOf" (k=10, rows=673)
-  circuit "decimals" (k=6, rows=28)
-  circuit "name" (k=6, rows=28)
-  circuit "pause" (k=13, rows=2365)
-  circuit "symbol" (k=6, rows=28)
-  circuit "totalSupply" (k=6, rows=28)
-  circuit "transfer" (k=13, rows=3990)
-  circuit "transferFrom" (k=13, rows=4972)
-  circuit "unpause" (k=13, rows=2362)
-Overall progress [====================] 11/11
-```
+<Cards>
+  <Card href={`/contracts-compact/${latestStable}/api/access-control`} title="AccessControl API">
+    Circuits, ledger state, and errors of the AccessControl module.
+  </Card>
+  <Card href={`/contracts-compact/${latestStable}/api/fungible-token`} title="FungibleToken API">
+    Circuits, ledger state, and errors of the FungibleToken module.
+  </Card>
+  <Card href={`/contracts-compact/${latestStable}/api/multi-token`} title="MultiToken API">
+    Circuits, ledger state, and errors of the MultiToken module.
+  </Card>
+  <Card href={`/contracts-compact/${latestStable}/api/non-fungible-token`} title="NonFungibleToken API">
+    Circuits, ledger state, and errors of the NonFungibleToken module.
+  </Card>
+  <Card href={`/contracts-compact/${latestStable}/api/ownable`} title="Ownable API">
+    Circuits, ledger state, and errors of the Ownable module.
+  </Card>
+  <Card href={`/contracts-compact/${latestStable}/api/security`} title="Security API">
+    Circuits and errors of the Initializable, Pausable, Allowlist, and Blocklist modules.
+  </Card>
+  <Card href={`/contracts-compact/${latestStable}/api/shielded-access-control`} title="ShieldedAccessControl API">
+    Circuits, ledger state, and errors of the ShieldedAccessControl module.
+  </Card>
+  <Card href={`/contracts-compact/${latestStable}/api/utils`} title="Utils API">
+    Circuits of the Utils module.
+  </Card>
+</Cards>
