@@ -1,6 +1,7 @@
 "use client";
 
 import { latestStable } from "content/contracts-cairo/latest-versions";
+import { latestStable as compactLatestStable } from "content/contracts-compact/latest-versions";
 import { latestStable as suiLatestStable } from "content/contracts-sui/latest-versions";
 import { Callout } from "fumadocs-ui/components/callout";
 import Link from "next/link";
@@ -24,6 +25,10 @@ export function VersionBanner() {
 		"contracts-cairo": {
 			version: latestStable,
 			path: `/contracts-cairo/${latestStable}`,
+		},
+		"contracts-compact": {
+			version: compactLatestStable,
+			path: `/contracts-compact/${compactLatestStable}`,
 		},
 		"contracts-sui": {
 			version: suiLatestStable,

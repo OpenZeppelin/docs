@@ -1,0 +1,205 @@
+---
+title: FungibleToken
+---
+
+{/* links */}
+[fungible tokens]: /contracts/5.x/tokens#different-kinds-of-tokens
+[EIP-20]: https://eips.ethereum.org/EIPS/eip-20
+[Module/Contract Pattern]: ./extensibility#the-modulecontract-pattern
+[_mint]: api/fungible-token#FungibleToken-_mint
+[transfer]: api/fungible-token#FungibleToken-transfer
+[approve]: api/fungible-token#FungibleToken-approve
+[transferFrom]: api/fungible-token#FungibleToken-transferFrom
+[wit_FungibleTokenSK]: api/fungible-token#FungibleToken-wit_FungibleTokenSK
+[computeAccountId]: api/utils#Utils-computeAccountId
+
+FungibleToken is a specification for [fungible tokens],
+a type of token where all the units are exactly equal to each other.
+This module is an approximation of [EIP-20] written in the Compact programming language for the Midnight network.
+
+## ERC20 Compatibility
+
+Even though Midnight is not EVM-compatible, this implementation attempts to be an approximation of the standard.
+Some features and behaviors are either not possible, not possible yet,
+or changed because of the vastly different tech stack and Compact language constraints.
+
+***Notable changes***
+
+* ***`Uint<128>` as value type*** - Since 256-bit unsigned integers are not supported,
+the library uses the Compact type `Uint<128>`.
+
+***Features and specifications NOT supported***
+
+* ***Events*** - Midnight does not currently support events, but this is planned on being supported in the future.
+* ***Uint256 type*** - There's ongoing research on ways to support uint256 in the future.
+* ***Interface*** - Compact currently does not have a way to define a contract interface.
+This library offers modules of contracts with free floating circuits;
+nevertheless, there are no means of enforcing that all circuits are provided.
+
+## Contract-to-contract calls
+
+Contract-to-contract calls are currently not supported in the Compact language.
+Due to this limitation, the current iteration of FungibleToken disallows transfers and mints to the `ContractAddress` type.
+Transferring tokens to a contract may result in those tokens being locked forever.
+The FungibleToken module, however, does provide `unsafe` circuit variants for users who wish to experiment with sending tokens to contracts.
+
+<Callout type='warn'>
+The `unsafe` circuits will eventually be deprecated after Compact supports contract-to-contract calls—meaning
+`transfer`, `_mint`, etc. are planned to eventually allow the recipients to be of the `ContractAddress` type.
+</Callout>
+
+## Identity Model
+
+FungibleToken uses a witness-derived identity scheme. Each caller proves knowledge of a secret key
+by injecting it through the [wit_FungibleTokenSK] witness. The module computes the caller's account identifier
+as `persistentHash(secretKey)`, a commitment that hides the key while providing a stable, pseudonymous on-chain identity.
+That identifier is the `Bytes<32>` (left) branch of the `Either<Bytes<32>, ContractAddress>` account type
+used by [transfer], [approve], and [transferFrom] to locate the caller's balance and allowances.
+
+What is public on the ledger:
+
+* `_balances`, keyed by account identifier (or contract address), and `_totalSupply`.
+* `_allowances`, keyed by owner and then spender.
+* `_name`, `_symbol`, and `_decimals`.
+
+What the caller holds privately:
+
+* The 32-byte `secretKey`. It never reaches the ledger; only its hash does.
+
+A transfer discloses the caller's account identifier, the recipient, and the amount, because the balance map is updated with those values.
+An approval discloses the owner's identifier, the spender, and the allowance.
+
+Because the identifier is `H(secretKey)` with no per-deployment salt, the same key produces the same identity in every contract.
+Users who want cross-contract unlinkability can use a different secret key per contract at the wallet layer.
+
+To derive an account identifier off-chain (for example, to pass as the `recipient` of a mint), use [computeAccountId] from the Utils module:
+
+```typescript
+import "./node_modules/@openzeppelin/compact-contracts/utils/Utils"
+  prefix Utils_;
+
+export pure circuit computeAccountId(secretKey: Bytes<32>): Bytes<32> {
+  return Utils_computeAccountId(secretKey);
+}
+```
+
+A contract that re-exports it this way exposes `pureCircuits.computeAccountId(secretKey)` to its TypeScript side.
+The [Utils guide](./utils#deriving-an-identifier-off-chain) shows the equivalent computation with the Compact runtime.
+
+The TypeScript witness implementation lives with the DApp, not with the library.
+The witnesses in the `compact-contracts` repository are test-only and are not published;
+consumers author their own `wit_FungibleTokenSK` that returns the caller's 32-byte secret key.
+
+<Callout type='warn'>
+  The `secretKey` must never be logged or persisted in plaintext. Loss of the key means loss of the tokens held under that identity,
+  and key exposure allows impersonation. Use `crypto.getRandomValues()` or equivalent to generate keys.
+</Callout>
+
+## Usage
+
+Import the FungibleToken module into the implementing contract.
+It's recommended to prefix the module with `FungibleToken_` to avoid circuit signature clashes.
+
+```typescript
+pragma language_version >= {{compact_language_version}};
+
+import CompactStandardLibrary;
+import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken"
+  prefix FungibleToken_;
+
+constructor(
+  name: Opaque<"string">,
+  symbol: Opaque<"string">,
+  decimals: Uint<8>
+) {
+  FungibleToken_initialize(name, symbol, decimals);
+}
+
+```
+
+Next, expose the circuits that users may call in the contract.
+
+This library enables extensibility by following the rules of the [Module/Contract Pattern].
+Note that circuits with a preceding underscore (`_likeThis`) are meant to be building blocks for implementing contracts.
+Exposing [_mint] without some sort of access control, for example, would allow ANYONE to mint tokens.
+
+```typescript
+export circuit name(): Opaque<"string"> {
+  return FungibleToken_name();
+}
+
+export circuit symbol(): Opaque<"string"> {
+  return FungibleToken_symbol();
+}
+
+export circuit decimals(): Uint<8> {
+  return FungibleToken_decimals();
+}
+
+(...)
+```
+
+The following example is a simple token contract with a fixed supply that's minted to the passed recipient upon construction.
+
+```typescript
+pragma language_version >= {{compact_language_version}};
+
+import CompactStandardLibrary;
+import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken"
+  prefix FungibleToken_;
+
+constructor(
+  name: Opaque<"string">,
+  symbol: Opaque<"string">,
+  decimals: Uint<8>,
+  recipient: Either<Bytes<32>, ContractAddress>,
+  fixedSupply: Uint<128>,
+) {
+  FungibleToken_initialize(name, symbol, decimals);
+  FungibleToken__mint(recipient, fixedSupply);
+}
+
+export circuit name(): Opaque<"string"> {
+  return FungibleToken_name();
+}
+
+export circuit symbol(): Opaque<"string"> {
+  return FungibleToken_symbol();
+}
+
+export circuit decimals(): Uint<8> {
+  return FungibleToken_decimals();
+}
+
+export circuit totalSupply(): Uint<128> {
+  return FungibleToken_totalSupply();
+}
+
+export circuit balanceOf(account: Either<Bytes<32>, ContractAddress>): Uint<128> {
+  return FungibleToken_balanceOf(account);
+}
+
+export circuit allowance(
+  owner: Either<Bytes<32>, ContractAddress>,
+  spender: Either<Bytes<32>, ContractAddress>
+): Uint<128> {
+  return FungibleToken_allowance(owner, spender);
+}
+
+export circuit transfer(to: Either<Bytes<32>, ContractAddress>, value: Uint<128>): Boolean {
+  return FungibleToken_transfer(to, value);
+}
+
+export circuit transferFrom(
+  fromAddress: Either<Bytes<32>, ContractAddress>,
+  to: Either<Bytes<32>, ContractAddress>,
+  value: Uint<128>,
+): Boolean {
+  return FungibleToken_transferFrom(fromAddress, to, value);
+}
+
+export circuit approve(spender: Either<Bytes<32>, ContractAddress>, value: Uint<128>): Boolean {
+  return FungibleToken_approve(spender, value);
+}
+
+```

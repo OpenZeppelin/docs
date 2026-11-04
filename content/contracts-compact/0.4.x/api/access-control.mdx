@@ -1,0 +1,286 @@
+---
+title: AccessControl API
+---
+
+This page provides the full AccessControl module API.
+
+Roles are referred to by their `Bytes<32>` identifier.
+These should be exposed in the top-level contract and be unique.
+The best way to achieve this is by using `export sealed ledger` hash digests that are initialized in the top-level contract:
+
+```typescript
+import CompactStandardLibrary;
+import "./node_modules/@openzeppelin/compact-contracts/access/AccessControl"
+  prefix AccessControl_;
+
+export sealed ledger MY_ROLE: Bytes<32>;
+
+constructor() {
+  MY_ROLE = persistentHash<Bytes<32>>(pad(32, "MY_ROLE"));
+}
+```
+
+To restrict access to a circuit, use [assertOnlyRole](#AccessControl-assertOnlyRole):
+
+
+```typescript
+circuit foo(): [] {
+  AccessControl_assertOnlyRole(MY_ROLE);
+}
+```
+
+Roles can be granted and revoked dynamically via the [grantRole](#AccessControl-grantRole) and [revokeRole](#AccessControl-revokeRole) circuits.
+Each role has an associated admin role,
+and only accounts that have a role's admin role can call [grantRole](#AccessControl-grantRole) and [revokeRole](#AccessControl-revokeRole).
+
+By default, the admin role for all roles is `DEFAULT_ADMIN_ROLE` (zero bytes),
+which means that only accounts with this role will be able to grant or revoke other roles.
+More complex role relationships can be created by using [_setRoleAdmin](#AccessControl-_setRoleAdmin).
+
+<Callout type='warn'>
+  The `DEFAULT_ADMIN_ROLE` is also its own admin: it has permission to grant and revoke this role.
+  Extra precautions should be taken to secure accounts that have been granted it.
+</Callout>
+
+<Callout type='info'>
+  For an overview of the module, read the [AccessControl guide](../access-control).
+</Callout>
+
+## AccessControl [toc] [#AccessControl]
+<APIGithubLinkHeader
+    moduleName="AccessControl"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.4.0/contracts/src/access/AccessControl.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/access/AccessControl";
+```
+
+---
+
+### Ledger [toc] [#AccessControl-Ledger]
+### Ledger [!toc] [#AccessControl-Ledger]
+
+#### _operatorRoles [toc] [#AccessControl-_operatorRoles]
+#### [!toc] [#AccessControl-_operatorRoles]
+<APIItemCompact
+  circuitSig="_operatorRoles: Map<Bytes<32>, Map<Either<Bytes<32>, ContractAddress>, Boolean>>"
+  kind="ledger"
+  id="AccessControl-_operatorRoles"
+>
+  Mapping from a role identifier -> account -> its permissions.
+</APIItemCompact>
+
+#### _adminRoles [toc] [#AccessControl-_adminRoles]
+#### [!toc] [#AccessControl-_adminRoles]
+<APIItemCompact
+  circuitSig="_adminRoles: Map<Bytes<32>, Bytes<32>>"
+  kind="ledger"
+  id="AccessControl-_adminRoles"
+>
+  Mapping from a role identifier to an admin role identifier.
+</APIItemCompact>
+
+### Witnesses [toc] [#AccessControl-Witnesses]
+### Witnesses [!toc] [#AccessControl-Witnesses]
+
+Witness implementations are authored by the consuming DApp.
+The TypeScript witnesses in the repository are test-only and are not published with the package.
+
+#### wit_AccessControlSK [toc] [#AccessControl-wit_AccessControlSK]
+#### [!toc] [#AccessControl-wit_AccessControlSK]
+<APIItemCompact
+  circuitSig="wit_AccessControlSK() → Bytes<32>"
+  kind="witness"
+  id="AccessControl-wit_AccessControlSK"
+>
+  Returns the caller's secret key used in deriving the account identifier.
+
+  The same key produces the same account identifier across all contracts. Users who
+  desire cross-contract unlinkability should use different keys per contract.
+</APIItemCompact>
+
+### Circuits [toc] [#AccessControl-Circuits]
+### Circuits [!toc] [#AccessControl-Circuits]
+
+#### DEFAULT_ADMIN_ROLE [toc] [#AccessControl-DEFAULT_ADMIN_ROLE]
+#### [!toc] [#AccessControl-DEFAULT_ADMIN_ROLE]
+<APIItemCompact
+  circuitSig="DEFAULT_ADMIN_ROLE() → Bytes<32>"
+  kind="pure"
+  modulePrefix="AccessControl"
+>
+  The default admin role for all roles. Only accounts with this role will be able
+  to grant or revoke other roles unless custom admin roles are created via [_setRoleAdmin](#AccessControl-_setRoleAdmin).
+</APIItemCompact>
+
+#### hasRole [toc] [#AccessControl-hasRole]
+#### [!toc] [#AccessControl-hasRole]
+<APIItemCompact
+  circuitSig="hasRole(roleId: Bytes<32>, account: Either<Bytes<32>, ContractAddress>) → Boolean"
+  kind="circuit"
+  complexity="k=10, rows=1019"
+  modulePrefix="AccessControl"
+>
+  Returns `true` if `account` has been granted `roleId`.
+</APIItemCompact>
+
+#### assertOnlyRole [toc] [#AccessControl-assertOnlyRole]
+#### [!toc] [#AccessControl-assertOnlyRole]
+<APIItemCompact
+  circuitSig="assertOnlyRole(roleId: Bytes<32>) → []"
+  kind="circuit"
+  complexity="k=13, rows=2669"
+  modulePrefix="AccessControl"
+>
+  Reverts if the caller cannot prove ownership of `roleId`.
+  In the case of an external (non-contract) caller, the caller’s identity is
+  derived from the [wit_AccessControlSK](#AccessControl-wit_AccessControlSK) witness as `persistentHash(secretKey)`.
+
+  Requirements:
+
+  * The caller must have `roleId`.
+</APIItemCompact>
+
+#### _checkRole [toc] [#AccessControl-_checkRole]
+#### [!toc] [#AccessControl-_checkRole]
+<APIItemCompact
+  circuitSig="_checkRole(roleId: Bytes<32>, account: Either<Bytes<32>, ContractAddress>) → []"
+  kind="circuit"
+  complexity="k=10, rows=987"
+  modulePrefix="AccessControl"
+>
+  Reverts if `account` is missing `roleId`.
+
+  Requirements:
+
+  * `account` must have `roleId`.
+</APIItemCompact>
+
+#### getRoleAdmin [toc] [#AccessControl-getRoleAdmin]
+#### [!toc] [#AccessControl-getRoleAdmin]
+<APIItemCompact
+  circuitSig="getRoleAdmin(roleId: Bytes<32>) → Bytes<32>"
+  kind="circuit"
+  complexity="k=9, rows=373"
+  modulePrefix="AccessControl"
+>
+  Returns the admin role that controls `roleId` or
+  a byte array with all zero bytes if `roleId` doesn't exist. See [grantRole](#AccessControl-grantRole) and [revokeRole](#AccessControl-revokeRole).
+
+  To change a role's admin use [_setRoleAdmin](#AccessControl-_setRoleAdmin).
+</APIItemCompact>
+
+#### grantRole [toc] [#AccessControl-grantRole]
+#### [!toc] [#AccessControl-grantRole]
+<APIItemCompact
+  circuitSig="grantRole(roleId: Bytes<32>, account: Either<Bytes<32>, ContractAddress>) → []"
+  kind="circuit"
+  complexity="k=13, rows=3536"
+  modulePrefix="AccessControl"
+>
+  Grants `roleId` to `account`.
+
+  Requirements:
+
+  * `account` must not be a ContractAddress.
+  * The caller must have `roleId`'s admin role.
+</APIItemCompact>
+
+#### revokeRole [toc] [#AccessControl-revokeRole]
+#### [!toc] [#AccessControl-revokeRole]
+<APIItemCompact
+  circuitSig="revokeRole(roleId: Bytes<32>, account: Either<Bytes<32>, ContractAddress>) → []"
+  kind="circuit"
+  complexity="k=13, rows=3466"
+  modulePrefix="AccessControl"
+>
+  Revokes `roleId` from `account`.
+
+  Requirements:
+
+  * The caller must have `roleId`'s admin role.
+</APIItemCompact>
+
+#### renounceRole [toc] [#AccessControl-renounceRole]
+#### [!toc] [#AccessControl-renounceRole]
+<APIItemCompact
+  circuitSig="renounceRole(roleId: Bytes<32>, callerConfirmation: Either<Bytes<32>, ContractAddress>) → []"
+  stackParams="true"
+  kind="circuit"
+  complexity="k=13, rows=3322"
+  modulePrefix="AccessControl"
+>
+  Revokes `roleId` from the calling account.
+
+  <Callout type='info'>
+    Roles are often managed via [grantRole](#AccessControl-grantRole) and [revokeRole](#AccessControl-revokeRole): this circuit's
+    purpose is to provide a mechanism for accounts to lose their privileges
+    if they are compromised (such as when a trusted device is misplaced).
+
+    The caller's identity is derived from the [wit_AccessControlSK](#AccessControl-wit_AccessControlSK) witness as
+    `persistentHash(secretKey)`. The `callerConfirmation` parameter must match
+    the caller's computed account identifier to prevent accidental renunciation.
+  </Callout>
+
+  Requirements:
+
+  * The caller's computed account identifier must match `callerConfirmation`.
+  * The caller must not be a `ContractAddress`.
+</APIItemCompact>
+
+#### _setRoleAdmin [toc] [#AccessControl-_setRoleAdmin]
+#### [!toc] [#AccessControl-_setRoleAdmin]
+<APIItemCompact
+  circuitSig="_setRoleAdmin(roleId: Bytes<32>, adminRole: Bytes<32>) → []"
+  kind="circuit"
+  complexity="k=10, rows=581"
+  modulePrefix="AccessControl"
+>
+  Sets `adminRole` as `roleId`'s admin role.
+</APIItemCompact>
+
+#### _grantRole [toc] [#AccessControl-_grantRole]
+#### [!toc] [#AccessControl-_grantRole]
+<APIItemCompact
+  circuitSig="_grantRole(roleId: Bytes<32>, account: Either<Bytes<32>, ContractAddress>) → Boolean"
+  kind="circuit"
+  complexity="k=11, rows=1143"
+  modulePrefix="AccessControl"
+>
+  Attempts to grant `roleId` to `account` and returns a boolean indicating if `roleId` was granted.
+  Internal circuit without access restriction.
+
+  Requirements:
+
+  * `account` must not be a ContractAddress.
+</APIItemCompact>
+
+#### _unsafeGrantRole [toc] [#AccessControl-_unsafeGrantRole]
+#### [!toc] [#AccessControl-_unsafeGrantRole]
+<APIItemCompact
+  circuitSig="_unsafeGrantRole(roleId: Bytes<32>, account: Either<Bytes<32>, ContractAddress>) → Boolean"
+  kind="circuit"
+  complexity="k=11, rows=1142"
+  modulePrefix="AccessControl"
+>
+  Attempts to grant `roleId` to `account` and returns a boolean indicating if `roleId` was granted.
+  Internal circuit without access restriction. It does NOT check if the role is granted to a ContractAddress.
+
+  <Callout type='info'>
+    External smart contracts cannot call the access control contract at this time, so granting a role to a ContractAddress may
+    render a circuit permanently inaccessible.
+  </Callout>
+</APIItemCompact>
+
+#### _revokeRole [toc] [#AccessControl-_revokeRole]
+#### [!toc] [#AccessControl-_revokeRole]
+<APIItemCompact
+  circuitSig="_revokeRole(roleId: Bytes<32>, account: Either<Bytes<32>, ContractAddress>) → Boolean"
+  kind="circuit"
+  complexity="k=11, rows=1073"
+  modulePrefix="AccessControl"
+>
+  Attempts to revoke `roleId` from `account` and returns a boolean indicating if `roleId` was revoked.
+  Internal circuit without access restriction.
+</APIItemCompact>

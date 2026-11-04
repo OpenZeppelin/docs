@@ -1,0 +1,193 @@
+---
+title: ShieldedAccessControl
+---
+
+{/* links */}
+[Role-Based Access Control (RBAC)]: https://en.wikipedia.org/wiki/Role-based_access_control
+[AccessControl]: ./access-control.mdx
+[ShieldedAccessControl API]: api/shielded-access-control
+
+[assertOnlyRole]: api/shielded-access-control#ShieldedAccessControl-assertOnlyRole
+[canProveRole]: api/shielded-access-control#ShieldedAccessControl-canProveRole
+[grantRole]: api/shielded-access-control#ShieldedAccessControl-grantRole
+[_grantRole]: api/shielded-access-control#ShieldedAccessControl-_grantRole
+[revokeRole]: api/shielded-access-control#ShieldedAccessControl-revokeRole
+[_revokeRole]: api/shielded-access-control#ShieldedAccessControl-_revokeRole
+[renounceRole]: api/shielded-access-control#ShieldedAccessControl-renounceRole
+[_setRoleAdmin]: api/shielded-access-control#ShieldedAccessControl-_setRoleAdmin
+[getRoleAdmin]: api/shielded-access-control#ShieldedAccessControl-getRoleAdmin
+[computeAccountId]: api/shielded-access-control#ShieldedAccessControl-computeAccountId
+[DEFAULT_ADMIN_ROLE]: api/shielded-access-control#ShieldedAccessControl-DEFAULT_ADMIN_ROLE
+
+This module provides a **privacy-preserving** role-based access control mechanism.
+Unlike [AccessControl], which stores role assignments in a public map,
+ShieldedAccessControl stores roles as Merkle tree commitments which hides _who_ holds a role
+while still allowing on-chain verification of authorization.
+
+If your contract does not require privacy for role holders, the simpler [AccessControl] module is recommended.
+
+## Why Shielded Access Control?
+
+In many applications, revealing which accounts hold administrative or privileged roles
+creates a security and privacy risk. ShieldedAccessControl addresses this by ensuring
+that role holders are never identified on-chain. Instead, callers prove ownership of a role
+using zero-knowledge proofs against Merkle tree commitments.
+
+This is useful in scenarios such as:
+
+- **Private governance**: voters or committee members prove eligibility without revealing identity.
+- **Confidential operations**: admins can manage a system without their addresses being publicly linked to the contract.
+- **Pseudonymous authorization**: role holders maintain a stable pseudonymous identity for the lifetime of their role, but that identity cannot be linked to a real-world identity without key compromise.
+
+## How It Works
+
+ShieldedAccessControl is built on three cryptographic primitives:
+
+**Role commitments** are Merkle tree leaves that bind a role to an account without revealing either.
+When a role is granted, a commitment is inserted into a Merkle tree:
+
+```
+roleCommitment = SHA256(role, accountId, instanceSalt, commitmentDomain)
+```
+
+**Account identifiers** are privacy-preserving identity commitments derived from a secret key
+and a per-deployment instance salt. A single secret key can be used across multiple roles within the same contract:
+
+```
+accountId = SHA256(secretKey, instanceSalt, accountIdDomain)
+```
+
+**Role nullifiers** are one-time burn tokens. When a role is revoked, its nullifier is inserted into a set,
+permanently invalidating the corresponding commitment:
+
+```
+roleNullifier = SHA256(roleCommitment, nullifierDomain)
+```
+
+The `instanceSalt` is a per-deployment random value that prevents commitment collisions across contracts
+and ensures that the same secret key produces different identities in different deployments.
+
+## Using `ShieldedAccessControl`
+
+Usage follows the same pattern as [AccessControl] which is to define role identifiers,
+grant them during construction, and enforce them with [assertOnlyRole].
+The key difference is that role assignments are stored as Merkle tree commitments rather than in a public map,
+and revocation uses a nullifier scheme rather than simply flipping a boolean.
+Account identifiers also incorporate a per-instance salt, preventing cross-contract correlation of the same secret key.
+
+```ts
+pragma language_version >= {{compact_language_version}};
+
+import CompactStandardLibrary;
+import "./node_modules/@openzeppelin/compact-contracts/access/ShieldedAccessControl"
+  prefix SAC_;
+
+export sealed ledger MINTER_ROLE: Bytes<32>;
+
+constructor(
+  instanceSalt: Bytes<32>,
+  defaultAdmin: SAC_AccountIdentifier,
+  minter: SAC_AccountIdentifier
+) {
+  SAC_initialize(instanceSalt);
+  MINTER_ROLE = persistentHash<Bytes<32>>(pad(32, "MINTER_ROLE"));
+  // Grant the default admin role and the minter role
+  SAC__grantRole(SAC_DEFAULT_ADMIN_ROLE(), defaultAdmin);
+  SAC__grantRole(MINTER_ROLE as SAC_RoleIdentifier, minter);
+}
+
+export circuit mint(/* ... */): [] {
+  SAC_assertOnlyRole(MINTER_ROLE as SAC_RoleIdentifier);
+  // ... minting logic
+}
+```
+
+<Callout type='warn'>
+  The `instanceSalt` must be generated using a cryptographically secure random number generator
+  (e.g. `crypto.getRandomValues()`) prior to deployment. Weak or predictable salts weaken privacy guarantees.
+</Callout>
+
+### Deriving Account Identifiers
+
+Before an account can be granted a role, the grantor needs the grantee's `AccountIdentifier`.
+This is derived off-chain using [computeAccountId]:
+
+```ts
+const accountId = SAC_computeAccountId(secretKey, instanceSalt);
+```
+
+The `secretKey` is a 32-byte cryptographically secure random value that the user keeps private.
+The `instanceSalt` is the same value used during contract initialization.
+
+<Callout type='warn'>
+  The `secretKey` must never be logged, persisted in plaintext, or exposed in browser devtools.
+  Loss of the key means loss of all roles held under that identity. Key exposure allows impersonation
+  and retroactive deanonymization.
+</Callout>
+
+### Granting and Revoking Roles
+
+Role management works similarly to [AccessControl]. Every role has an associated admin role.
+Only accounts that can prove they hold the admin role may call [grantRole] and [revokeRole].
+By default, all roles are administered by [DEFAULT_ADMIN_ROLE].
+Custom admin relationships can be set using [_setRoleAdmin].
+
+There is one important difference from unshielded AccessControl:
+**revocation is permanent for a given identity**. When a role is revoked,
+its nullifier is burned, and the same `(role, accountId)` pairing can never be granted again.
+To be re-authorized, the user must generate a new `secretKey` to produce a new `accountId`.
+
+Other roles held under the old secret key remain valid. The user will need to retain both keys
+until all roles under the old key are no longer needed.
+
+### Renouncing Roles
+
+[renounceRole] allows a role holder to voluntarily give up their own role.
+This is useful if a trusted device is compromised and the holder wants to immediately invalidate their credentials.
+The caller must confirm their `accountId` to prevent accidental renunciation.
+
+### Proving Role Ownership
+
+Two circuits are available for verifying role ownership:
+
+- [assertOnlyRole]: reverts if the caller cannot prove they hold the role. Use this to gate access to circuits.
+- [canProveRole]: returns a boolean without reverting. Useful for conditional logic where lacking a role is not an error.
+
+Both circuits disclose a nullifier, which means every call made under the same role instance
+can be linked by an outside observer. This provides **pseudonymity, not anonymity**.
+
+## Privacy Considerations
+
+ShieldedAccessControl provides strong privacy guarantees, but it's important to understand what is and isn't hidden:
+
+**What observers CAN see:**
+- When roles are granted and revoked
+- All role identifiers and which are admin identifiers (disclosed via [getRoleAdmin], [_setRoleAdmin], [grantRole], and [revokeRole])
+- How many admins exist
+- All role nullifiers (disclosed via `Set` operations in every grant, revoke, and role-proof transaction)
+- The same nullifier across calls, allowing them to link all actions performed under the same role instance over time (pseudonymity, not anonymity)
+- Correlation between a grant and its revocation (the same nullifier appears in both transactions)
+- Which role is being granted or revoked when the admin-checked circuits ([grantRole], [revokeRole]) are used, since those disclose the role identifier in the same transaction
+- The cumulative number of role grants across all roles; per-role counts are also inferable when the admin-checked circuits are used
+
+**What observers CANNOT see:**
+- The identity of any role holder, so long as secret keys are kept private and generated using cryptographically secure random values
+- The value of role commitments stored in the Merkle tree (MerkleTree inserts hash the value internally; only the internal leaf hash appears as a public input, unlike Set operations where values are directly visible)
+- Users can be retroactively deanonymized if their secret key is exposed
+
+<Callout type='info'>
+  The internal circuits ([_grantRole], [_revokeRole]) do not disclose the role identifier, offering stronger privacy
+  when wrapped with custom authorization logic. The trade-off is that the implementing contract takes full
+  responsibility for access control.
+</Callout>
+
+## Security Considerations
+
+- The `_operatorRoles` Merkle tree has a **fixed capacity of 2^20 leaf slots** and slots cannot be reclaimed after revocation. Monitor slot consumption off-chain and plan capacity accordingly.
+- A single secret key compromise exposes **all roles** held by that user within the contract instance. Users requiring compartmentalization between roles should use separate keys per role.
+- Admins can revoke `(role, accountId)` pairings that were never granted (non-membership proofs are not available for the Merkle tree). Admin trust is a fundamental assumption. Off-chain validation should confirm a pairing was actually granted before submitting a revocation.
+- The SHA256 hashing function is used throughout. A migration to a ZK-friendly hashing function is planned when an implementation becomes available.
+
+<Callout type='info'>
+  For the full API reference, see the [ShieldedAccessControl API].
+</Callout>
