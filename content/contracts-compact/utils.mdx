@@ -2,9 +2,88 @@
 title: Utils
 ---
 
-The Utils module provides miscellaneous circuits and common utilities for Compact contract development.
+{/* links */}
+[Utils API]: ./api/utils#Utils
+[computeAccountId]: ./api/utils#Utils-computeAccountId
+[zeroAccount]: ./api/utils#Utils-zeroAccount
+[isTargetZero]: ./api/utils#Utils-isTargetZero
+[selfAsRecipient]: ./api/utils#Utils-selfAsRecipient
+[Ownable]: ./ownable
+[AccessControl]: ./access-control
 
-### Usage
+The Utils module provides miscellaneous circuits and common utilities for Compact contract development.
+Most of them are pure circuits with no ledger state, so they can be called from a circuit,
+from a constructor, or off-chain through the compiled contract.
+
+## Account identifiers
+
+The [Ownable] and [AccessControl] modules, and the token modules, identify a caller by a `Bytes<32>` account identifier
+rather than by a public key.
+The caller proves knowledge of a 32-byte secret key through a witness, and the module derives the identifier as:
+
+```
+accountId = H(secretKey)
+```
+
+where `H` is `persistentHash`.
+[computeAccountId] is the shared derivation: it is a pure circuit, so the same function that the modules
+evaluate inside a proof can be evaluated ahead of time to produce the identifier a contract expects as input,
+for example the `initialOwner` of an Ownable contract, the `defaultAdmin` of an AccessControl contract,
+or the recipient of a token mint.
+
+The witnesses that supply the secret key are authored by the implementing contract's TypeScript side.
+The witnesses in the library repository are test-only and are not published with the package.
+
+### Deriving an identifier off-chain
+
+Any of the following produce the same identifier for the same key:
+
+* Call the pure circuit through the compiled contract: `pureCircuits.computeAccountId(secretKey)`
+  (exposed by any contract that re-exports it as a `pure circuit`).
+* Compute it directly with `@midnight-ntwrk/compact-runtime`:
+
+```typescript
+import {
+  CompactTypeBytes,
+  CompactTypeVector,
+  persistentHash,
+} from '@midnight-ntwrk/compact-runtime';
+
+const accountIdOf = (secretKey: Uint8Array): Uint8Array =>
+  persistentHash(new CompactTypeVector(1, new CompactTypeBytes(32)), [secretKey]);
+```
+
+The secret key must be a 32-byte cryptographically secure random value (`crypto.getRandomValues()` or equivalent).
+
+<Callout type='warn'>
+  The secret key is the identity. Never log or persist it in plaintext, keep it in offline or enclave storage
+  where possible, and avoid evaluating the derivation in an untrusted runtime. A lost key cannot be recovered,
+  and an exposed key allows impersonation.
+</Callout>
+
+### Scope of the identifier
+
+The derivation is deliberately untagged and global: the same secret key yields the same identifier in every
+module and every contract that derives one, so a user who wants to carry a single identity across contracts can.
+Users who want unlinkable identities across contracts should use a different secret key per contract.
+A module that needs a per-deployment, unlinkable identity should not use this circuit.
+
+The output is an identifier, not a secret. Because the construction carries no domain-separation tag,
+it must not be reused to derive private values: a circuit that derives a private value from a secret
+must use its own domain-separation tag.
+
+## Zero accounts
+
+[zeroAccount] returns the canonical zero `Either<Bytes<32>, ContractAddress>` (the left variant set to zero),
+which the token modules use as the mint and burn sentinel and for cleared approvals.
+[isTargetZero] checks whether the active side of such a value is zero.
+
+## Contract as recipient
+
+[selfAsRecipient] wraps the executing contract's own address as an `Either<ZswapCoinPublicKey, ContractAddress>`,
+the recipient shape expected by shielded send operations, for deposits into the contract and for receiving change.
+
+## Usage
 
 ```typescript
 pragma language_version >= {{compact_language_version}};
@@ -24,4 +103,12 @@ export circuit performActionWhenEqual(
     // Do something else
   }
 }
+
+// Re-export the derivation so the identifier can be computed off-chain
+// through the compiled contract.
+export pure circuit computeAccountId(secretKey: Bytes<32>): Bytes<32> {
+  return Utils_computeAccountId(secretKey);
+}
 ```
+
+See the [Utils API] for the full list of circuits.

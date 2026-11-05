@@ -2,6 +2,24 @@
 title: Security
 ---
 
+{/* links */}
+[Ownable]: ./ownable
+[Utils guide]: ./utils#account-identifiers
+[assertPaused]: ./api/security#Pausable-assertPaused
+[assertNotPaused]: ./api/security#Pausable-assertNotPaused
+[Initializable API]: ./api/security#Initializable
+[Allowlist API]: ./api/security#Allowlist
+[Blocklist API]: ./api/security#Blocklist
+[isAllowed]: ./api/security#Allowlist-isAllowed
+[assertAllowed]: ./api/security#Allowlist-assertAllowed
+[_allow]: ./api/security#Allowlist-_allow
+[_disallow]: ./api/security#Allowlist-_disallow
+[isBlocked]: ./api/security#Blocklist-isBlocked
+[assertNotBlocked]: ./api/security#Blocklist-assertNotBlocked
+[_block]: ./api/security#Blocklist-_block
+[_unblock]: ./api/security#Blocklist-_unblock
+[compact#270]: https://github.com/LFDT-Minokawa/compact/issues/270
+
 The following documentation provides context, reasoning, and examples of modules found in the Security directory.
 
 ## Initializable
@@ -11,10 +29,20 @@ More specifically, it enables logic to be performed once and only once to set up
 This is useful when a constructor cannot be used,
 for example when there are circular dependencies at construction time.
 
-Many modules also use the initializable pattern which ensures that implementing contracts:
+The initializable pattern ensures that implementing contracts:
 
 - Don't allow circuit calls until the contract is initialized.
 - Can only initialize the contract once.
+
+<Callout type='warn'>
+  Use this module only at the top contract layer, and import it into at most one module per contract.
+  The Compact compiler collapses a shared import's ledger state inconsistently depending on directory layout
+  ([compact#270]): when two modules in the same directory both import Initializable,
+  their `_isInitialized` flags share a single ledger slot, so initializing one marks the other as initialized
+  and the other can never be initialized on its own.
+  For this reason the OpenZeppelin modules do not import Initializable; each one tracks its own
+  `_isInitialized` ledger flag inline.
+</Callout>
 
 ### Usage
 
@@ -38,7 +66,7 @@ export circuit doSomethingBeforeInitialized(): [] {
 export circuit setFieldAfterDeployment(f: Field): [] {
   // Initialize so the circuit cannot be called again
   Initializable_initialize();
-  _fieldAfterDeployment = f;
+  _fieldAfterDeployment = disclose(f);
 }
 
 export circuit checkFieldAfterDeployment(): Field {
@@ -48,11 +76,9 @@ export circuit checkFieldAfterDeployment(): Field {
 }
 ```
 
-## Pausable
+See the [Initializable API] for the full list of circuits.
 
-[Ownable]: ./ownable
-[assertPaused]: ./api/security#Pausable-assertPaused
-[assertNotPaused]: ./api/security#Pausable-assertNotPaused
+## Pausable
 
 The Pausable module allows contracts to implement an emergency stop mechanism.
 This can be useful for scenarios such as preventing trades until the end of an evaluation period
@@ -101,3 +127,156 @@ export circuit whenPaused(): [] {
   // Do something
 }
 ```
+
+## Allowlist
+
+The Allowlist module is a minimal, reusable permit-list keyed by a `Bytes<32>` account identifier.
+It answers a single question: is this account a member?
+It backs use cases such as KYC allowlists, permissioned mints, and membership gates.
+
+The module is a membership mechanism, not a policy.
+It holds no access control and no notion of when the list is enforced:
+
+- The mutators [_allow] and [_disallow] are ungated building blocks.
+  The implementing contract must protect them with its own access control module,
+  in the same way a token protects `_mint` and `_burn`.
+- The implementing contract decides where [assertAllowed] applies,
+  for example only on transfers, only on mints, or only while an "eligibility required" flag is set.
+- [isAllowed] reads membership without asserting it.
+
+### What is public
+
+The approved set lives in the public ledger field `_allowed: Set<Bytes<32>>`.
+Membership is publicly readable and the approved set is publicly enumerable.
+Every circuit discloses the `account` it is called with, so the identifier reaches the ledger as a public input.
+This is the right posture for transparent or public-graph assets.
+An asset whose transaction graph is meant to stay private should not use a public allowlist,
+since the published candidate set would bound its anonymity set.
+
+The `Bytes<32>` keys are account identifiers as derived by `Utils_computeAccountId`;
+see the [Utils guide] for how to derive one off-chain.
+
+### Usage
+
+The following example is a token whose recipients must be approved by the owner before they can receive tokens.
+Membership changes are gated behind [Ownable], and the gate is enforced on `transfer`:
+
+```ts
+// PermissionedToken.compact
+
+pragma language_version >= {{compact_language_version}};
+
+import CompactStandardLibrary;
+import "./node_modules/@openzeppelin/compact-contracts/security/Allowlist"
+  prefix Allowlist_;
+import "./node_modules/@openzeppelin/compact-contracts/access/Ownable"
+  prefix Ownable_;
+import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken"
+  prefix FungibleToken_;
+
+constructor(
+  initialOwner: Either<Bytes<32>, ContractAddress>,
+  name: Opaque<"string">,
+  symbol: Opaque<"string">,
+  decimals: Uint<8>,
+) {
+  Ownable_initialize(initialOwner);
+  FungibleToken_initialize(name, symbol, decimals);
+}
+
+// Membership changes are protected by the owner.
+export circuit allow(account: Bytes<32>): [] {
+  Ownable_assertOnlyOwner();
+  Allowlist__allow(account);
+}
+
+export circuit disallow(account: Bytes<32>): [] {
+  Ownable_assertOnlyOwner();
+  Allowlist__disallow(account);
+}
+
+export circuit isAllowed(account: Bytes<32>): Boolean {
+  return Allowlist_isAllowed(account);
+}
+
+// The implementing contract decides where the gate applies.
+export circuit transfer(to: Either<Bytes<32>, ContractAddress>, value: Uint<128>): Boolean {
+  assert(to.is_left, "PermissionedToken: recipient must be an account identifier");
+  Allowlist_assertAllowed(to.left);
+  return FungibleToken_transfer(to, value);
+}
+```
+
+See the [Allowlist API] for the full list of circuits.
+
+## Blocklist
+
+The Blocklist module is a minimal, reusable deny-list keyed by a `Bytes<32>` account identifier.
+It answers a single question: is this account blocked?
+It backs use cases such as sanctions lists, account freezes, and abuse denials.
+
+As with Allowlist, the module is a membership mechanism, not a policy:
+
+- The mutators [_block] and [_unblock] are ungated building blocks that the implementing contract
+  must protect with its own access control module.
+- The implementing contract decides where [assertNotBlocked] applies.
+- [isBlocked] reads membership without asserting it.
+
+### What is public
+
+The blocked set lives in the public ledger field `_blocked: Set<Bytes<32>>`.
+Membership is publicly readable and the blocked set is publicly enumerable,
+and every circuit discloses the `account` it is called with.
+As with Allowlist, this is the right posture for transparent or public-graph assets only.
+
+### Usage
+
+The following example lets the owner freeze accounts, and refuses transfers to a frozen recipient:
+
+```ts
+// FreezableToken.compact
+
+pragma language_version >= {{compact_language_version}};
+
+import CompactStandardLibrary;
+import "./node_modules/@openzeppelin/compact-contracts/security/Blocklist"
+  prefix Blocklist_;
+import "./node_modules/@openzeppelin/compact-contracts/access/Ownable"
+  prefix Ownable_;
+import "./node_modules/@openzeppelin/compact-contracts/token/FungibleToken"
+  prefix FungibleToken_;
+
+constructor(
+  initialOwner: Either<Bytes<32>, ContractAddress>,
+  name: Opaque<"string">,
+  symbol: Opaque<"string">,
+  decimals: Uint<8>,
+) {
+  Ownable_initialize(initialOwner);
+  FungibleToken_initialize(name, symbol, decimals);
+}
+
+// Freezing and unfreezing are protected by the owner.
+export circuit block(account: Bytes<32>): [] {
+  Ownable_assertOnlyOwner();
+  Blocklist__block(account);
+}
+
+export circuit unblock(account: Bytes<32>): [] {
+  Ownable_assertOnlyOwner();
+  Blocklist__unblock(account);
+}
+
+export circuit isBlocked(account: Bytes<32>): Boolean {
+  return Blocklist_isBlocked(account);
+}
+
+// The implementing contract decides where the gate applies.
+export circuit transfer(to: Either<Bytes<32>, ContractAddress>, value: Uint<128>): Boolean {
+  assert(to.is_left, "FreezableToken: recipient must be an account identifier");
+  Blocklist_assertNotBlocked(to.left);
+  return FungibleToken_transfer(to, value);
+}
+```
+
+See the [Blocklist API] for the full list of circuits.

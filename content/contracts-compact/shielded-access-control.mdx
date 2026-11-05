@@ -18,6 +18,11 @@ title: ShieldedAccessControl
 [getRoleAdmin]: api/shielded-access-control#ShieldedAccessControl-getRoleAdmin
 [computeAccountId]: api/shielded-access-control#ShieldedAccessControl-computeAccountId
 [DEFAULT_ADMIN_ROLE]: api/shielded-access-control#ShieldedAccessControl-DEFAULT_ADMIN_ROLE
+[_operatorRoles]: api/shielded-access-control#ShieldedAccessControl-_operatorRoles
+[_grantedRoleNullifiers]: api/shielded-access-control#ShieldedAccessControl-_grantedRoleNullifiers
+[_roleCommitmentNullifiers]: api/shielded-access-control#ShieldedAccessControl-_roleCommitmentNullifiers
+[wit_secretKey]: api/shielded-access-control#ShieldedAccessControl-wit_secretKey
+[wit_getRoleCommitmentPath]: api/shielded-access-control#ShieldedAccessControl-wit_getRoleCommitmentPath
 
 This module provides a **privacy-preserving** role-based access control mechanism.
 Unlike [AccessControl], which stores role assignments in a public map,
@@ -47,25 +52,43 @@ ShieldedAccessControl is built on three cryptographic primitives:
 When a role is granted, a commitment is inserted into a Merkle tree:
 
 ```
-roleCommitment = SHA256(role, accountId, instanceSalt, commitmentDomain)
+roleCommitment = SHA256(role || accountId || instanceSalt || commitmentDomain)
 ```
 
 **Account identifiers** are privacy-preserving identity commitments derived from a secret key
 and a per-deployment instance salt. A single secret key can be used across multiple roles within the same contract:
 
 ```
-accountId = SHA256(secretKey, instanceSalt, accountIdDomain)
+accountId = SHA256(secretKey || instanceSalt || accountIdDomain)
 ```
 
 **Role nullifiers** are one-time burn tokens. When a role is revoked, its nullifier is inserted into a set,
 permanently invalidating the corresponding commitment:
 
 ```
-roleNullifier = SHA256(roleCommitment, nullifierDomain)
+roleNullifier = SHA256(roleCommitment || nullifierDomain)
 ```
 
 The `instanceSalt` is a per-deployment random value that prevents commitment collisions across contracts
 and ensures that the same secret key produces different identities in different deployments.
+
+### Public ledger and private witnesses
+
+What is on the ledger:
+
+- [_operatorRoles]: the Merkle tree of role commitments. Inserts expose only the internal leaf hash, not the commitment value.
+- [_grantedRoleNullifiers]: the nullifier of every `(role, accountId)` pairing ever granted.
+- [_roleCommitmentNullifiers]: the nullifier of every pairing that has been revoked.
+- `_adminRoles`, the sealed `_instanceSalt`, and `_isInitialized`.
+
+What each role holder keeps private, and supplies through witnesses at proving time:
+
+- The `secretKey`, via [wit_secretKey]. It is hashed with `_instanceSalt` inside the proof and never reaches the ledger.
+- The Merkle path to their role commitment, via [wit_getRoleCommitmentPath].
+  The consumer's witness implementation builds this path from the exported `_operatorRoles` state.
+
+Witness implementations are authored by the consuming DApp.
+The TypeScript witnesses in the repository are test-only and are not published with the package.
 
 ## Using `ShieldedAccessControl`
 
@@ -103,7 +126,7 @@ export circuit mint(/* ... */): [] {
 ```
 
 <Callout type='warn'>
-  The `instanceSalt` must be generated using a cryptographically secure random number generator
+  The `instanceSalt` must be nonzero and generated using a cryptographically secure random number generator
   (e.g. `crypto.getRandomValues()`) prior to deployment. Weak or predictable salts weaken privacy guarantees.
 </Callout>
 
@@ -132,6 +155,14 @@ Only accounts that can prove they hold the admin role may call [grantRole] and [
 By default, all roles are administered by [DEFAULT_ADMIN_ROLE].
 Custom admin relationships can be set using [_setRoleAdmin].
 
+Each `(role, accountId)` pairing has exactly one lifecycle:
+
+- **Grant**: the first grant inserts the role commitment into the Merkle tree and records the pairing's nullifier
+  in [_grantedRoleNullifiers]. Granting a pairing that is already active is a no-op, so a pairing never consumes
+  more than one tree slot.
+- **Revoke**: revoking (or renouncing) inserts the nullifier into [_roleCommitmentNullifiers].
+  A pairing that was never granted cannot be revoked; the call reverts with `role was never granted`.
+
 There is one important difference from unshielded AccessControl:
 **revocation is permanent for a given identity**. When a role is revoked,
 its nullifier is burned, and the same `(role, accountId)` pairing can never be granted again.
@@ -144,7 +175,8 @@ until all roles under the old key are no longer needed.
 
 [renounceRole] allows a role holder to voluntarily give up their own role.
 This is useful if a trusted device is compromised and the holder wants to immediately invalidate their credentials.
-The caller must confirm their `accountId` to prevent accidental renunciation.
+The caller must confirm their `accountId` to prevent accidental renunciation,
+and the pairing must have been granted. Consumers with no need for self-revocation should not export this circuit.
 
 ### Proving Role Ownership
 
@@ -168,12 +200,13 @@ ShieldedAccessControl provides strong privacy guarantees, but it's important to 
 - The same nullifier across calls, allowing them to link all actions performed under the same role instance over time (pseudonymity, not anonymity)
 - Correlation between a grant and its revocation (the same nullifier appears in both transactions)
 - Which role is being granted or revoked when the admin-checked circuits ([grantRole], [revokeRole]) are used, since those disclose the role identifier in the same transaction
-- The cumulative number of role grants across all roles; per-role counts are also inferable when the admin-checked circuits are used
+- The number of distinct `(role, accountId)` pairings ever granted across all roles; per-role counts are also inferable when the admin-checked circuits are used
 
 **What observers CANNOT see:**
 - The identity of any role holder, so long as secret keys are kept private and generated using cryptographically secure random values
 - The value of role commitments stored in the Merkle tree (MerkleTree inserts hash the value internally; only the internal leaf hash appears as a public input, unlike Set operations where values are directly visible)
-- Users can be retroactively deanonymized if their secret key is exposed
+
+Users can be retroactively deanonymized if their secret key is exposed.
 
 <Callout type='info'>
   The internal circuits ([_grantRole], [_revokeRole]) do not disclose the role identifier, offering stronger privacy
@@ -183,10 +216,10 @@ ShieldedAccessControl provides strong privacy guarantees, but it's important to 
 
 ## Security Considerations
 
-- The `_operatorRoles` Merkle tree has a **fixed capacity of 2^20 leaf slots** and slots cannot be reclaimed after revocation. Monitor slot consumption off-chain and plan capacity accordingly.
-- A single secret key compromise exposes **all roles** held by that user within the contract instance. Users requiring compartmentalization between roles should use separate keys per role.
-- Admins can revoke `(role, accountId)` pairings that were never granted (non-membership proofs are not available for the Merkle tree). Admin trust is a fundamental assumption. Off-chain validation should confirm a pairing was actually granted before submitting a revocation.
-- The SHA256 hashing function is used throughout. A migration to a ZK-friendly hashing function is planned when an implementation becomes available.
+- The `_operatorRoles` Merkle tree has a **fixed capacity of 2^20 leaf slots**. Each distinct `(role, accountId)` pairing consumes one slot, re-granting an active pairing is a no-op, and slots cannot be reclaimed after revocation. Once exhausted, the contract can never grant a new role. Monitor slot consumption off-chain (`firstFree()` on the exported tree in TypeScript, `isFull()` in a circuit) and plan capacity accordingly.
+- A single secret key compromise exposes **all roles** held by that user within the contract instance. Users requiring compartmentalization between roles should use separate keys per role. On compromise, coordinate with admins to revoke every role under the compromised `accountId` and re-grant under a new identity.
+- A pairing can only be revoked after it was granted, so the nullifier set holds at most one entry per granted pairing. Admin trust is still a fundamental assumption: an admin can revoke any granted pairing, and revocation is irreversible.
+- The SHA256 hashing function is used throughout.
 
 <Callout type='info'>
   For the full API reference, see the [ShieldedAccessControl API].

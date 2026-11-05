@@ -11,17 +11,29 @@ This module provides the full MultiToken module API.
 ## MultiToken [toc] [#MultiToken]
 <APIGithubLinkHeader
     moduleName="MultiToken"
-    link={`https://github.com/OpenZeppelin/compact-contracts/blob/main/contracts/src/token/MultiToken.compact`}
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/token/MultiToken.compact`}
 />
 
 ```ts
-import "./node_modules/@openzeppelin/token/src/MultiToken";
+import "./node_modules/@openzeppelin/compact-contracts/token/MultiToken";
 ```
 
 ---
 
 ### Ledger [toc] [#MultiToken-Ledger]
 ### Ledger [!toc] [#MultiToken-Ledger]
+
+#### _isInitialized [toc] [#MultiToken-_isInitialized]
+#### [!toc] [#MultiToken-_isInitialized]
+<APIItemCompact
+  circuitSig='_isInitialized: Boolean'
+  kind="ledger"
+  id="MultiToken-_isInitialized"
+>
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
+</APIItemCompact>
 
 #### _balances [toc] [#MultiToken-_balances]
 #### [!toc] [#MultiToken-_balances]
@@ -51,6 +63,7 @@ import "./node_modules/@openzeppelin/token/src/MultiToken";
   id="MultiToken-_uri"
 >
   Base URI for computing token URIs.
+  Used as the URI for all token types by relying on ID substitution, e.g. https://token-cdn-domain/`id`.json
 </APIItemCompact>
 
 ### Witnesses [toc] [#MultiToken-Witnesses]
@@ -72,18 +85,6 @@ import "./node_modules/@openzeppelin/token/src/MultiToken";
 ### Circuits [toc] [#MultiToken-Circuits]
 ### Circuits [!toc] [#MultiToken-Circuits]
 
-#### ZERO [toc] [#MultiToken-ZERO]
-#### [!toc] [#MultiToken-ZERO]
-<APIItemCompact
-  circuitSig="ZERO() → Either<Bytes<32>, ContractAddress>"
-  kind="pure"
-  modulePrefix="MultiToken"
->
-  Returns a canonical zero `Either` value (left variant with zero `Bytes<32>`).
-  Used as the zero value for mint/burn operations in `_update`, where a zero
-  `fromAddress` signals a mint and a zero `to` signals a burn.
-</APIItemCompact>
-
 #### initialize [toc] [#MultiToken-initialize]
 #### [!toc] [#MultiToken-initialize]
 <APIItemCompact
@@ -94,12 +95,9 @@ import "./node_modules/@openzeppelin/token/src/MultiToken";
 >
   Initializes the contract by setting the base URI for all tokens.
 
-  This MUST be called in the implementing contract's constructor.
-  Failure to do so can lead to an irreparable contract.
-
   Requirements:
 
-  * Contract is not initialized.
+  * Must be called in the contract's constructor.
 </APIItemCompact>
 
 #### uri [toc] [#MultiToken-uri]
@@ -110,9 +108,11 @@ import "./node_modules/@openzeppelin/token/src/MultiToken";
   complexity="k=8, rows=176"
   modulePrefix="MultiToken"
 >
-  This implementation returns the same URI for **all** token types.
-  It relies on the token type ID substitution mechanism defined in the EIP: [ERC1155-Metadata](https://eips.ethereum.org/EIPS/eip-1155#metadata).
-  Clients calling this function must replace the `\{id\}` substring with the actual token type ID.
+  This implementation returns the same URI for *all* token types. It relies
+  on the token type ID substitution mechanism defined in the EIP:
+  https://eips.ethereum.org/EIPS/eip-1155#metadata.
+  Clients calling this function must replace the `\{id\}` substring with the
+  actual token type ID.
 
   Requirements:
 
@@ -151,7 +151,9 @@ import "./node_modules/@openzeppelin/token/src/MultiToken";
   modulePrefix="MultiToken"
 >
   Enables or disables approval for `operator` to manage all of the caller's assets.
-  The caller's identity is derived from the `wit_MultiTokenSK` witness as `persistentHash(secretKey)`.
+
+  In the case of an external (non-contract) caller, the caller's identity is derived from the [wit_MultiTokenSK](#MultiToken-wit_MultiTokenSK)
+  witness as `persistentHash(secretKey)`.
 
   Requirements:
 
@@ -193,11 +195,14 @@ import "./node_modules/@openzeppelin/token/src/MultiToken";
 >
   Transfers ownership of `value` amount of `id` tokens from `fromAddress` to `to`.
   The caller must be `fromAddress` or approved to transfer on their behalf.
-  The caller's identity is derived from the `wit_MultiTokenSK` witness as `persistentHash(secretKey)`.
+
+  In the case of an external (non-contract) caller, the caller's identity is derived from the [wit_MultiTokenSK](#MultiToken-wit_MultiTokenSK)
+  witness as `persistentHash(secretKey)`.
 
   <Callout type='info'>
-    Transfers to contract addresses are currently disallowed until contract-to-contract interactions are supported in Compact.
-    This restriction prevents assets from being inadvertently locked in contracts that cannot currently handle token receipt.
+    Transfers to contract addresses are currently disallowed until contract-to-contract
+    interactions are supported in Compact. This restriction prevents assets from
+    being inadvertently locked in contracts that cannot currently handle token receipt.
   </Callout>
 
   Requirements:
@@ -225,11 +230,13 @@ import "./node_modules/@openzeppelin/token/src/MultiToken";
   modulePrefix="MultiToken"
 >
   Transfers ownership of `value` amount of `id` tokens from `fromAddress` to `to`.
-  Does not impose restrictions on the caller, making it suitable for composition in higher-level contract logic.
+  Does not impose restrictions on the caller, making it suitable for composition
+  in higher-level contract logic.
 
   <Callout type='info'>
-    Transfers to contract addresses are currently disallowed until contract-to-contract interactions are supported in Compact.
-    This restriction prevents assets from being inadvertently locked in contracts that cannot currently handle token receipt.
+    Transfers to contract addresses are currently disallowed until contract-to-contract
+    interactions are supported in Compact. This restriction prevents assets from
+    being inadvertently locked in contracts that cannot currently handle token receipt.
   </Callout>
 
   Requirements:
@@ -239,28 +246,6 @@ import "./node_modules/@openzeppelin/token/src/MultiToken";
   * `to` is not zero.
   * `fromAddress` is not zero.
   * `fromAddress` must have an `id` balance of at least `value`.
-</APIItemCompact>
-
-#### _update [toc] [#MultiToken-_update]
-#### [!toc] [#MultiToken-_update]
-<APIItemCompact
-  circuitSig="_update(
-    fromAddress: Either<Bytes<32>, ContractAddress>,
-    to: Either<Bytes<32>, ContractAddress>,
-    id: Uint<128>,
-    value: Uint<128>
-  ) → []"
-  kind="internal"
-  stackParams="true"
-  modulePrefix="MultiToken"
->
-  Transfers a value amount of tokens of type `id` from `fromAddress` to `to`.
-  This circuit will mint (or burn) if `fromAddress` (or `to`) is zero.
-
-  Requirements:
-
-  * Contract is initialized.
-  * If `fromAddress` is not zero, the balance of `id` of `fromAddress` must be >= `value`.
 </APIItemCompact>
 
 #### _unsafeTransferFrom [toc] [#MultiToken-_unsafeTransferFrom]
@@ -279,11 +264,13 @@ import "./node_modules/@openzeppelin/token/src/MultiToken";
 >
   Unsafe variant of [transferFrom](#MultiToken-transferFrom) which allows transfers to contract addresses.
   The caller must be `fromAddress` or approved to transfer on their behalf.
-  The caller's identity is derived from the `wit_MultiTokenSK` witness as `persistentHash(secretKey)`.
+
+  In the case of an external (non-contract) caller, the caller's identity is derived from the [wit_MultiTokenSK](#MultiToken-wit_MultiTokenSK)
+  witness as `persistentHash(secretKey)`.
 
   <Callout type='warn'>
-    Transfers to contract addresses are considered unsafe because contract-to-contract calls are not currently supported.
-    Tokens sent to a contract address may become irretrievable.
+    Transfers to contract addresses are considered unsafe because contract-to-contract
+    calls are not currently supported. Tokens sent to a contract address may become irretrievable.
     Once contract-to-contract calls are supported, this circuit may be deprecated.
   </Callout>
 
@@ -311,11 +298,12 @@ import "./node_modules/@openzeppelin/token/src/MultiToken";
   modulePrefix="MultiToken"
 >
   Unsafe variant of [_transfer](#MultiToken-_transfer) which allows transfers to contract addresses.
-  Does not impose restrictions on the caller, making it suitable as a low-level building block for advanced contract logic.
+  Does not impose restrictions on the caller, making it suitable as a low-level
+  building block for advanced contract logic.
 
   <Callout type='warn'>
-    Transfers to contract addresses are considered unsafe because contract-to-contract calls are not currently supported.
-    Tokens sent to a contract address may become irretrievable.
+    Transfers to contract addresses are considered unsafe because contract-to-contract
+    calls are not currently supported. Tokens sent to a contract address may become irretrievable.
     Once contract-to-contract calls are supported, this circuit may be deprecated.
   </Callout>
 
@@ -335,14 +323,20 @@ import "./node_modules/@openzeppelin/token/src/MultiToken";
   complexity="k=6, rows=28"
   modulePrefix="MultiToken"
 >
-  Sets a new URI for all token types, by relying on the token type ID substitution mechanism defined in the MultiToken standard.
+  Sets a new URI for all token types, by relying on the token type ID
+  substitution mechanism defined in the MultiToken standard.
   See https://eips.ethereum.org/EIPS/eip-1155#metadata.
 
-  By this mechanism, any occurrence of the `\{id\}` substring
-  in either the URI or any of the values in the JSON file at said URI will be replaced by clients with the token type ID.
+  <Callout type='info'>
+    By this mechanism, any occurrence of the `\{id\}` substring in either the
+    URI or any of the values in the JSON file at said URI will be replaced by
+    clients with the token type ID.
 
-  For example, the `https://token-cdn-domain/\{id\}.json` URI would be interpreted by clients as
-  `https://token-cdn-domain/000000000000000000000000000000000000000000000000000000000004cce0.json` for token type ID 0x4cce0.
+    For example, the `https://token-cdn-domain/\{id\}.json` URI would be
+    interpreted by clients as
+    `https://token-cdn-domain/000000000000000000000000000000000000000000000000000000000004cce0.json`
+    for token type ID 0x4cce0.
+  </Callout>
 
   Requirements:
 
@@ -361,8 +355,9 @@ import "./node_modules/@openzeppelin/token/src/MultiToken";
   Creates a `value` amount of tokens of type `id`, and assigns them to `to`.
 
   <Callout type='info'>
-    Transfers to contract addresses are currently disallowed until contract-to-contract interactions are supported in Compact.
-    This restriction prevents assets from being inadvertently locked in contracts that cannot currently handle token receipt.
+    Transfers to contract addresses are currently disallowed until contract-to-contract
+    interactions are supported in Compact. This restriction prevents assets from
+    being inadvertently locked in contracts that cannot currently handle token receipt.
   </Callout>
 
   Requirements:
@@ -388,8 +383,8 @@ import "./node_modules/@openzeppelin/token/src/MultiToken";
   Unsafe variant of [_mint](#MultiToken-_mint) which allows transfers to contract addresses.
 
   <Callout type='warn'>
-    Transfers to contract addresses are considered unsafe because contract-to-contract calls are not currently supported.
-    Tokens sent to a contract address may become irretrievable.
+    Transfers to contract addresses are considered unsafe because contract-to-contract
+    calls are not currently supported. Tokens sent to a contract address may become irretrievable.
     Once contract-to-contract calls are supported, this circuit may be deprecated.
   </Callout>
 
@@ -435,7 +430,11 @@ import "./node_modules/@openzeppelin/token/src/MultiToken";
   modulePrefix="MultiToken"
 >
   Enables or disables approval for `operator` to manage all of `owner`'s assets.
-  This circuit does not check for access permissions but can be useful as a building block for more complex contract logic.
+
+  <Callout type='info'>
+    This circuit does not check for access permissions but can be useful as a building block
+    for more complex contract logic.
+  </Callout>
 
   Requirements:
 
@@ -444,47 +443,3 @@ import "./node_modules/@openzeppelin/token/src/MultiToken";
   * `operator` is not zero.
 </APIItemCompact>
 
-#### _computeAccountId [toc] [#MultiToken-_computeAccountId]
-#### [!toc] [#MultiToken-_computeAccountId]
-<APIItemCompact
-  circuitSig="_computeAccountId() → Bytes<32>"
-  kind="internal"
-  modulePrefix="MultiToken"
->
-  Computes the caller's account identifier from the `wit_MultiTokenSK` witness.
-
-  ID Derivation: `accountId = persistentHash(secretKey)`
-
-  The result is a 32-byte commitment that uniquely identifies the caller.
-</APIItemCompact>
-
-#### computeAccountId [toc] [#MultiToken-computeAccountId]
-#### [!toc] [#MultiToken-computeAccountId]
-<APIItemCompact
-  circuitSig="computeAccountId(secretKey: Bytes<32>) → Bytes<32>"
-  kind="pure"
-  modulePrefix="MultiToken"
->
-  Computes an account identifier without on-chain state, allowing a user to derive
-  their identity commitment before submitting it in a token operation.
-  This is the off-chain counterpart to the internal `_computeAccountId` and produces an identical result
-  given the same inputs.
-
-  ID Derivation: `accountId = persistentHash(secretKey)`
-
-  <Callout type='warn'>
-    The `secretKey` parameter is a sensitive secret. Mishandling it can permanently compromise the security of this system.
-    Never log or persist the key in plaintext. Use cryptographically secure randomness to generate keys.
-    Treat key loss as identity loss — a lost key cannot be recovered.
-  </Callout>
-</APIItemCompact>
-
-#### _isTargetZero [toc] [#MultiToken-_isTargetZero]
-#### [!toc] [#MultiToken-_isTargetZero]
-<APIItemCompact
-  circuitSig="_isTargetZero(target: Either<Bytes<32>, ContractAddress>) → Boolean"
-  kind="internal"
-  modulePrefix="MultiToken"
->
-  Returns `true` if `target`'s active branch (as indicated by `is_left`) holds the zero value.
-</APIItemCompact>
