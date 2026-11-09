@@ -1,0 +1,252 @@
+---
+title: Validators
+description: Signature validation modules for ERC-7579 accounts
+---
+
+Validator modules determine whether a transaction should be executed by validating signatures. They implement the `IERC7579Validator` interface and are installed as `MODULE_TYPE_VALIDATOR` modules on ERC-7579 accounts.
+
+## Base Validator
+
+**`ERC7579Validator`** is the abstract base contract for all validator modules. It provides:
+
+- Integration with ERC-4337 UserOperations via `validateUserOp`
+- ERC-1271 signature verification via `isValidSignatureWithSender`
+- A hook for custom validation logic via `_rawERC7579Validation`
+
+Developers extending this base contract must implement:
+
+- `onInstall(bytes calldata data)`: Initialize the validator with account-specific configuration
+- `onUninstall(bytes calldata data)`: Clean up validator state
+- `_rawERC7579Validation(address account, bytes32 hash, bytes calldata signature)`: Core signature validation logic
+
+The single-signer validators below (`ERC7579ECDSAValidator`, `ERC7579P256Validator`, `ERC7579WebAuthnValidator`) are thin wrappers that compose `ERC7579Validator` with the corresponding [signer base module](/accounts/contracts/signers). Signer storage and management logic live in those base modules.
+
+## Available Validators
+
+OpenZeppelin Accounts provides several validator implementations:
+
+### ERC7579ECDSAValidator
+
+Validates ECDSA signatures from Ethereum addresses (EOAs). This is the most common validator for traditional Ethereum wallets.
+
+**Key Features:**
+
+- Single signer per account (EOA address)
+- Standard ECDSA signature validation
+- Simple installation with just a 20-byte address
+
+<Callout>
+This is an abstract contract. You need to create a concrete implementation:
+
+```solidity
+contract MyECDSAValidator is ERC7579ECDSAValidator {}
+```
+
+</Callout>
+
+The ECDSA validator can be installed as follows:
+
+```solidity
+import {MODULE_TYPE_VALIDATOR} from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol";
+import {ERC7579ECDSAValidator} from "@openzeppelin-accounts/contracts/modules/validators/ERC7579ECDSAValidator.sol";
+
+// Create a concrete implementation
+contract MyECDSAValidator is ERC7579ECDSAValidator {}
+
+// Deploy the validator (singleton, can be reused)
+MyECDSAValidator validator = new MyECDSAValidator();
+
+// Prepare initialization data (20-byte address)
+bytes memory initData = abi.encodePacked(signerAddress);
+
+// Install the module
+account.installModule(MODULE_TYPE_VALIDATOR, address(validator), initData);
+```
+
+After installation, you can update the signer:
+
+```solidity
+// Update the signer (must be called by the account)
+validator.setSigner(account, newSignerAddress);
+
+// Query the current signer
+address currentSigner = validator.signer(account);
+```
+
+### ERC7579P256Validator
+
+Validates P256 (secp256r1) signatures, which are commonly used by mobile devices and hardware security modules. This enables signing with keys that don't have Ethereum addresses.
+
+**Key Features:**
+
+- Single P256 public key per account (qx, qy coordinates)
+- Native support for mobile device signing
+- Hardware security module compatibility
+
+<Callout>
+This is an abstract contract. You need to create a concrete implementation:
+
+```solidity
+contract MyP256Validator is ERC7579P256Validator {}
+```
+
+</Callout>
+
+The P256 validator can be installed as follows:
+
+```solidity
+import {MODULE_TYPE_VALIDATOR} from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol";
+import {ERC7579P256Validator} from "@openzeppelin-accounts/contracts/modules/validators/ERC7579P256Validator.sol";
+
+// Create a concrete implementation
+contract MyP256Validator is ERC7579P256Validator {}
+
+// Deploy the validator (singleton, can be reused)
+MyP256Validator validator = new MyP256Validator();
+
+// Prepare P256 public key coordinates (64 bytes: qx + qy)
+bytes32 qx = /* P256 public key x-coordinate */;
+bytes32 qy = /* P256 public key y-coordinate */;
+bytes memory initData = abi.encodePacked(qx, qy);
+
+// Install the module
+account.installModule(MODULE_TYPE_VALIDATOR, address(validator), initData);
+```
+
+After installation, you can update the signer:
+
+```solidity
+// Update the P256 signer (must be called by the account)
+validator.setSigner(account, newQx, newQy);
+
+// Query the current signer
+(bytes32 qx, bytes32 qy) = validator.signer(account);
+```
+
+### ERC7579WebAuthnValidator
+
+Validates WebAuthn/FIDO2 signatures, providing passwordless authentication support. This validator extends [`ERC7579WebAuthn`](/accounts/contracts/signers#erc7579webauthn) and `ERC7579P256Validator`.
+
+**Key Features:**
+
+- WebAuthn/FIDO2 authentication support
+- Passwordless login capabilities
+- Compatible with hardware security keys (YubiKey, etc.)
+
+<Callout>
+This is an abstract contract. You need to create a concrete implementation:
+
+```solidity
+contract MyWebAuthnValidator is ERC7579WebAuthnValidator {}
+```
+
+</Callout>
+
+The WebAuthn validator can be installed as follows:
+
+```solidity
+import {MODULE_TYPE_VALIDATOR} from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol";
+import {ERC7579WebAuthnValidator} from "@openzeppelin-accounts/contracts/modules/validators/ERC7579WebAuthnValidator.sol";
+
+// Create a concrete implementation
+contract MyWebAuthnValidator is ERC7579WebAuthnValidator {}
+
+// Deploy the validator (singleton, can be reused)
+MyWebAuthnValidator validator = new MyWebAuthnValidator();
+
+// Prepare P256 public key coordinates (same as P256 validator)
+bytes32 qx = /* WebAuthn credential public key x-coordinate */;
+bytes32 qy = /* WebAuthn credential public key y-coordinate */;
+bytes memory initData = abi.encodePacked(qx, qy);
+
+// Install the module
+account.installModule(MODULE_TYPE_VALIDATOR, address(validator), initData);
+```
+
+**Signature Format:**
+
+Signatures must be ABI-encoded `WebAuthn.WebAuthnAuth` structs. See [`WebAuthn`](/contracts/5.x/api/utils/cryptography#WebAuthn) for the struct definition.
+
+### ERC7579MultisigValidator
+
+A validator that requires multiple signatures before executing operations. See the [Multisig documentation](/accounts/contracts/multisig) for more details.
+
+### ERC7579MultisigWeightedValidator
+
+A validator that supports weighted voting with multiple signers. See the [Multisig documentation](/accounts/contracts/multisig) for more details.
+
+### ERC7579MultisigConfidentialValidator
+
+A validator combining confidential multisig (FHE-encrypted signer addresses and threshold) with ERC-7579 validation. See the [Multisig documentation](/accounts/contracts/multisig) for installation and usage details.
+
+### ERC7579MultisigWeightedConfidentialValidator
+
+A validator combining confidential weighted multisig (FHE-encrypted signer addresses, weights, and threshold) with ERC-7579 validation. See the [Multisig documentation](/accounts/contracts/multisig) for installation and usage details.
+
+### Considerations
+
+When an account has multiple validators installed:
+
+- **UserOperations**: The validator is selected via the nonce (or account-specific mechanism) (see [validator selection](#validator-selection))
+- **ERC-1271**: The validator is selected via the first 20 bytes of the signature
+- **Validation**: Only the selected validator is called, not all installed validators
+
+This design allows accounts to support multiple signature types while explicitly selecting which validator to use for each operation.
+
+## Validator Selection
+
+ERC-7579 does not standardize how accounts select which validator to use for a given operation. Different account implementations use different mechanisms, with the most common approach being to encode the validator address in the UserOperation's `nonce` field.
+
+<Callout type="info">
+  When using the SDK's `toOpenAccount`, pass the `validator` address once at account creation time. The nonce is
+  constructed automatically for every user operation, so you never need to encode the validator address manually.
+</Callout>
+
+#### OpenZeppelin's AccountERC7579
+
+[OpenZeppelin's AccountERC7579](/contracts/5.x/api/account#AccountERC7579) extracts the validator address from the first 20 bytes of the nonce:
+
+```solidity
+// Nonce format: <validator address (20 bytes)> | <key (4 bytes)> | <nonce (8 bytes)>
+address validator = address(bytes32(userOp.nonce).extract_32_20(0));
+```
+
+To construct a nonce for multi-validator setup:
+
+```solidity
+// You have multiple validators installed
+address ecdsaValidator = address(0x1234...);
+address p256Validator = address(0x5678...);
+address multisigValidator = address(0x9abc...);
+
+// To use the ECDSA validator, construct the nonce:
+// Nonce format: <validator address (20 bytes)> | <key (4 bytes)> | <sequence (8 bytes)>
+uint192 key = 0; // Optional: sequence key for parallel nonces (allows multiple nonce sequences)
+uint64 sequence = 1; // The actual nonce sequence
+
+// Pack the nonce: validator address in bytes 0-19, key in bytes 20-23, sequence in bytes 24-31
+bytes32 nonce = bytes32(
+    uint256(uint160(ecdsaValidator)) << 96 |  // validator at bytes 0-19 (left-shift by 96 bits)
+    uint256(key) << 64 |                       // key at bytes 20-23 (left-shift by 64 bits)
+    uint256(sequence)                          // sequence at bytes 24-31 (no shift needed)
+);
+
+// Use this nonce in your UserOperation
+userOp.nonce = nonce;
+
+// To use a different validator (e.g., P256), just change the validator address:
+nonce = bytes32(
+    uint256(uint160(p256Validator)) << 96 |
+    uint256(key) << 64 |
+    uint256(sequence)
+);
+```
+
+#### Kernel
+
+[Kernel](https://github.com/zerodevapp/kernel) by ZeroDev also uses the nonce to select validators, but uses a different offset. Kernel extracts the validator from `userOp.nonce[2:22]` (bytes 2-21), allowing the first 2 bytes to encode validation mode information.
+
+<Callout>
+  When working with multiple account implementations, check each account's documentation for its specific validator
+  selection mechanism, as they may be incompatible.
+</Callout>

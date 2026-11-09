@@ -1,0 +1,28 @@
+---
+title: Signers
+description: Abstract modules for single-signer storage and signature validation primitives
+---
+
+These abstract modules handle signer storage, the installation lifecycle, and core signature validation primitives. See the [Validators](/accounts/contracts/validators) page for the ready-to-use validator implementations built on top of them.
+
+### ERC7579ECDSA
+
+Manages a single EOA signer per account and exposes `_validateECDSA` for downstream validation logic. Installation data encodes the signer as a packed 20-byte address.
+
+```solidity
+address currentSigner = module.signer(account);
+module.setSigner(account, newSigner); // must be called by the account
+```
+
+### ERC7579P256
+
+Manages a single P256 (secp256r1) public key per account as `(qx, qy)` coordinates and exposes `_validateP256`. Installation data encodes the key as 64 packed bytes.
+
+```solidity
+(bytes32 qx, bytes32 qy) = module.signer(account);
+module.setSigner(account, newQx, newQy); // must be called by the account
+```
+
+### ERC7579WebAuthn
+
+Extends `ERC7579P256` with WebAuthn authentication by adding `_validateWebAuthn`. Signatures must be ABI-encoded [`WebAuthn.WebAuthnAuth`](/contracts/5.x/api/utils/cryptography#WebAuthn) structs. Signer storage and management are inherited from `ERC7579P256`.

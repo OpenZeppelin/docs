@@ -1,0 +1,211 @@
+---
+title: ERC-7579 Actions
+description: Bundler client extension for managing ERC-7579 modules and executing user operations
+---
+
+`erc7579Actions` is a Viem client extension that adds a set of typed convenience methods for interacting with any ERC-7579 smart account. It is built on top of the core utilities in `erc7579.utils` and wraps Viem's `sendUserOperation` and `readContract` actions.
+
+## Setup
+
+Extend any Viem bundler client with `erc7579Actions()` after creating it:
+
+```typescript
+import { createBundlerClient } from 'viem/account-abstraction';
+import { http } from 'viem';
+import { erc7579Actions } from '@openzeppelin-accounts/sdk';
+
+const bundlerClient = createBundlerClient({
+  account,
+  client,
+  transport: http('https://bundler.example.com'),
+}).extend(erc7579Actions());
+```
+
+All actions resolve the smart account from either the client's attached `account` or an explicit `account` field in the parameters object.
+
+## Actions
+
+### accountId
+
+Reads the ERC-7579 account identifier string from the on-chain contract. Useful for verifying the account implementation and version before interacting with it.
+
+```typescript
+const id = await bundlerClient.accountId();
+// '@openzeppelin/contracts.AccountERC7579.v1.0.0'
+```
+
+### supportsModule
+
+Returns `true` if the account declares support for a given module type.
+
+```typescript
+const supported = await bundlerClient.supportsModule({ type: 'validator' });
+```
+
+Valid values for `type` are `'validator'`, `'executor'`, `'fallback'`, `'hook'`, or their numeric equivalents `1`–`4`.
+
+### supportsExecutionMode
+
+Returns `true` if the account supports a given execution mode. Execution modes combine a call type and an execution type.
+
+```typescript
+const supported = await bundlerClient.supportsExecutionMode({
+  callType: 'batchcall', // 'call' | 'batchcall' | 'delegatecall'
+  execType: 'try',       // 'default' | 'try'
+});
+```
+
+An optional `selector` (4 bytes) and `payload` (22 bytes) can also be specified for accounts that expose fallback handlers gated by function selector.
+
+### isModuleInstalled
+
+Returns `true` if a specific module address is installed under a given type.
+
+```typescript
+const installed = await bundlerClient.isModuleInstalled({
+  type: 'validator',
+  address: '0x<validatorAddress>',
+  additionalContext: '0x', // optional, passed to the account's isModuleInstalled check
+});
+```
+
+### installModules
+
+Sends a user operation that installs one or more modules. When multiple modules are provided they are automatically batched into a single `CALLTYPE_BATCH` execution so the account pays for only one user operation.
+
+```typescript
+import { encodePacked } from 'viem';
+
+const hash = await bundlerClient.installModules({
+  modules: [
+    {
+      type: 'validator',
+      address: '0x<validatorAddress>',
+      initData: encodePacked(['address'], [signer.address]),
+    },
+  ],
+});
+
+await bundlerClient.waitForUserOperationReceipt({ hash });
+```
+
+The `initData` format is module-specific. See the [Validators](/accounts/contracts/validators) and [Executors](/accounts/contracts/executors) pages for the expected encoding of each module.
+
+An optional `execType` field (`'default'` | `'try'`) controls whether individual installations revert the entire batch or are silently skipped on failure.
+
+### uninstallModules
+
+Sends a user operation that uninstalls one or more modules. Like `installModules`, multiple modules are batched automatically.
+
+```typescript
+const hash = await bundlerClient.uninstallModules({
+  modules: [
+    {
+      type: 'validator',
+      address: '0x<validatorAddress>',
+      deInitData: '0x', // module-specific cleanup data, defaults to '0x'
+    },
+  ],
+});
+
+await bundlerClient.waitForUserOperationReceipt({ hash });
+```
+
+<Callout type="warning">
+  Uninstalling the last validator module from an account will leave it without any authorization mechanism, making it
+  permanently unusable. Always ensure at least one validator remains installed.
+</Callout>
+
+### execute
+
+Sends a user operation that executes one or more arbitrary calls through the account. The call type is selected automatically: a single entry uses `CALLTYPE_SINGLE`, two or more entries use `CALLTYPE_BATCH`.
+
+```typescript
+import { parseEther } from 'viem';
+
+// Single call
+const hash = await bundlerClient.execute({
+  calls: [{ to: '0x<recipient>', data: '0x', value: parseEther('1') }],
+});
+
+// Batch call
+const hash = await bundlerClient.execute({
+  calls: [
+    { to: '0x<recipient1>', data: '0x', value: parseEther('1') },
+    { to: '0x<recipient2>', data: '0x', value: parseEther('2') },
+  ],
+});
+
+await bundlerClient.waitForUserOperationReceipt({ hash });
+```
+
+Pass `execType: 'try'` to continue processing remaining calls even if one fails:
+
+```typescript
+const hash = await bundlerClient.execute({
+  calls: [/* ... */],
+  execType: 'try',
+});
+```
+
+## ERC-7579 Utilities
+
+The SDK also exports the low-level encoding helpers used internally by `erc7579Actions` and `toERC7579Account`. These are useful when you need to build execution calldata manually.
+
+### Execution Mode
+
+ERC-7579 execution modes are 32-byte packed values that combine a call type, an execution type, an optional selector, and optional payload.
+
+```typescript
+import { encodeMode, decodeMode } from '@openzeppelin-accounts/sdk';
+
+const mode = encodeMode({
+  callType: 'batchcall', // 'call' | 'batchcall' | 'delegatecall'
+  execType: 'try',       // 'default' | 'try'
+});
+
+const decoded = decodeMode(mode);
+// { callType: '0x01', execType: '0x01', selector: '0x00000000', payload: '0x...' }
+```
+
+<Callout type="info">
+Omitted fields default to `CALLTYPE_CALL`, `EXECTYPE_DEFAULT`, a zero selector, and a zero payload.
+</Callout>
+
+### Call Encoding / Decoding
+
+`encodeCalls` wraps an array of Viem `Call` objects into ERC-7579 `execute` calldata, choosing single or batch encoding automatically:
+
+```typescript
+import { encodeCalls, decodeCalls } from '@openzeppelin-accounts/sdk';
+
+const calldata = encodeCalls([
+  { to: '0x<target>', value: 0n, data: '0x1234' },
+]);
+
+const calls = await decodeCalls(calldata);
+```
+
+Lower-level helpers for each encoding are also exported:
+
+| Function | Description |
+|---|---|
+| `encodeSingle` / `decodeSingle` | Pack/unpack a single `(address, uint256, bytes)` execution |
+| `encodeBatch` / `decodeBatch` | ABI-encode/decode an array of `(address, uint256, bytes)` executions |
+| `encodeDelegate` / `decodeDelegate` | Pack/unpack a `delegatecall` execution (no value field) |
+
+### Module Type Identifiers
+
+`ModuleType` values can be passed as either string or numeric literals throughout the SDK:
+
+```typescript
+import { ModuleTypes, parseModuleTypeId } from '@openzeppelin-accounts/sdk';
+
+ModuleTypes.VALIDATOR  // 1
+ModuleTypes.EXECUTOR   // 2
+ModuleTypes.FALLBACK   // 3
+ModuleTypes.HOOK       // 4
+
+parseModuleTypeId('validator') // 1n
+parseModuleTypeId(2)           // 2n
+```

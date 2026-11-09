@@ -1,0 +1,168 @@
+---
+title: Overview
+description: Architecture and key concepts of OpenZeppelin Accounts
+---
+
+import { File, Folder, Files } from 'fumadocs-ui/components/files';
+
+The OpenZeppelin Accounts is designed to provide compatibility with ERC-7579 accounts. Previous developments in major smart account contracts have provided with a layer of compatibility with ERC-7579, or even native support, which suits the standard to distribute standardized functionality that developers can use safely with popular account implementations like [OpenZeppelin's ERC-7579 account](/contracts/5.x/api/account#AccountERC7579) or [Kernel](https://github.com/zerodevapp/kernel).
+
+The contracts are organized with a clear structure that separates account implementations, and modules. This overview explains the architecture and key components.
+
+## Directory Structure
+
+The repository's source code is organized as follows:
+
+```files
+src/
+├── OpenAccount.sol              # Base ERC-7579 account implementation
+├── modules/
+│   ├── ERC7579Multisig.sol      # Multisig module (ERC-7913)
+│   ├── ERC7579MultisigWeighted.sol  # Weighted multisig module
+│   ├── executors/               # Execution modules
+│   └── validators/              # Validation modules
+└── extensions/                  # Account extensions
+```
+
+## Setting up an account
+
+Since these contracts are designed to provide compatibility with major ERC-7579 account implementations, it's assumed the developer has picked one already. Otherwise, `OpenAccount` is provided as a starting point.
+
+### OpenAccount
+
+`OpenAccount` is a production-ready, ERC-7579 compliant smart account implementation built on top of [OpenZeppelin Contracts](/contracts). It provides:
+
+- Full ERC-7579 compliance (module installation, execution modes, validation)
+- ERC-4337 support for account abstraction
+- EIP-712 signature support
+- NFT holder capabilities (ERC721 and ERC1155)
+
+#### Using OpenAccountFactory
+
+The `OpenAccountFactory` is deployed across all major EVM chains at the same deterministic address:
+
+```
+0x9045eF209067701bE7b78AaC216C04Ffa6543330
+```
+
+This factory creates minimal ERC-1967 proxy clones of the `OpenAccountImplementation` contract, providing deterministic addresses and efficient ERC-1967 proxy deployment. By design, the account is upgradeable, allowing the account itself (or the entrypoint) to upgrade the implementation contract.
+
+`OpenAccountImplementation` inherits from both `OpenAccount` and `AccountERC8043Upgradeable`, so every account deployed through this factory supports [init mode (ERC-8043)](/accounts/contracts/erc8043) out of the box. No extra setup is required to install and use modules atomically in a single user operation.
+
+<Callout type="info">
+  ZKSync has a different CREATE2 derivation scheme making it impossible to deploy deterministically in chains using the
+  ZKStack.
+</Callout>
+
+#### Creating a Custom Factory
+
+If you need custom account logic or want to extend `OpenAccount`, you can create your own account factory using OpenZeppelin's [Clones library](/contracts/5.x/api/proxy#Clones):
+
+```solidity
+// contracts/MyFactoryAccount.sol
+// SPDX-License-Identifier: MIT
+
+pragma solidity ^0.8.20;
+
+import { Clones } from '../../../proxy/Clones.sol';
+import { Address } from '../../../utils/Address.sol';
+
+/**
+ * @dev A factory contract to create accounts on demand.
+ */
+contract MyFactoryAccount {
+  using Clones for address;
+  using Address for address;
+
+  address private immutable _impl;
+
+  constructor(address impl_) {
+    require(impl_.code.length > 0);
+    _impl = impl_;
+  }
+
+  /// @dev Predict the address of the account
+  function predictAddress(bytes calldata callData) public view returns (address) {
+    return _impl.predictDeterministicAddress(keccak256(callData), address(this));
+  }
+
+  /// @dev Create clone accounts on demand
+  function cloneAndInitialize(bytes calldata callData) public returns (address) {
+    address predicted = predictAddress(callData);
+    if (predicted.code.length == 0) {
+      _impl.cloneDeterministic(keccak256(callData));
+      predicted.functionCall(callData);
+    }
+    return predicted;
+  }
+}
+```
+
+<Callout type="info">
+  Most developers are fine using deployed `OpenAccountFactory` at `0x9045eF209067701bE7b78AaC216C04Ffa6543330`. Only
+  create a custom factory if you need to extend `OpenAccount` with custom logic or implement a different account
+  contract.
+</Callout>
+
+<Callout type="warning">
+  Account factories should be carefully implemented to ensure the account address is deterministically tied to the
+  initial owners or signers. This prevents frontrunning attacks where a malicious actor could deploy the account with
+  their own owners before the intended owner does. The factory should include the owner's address (or other identifying
+  information) in the salt used for address calculation.
+</Callout>
+
+#### Handling Initialization
+
+Since `OpenAccount` implements `Initializable`, it's designed to work with factories. The account must be initialized with at least one validator or executor module right after deployment:
+
+```solidity
+function initialize(
+    uint256[] calldata moduleTypeIds,
+    address[] calldata modules,
+    bytes[] calldata initDatas,
+    Mode configMode,
+    bytes calldata configCalldata
+) public
+```
+
+In case an extra configuration call is needed from the account, the `configMode` and `configCalldata` arguments following ERC-7579 `Mode` and `executionCalldata` definitions, which allow to execute arbitrary calls during initialization and after module installation:
+
+```solidity
+// Single configuration call during initialization
+Mode configMode = CALLTYPE_SINGLE.encodeMode(EXECTYPE_DEFAULT, ...);
+bytes memory configCalldata = abi.encodePacked(
+    targetAddress,
+    uint256(0), // value
+    abi.encodeCall(target.someFunction, (arg1, arg2))
+);
+
+account.initialize(moduleTypeIds, modules, initDatas, configMode, configCalldata);
+```
+
+<Callout>
+  Factories will normally include the initialization call as part of the address derivation to ensure that each address
+  is specific to the owners and configuration set. For this reason, accounts who want to support `value` during a
+  configuration call must receive it first to an address that includes the transfer and native value in the calldata;
+  any change to the `configCalldata` will change the address of the account.
+</Callout>
+
+<Callout type="warning">
+  Accounts must be initialized with at least one validator or executor module. Leaving an account uninitialized or
+  without these modules will make it unusable since no module will be installed to authorize operations.
+</Callout>
+
+## Installing Modules
+
+To install a module on an account:
+
+```solidity
+// Install an ECDSA validator
+address validator = address(new ERC7579ECDSAValidator());
+bytes memory initData = abi.encodePacked(signerAddress);
+account.installModule(MODULE_TYPE_VALIDATOR, validator, initData);
+```
+
+The `initData` format depends on the module. For example:
+
+- **ECDSA Validator**: `abi.encodePacked(signerAddress)` (20 bytes)
+- **Multisig**: `abi.encode(signers, threshold)` where `signers` is `bytes[]` and `threshold` is `uint64`

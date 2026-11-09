@@ -1,0 +1,285 @@
+---
+title: Session Keys
+description: Scoped, time-limited signing authority for dapps, games, and automated services
+---
+
+Session keys grant a temporary, scoped signing authority to an additional key so that a dapp, game engine, or automated service can act on behalf of an account without exposing the owner's primary key. Rather than implementing a single, opinionated session-key contract, OpenZeppelin Accounts decomposes the problem into two clearly separated concerns.
+
+**What every session key needs:**
+
+- A configurable **validity range**: the key is only active between two timepoints.
+- **Policy enforcement**: the key must be constrained to a specific set of actions, otherwise a compromised session key would have the same power as the owner.
+- **Arbitrary signature schemes**: session keys may be EOAs (secp256k1), P256 hardware keys, WebAuthn credentials, or any other key type supported by [ERC-7913](/accounts/contracts/erc7913).
+
+**Why a unified design is hard:**
+
+Policy enforcement is use-case specific. A gaming session may need only a timer; a DeFi integration may need a spending-limit tracker that renews on a schedule; a selector-whitelist module rejects calls to functions not on an allow-list. Each policy requires its own storage and logic, and there is no one-size-fits-all implementation.
+
+This is resolved by splitting the responsibility: `ERC7579SessionKeys` handles the generic concerns (key registry + validity) while concrete extensions provide their own policy logic as ERC-7579 modules.
+
+## Architecture
+
+```
+ERC7579SessionKeys  (abstract)
+    │
+    ├── ERC7579SessionKeysValidator  (abstract – adds ERC-4337 / ERC-1271 validation)
+    │       │
+    │       └── YourPolicyModule  (concrete – add policy enforcement here)
+    │
+    └── YourCustomModule  (can also mix in ERC7579Executor for execution constraints)
+```
+
+### `ERC7579SessionKeys`
+
+`ERC7579SessionKeys` is an abstract ERC-7579 module that manages a per-account registry of [ERC-7913](/accounts/contracts/erc7913) session keys and their validity ranges. It deliberately does **not** implement any policy: a concrete subclass must decide what a valid key is allowed to do.
+
+Key properties:
+
+- **ERC-7913 keys**: any `(verifier, key)` pair is accepted: EOA addresses, P256 hardware keys, WebAuthn credentials, ZKEmail addresses, etc.
+- **Validity ranges**: each key has a `from` and an `until` timepoint. Passing `0` for `from` resolves to the current timestamp; passing `0` for `until` stores `type(uint48).max` (no expiry).
+- **ERC-6372 clock**: defaults to `block.timestamp`. Override `clock()` and `CLOCK_MODE()` to use block numbers instead.
+- **Cheap uninstall**: rather than iterating over all registered keys on uninstall, the module increments an installation nonce. All previous key data becomes unreachable instantly. Storage from old installations remains but is never accessed again.
+
+```solidity
+// Key registration state accessors
+bool registered  = module.isKey(account, key);          // is the key in the registry?
+bool active      = module.isValid(account, key);         // registered AND within validity range?
+(uint48 from, uint48 until) = module.validity(account, key);
+bytes[] memory allKeys = module.keys(account, 0, type(uint256).max);
+
+// Lifecycle (called by the account)
+module.addKeys(newKeys, starts, ends);
+module.removeKeys(oldKeys);
+```
+
+### `ERC7579SessionKeysValidator`
+
+`ERC7579SessionKeysValidator` extends `ERC7579SessionKeys` with ERC-4337 user-operation validation and ERC-1271 message signing. It is still **abstract**: it does not call `_validateSessionKey` unconditionally—concrete subclasses inherit the full validation plumbing and add their own policy gate before or after the key check.
+
+Key behaviors:
+
+- **User-operation validation**: decodes the session key from `userOp.signature`, reads its `(from, until)` range, and packs both the signature validity bit and the time range into a single `validationData` word using `ERC4337Utils.packValidationData`. The EntryPoint enforces the time range natively without requiring an explicit on-chain timestamp check.
+- **ERC-1271 validation**: the EntryPoint is not involved in off-chain message signing, so validity is checked manually: if the clock is outside `[from, until]`, the function returns `0xffffffff` immediately.
+
+## Implementing Custom Policies
+
+Because `ERC7579SessionKeysValidator` is abstract, the developer is responsible for providing the policy logic. The simplest concrete implementation—which grants full account access to any registered key within its validity window—looks like:
+
+```solidity
+import {ERC7579SessionKeysValidator} from "@openzeppelin-accounts/contracts/modules/validators/ERC7579SessionKeysValidator.sol";
+
+contract UnrestrictedSessionKeyValidator is ERC7579SessionKeysValidator {
+    // No additional policy: any registered + valid key can sign anything.
+    // _rawERC7579Validation is already implemented in ERC7579SessionKeysValidator.
+}
+```
+
+<Callout type="warn">
+  Without additional restrictions, any registered session key within its validity range can validate any user operation
+  and sign any ERC-1271 message on behalf of the account. Always add policy enforcement for production use.
+</Callout>
+
+A more realistic policy overrides `_validateUserOp` to inspect `userOp.callData` before delegating to the parent. For example, a selector-whitelist policy:
+
+```solidity
+import {ERC7579SessionKeysValidator} from "@openzeppelin-accounts/contracts/modules/validators/ERC7579SessionKeysValidator.sol";
+import {PackedUserOperation} from "@openzeppelin/contracts/interfaces/draft-IERC4337.sol";
+
+contract SelectorWhitelistValidator is ERC7579SessionKeysValidator {
+    // account => key id => selector => allowed
+    mapping(address => mapping(bytes32 => mapping(bytes4 => bool))) private _allowed;
+
+    function allowSelector(bytes calldata key, bytes4 selector) external {
+        _allowed[msg.sender][keccak256(key)][selector] = true;
+    }
+
+    function _validateUserOp(
+        PackedUserOperation calldata userOp,
+        bytes32 userOpHash
+    ) internal override returns (uint256) {
+        // Enforce the selector whitelist by inspecting userOp.callData before
+        // delegating to the parent for cryptographic verification and validity packing.
+        // ...
+    }
+}
+```
+
+## Validator and Executor Combined
+
+Some policies cannot be enforced at the ERC-4337 validation phase because the phase is stateless and cannot track evolving state like remaining spend allowance. In these cases the module can be **both a validator and an executor**: the session key validates a user operation that calls a specific function on the module itself, and that function uses `executeFromExecutor` on the account. This pattern allows execution-time constraints—such as decrementing a spend counter or reverting if a call target is not whitelisted—to be enforced outside the validation phase.
+
+```
+UserOp (signed by session key)
+    └─ callData → SpendLimitModule.transferFrom(account, key, ..., amount)
+                         │
+                         └─ checks & decrements per-key remaining limit
+                         └─ account.executeFromExecutor(target, value, data)
+```
+
+`ERC7579NativeSpender` and `ERC7579ERC20Spender` are the canonical implementations of this pattern. They:
+
+- Install under BOTH `MODULE_TYPE_VALIDATOR` and `MODULE_TYPE_EXECUTOR`, in that order.
+- Override `_validateUserOp` to require that `userOp.callData` is exactly `IERC7579Execution.execute(SINGLE, encodeSingle(address(this), 0, transferFromOrBatchTransferFrom(...)))`.
+- Disable ERC-1271 signing (`isValidSignatureWithSender` returns `0xffffffff`) so a spending session key cannot be repurposed to sign arbitrary off-chain digests.
+
+See [Spending Limits](/accounts/contracts/executors/spending-limits) for the full install/use guide. This is the recommended pattern for any policy with mutable state (spending limits, rate limits, per-session counters).
+
+## Installing Session Keys
+
+### At Account Deployment
+
+Pass the session key module as one of the initial modules when deploying through `OpenAccountFactory`:
+
+```solidity
+bytes[] memory keys = new bytes[](1);
+keys[0] = abi.encodePacked(sessionKeyAddress); // EOA session key
+
+uint48[] memory starts = new uint48[](1);
+uint48[] memory ends   = new uint48[](1);
+starts[0] = 0;            // 0 → current timestamp
+ends[0]   = uint48(block.timestamp + 7 days);
+
+bytes memory initData = abi.encode(keys, starts, ends);
+
+uint256[] memory moduleTypeIds = new uint256[](1);
+moduleTypeIds[0] = MODULE_TYPE_VALIDATOR;
+address[] memory modules = new address[](1);
+modules[0] = address(sessionKeyValidator);
+bytes[] memory initDatas = new bytes[](1);
+initDatas[0] = initData;
+
+address account = factory.createAndInitialize(moduleTypeIds, modules, initDatas, mode, callData, salt);
+```
+
+### On an Existing Account (standard two-step)
+
+```solidity
+import {MODULE_TYPE_VALIDATOR} from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol";
+
+// Step 1 – install the module
+account.installModule(MODULE_TYPE_VALIDATOR, address(sessionKeyValidator), initData);
+
+// Step 2 – use the session key in a subsequent UserOperation
+```
+
+### Atomic Installation and First Use with ERC-8043
+
+[ERC-8043](/accounts/contracts/erc8043) collapses module installation and the first use of the new module into a single user operation. This is particularly valuable for session keys because the dapp can install its session key and immediately perform the first action without requiring a separate owner-signed transaction.
+
+The owner signs an EIP-712 `InitModules` struct authorizing the installation, and the session key signs the user operation itself. Both authorizations travel in the same `UserOperation`:
+
+```solidity
+// 1. Owner signs the EIP-712 installation authorization
+bytes32[] memory initDataHashes = new bytes32[](1);
+initDataHashes[0] = keccak256(initData);
+
+bytes32 structHash = keccak256(abi.encode(
+    INIT_MODULES_TYPEHASH,
+    keccak256(abi.encodePacked(moduleTypeIds)),
+    keccak256(abi.encodePacked(modules)),
+    keccak256(abi.encodePacked(initDataHashes)),
+    userOpNonce
+));
+bytes32 digest = MessageHashUtils.toTypedDataHash(account.domainSeparator(), structHash);
+bytes memory installationSignature = ownerSign(digest); // prefixed with current validator address
+
+// 2. Encode initCode with the ERC-8043 magic value
+bytes memory initCode = abi.encodePacked(
+    bytes4(0x80438043),
+    abi.encode(moduleTypeIds, modules, initDatas, installationSignature)
+);
+
+// 3. Session key signs the userOpHash (routing nonce through the new validator)
+uint256 nonce = uint256(uint160(address(sessionKeyValidator))) << 96;
+PackedUserOperation memory userOp = PackedUserOperation({
+    sender:   address(account),
+    nonce:    nonce,
+    initCode: initCode,
+    callData: callData,  // the action to execute in the same operation
+    // ... gas fields ...
+    signature: sessionKeySign(userOpHash) // abi.encode(key, cryptoSignature)
+});
+```
+
+See [ERC-8043](/accounts/contracts/erc8043) for the complete encoding details and the full step-by-step guide.
+
+## Managing Session Keys
+
+After installation, the account can add or remove keys at any time by calling the module directly (only the account itself may call these functions):
+
+```solidity
+// Add new keys
+bytes[] memory newKeys = new bytes[](2);
+newKeys[0] = abi.encodePacked(eoa);                          // EOA
+newKeys[1] = abi.encodePacked(p256Verifier, qx, qy);         // P256 hardware key
+
+uint48[] memory starts = new uint48[](2);
+uint48[] memory ends   = new uint48[](2);
+starts[0] = 0;                        // active immediately
+ends[0]   = uint48(block.timestamp + 1 days);
+starts[1] = uint48(block.timestamp + 1 hours); // delayed activation
+ends[1]   = 0;                        // no expiry
+
+sessionKeyValidator.addKeys(newKeys, starts, ends);
+
+// Remove keys
+bytes[] memory oldKeys = new bytes[](1);
+oldKeys[0] = abi.encodePacked(eoa);
+sessionKeyValidator.removeKeys(oldKeys);
+```
+
+<Callout>
+  Setting `starts[i] = 0` activates the key from the current timepoint. Setting `ends[i] = 0` stores
+  `type(uint48).max`, meaning the key never expires.
+</Callout>
+
+## Querying Session Key State
+
+```solidity
+// Is the key registered (regardless of validity range)?
+bool registered = sessionKeyValidator.isKey(account, key);
+
+// Is the key registered AND currently within its validity range?
+bool active = sessionKeyValidator.isValid(account, key);
+
+// Read the exact validity range
+(uint48 from, uint48 until) = sessionKeyValidator.validity(account, key);
+
+// Enumerate all keys (paginated)
+bytes[] memory allKeys = sessionKeyValidator.keys(account, 0, type(uint256).max);
+
+// Current installation nonce (incremented on each uninstall)
+uint256 nonce = sessionKeyValidator.installation(account);
+```
+
+## Signature Format
+
+When signing a user operation or ERC-1271 message with a session key, the `signature` field must be ABI-encoded as:
+
+```solidity
+bytes memory signature = abi.encode(
+    bytes key,          // ERC-7913 key bytes (verifier || key)
+    bytes keySignature  // cryptographic signature produced by that key
+);
+```
+
+For an EOA session key this looks like:
+
+```solidity
+(uint8 v, bytes32 r, bytes32 s) = vm.sign(sessionKeyPrivateKey, userOpHash);
+bytes memory keySignature = abi.encodePacked(r, s, v);
+bytes memory signature = abi.encode(
+    abi.encodePacked(sessionKeyAddress), // 20-byte EOA key
+    keySignature
+);
+```
+
+For a P256 session key (e.g. a hardware security key or mobile enclave):
+
+```solidity
+bytes memory key = abi.encodePacked(p256Verifier, qx, qy);
+bytes memory keySignature = ...; // P256 signature bytes
+bytes memory signature = abi.encode(key, keySignature);
+```
+
+The session key is identified and verified through the [ERC-7913](/accounts/contracts/erc7913) `SignatureChecker` path, so any key type supported by ERC-7913 works out of the box.

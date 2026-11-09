@@ -1,0 +1,738 @@
+---
+title: "Utils"
+description: "Smart contract utils utilities and implementations"
+---
+
+Libraries and helpers used by the account and its modules.
+
+- [`Multisig`](#Multisig): Encoding and decoding of multisignatures and their signer sets.
+- [`CrossChainSignatureChecker`](#CrossChainSignatureChecker): Verification of ERC-7964 crosschain signatures.
+- [`ERC8043Utils`](#ERC8043Utils): Encoding helpers for the ERC-8043 init mode.
+- [`MultisigCoordinator`](#MultisigCoordinator): Coordinates FHE inputs and decryption rights between the signers of a multisig account.
+
+## Libraries
+
+[`Multisig`](#Multisig)
+
+[`CrossChainSignatureChecker`](#CrossChainSignatureChecker)
+
+[`ERC8043Utils`](#ERC8043Utils)
+
+## Coordination
+
+[`MultisigCoordinator`](#MultisigCoordinator)
+
+<a id="CrossChainSignatureChecker"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `CrossChainSignatureChecker` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-accounts/blob/main/packages/contracts/src/utils/CrossChainSignatureChecker.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin-accounts/contracts/utils/CrossChainSignatureChecker.sol";
+```
+
+Crosschain signature verification helper for ERC-7964 compliant signatures.
+
+[ERC-7964](https://eips.ethereum.org/EIPS/eip-7964) enables a single signature to
+be valid across multiple chains by omitting the `chainId` from the EIP-712 domain
+and encoding chain-specific operations as an array of struct hashes. This helper
+provides functions to parse and verify such crosschain signatures.
+
+The signature encoding includes metadata that allows contracts to:
+* Detect crosschain signatures via a magic prefix
+* Identify which operation in the array corresponds to the current chain
+* Reconstruct the full EIP-712 hash for verification
+* Validate the signature using standard ECDSA or ERC-1271
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [isValidCrossChainSignatureNow(signer, hash, erc7964Signature, structHash)](#CrossChainSignatureChecker-isValidCrossChainSignatureNow-address-bytes32-bytes-function--bytes32--view-returns--bytes32--)
+- [isValidCrossChainSignatureNowCalldata(signer, hash, erc7964Signature, structHash)](#CrossChainSignatureChecker-isValidCrossChainSignatureNowCalldata-address-bytes32-bytes-function--bytes32--view-returns--bytes32--)
+- [tryParseCrossChainSignature(erc7964Signature)](#CrossChainSignatureChecker-tryParseCrossChainSignature-bytes-)
+- [tryParseCrossChainSignatureCalldata(erc7964Signature)](#CrossChainSignatureChecker-tryParseCrossChainSignatureCalldata-bytes-)
+</div>
+</div>
+
+<a id="CrossChainSignatureChecker-isValidCrossChainSignatureNow-address-bytes32-bytes-function--bytes32--view-returns--bytes32--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">isValidCrossChainSignatureNow(address signer, bytes32 hash, bytes erc7964Signature, function (bytes32) view returns (bytes32) structHash) → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#CrossChainSignatureChecker-isValidCrossChainSignatureNow-address-bytes32-bytes-function--bytes32--view-returns--bytes32--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Verifies an ERC-7964 crosschain signature for a given `signer`, `hash` and `erc7964Signature`.
+Uses the provided `structHash` function to compute the main struct hash from the array of
+chain-specific struct hashes.
+
+This function:
+
+1. Parses the ERC-7964 signature encoding to extract metadata
+2. Verifies that the provided `hash` matches the struct at `structIndex` in the array
+3. Queries the application contract for EIP-712 domain information
+4. Reconstructs the full typed hash using the domain and array of struct hashes
+5. Validates the signature against the reconstructed hash
+
+<Callout>
+Unlike ECDSA signatures, contract signatures are revocable, and the outcome of this function can thus
+change through time. It could return true at block N and false at block N+1 (or the opposite).
+</Callout>
+
+<Callout type="warn">
+Make sure the `structHash` function pointer manages memory correctly. Otherwise,
+this function may behave unexpectedly.
+</Callout>
+
+</div>
+</div>
+
+<a id="CrossChainSignatureChecker-isValidCrossChainSignatureNowCalldata-address-bytes32-bytes-function--bytes32--view-returns--bytes32--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">isValidCrossChainSignatureNowCalldata(address signer, bytes32 hash, bytes erc7964Signature, function (bytes32) view returns (bytes32) structHash) → bool</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#CrossChainSignatureChecker-isValidCrossChainSignatureNowCalldata-address-bytes32-bytes-function--bytes32--view-returns--bytes32--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Variant of [`CrossChainSignatureChecker.isValidCrossChainSignatureNow`](#CrossChainSignatureChecker-isValidCrossChainSignatureNow-address-bytes32-bytes-function--bytes32--view-returns--bytes32--) that takes the signature in calldata.
+
+</div>
+</div>
+
+<a id="CrossChainSignatureChecker-tryParseCrossChainSignature-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">tryParseCrossChainSignature(bytes erc7964Signature) → bytes1 fields, uint16 structIndex, address application, bytes32[] structsArray, bytes crossChainSignature</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#CrossChainSignatureChecker-tryParseCrossChainSignature-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Parses an ERC-7964 encoded crosschain signature into its components:
+
+* `success` True if parsing succeeded, false if the signature is malformed or the magic value is incorrect
+* `fields` The EIP-712 domain fields byte from ERC-5267
+* `structIndex` The index of the current chain's operation in the array
+* `application` The address of the contract providing EIP-712 domain info
+* `structsArray` The array of struct hashes for all chains
+* `crossChainSignature` The actual signature bytes
+
+</div>
+</div>
+
+<a id="CrossChainSignatureChecker-tryParseCrossChainSignatureCalldata-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">tryParseCrossChainSignatureCalldata(bytes erc7964Signature) → bytes1 fields, uint16 structIndex, address application, bytes32[] structsArray, bytes crossChainSignature</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#CrossChainSignatureChecker-tryParseCrossChainSignatureCalldata-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Variant of `parseCrossChainSignature` that takes the signature in calldata.
+
+</div>
+</div>
+
+<a id="ERC8043Utils"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `ERC8043Utils` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-accounts/blob/main/packages/contracts/src/utils/ERC8043Utils.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin-accounts/contracts/utils/ERC8043Utils.sol";
+```
+
+Utility functions for the [ERC-8043](https://eip.tools/eip/8043) init mode.
+
+Init mode allows an ERC-4337 user operation to install one or more ERC-7579 modules
+atomically alongside its regular execution. It is triggered by prefixing the user
+operation's `initCode` with [`ERC8043Utils.INIT_MODE_MAGIC_VALUE`](#ERC8043Utils-INIT_MODE_MAGIC_VALUE-bytes4); the remaining bytes carry an
+ABI-encoded installation payload followed by an EIP-712 signature over the
+`InitModules` struct authorizing the installation.
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [initModulesStructHash(moduleTypeIds, modules, initDatas, nonce)](#ERC8043Utils-initModulesStructHash-uint256---address---bytes---uint256-)
+- [tryDecodeInitMode(data)](#ERC8043Utils-tryDecodeInitMode-bytes-)
+</div>
+</div>
+
+<a id="ERC8043Utils-initModulesStructHash-uint256---address---bytes---uint256-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">initModulesStructHash(uint256[] moduleTypeIds, address[] modules, bytes[] initDatas, uint256 nonce) → bytes32</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC8043Utils-initModulesStructHash-uint256---address---bytes---uint256-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Computes the EIP-712 struct hash of the `InitModules` message.
+
+```
+InitModules(uint256[] moduleTypeIds, address[] modules, bytes[] initDatas, uint256 nonce)
+```
+
+`nonce` is the user operation's nonce; combining it into the signed payload binds
+the installation authorization to a specific user operation. Callers must wrap the
+returned struct hash with the account's EIP-712 domain separator (e.g.
+`_hashTypedDataV4`) before verifying `installationSignature`.
+
+</div>
+</div>
+
+<a id="ERC8043Utils-tryDecodeInitMode-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">tryDecodeInitMode(bytes data) → bool valid, uint256[] moduleTypeIds, address[] modules, bytes[] initDatas, bytes installationSignature</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#ERC8043Utils-tryDecodeInitMode-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Attempts to decode an ERC-8043 init mode payload from `data`.
+
+`data` must be the user operation's `initCode` with the [`ERC8043Utils.INIT_MODE_MAGIC_VALUE`](#ERC8043Utils-INIT_MODE_MAGIC_VALUE-bytes4)
+4-byte prefix already stripped. Callers are expected to detect init mode
+themselves — typically by comparing `initCode[:4]` against [`ERC8043Utils.INIT_MODE_MAGIC_VALUE`](#ERC8043Utils-INIT_MODE_MAGIC_VALUE-bytes4)
+— before invoking this function.
+
+`valid` is `true` when the payload decodes into four consistent, non-empty
+arrays: `moduleTypeIds.length == modules.length == initDatas.length > 0`. When
+`valid` is `false` the returned slices should not be relied on; individual
+fields whose sub-decoder failed are returned as empty slices, but fields that
+decoded before the inconsistency was detected may be populated. Callers that
+want strict init-mode semantics should reject the user operation in that case.
+
+The decoding never reverts on malformed input: length and offset checks are
+performed inline before any calldata slice is materialized.
+
+</div>
+</div>
+
+<a id="Multisig"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `Multisig` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-accounts/blob/main/packages/contracts/src/utils/Multisig.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin-accounts/contracts/utils/Multisig.sol";
+```
+
+Utilities for multisignature operations.
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [tryDecodeMultisignatureCalldata(multisignature)](#Multisig-tryDecodeMultisignatureCalldata-bytes-)
+- [decodeMultisignatureCalldata(multisignature)](#Multisig-decodeMultisignatureCalldata-bytes-)
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [MultisigInvalidFormat()](#Multisig-MultisigInvalidFormat--)
+</div>
+</div>
+
+<a id="Multisig-tryDecodeMultisignatureCalldata-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">tryDecodeMultisignatureCalldata(bytes multisignature) → bool success, bytes[] signingSigners, bytes[] signatures</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#Multisig-tryDecodeMultisignatureCalldata-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Decodes a multisignature data from calldata without memory allocation.
+
+The multisignature should be encoded as:
+`abi.encode(bytes[] signingSigners, bytes[] signatures)`
+
+Where `signingSigners` are the authorized signers and `signatures` are their corresponding
+signatures of the operation hash. This function is equivalent to
+`abi.decode(multisignature, (bytes[], bytes[]))` but operates directly on calldata to avoid
+memory allocation, improving gas efficiency during multisignature validation.
+
+<Callout>
+This function does not validate the returned signers and signatures have the same length.
+</Callout>
+
+</div>
+</div>
+
+<a id="Multisig-decodeMultisignatureCalldata-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">decodeMultisignatureCalldata(bytes multisignature) → bytes[] signingSigners, bytes[] signatures</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#Multisig-decodeMultisignatureCalldata-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Same as [`Multisig.tryDecodeMultisignatureCalldata`](#Multisig-tryDecodeMultisignatureCalldata-bytes-), but reverts if the multisignature is invalid.
+
+Requirements:
+
+* The `multisignature` must be at least 64 bytes long to contain the two offset words.
+* Both array offsets must be properly aligned and within bounds.
+* Both array length fields must be accessible within the provided data.
+* The arrays should have the same length for proper signature validation.
+
+</div>
+</div>
+
+<a id="Multisig-MultisigInvalidFormat--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">MultisigInvalidFormat()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#Multisig-MultisigInvalidFormat--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The `multisignature` format is invalid.
+
+</div>
+</div>
+
+<a id="MultisigCoordinator"></a>
+
+<div style={{marginTop: "4em"}} className="w-full flex flex-row items-center justify-between">
+
+## `MultisigCoordinator` 
+
+<a target="_blank" style={{marginTop: "1.5em"}} href="https://github.com/OpenZeppelin/openzeppelin-accounts/blob/main/packages/contracts/src/utils/MultisigCoordinator.sol">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-github-icon lucide-github"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+</a>
+
+</div>
+
+```solidity
+import "@openzeppelin-accounts/contracts/utils/MultisigCoordinator.sol";
+```
+
+Utility contract that bridges multisig accounts with Fully Homomorphic Encryption (FHE).
+
+When a multisig account interacts with a confidential token (e.g. ERC-7984), one signer
+typically constructs the encrypted input off-chain and packages it with an input proof. The
+remaining signers cannot independently inspect or reconstruct the encrypted value, they must
+trust the submitting signer's off-chain preparation.
+
+Additionally, Zama's FHE Access Control List (ACL) only supports EOA addresses as decryption
+recipients; it does not natively support smart-contract multisigs. This means signers that are
+not EOAs cannot receive decryption rights that their signers can act on.
+
+### Solution
+
+This contract provides two capabilities:
+
+1. **Encrypted value creation**: Any caller can submit an externally-encrypted FHE value along
+   with its input proof. The contract verifies the proof and stores ACL permissions so that both
+   this coordinator and the target account can subsequently use or re-share the handle.
+   The resulting handle is returned for use in downstream calls (e.g. `confidentialTransferFrom`).
+
+2. **Handle allowance granting**: Any authorized signer (or the account itself) can grant
+   ACL permission over an existing encrypted handle to an arbitrary EOA or contract address.
+   This lets signers individually expose a confidential value to their own EOA for decryption,
+   without the account contract having to approve anything.
+
+### Setup
+
+This is an abstract contract. Concrete deployments must also inherit an fhEVM coprocessor
+configuration. For Zama's fhEVM this is done by inheriting `ZamaEthereumConfig` from the
+[FHEVM Solidity package](https://github.com/zama-ai/fhevm/tree/main/library-solidity) alongside
+this contract:
+
+```solidity
+contract MyMultisigCoordinator is MultisigCoordinator, ZamaEthereumConfig {}
+```
+
+A single deployment can serve multiple accounts: each account is identified by its address.
+Before using [`MultisigCoordinator.allowHandle`](#MultisigCoordinator-allowHandle-address-bytes-bytes-bytes32-address-), an account must register its associated
+[`ERC7579Multisig`](/accounts/api/modules#ERC7579Multisig) module by calling [`MultisigCoordinator.setERC7579Multisig`](#MultisigCoordinator-setERC7579Multisig-address-) from the account itself (e.g. via a
+UserOperation's `execute` call).
+
+### Signature scheme
+
+When an explicit signer and signature are supplied, the signed digest is an EIP-712 typed
+data hash anchored to the `account`'s own domain separator. The domain is retrieved at
+call-time via `IERC5267-eip712Domain`, so no additional configuration of this coordinator
+is needed.
+
+<Callout>
+[`MultisigCoordinator.fromExternal`](#MultisigCoordinator-fromExternal-address-bytes32-bytes-enum-FheType-) does not require prior registration; it grants ACL permissions to
+any address provided as `account`, regardless of whether a multisig has been configured.
+</Callout>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Functions</h3>
+<div className="font-mono">
+- [erc7579Multisig(account)](#MultisigCoordinator-erc7579Multisig-address-)
+- [setERC7579Multisig(multisig_)](#MultisigCoordinator-setERC7579Multisig-address-)
+- [fromExternal(account, externalHandle, inputProof, fheType)](#MultisigCoordinator-fromExternal-address-bytes32-bytes-enum-FheType-)
+- [_fromExternal(account, externalHandle, inputProof, fheType)](#MultisigCoordinator-_fromExternal-address-bytes32-bytes-enum-FheType-)
+- [allowHandle(account, handle, to)](#MultisigCoordinator-allowHandle-address-bytes32-address-)
+- [allowHandle(account, signer, signature, handle, to)](#MultisigCoordinator-allowHandle-address-bytes-bytes-bytes32-address-)
+- [_validateAccess(account, signer, signature, hash)](#MultisigCoordinator-_validateAccess-address-bytes-bytes-bytes32-)
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Events</h3>
+<div className="font-mono">
+- [MultisigCoordinatorMultisigSet(account, multisig)](#MultisigCoordinator-MultisigCoordinatorMultisigSet-address-address-)
+</div>
+</div>
+
+<div className="bg-secondary p-4 rounded-md mb-6">
+<h3 style={{ marginTop: "0"}}>Errors</h3>
+<div className="font-mono">
+- [MultisigCoordinatorInvalidSigner(account, signer)](#MultisigCoordinator-MultisigCoordinatorInvalidSigner-address-bytes-)
+- [MultisigCoordinatorInvalidSignature(account, signer, signature)](#MultisigCoordinator-MultisigCoordinatorInvalidSignature-address-bytes-bytes-)
+- [MultisigCoordinatorInvalidMultisig()](#MultisigCoordinator-MultisigCoordinatorInvalidMultisig--)
+- [MultisigCoordinatorInvalidMultisigModule()](#MultisigCoordinator-MultisigCoordinatorInvalidMultisigModule--)
+- [MultisigCoordinatorAccountNotAllowedToUseHandle(handle, account)](#MultisigCoordinator-MultisigCoordinatorAccountNotAllowedToUseHandle-bytes32-address-)
+</div>
+</div>
+
+<a id="MultisigCoordinator-erc7579Multisig-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">erc7579Multisig(address account) → address</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#MultisigCoordinator-erc7579Multisig-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Returns the address of the [`ERC7579Multisig`](/accounts/api/modules#ERC7579Multisig) module associated with `account`.
+Returns `address(0)` if no multisig has been registered.
+
+</div>
+</div>
+
+<a id="MultisigCoordinator-setERC7579Multisig-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">setERC7579Multisig(address multisig_)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#MultisigCoordinator-setERC7579Multisig-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Registers or updates the [`ERC7579Multisig`](/accounts/api/modules#ERC7579Multisig) module address for the calling account.
+
+This should be called by the account itself, typically via a UserOperation's `execute` call,
+so that [`MultisigCoordinator.allowHandle`](#MultisigCoordinator-allowHandle-address-bytes-bytes-bytes32-address-) can verify signer authority.
+
+Requirements:
+
+* `multisig_` must not be the zero address.
+
+</div>
+</div>
+
+<a id="MultisigCoordinator-fromExternal-address-bytes32-bytes-enum-FheType-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">fromExternal(address account, bytes32 externalHandle, bytes inputProof, enum FheType fheType) → bytes32</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#MultisigCoordinator-fromExternal-address-bytes32-bytes-enum-FheType-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Verifies an externally-encrypted handle input proof and registers ACL permissions.
+
+The proof is validated by `FHE-fromExternal`, after which both this coordinator (`address(this)`)
+and the target `account` are permanently allowed to use the resulting handle.
+
+The returned handle can be cast to the appropriate type using with `ebool.wrap(externalHandle)`
+for `ebool`, `eaddress.wrap(externalHandle)` for `eaddress`, `euint8.wrap(externalHandle)` for
+`euint8` and so on.
+
+<Callout>
+Anyone can call this function for any `account` address. ACL permissions are additive
+and the caller has no ability to revoke them, so there is no griefing risk.
+</Callout>
+
+</div>
+</div>
+
+<a id="MultisigCoordinator-_fromExternal-address-bytes32-bytes-enum-FheType-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_fromExternal(address account, bytes32 externalHandle, bytes inputProof, enum FheType fheType) → bytes32 handle</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#MultisigCoordinator-_fromExternal-address-bytes32-bytes-enum-FheType-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Internal version of [`MultisigCoordinator.fromExternal`](#MultisigCoordinator-fromExternal-address-bytes32-bytes-enum-FheType-)
+
+</div>
+</div>
+
+<a id="MultisigCoordinator-allowHandle-address-bytes32-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">allowHandle(address account, bytes32 handle, address to)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#MultisigCoordinator-allowHandle-address-bytes32-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Grants ACL permission over an encrypted `handle` to address `to`.
+
+`msg.sender` must be `account` itself or a registered signer EOA.
+See `allowHandle-address-bytes-bytes-bytes32-address-` for the full authorization
+rules and requirements.
+
+</div>
+</div>
+
+<a id="MultisigCoordinator-allowHandle-address-bytes-bytes-bytes32-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">allowHandle(address account, bytes signer, bytes signature, bytes32 handle, address to)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">public</p>
+<a className="peer" data-card href="#MultisigCoordinator-allowHandle-address-bytes-bytes-bytes32-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Grants a permanent ACL permission over an encrypted `handle` to address `to`, verified
+against the account's registered [`ERC7579Multisig`](/accounts/api/modules#ERC7579Multisig).
+
+See [`MultisigCoordinator._validateAccess`](#MultisigCoordinator-_validateAccess-address-bytes-bytes-bytes32-) for the full authorization rules.
+
+Once authorization is confirmed, the `handle` is permanently allowed to `to` via the FHE
+ACL. This enables `to` (typically an EOA) to request off-chain decryption of the value.
+
+<Callout type="warn">
+This grant is permanent and irrevocable. If `to` is later removed from the
+multisig, they will still be able to decrypt any handle they were previously allowed. To
+remove a former signer's access, re-encrypt the sensitive values using fresh FHE inputs
+and grant access only to current signers.
+</Callout>
+
+Requirements:
+
+* `account` must have a multisig registered via [`MultisigCoordinator.setERC7579Multisig`](#MultisigCoordinator-setERC7579Multisig-address-) and installed as a validator.
+* `account` must implement `IERC5267`.
+* The EIP-712 domain returned by `account` must not set the extensions flag (bit `0x20` of `fields`),
+
+</div>
+</div>
+
+<a id="MultisigCoordinator-_validateAccess-address-bytes-bytes-bytes32-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">_validateAccess(address account, bytes signer, bytes signature, bytes32 hash)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">internal</p>
+<a className="peer" data-card href="#MultisigCoordinator-_validateAccess-address-bytes-bytes-bytes32-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+Validates that `signer` is authorized to act for `account` over the given `hash`.
+
+First confirms that the registered multisig module is actually installed as a validator on
+the account (via `IERC7579ModuleConfig-isModuleInstalled`), then applies the following
+authorization rules:
+
+- If `signer` is empty: `msg.sender` must be `account` itself or a registered signer EOA.
+- If `signer` is exactly 20 bytes: treated as an EOA; must be a registered signer and
+  `signature` must be a valid EIP-712 signature over `hash`.
+- If `signer` is more than 20 bytes: treated as an ERC-7913 signer (`verifier || key`);
+  must be a registered signer and `signature` is forwarded to the verifier via
+  `IERC7913SignatureVerifier-verify`.
+
+<Callout>
+Existing FHE ACL permissions (`FHE.isAllowed`) are intentionally not checked here.
+Authorization is strictly tied to the account's multisig membership. Callers that already
+hold ACL access to a handle and wish to extend it to another address can do so directly via
+the FHE ACL (e.g. `FHE.allow`) without involving this coordinator.
+</Callout>
+
+Requirements:
+
+* `account` must have a multisig registered via [`MultisigCoordinator.setERC7579Multisig`](#MultisigCoordinator-setERC7579Multisig-address-) and installed as a validator.
+
+</div>
+</div>
+
+<a id="MultisigCoordinator-MultisigCoordinatorMultisigSet-address-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">MultisigCoordinatorMultisigSet(address indexed account, address indexed multisig)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">event</p>
+<a className="peer" data-card href="#MultisigCoordinator-MultisigCoordinatorMultisigSet-address-address-">#</a>
+</div>
+</div>
+
+<div className="px-4">
+
+Emitted when an account updates its associated multisig address.
+
+</div>
+</div>
+
+<a id="MultisigCoordinator-MultisigCoordinatorInvalidSigner-address-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">MultisigCoordinatorInvalidSigner(address account, bytes signer)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#MultisigCoordinator-MultisigCoordinatorInvalidSigner-address-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The provided signer is not authorized for the account.
+
+</div>
+</div>
+
+<a id="MultisigCoordinator-MultisigCoordinatorInvalidSignature-address-bytes-bytes-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">MultisigCoordinatorInvalidSignature(address account, bytes signer, bytes signature)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#MultisigCoordinator-MultisigCoordinatorInvalidSignature-address-bytes-bytes-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The provided signature is not valid for the given signer.
+
+</div>
+</div>
+
+<a id="MultisigCoordinator-MultisigCoordinatorInvalidMultisig--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">MultisigCoordinatorInvalidMultisig()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#MultisigCoordinator-MultisigCoordinatorInvalidMultisig--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The provided multisig address is the zero address.
+
+</div>
+</div>
+
+<a id="MultisigCoordinator-MultisigCoordinatorInvalidMultisigModule--"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">MultisigCoordinatorInvalidMultisigModule()</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#MultisigCoordinator-MultisigCoordinatorInvalidMultisigModule--">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The provided multisig module is not installed in the account.
+
+</div>
+</div>
+
+<a id="MultisigCoordinator-MultisigCoordinatorAccountNotAllowedToUseHandle-bytes32-address-"></a>
+
+<div className="border rounded-md mb-4">
+<div className="bg-secondary flex w-full justify-between px-4">
+<p className="font-bold text-sm font-mono">MultisigCoordinatorAccountNotAllowedToUseHandle(bytes32 handle, address account)</p>
+<div className="flex flex-row items-center gap-2">
+<p className="font-light text-sm">error</p>
+<a className="peer" data-card href="#MultisigCoordinator-MultisigCoordinatorAccountNotAllowedToUseHandle-bytes32-address-">#</a>
+</div>
+</div>
+<div className="px-4">
+
+The provided account is not allowed to use the handle.
+
+</div>
+</div>
+
