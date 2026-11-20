@@ -3,7 +3,7 @@ import cantonData from "./canton.json";
 import ethereumEvmData from "./ethereum-evm.json";
 import impactData from "./impact.json";
 import { mergeDeveloperLibraries } from "./merge-developer-libraries";
-import midnightData from "./midnight.json";
+import midnightData from "./midnight";
 import polkadotData from "./polkadot.json";
 import starknetData from "./starknet";
 import stellarData from "./stellar.json";
