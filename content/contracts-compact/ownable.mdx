@@ -8,7 +8,7 @@ title: Ownable
 [_transferOwnership]: api/ownable#Ownable-_transferOwnership
 [_unsafeTransferOwnership]: api/ownable#Ownable-_unsafeTransferOwnership
 [_unsafeUncheckedTransferOwnership]: api/ownable#Ownable-_unsafeUncheckedTransferOwnership
-[computeAccountId]: api/ownable#Ownable-computeAccountId
+[computeAccountId]: api/utils#Utils-computeAccountId
 [assertOnlyOwner]: api/ownable#Ownable-assertOnlyOwner
 [Ownable API]: api/ownable#Ownable
 
@@ -16,10 +16,12 @@ title: Ownable
 [ZOwnablePK_transferOwnership]: api/ownable#ZOwnablePK-transferOwnership
 [ZOwnablePK_assertOnlyOwner]: api/ownable#ZOwnablePK-assertOnlyOwner
 [_computeOwnerId]: api/ownable#ZOwnablePK-_computeOwnerId
+[wit_secretNonce]: api/ownable#ZOwnablePK-wit_secretNonce
 
 [ed25519]: https://ed25519.cr.yp.to/
 [rfc6979]: https://datatracker.ietf.org/doc/html/rfc6979
 [AccessControl]: ./access-control.mdx
+[Utils]: ./utils.mdx
 
 ## Access Control Defined
 
@@ -46,17 +48,49 @@ This can later be changed with [transferOwnership].
 
 Ownable uses a witness-derived identity scheme. The owner proves knowledge of a secret key
 by injecting it via the `wit_OwnableSK` witness. The module computes an account identifier
-as `persistentHash(secretKey)`, which is a commitment that hides the key while providing a stable,
+as `H(secretKey)` (a `persistentHash` of the key), which is a commitment that hides the key while providing a stable,
 pseudonymous on-chain identity.
 
+What is public and what is private:
+
+* **On the ledger**: `_owner` holds the account identifier `H(secretKey)` (or a contract address), and `_isInitialized`.
+* **Held privately by the owner**: the 32-byte `secretKey`, supplied through `wit_OwnableSK` at proving time.
+  The key never reaches the ledger; [assertOnlyOwner] recomputes the identifier inside the proof and compares it against `_owner`.
+
+Witness implementations are authored by the consuming DApp.
+The TypeScript witnesses in the repository are test-only and are not published with the package.
+
 To derive an account identifier off-chain (e.g. for the `initialOwner` parameter during construction),
-use [computeAccountId]:
+use [computeAccountId] from the [Utils] module:
 
 ```typescript
-const accountId = Ownable_computeAccountId(secretKey);
+import "./node_modules/@openzeppelin/compact-contracts/utils/Utils"
+  prefix Utils_;
+
+export pure circuit computeAccountId(secretKey: Bytes<32>): Bytes<32> {
+  return Utils_computeAccountId(secretKey);
+}
+```
+
+A contract that re-exports it this way exposes `pureCircuits.computeAccountId(secretKey)` to its TypeScript side.
+The same value can be computed directly in TypeScript with the Compact runtime:
+
+```typescript
+import {
+  CompactTypeBytes,
+  CompactTypeVector,
+  persistentHash,
+} from '@midnight-ntwrk/compact-runtime';
+
+const computeAccountId = (secretKey: Uint8Array): Uint8Array => {
+  const rt_type = new CompactTypeVector(1, new CompactTypeBytes(32));
+  return persistentHash(rt_type, [secretKey]);
+};
 ```
 
 The `secretKey` is a 32-byte cryptographically secure random value that the owner keeps private.
+Because the identifier has no per-deployment salt, the same key produces the same identity across all contracts.
+Owners who want cross-contract unlinkability should use a different key per contract.
 
 <Callout type='warn'>
   The `secretKey` must never be logged or persisted in plaintext. Loss of the key means loss of ownership.
@@ -72,12 +106,12 @@ In other words, ownership transfers to contract addresses are disallowed through
 This is because Compact currently does not support contract-to-contract calls, which means if a contract is granted ownership,
 the owner contract cannot directly call the protected circuit.
 
-### Experimental Features
+### Unsafe Circuits
 
-This module offers experimental circuits that allow ownership to be granted to contract addresses
+This module offers circuits that allow ownership to be granted to contract addresses
 ([_unsafeTransferOwnership] and [_unsafeUncheckedTransferOwnership]).
 
-Note that the circuit names are very explicit ("unsafe") with these experimental circuits.
+Note that the circuit names are very explicit ("unsafe").
 Until contract-to-contract calls are supported,
 there is no direct way for a contract to call circuits of other contracts or transfer ownership back to a user.
 
@@ -90,7 +124,7 @@ there is no direct way for a contract to call circuits of other contracts or tra
 Import the Ownable module into the implementing contract.
 It's recommended to prefix the module with `Ownable_` to avoid circuit signature clashes.
 
-The `initialOwner` should be an account identifier derived off-chain using `computeAccountId(secretKey)`:
+The `initialOwner` should be an account identifier derived off-chain using `Utils_computeAccountId(secretKey)`:
 
 ```ts
 pragma language_version >= {{compact_language_version}};
@@ -118,7 +152,7 @@ export circuit mySensitiveCircuit(): [] {
 ```
 
 Contracts may expose [transferOwnership] to allow the owner to transfer ownership.
-The `newOwner` should be an account identifier derived by the new owner using `computeAccountId(secretKey)`:
+The `newOwner` should be an account identifier derived by the new owner using `Utils_computeAccountId(secretKey)`:
 
 ```ts
 export circuit transferOwnership(newOwner: Either<Bytes<32>, ContractAddress>): [] {
@@ -139,7 +173,7 @@ import "./node_modules/@openzeppelin/compact-contracts/access/Ownable"
 
 /**
  * Set `initialOwner` as the owner of the contract.
- * `initialOwner` should be derived off-chain using computeAccountId(secretKey).
+ * `initialOwner` should be derived off-chain using Utils_computeAccountId(secretKey).
  */
 constructor(initialOwner: Either<Bytes<32>, ContractAddress>) {
   Ownable_initialize(initialOwner);
@@ -155,7 +189,7 @@ export circuit owner(): Either<Bytes<32>, ContractAddress> {
 /**
  * Transfers ownership of the contract.
  * Can only be called by the current owner.
- * `newOwner` should be derived off-chain by the new owner using computeAccountId(secretKey).
+ * `newOwner` should be derived off-chain by the new owner using Utils_computeAccountId(secretKey).
  */
 export circuit transferOwnership(newOwner: Either<Bytes<32>, ContractAddress>): [] {
   Ownable_transferOwnership(newOwner);
@@ -202,6 +236,17 @@ instead, the contract stores only a cryptographic commitment that proves ownersh
 This is useful in scenarios such as private treasuries, anonymous governance,
 or any application where revealing the administrator's identity may compromise the system's confidentiality.
 
+What is public and what is private:
+
+* **On the ledger**: `_ownerCommitment`, the transfer `_counter`, the sealed `_instanceSalt`, and `_isInitialized`.
+  Ownership changes disclose only the new commitment, never the owner identifier that produced it.
+* **Held privately by the owner**: the secret nonce, supplied through the [wit_secretNonce] witness,
+  and the public key, supplied through `ownPublicKey()`. [ZOwnablePK_assertOnlyOwner] recomputes the commitment
+  from both inside the proof and compares it against `_ownerCommitment`.
+
+Witness implementations are authored by the consuming DApp.
+The TypeScript witnesses in the repository are test-only and are not published with the package.
+
 ### Commitment Scheme
 
 The `ZOwnablePK` module employs a two-layer cryptographic commitment scheme designed to provide privacy,
@@ -212,7 +257,7 @@ unlinkability, and collision resistance across deployments and ownership transfe
 The foundation of the system is the owner identifier, computed as:
 
 ```typescript
-id = SHA256(pk, nonce)
+id = SHA256(pk || nonce)
 ```
 
 Where `pk` is the owner's public key and `nonce` is a secret value that may be either randomly generated for maximum privacy
@@ -225,14 +270,15 @@ ensuring the owner's identity remains confidential.
 The final ownership commitment stored on-chain is computed as:
 
 ```typescript
-commitment = SHA256(id, instanceSalt, counter, pad(32, "ZOwnablePK:shield:"))
+commitment = SHA256(id || instanceSalt || counter || pad(32, "ZOwnablePK:shield:"))
 ```
 
 This multi-element hash provides several security properties:
 
 * `id`: The privacy-preserving owner identifier described above.
 * `instanceSalt`: A unique per-deployment salt that prevents commitment collisions across different contract instances,
-even when the same owner and nonce are used.
+even when the same owner and nonce are used. It must be nonzero, and it should be a fresh random value per deployment:
+a reused salt links the same owner across deployments.
 * `counter`: Incremented with each ownership transfer to ensure unlinkability.
 Each transfer produces a completely different commitment even with the same underlying owner.
 * `pad(32, "ZOwnablePK:shield:")`: A domain separator padded to 32 bytes that prevents hash collisions
@@ -245,6 +291,13 @@ This commitment scheme ensures that:
 * Public keys are never revealed on-chain.
 * Observers cannot correlate past and future ownership.
 * Cross-contract collisions are prevented through instance-specific salting.
+
+<Callout type='warn'>
+  `ownPublicKey()` is a witness: it returns the caller's Zswap coin public key, and nothing in the circuit proves
+  that the caller holds the matching private key. The secret nonce is therefore the owner credential:
+  anyone holding the nonce and the owner's public key can pass [ZOwnablePK_assertOnlyOwner].
+  Generate the nonce as 32 bytes from a CSPRNG (or a derivation with equivalent entropy) and keep it private.
+</Callout>
 
 ### Nonce Generation Strategies
 
@@ -261,7 +314,7 @@ const ownerId = ZOwnablePK._computeOwnerId(publicKey, randomNonce);
 ```
 
 This approach is easy to generate and ensures maximum unlinkability.
-However, it requires secure backup of both the private key and the nonce.
+However, it requires secure backup of both the public key and the nonce.
 **Loss of either component results in permanent, irrecoverable loss of ownership.**
 
 #### Deterministic Nonce
@@ -318,24 +371,26 @@ import "./node_modules/@openzeppelin/compact-contracts/access/ZOwnablePK"
   prefix ZOwnablePK_;
 
 constructor(
-  initOwnerCommitment: Bytes<32>,
+  initOwnerId: Bytes<32>,
   instanceSalt: Bytes<32>,
 ) {
-  ZOwnablePK_initialize(initOwnerCommitment, instanceSalt);
+  ZOwnablePK_initialize(initOwnerId, instanceSalt);
 }
 
 export circuit owner(): Bytes<32> {
   return ZOwnablePK_owner();
 }
 
-export circuit transferOwnership(newOwnerCommitment: Bytes<32>): [] {
-  return ZOwnablePK_transferOwnership(disclose(newOwnerCommitment));
+export circuit transferOwnership(newOwnerId: Bytes<32>): [] {
+  return ZOwnablePK_transferOwnership(disclose(newOwnerId));
 }
 
 export circuit renounceOwnership(): [] {
   return ZOwnablePK_renounceOwnership();
 }
 ```
+
+[ZOwnablePK_initialize] rejects a zero `ownerId` and a zero `instanceSalt`.
 
 Similar to the [Ownable](#usage) module,
 circuits can be protected so that only the contract owner may call them by adding `assertOnlyOwner` as the first line in the circuit body:
@@ -373,7 +428,7 @@ const generateId = (
   return persistentHash(rt_type, [pk, nonce]);
 };
 
-// Instance salt for the constructor
+// Instance salt for the constructor (must be nonzero)
 const generateInstanceSalt = (): Uint8Array => {
   return getRandomValues(new Uint8Array(32));
 }
