@@ -1,0 +1,152 @@
+---
+title: Scoped Authorization Grant
+---
+
+Scoped Authorization Grant is resource-scoped authorization for Daml. An authority issues an `AuthorizationGrant` that lets one party perform one operation on one resource. A protected choice checks the grant against a requirement that it derives from its own trusted state. Grants can have a validity window, and the authority can revoke them or the grantee can renounce them.
+
+Role-based access control is built on top of the grants: each role maps to one permission, as the treasury example shows. The closest Solidity analogue is `AccessControl`, without a role hierarchy.
+
+<Callout type="warn">
+  Pre-release and unaudited. The package has no release yet. Source:
+  [`packages/access/scoped-authorization-grant-v1`](https://github.com/OpenZeppelin/canton-contracts/tree/main/packages/access/scoped-authorization-grant-v1)
+  in `OpenZeppelin/canton-contracts`.
+</Callout>
+
+| Package | Module | Dependencies |
+| --- | --- | --- |
+| `openzeppelin-scoped-authorization-grant-v1` | `OpenZeppelin.ScopedAuthorizationGrantV1` | `daml-prim`, `daml-stdlib` |
+
+```daml
+import DA.Functor (void)
+import qualified OpenZeppelin.ScopedAuthorizationGrantV1 as SAG
+```
+
+## Types
+
+| Type | Purpose |
+| --- | --- |
+| `AuthorizationScope` | The exact resource and permission: `namespace`, `resourceType`, `resourceId`, `permission`, `policyEpoch` (nonnegative), and an optional `resourceInstanceCid`. |
+| `AuthorizationGrant` | The grant contract: `authority`, `grantee`, `scope`, and the optional `validFrom` (inclusive) and `validUntil` (exclusive) ledger-time bounds. |
+| `Authorization` | What the caller presents to a protected choice: `actor` and `grantCid`. |
+| `AuthorizationRequirement` | What the protected choice expects: `expectedAuthority` and `expectedScope`. |
+| `HasAuthorizationPolicy` | A type class that maps a resource, its contract ID, and an application permission to a requirement. |
+
+## The Grant
+
+`AuthorizationGrant` has signatory `authority` and observer `grantee`. Creation requires a nonnegative `policyEpoch` and `validFrom < validUntil` when both bounds are set.
+
+| Choice | Controller | Consuming | Effect |
+| --- | --- | --- | --- |
+| `AuthorizationGrant_Use` | `grantee` | No | Checks the validity window and records a use. |
+| `AuthorizationGrant_Revoke` | `authority` | Yes | Archives the grant. |
+| `AuthorizationGrant_Renounce` | `grantee` | Yes | Archives the grant. |
+
+Expiry does not archive a grant. A later use of a revoked or renounced grant fails.
+
+## Guarding a Choice
+
+Make `authorization.actor` the controller, derive the requirement from the contract state, and call the guard before the protected work:
+
+```daml
+nonconsuming choice ProtectedOperation : ()
+  with authorization : SAG.Authorization
+  controller authorization.actor
+  do
+    let requirement = SAG.AuthorizationRequirement with
+          expectedAuthority = administrator
+          expectedScope = scopeFromThisContract
+    void $ SAG.requireAuthorization authorization requirement
+    -- protected effects
+```
+
+`requireAuthorization` fetches the grant, checks the authority, the grantee, and the scope, then exercises `AuthorizationGrant_Use`. It returns the grant.
+
+The grantee is usually not a stakeholder of the protected contract, so a stakeholder has to disclose that contract to the grantee before it can exercise the choice. Each guarded call also brings in the grant's `authority` as a confirming party, so the authority's participant must be online for every protected call. Prefer an authority that already signs the protected contract.
+
+<Callout type="warn">
+  Never take the expected authority, resource, permission, or epoch from choice
+  arguments. A caller that supplies the requirement chooses the policy that it
+  is checked against.
+</Callout>
+
+## Typed Policies
+
+`HasAuthorizationPolicy` keeps issuance and guarding on the same requirement. Define a permission type and an instance next to the resource template:
+
+```daml
+instance SAG.HasAuthorizationPolicy LicenseRegistry Policy.LicensingPermission where
+  authorizationRequirement registry cid Policy.IssueLicense = SAG.AuthorizationRequirement with
+    expectedAuthority = registry.licensor
+    expectedScope = Policy.issueLicenseScope cid registry.registryId registry.policyEpoch
+```
+
+The protected choice then calls `void $ SAG.requirePermission this self Policy.IssueLicense authorization`. Pass `this` and `self`, or fetched state with the contract ID used to fetch it, and select the permission in code.
+
+## Functions
+
+| Function | Records use | Result |
+| --- | --- | --- |
+| `requireAuthorization` | Yes | The grant, or the transaction fails. |
+| `requirePermission` | Yes | As `requireAuthorization`, with the requirement from `HasAuthorizationPolicy`. |
+| `checkAuthorization` | No | `Right grant` or `Left FailureStatus` with the first mismatch. |
+| `checkPermission` | No | As `checkAuthorization`, with the requirement from `HasAuthorizationPolicy`. |
+| `requireAuthorityOrGrant` | When a grant is presented | `None` when the actor is the expected authority and presents no grant; otherwise the result of `requireAuthorization`. |
+
+Use a check function to choose between candidate grants, then call the matching `require` function on the selected grant. An archived or unavailable grant aborts on fetch; the check functions do not return it as `Left`.
+
+`requireAuthorityOrGrant` suits an interface choice that receives the grant through an extensible context, such as the Splice `ChoiceContext`. Every implementation of such a choice must call a guard.
+
+## Scope and Resource Identity
+
+Every scope field must match exactly.
+
+- `resourceInstanceCid = None` matches by logical fields only, so a grant applies to successor contracts.
+- `resourceInstanceCid = Some (coerceContractId cid)` binds the grant to one contract ID. The guard compares IDs; it does not fetch the resource.
+- To invalidate grants, increase the expected `policyEpoch` in the resource state. Do not reuse an earlier epoch: that reactivates old grants.
+
+## Failure Statuses
+
+The `require` functions fail with `DA.Fail.failWithStatus`, and the `check` functions return the same status as `Left`. All statuses use `FAILED_PRECONDITION`. Match on the `errorId`, not on the message.
+
+| `errorId` | Metadata |
+| --- | --- |
+| `openzeppelin.com/scoped-authorization-grant-authority-mismatch` | `expected`, `actual` |
+| `openzeppelin.com/scoped-authorization-grant-grantee-mismatch` | `expected`, `actual` |
+| `openzeppelin.com/scoped-authorization-grant-scope-mismatch` | `fields` |
+| `openzeppelin.com/scoped-authorization-grant-not-yet-valid` | `validFrom` |
+| `openzeppelin.com/scoped-authorization-grant-expired` | `validUntil` |
+| `openzeppelin.com/scoped-authorization-grant-required` | `expected`, `actual` |
+
+The checks run in the order of the table and stop at the first mismatch. `grant-required` comes only from `requireAuthorityOrGrant`.
+
+## Security Considerations
+
+- **Bind the actor.** `Authorization` is input, not proof. The controller clause supplies the actor's authority, and the guard matches the grant's grantee to it.
+- **Committed path.** Keep the guard on the committed execution path. A caught exception can roll back a successful check.
+- **Ledger time.** The validity bounds use ledger time, which can differ from record time within the synchronizer tolerance. Allow a margin for real-world deadlines.
+- **Duplicates.** Each grant has its own contract ID and can authorize use. To offboard a grantee, revoke every applicable grant or advance the policy epoch.
+- **Usage records.** A direct `AuthorizationGrant_Use` exercise does not check the authority or the scope. Treat a use event as proof only when it comes from your guarded choice.
+- **Authority.** The authority can create grants directly, so it is trusted for every scope that it controls.
+
+## Examples
+
+- [`examples/licensing-app-v1`](https://github.com/OpenZeppelin/canton-contracts/tree/main/examples/licensing-app-v1): a licensor appoints an operator through a grant, and the operator issues licenses.
+- [`examples/treasury-rbac-v1`](https://github.com/OpenZeppelin/canton-contracts/tree/main/examples/treasury-rbac-v1): three roles (proposer, approver, executor), each from its own authority, with separation of duties.
+
+## Build and Consume
+
+From the root of `canton-contracts`:
+
+```bash
+DAML_PACKAGE=packages/access/scoped-authorization-grant-v1 dpm build
+```
+
+```yaml
+data-dependencies:
+  - ../canton-contracts/packages/access/scoped-authorization-grant-v1/.daml/dist/openzeppelin-scoped-authorization-grant-v1-0.1.0.dar
+```
+
+## Related
+
+- [Pausable](/canton/library/pausable) for an emergency stop.
+- [Token (CIP-0112)](/canton/library/token)
