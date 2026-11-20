@@ -1,0 +1,1695 @@
+---
+title: NativeShieldedToken API
+---
+
+This module provides the full NativeShieldedToken module API: the two token flavors, their shared core,
+the supply and derived-nonce extensions, and the owner-gated preset.
+
+<Callout type='info'>
+  For an overview of the modules, read the [NativeShieldedToken guide](../native-shielded-token).
+</Callout>
+
+The page covers the following modules:
+
+- **Token modules**
+  - [NativeShieldedToken](#NativeShieldedToken): a single token type issued and burned by the contract.
+  - [NativeShieldedTokenFamily](#NativeShieldedTokenFamily): many token types, keyed by domain, under one contract.
+  - [NativeShieldedTokenCore](#NativeShieldedTokenCore): the shared core behind the two flavors; not composed directly.
+- **Extensions**
+  - [NativeShieldedTokenPublicSupply](#NativeShieldedTokenPublicSupply): on-chain minted and burned totals for a `NativeShieldedToken`.
+  - [NativeShieldedTokenFamilyPublicSupply](#NativeShieldedTokenFamilyPublicSupply): per-domain on-chain totals for a `NativeShieldedTokenFamily`.
+  - [NativeShieldedTokenPublicSupplyCore](#NativeShieldedTokenPublicSupplyCore): the shared core behind the two supply extensions; not composed directly.
+  - [NativeShieldedTokenDerivedNonce](#NativeShieldedTokenDerivedNonce): mint coin nonces derived from a counter.
+- **Preset**
+  - [ZOwnableNativeShieldedToken](#ZOwnableNativeShieldedToken): a single token whose `ZOwnablePK` owner mints and burns, with a public minted total.
+
+These modules export no structs or enums of their own. Coins are the standard library's `ShieldedCoinInfo`
+(a `nonce`, `color`, and `value`) and `QualifiedShieldedCoinInfo` (the same plus the Merkle-tree index `mt_index`
+of a coin the contract holds).
+
+## NativeShieldedToken [toc] [#NativeShieldedToken]
+<APIGithubLinkHeader
+    moduleName="NativeShieldedToken"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/token/NativeShieldedToken.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/token/NativeShieldedToken";
+```
+
+---
+
+### Ledger [toc] [#NativeShieldedToken-Ledger]
+### Ledger [!toc] [#NativeShieldedToken-Ledger]
+
+#### _domain [toc] [#NativeShieldedToken-_domain]
+#### [!toc] [#NativeShieldedToken-_domain]
+<APIItemCompact
+  circuitSig='_domain: Bytes<32>'
+  kind="sealed ledger"
+  id="NativeShieldedToken-_domain"
+>
+  Domain separator fixed at construction; with the contract
+  address it determines this token's color.
+</APIItemCompact>
+
+#### _name [toc] [#NativeShieldedToken-_name]
+#### [!toc] [#NativeShieldedToken-_name]
+<APIItemCompact
+  circuitSig='_name: Opaque<"string">'
+  kind="sealed ledger"
+  id="NativeShieldedToken-_name"
+>
+  The immutable token name. Re-exported from `NativeShieldedTokenCore`.
+</APIItemCompact>
+
+#### _symbol [toc] [#NativeShieldedToken-_symbol]
+#### [!toc] [#NativeShieldedToken-_symbol]
+<APIItemCompact
+  circuitSig='_symbol: Opaque<"string">'
+  kind="sealed ledger"
+  id="NativeShieldedToken-_symbol"
+>
+  The immutable token symbol. Re-exported from `NativeShieldedTokenCore`.
+</APIItemCompact>
+
+#### _decimals [toc] [#NativeShieldedToken-_decimals]
+#### [!toc] [#NativeShieldedToken-_decimals]
+<APIItemCompact
+  circuitSig='_decimals: Uint<8>'
+  kind="sealed ledger"
+  id="NativeShieldedToken-_decimals"
+>
+  The immutable token decimals. Re-exported from `NativeShieldedTokenCore`.
+</APIItemCompact>
+
+#### _isInitialized [toc] [#NativeShieldedToken-_isInitialized]
+#### [!toc] [#NativeShieldedToken-_isInitialized]
+<APIItemCompact
+  circuitSig='_isInitialized: Boolean'
+  kind="ledger"
+  id="NativeShieldedToken-_isInitialized"
+>
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
+</APIItemCompact>
+
+### Witnesses [toc] [#NativeShieldedToken-Witnesses]
+### Witnesses [!toc] [#NativeShieldedToken-Witnesses]
+
+None.
+
+### Circuits [toc] [#NativeShieldedToken-Circuits]
+### Circuits [!toc] [#NativeShieldedToken-Circuits]
+
+#### initialize [toc] [#NativeShieldedToken-initialize]
+#### [!toc] [#NativeShieldedToken-initialize]
+<APIItemCompact
+  circuitSig='initialize(
+    domainSep: Bytes<32>,
+    name_: Opaque<"string">,
+    symbol_: Opaque<"string">,
+    decimals_: Uint<8>
+  ) → []'
+  kind="circuit"
+  modulePrefix="NativeShieldedToken"
+  stackParams="true"
+>
+  Initializes the module's domain and metadata.
+  This MUST be called in the implementing contract's constructor, and it
+  MUST be the only token operation performed there. Failure to call it can
+  lead to an irreparable contract; perform mint, burn, and [tokenColor](#NativeShieldedToken-tokenColor) only
+  in post-deployment circuits, never in the constructor.
+</APIItemCompact>
+
+#### isInitialized [toc] [#NativeShieldedToken-isInitialized]
+#### [!toc] [#NativeShieldedToken-isInitialized]
+<APIItemCompact
+  circuitSig='isInitialized() → Boolean'
+  kind="circuit"
+  complexity="k=6, rows=26"
+  modulePrefix="NativeShieldedToken"
+>
+  Returns whether the contract has been initialized.
+</APIItemCompact>
+
+#### name [toc] [#NativeShieldedToken-name]
+#### [!toc] [#NativeShieldedToken-name]
+<APIItemCompact
+  circuitSig='name() → Opaque<"string">'
+  kind="circuit"
+  complexity="k=6, rows=28"
+  modulePrefix="NativeShieldedToken"
+>
+  Returns the token name.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### symbol [toc] [#NativeShieldedToken-symbol]
+#### [!toc] [#NativeShieldedToken-symbol]
+<APIItemCompact
+  circuitSig='symbol() → Opaque<"string">'
+  kind="circuit"
+  complexity="k=6, rows=28"
+  modulePrefix="NativeShieldedToken"
+>
+  Returns the symbol of the token.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### decimals [toc] [#NativeShieldedToken-decimals]
+#### [!toc] [#NativeShieldedToken-decimals]
+<APIItemCompact
+  circuitSig='decimals() → Uint<8>'
+  kind="circuit"
+  complexity="k=6, rows=28"
+  modulePrefix="NativeShieldedToken"
+>
+  Returns the number of decimals used to get its user representation.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### tokenColor [toc] [#NativeShieldedToken-tokenColor]
+#### [!toc] [#NativeShieldedToken-tokenColor]
+<APIItemCompact
+  circuitSig='tokenColor() → Bytes<32>'
+  kind="circuit"
+  complexity="k=13, rows=3971"
+  modulePrefix="NativeShieldedToken"
+>
+  Returns this token's coin color:
+  `tokenType(_domain, kernel.self())`, computed at call time.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### _mint [toc] [#NativeShieldedToken-_mint]
+#### [!toc] [#NativeShieldedToken-_mint]
+<APIItemCompact
+  circuitSig='_mint(
+    recipient: ZswapCoinPublicKey,
+    amount: Uint<64>,
+    nonce: Bytes<32>
+  ) → ShieldedCoinInfo'
+  kind="circuit"
+  complexity="k=14, rows=10473"
+  modulePrefix="NativeShieldedToken"
+  stackParams="true"
+>
+  Mints `amount` of the token to `recipient`, using a
+  caller-supplied nonce.
+
+  The caller is fully responsible for nonce uniqueness. Reusing a
+  nonce for the same (value, recipient) produces a duplicate commitment,
+  which the protocol rejects. With a secret random nonce this is the
+  recipient-private mint. For mints that require no caller-managed nonce,
+  compose the `NativeShieldedTokenDerivedNonce` extension and pass its
+  `_deriveNonce()` output.
+
+  <Callout type='info'>
+    The returned coin info is the only copy available to the
+    recipient; callers SHOULD deliver it out of band. Wallets cannot detect
+    contract-minted coins by scanning the chain.
+  </Callout>
+
+  Requirements:
+
+  * Contract is initialized.
+  * `recipient` is not zero.
+</APIItemCompact>
+
+#### _mintToSelf [toc] [#NativeShieldedToken-_mintToSelf]
+#### [!toc] [#NativeShieldedToken-_mintToSelf]
+<APIItemCompact
+  circuitSig='_mintToSelf(amount: Uint<64>, nonce: Bytes<32>) → ShieldedCoinInfo'
+  kind="circuit"
+  complexity="k=14, rows=16070"
+  modulePrefix="NativeShieldedToken"
+>
+  Mints `amount` to this contract itself, claiming the coin in
+  the same call. Forwards to `NativeShieldedTokenCore._mint` with
+  `right(kernel.self())`.
+
+  Nonce uniqueness is the caller's responsibility, as in [_mint](#NativeShieldedToken-_mint). Spend
+  the coin later with [_burnFromSelf](#NativeShieldedToken-_burnFromSelf), once it carries an `mt_index`.
+
+  <Callout type='info'>
+    The consumer SHOULD persist the returned coin info in its own
+    ledger state: it is the contract's holding and is not otherwise
+    recoverable.
+  </Callout>
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### _burn [toc] [#NativeShieldedToken-_burn]
+#### [!toc] [#NativeShieldedToken-_burn]
+<APIItemCompact
+  circuitSig='_burn(
+    coin: ShieldedCoinInfo,
+    amount: Uint<128>,
+    refundTo: ZswapCoinPublicKey
+  ) → Maybe<ShieldedCoinInfo>'
+  kind="circuit"
+  complexity="k=16, rows=41492"
+  modulePrefix="NativeShieldedToken"
+  stackParams="true"
+>
+  Burns `amount` from `coin`, a coin provided within the
+  current transaction (e.g. paid in by the caller's wallet), and routes the
+  remaining change to `refundTo`.
+
+  To destroy `coin` in full, pass `coin.value` as `amount`; the change
+  branch will not fire and `none` is returned. The `refundTo` value is
+  inert in that case but must still be supplied and non-zero.
+
+  The coin is received by the contract and spent in the same
+  transaction, so the spend goes through `sendImmediateShielded` (the
+  transient path). For coins the contract already holds, use
+  [_burnFromSelf](#NativeShieldedToken-_burnFromSelf) instead.
+
+  <Callout type='info'>
+    The returned refund coin info is the only copy available to
+    `refundTo`; callers SHOULD deliver it out of band. Wallets cannot detect
+    contract-sent coins by scanning the chain.
+  </Callout>
+
+  Requirements:
+
+  * Contract is initialized.
+  * `coin.color` is this contract's token color.
+  * `amount` is less than or equal to `coin.value`.
+  * `refundTo` is not zero (the zero key is the burn address; a zero
+    `refundTo` would silently burn the change as well).
+</APIItemCompact>
+
+#### _burnFromSelf [toc] [#NativeShieldedToken-_burnFromSelf]
+#### [!toc] [#NativeShieldedToken-_burnFromSelf]
+<APIItemCompact
+  circuitSig='_burnFromSelf(coin: QualifiedShieldedCoinInfo, amount: Uint<128>) → Maybe<ShieldedCoinInfo>'
+  kind="circuit"
+  complexity="k=15, rows=23307"
+  modulePrefix="NativeShieldedToken"
+>
+  Burns `amount` from `coin`, a coin this contract already
+  holds (a Merkle-tree entry with a valid `mt_index`). Any change is
+  auto-received by the contract and returned.
+
+  The consumer SHOULD persist the returned change coin info in its own
+  ledger state: the change replaces `coin` as the contract's holding, and
+  its info is not otherwise recoverable.
+
+  Requirements:
+
+  * Contract is initialized.
+  * `coin.color` is this contract's token color.
+  * `amount` is less than or equal to `coin.value`.
+</APIItemCompact>
+
+---
+
+## NativeShieldedTokenFamily [toc] [#NativeShieldedTokenFamily]
+<APIGithubLinkHeader
+    moduleName="NativeShieldedTokenFamily"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/token/NativeShieldedTokenFamily.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/token/NativeShieldedTokenFamily";
+```
+
+---
+
+### Ledger [toc] [#NativeShieldedTokenFamily-Ledger]
+### Ledger [!toc] [#NativeShieldedTokenFamily-Ledger]
+
+#### _name [toc] [#NativeShieldedTokenFamily-_name]
+#### [!toc] [#NativeShieldedTokenFamily-_name]
+<APIItemCompact
+  circuitSig='_name: Opaque<"string">'
+  kind="sealed ledger"
+  id="NativeShieldedTokenFamily-_name"
+>
+  The immutable family name shared by all token types. Re-exported from `NativeShieldedTokenCore`.
+</APIItemCompact>
+
+#### _symbol [toc] [#NativeShieldedTokenFamily-_symbol]
+#### [!toc] [#NativeShieldedTokenFamily-_symbol]
+<APIItemCompact
+  circuitSig='_symbol: Opaque<"string">'
+  kind="sealed ledger"
+  id="NativeShieldedTokenFamily-_symbol"
+>
+  The immutable family symbol shared by all token types. Re-exported from `NativeShieldedTokenCore`.
+</APIItemCompact>
+
+#### _decimals [toc] [#NativeShieldedTokenFamily-_decimals]
+#### [!toc] [#NativeShieldedTokenFamily-_decimals]
+<APIItemCompact
+  circuitSig='_decimals: Uint<8>'
+  kind="sealed ledger"
+  id="NativeShieldedTokenFamily-_decimals"
+>
+  The immutable family-wide decimals. Re-exported from `NativeShieldedTokenCore`.
+</APIItemCompact>
+
+#### _isInitialized [toc] [#NativeShieldedTokenFamily-_isInitialized]
+#### [!toc] [#NativeShieldedTokenFamily-_isInitialized]
+<APIItemCompact
+  circuitSig='_isInitialized: Boolean'
+  kind="ledger"
+  id="NativeShieldedTokenFamily-_isInitialized"
+>
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
+</APIItemCompact>
+
+### Witnesses [toc] [#NativeShieldedTokenFamily-Witnesses]
+### Witnesses [!toc] [#NativeShieldedTokenFamily-Witnesses]
+
+None.
+
+### Circuits [toc] [#NativeShieldedTokenFamily-Circuits]
+### Circuits [!toc] [#NativeShieldedTokenFamily-Circuits]
+
+#### initialize [toc] [#NativeShieldedTokenFamily-initialize]
+#### [!toc] [#NativeShieldedTokenFamily-initialize]
+<APIItemCompact
+  circuitSig='initialize(
+    name_: Opaque<"string">,
+    symbol_: Opaque<"string">,
+    decimals_: Uint<8>
+  ) → []'
+  kind="circuit"
+  modulePrefix="NativeShieldedTokenFamily"
+  stackParams="true"
+>
+  Initializes the module's family metadata.
+  This MUST be called in the implementing contract's constructor, and it
+  MUST be the only token operation performed there. Failure to call it can
+  lead to an irreparable contract; perform mint, burn, and [tokenColor](#NativeShieldedTokenFamily-tokenColor) only
+  in post-deployment circuits, never in the constructor.
+</APIItemCompact>
+
+#### isInitialized [toc] [#NativeShieldedTokenFamily-isInitialized]
+#### [!toc] [#NativeShieldedTokenFamily-isInitialized]
+<APIItemCompact
+  circuitSig='isInitialized() → Boolean'
+  kind="circuit"
+  complexity="k=6, rows=26"
+  modulePrefix="NativeShieldedTokenFamily"
+>
+  Returns whether the contract has been initialized.
+</APIItemCompact>
+
+#### name [toc] [#NativeShieldedTokenFamily-name]
+#### [!toc] [#NativeShieldedTokenFamily-name]
+<APIItemCompact
+  circuitSig='name() → Opaque<"string">'
+  kind="circuit"
+  complexity="k=6, rows=28"
+  modulePrefix="NativeShieldedTokenFamily"
+>
+  Returns the family name shared by all token types of this
+  contract. Per-type identity belongs in the consumer's own state; see the
+  module notes.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### symbol [toc] [#NativeShieldedTokenFamily-symbol]
+#### [!toc] [#NativeShieldedTokenFamily-symbol]
+<APIItemCompact
+  circuitSig='symbol() → Opaque<"string">'
+  kind="circuit"
+  complexity="k=6, rows=28"
+  modulePrefix="NativeShieldedTokenFamily"
+>
+  Returns the family symbol shared by all token types of this
+  contract.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### decimals [toc] [#NativeShieldedTokenFamily-decimals]
+#### [!toc] [#NativeShieldedTokenFamily-decimals]
+<APIItemCompact
+  circuitSig='decimals() → Uint<8>'
+  kind="circuit"
+  complexity="k=6, rows=28"
+  modulePrefix="NativeShieldedTokenFamily"
+>
+  Returns the family-wide number of decimals used to get the
+  user representation.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### tokenColor [toc] [#NativeShieldedTokenFamily-tokenColor]
+#### [!toc] [#NativeShieldedTokenFamily-tokenColor]
+<APIItemCompact
+  circuitSig='tokenColor(domain: Bytes<32>) → Bytes<32>'
+  kind="circuit"
+  complexity="k=13, rows=4248"
+  modulePrefix="NativeShieldedTokenFamily"
+>
+  Returns the coin color (token type) for `domain` under this
+  contract's address, so integrators do not have to re-derive it by hand.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### _mint [toc] [#NativeShieldedTokenFamily-_mint]
+#### [!toc] [#NativeShieldedTokenFamily-_mint]
+<APIItemCompact
+  circuitSig='_mint(
+    domain: Bytes<32>,
+    recipient: ZswapCoinPublicKey,
+    amount: Uint<64>,
+    nonce: Bytes<32>
+  ) → ShieldedCoinInfo'
+  kind="circuit"
+  complexity="k=14, rows=10750"
+  modulePrefix="NativeShieldedTokenFamily"
+  stackParams="true"
+>
+  Mints `amount` of the token identified by `domain` to
+  `recipient`, using a caller-supplied nonce.
+
+  The caller is fully responsible for nonce uniqueness. Reusing a
+  nonce for the same (domain, value, recipient) produces a duplicate
+  commitment, which the protocol rejects. With a secret random nonce this
+  is the recipient-private mint. For mints that require no caller-managed
+  nonce, compose the `NativeShieldedTokenDerivedNonce` extension and pass
+  its `_deriveNonce()` output.
+
+  <Callout type='info'>
+    The returned coin info is the only copy available to the
+    recipient; callers SHOULD deliver it out of band. Wallets cannot detect
+    contract-minted coins by scanning the chain.
+  </Callout>
+
+  Requirements:
+
+  * Contract is initialized.
+  * `recipient` is not zero.
+</APIItemCompact>
+
+#### _mintToSelf [toc] [#NativeShieldedTokenFamily-_mintToSelf]
+#### [!toc] [#NativeShieldedTokenFamily-_mintToSelf]
+<APIItemCompact
+  circuitSig='_mintToSelf(
+    domain: Bytes<32>,
+    amount: Uint<64>,
+    nonce: Bytes<32>
+  ) → ShieldedCoinInfo'
+  kind="circuit"
+  complexity="k=14, rows=16346"
+  modulePrefix="NativeShieldedTokenFamily"
+  stackParams="true"
+>
+  Mints `amount` of the token identified by `domain` to this
+  contract itself, claiming the coin in the same call. Forwards to
+  `NativeShieldedTokenCore._mint` with `right(kernel.self())`.
+
+  Nonce uniqueness is the caller's responsibility, as in [_mint](#NativeShieldedTokenFamily-_mint). Spend
+  the coin later with [_burnFromSelf](#NativeShieldedTokenFamily-_burnFromSelf), once it carries an `mt_index`.
+
+  <Callout type='info'>
+    The consumer SHOULD persist the returned coin info in its own
+    ledger state: it is the contract's holding and is not otherwise
+    recoverable.
+  </Callout>
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### _burn [toc] [#NativeShieldedTokenFamily-_burn]
+#### [!toc] [#NativeShieldedTokenFamily-_burn]
+<APIItemCompact
+  circuitSig='_burn(
+    domain: Bytes<32>,
+    coin: ShieldedCoinInfo,
+    amount: Uint<128>,
+    refundTo: ZswapCoinPublicKey
+  ) → Maybe<ShieldedCoinInfo>'
+  kind="circuit"
+  complexity="k=16, rows=41768"
+  modulePrefix="NativeShieldedTokenFamily"
+  stackParams="true"
+>
+  Burns `amount` from `coin`, a coin provided within the
+  current transaction (e.g. paid in by the caller's wallet), and routes the
+  remaining change to `refundTo`.
+
+  To destroy `coin` in full, pass `coin.value` as `amount`; the change
+  branch will not fire and `none` is returned. The `refundTo` value is
+  inert in that case but must still be supplied and non-zero.
+
+  The coin is received by the contract and spent in the same
+  transaction, so the spend goes through `sendImmediateShielded` (the
+  transient path). For coins the contract already holds, use
+  [_burnFromSelf](#NativeShieldedTokenFamily-_burnFromSelf) instead.
+
+  <Callout type='info'>
+    The returned refund coin info is the only copy available to
+    `refundTo`; callers SHOULD deliver it out of band. Wallets cannot detect
+    contract-sent coins by scanning the chain.
+  </Callout>
+
+  Requirements:
+
+  * Contract is initialized.
+  * `coin.color` is this contract's token type for `domain`.
+  * `amount` is less than or equal to `coin.value`.
+  * `refundTo` is not zero (the zero key is the burn address; a zero
+    `refundTo` would silently burn the change as well).
+</APIItemCompact>
+
+#### _burnFromSelf [toc] [#NativeShieldedTokenFamily-_burnFromSelf]
+#### [!toc] [#NativeShieldedTokenFamily-_burnFromSelf]
+<APIItemCompact
+  circuitSig='_burnFromSelf(
+    domain: Bytes<32>,
+    coin: QualifiedShieldedCoinInfo,
+    amount: Uint<128>
+  ) → Maybe<ShieldedCoinInfo>'
+  kind="circuit"
+  complexity="k=15, rows=23583"
+  modulePrefix="NativeShieldedTokenFamily"
+  stackParams="true"
+>
+  Burns `amount` from `coin`, a coin this contract already
+  holds (a Merkle-tree entry with a valid `mt_index`). Any change is
+  auto-received by the contract and returned.
+
+  The consumer SHOULD persist the returned change coin info in its own
+  ledger state: the change replaces `coin` as the contract's holding, and
+  its info is not otherwise recoverable.
+
+  Requirements:
+
+  * Contract is initialized.
+  * `coin.color` is this contract's token type for `domain`.
+  * `amount` is less than or equal to `coin.value`.
+</APIItemCompact>
+
+---
+
+## NativeShieldedTokenCore [toc] [#NativeShieldedTokenCore]
+<APIGithubLinkHeader
+    moduleName="NativeShieldedTokenCore"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/token/NativeShieldedTokenCore.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/token/NativeShieldedTokenCore";
+```
+
+---
+
+### Ledger [toc] [#NativeShieldedTokenCore-Ledger]
+### Ledger [!toc] [#NativeShieldedTokenCore-Ledger]
+
+#### _isInitialized [toc] [#NativeShieldedTokenCore-_isInitialized]
+#### [!toc] [#NativeShieldedTokenCore-_isInitialized]
+<APIItemCompact
+  circuitSig='_isInitialized: Boolean'
+  kind="ledger"
+  id="NativeShieldedTokenCore-_isInitialized"
+>
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
+</APIItemCompact>
+
+#### _name [toc] [#NativeShieldedTokenCore-_name]
+#### [!toc] [#NativeShieldedTokenCore-_name]
+<APIItemCompact
+  circuitSig='_name: Opaque<"string">'
+  kind="sealed ledger"
+  id="NativeShieldedTokenCore-_name"
+>
+  The immutable token name.
+</APIItemCompact>
+
+#### _symbol [toc] [#NativeShieldedTokenCore-_symbol]
+#### [!toc] [#NativeShieldedTokenCore-_symbol]
+<APIItemCompact
+  circuitSig='_symbol: Opaque<"string">'
+  kind="sealed ledger"
+  id="NativeShieldedTokenCore-_symbol"
+>
+  The immutable token symbol.
+</APIItemCompact>
+
+#### _decimals [toc] [#NativeShieldedTokenCore-_decimals]
+#### [!toc] [#NativeShieldedTokenCore-_decimals]
+<APIItemCompact
+  circuitSig='_decimals: Uint<8>'
+  kind="sealed ledger"
+  id="NativeShieldedTokenCore-_decimals"
+>
+  The immutable token decimals.
+</APIItemCompact>
+
+### Witnesses [toc] [#NativeShieldedTokenCore-Witnesses]
+### Witnesses [!toc] [#NativeShieldedTokenCore-Witnesses]
+
+None.
+
+### Circuits [toc] [#NativeShieldedTokenCore-Circuits]
+### Circuits [!toc] [#NativeShieldedTokenCore-Circuits]
+
+#### initialize [toc] [#NativeShieldedTokenCore-initialize]
+#### [!toc] [#NativeShieldedTokenCore-initialize]
+<APIItemCompact
+  circuitSig='initialize(
+    name_: Opaque<"string">,
+    symbol_: Opaque<"string">,
+    decimals_: Uint<8>
+  ) → []'
+  kind="circuit"
+  modulePrefix="NativeShieldedTokenCore"
+  stackParams="true"
+>
+  Initializes the contract-wide metadata.
+  This MUST be called in the implementing contract's constructor (via
+  the wrapping flavor's [initialize](#NativeShieldedTokenCore-initialize)). Failure to do so can lead to an
+  irreparable contract.
+</APIItemCompact>
+
+#### assertInitialized [toc] [#NativeShieldedTokenCore-assertInitialized]
+#### [!toc] [#NativeShieldedTokenCore-assertInitialized]
+<APIItemCompact
+  circuitSig='assertInitialized() → []'
+  kind="circuit"
+  modulePrefix="NativeShieldedTokenCore"
+>
+  Asserts that the contract has been initialized, throwing an
+  error if not.
+
+  Requirements:
+
+  * Contract must be initialized.
+</APIItemCompact>
+
+#### assertNotInitialized [toc] [#NativeShieldedTokenCore-assertNotInitialized]
+#### [!toc] [#NativeShieldedTokenCore-assertNotInitialized]
+<APIItemCompact
+  circuitSig='assertNotInitialized() → []'
+  kind="circuit"
+  modulePrefix="NativeShieldedTokenCore"
+>
+  Asserts that the contract has not been initialized, throwing
+  an error if it has.
+
+  Requirements:
+
+  * Contract must not be initialized.
+</APIItemCompact>
+
+#### isInitialized [toc] [#NativeShieldedTokenCore-isInitialized]
+#### [!toc] [#NativeShieldedTokenCore-isInitialized]
+<APIItemCompact
+  circuitSig='isInitialized() → Boolean'
+  kind="circuit"
+  complexity="k=6, rows=26"
+  modulePrefix="NativeShieldedTokenCore"
+>
+  Returns whether the contract has been initialized.
+  Does not gate on init (it reports it), so it is safe to call before
+  [initialize](#NativeShieldedTokenCore-initialize).
+</APIItemCompact>
+
+#### name [toc] [#NativeShieldedTokenCore-name]
+#### [!toc] [#NativeShieldedTokenCore-name]
+<APIItemCompact
+  circuitSig='name() → Opaque<"string">'
+  kind="circuit"
+  complexity="k=6, rows=28"
+  modulePrefix="NativeShieldedTokenCore"
+>
+  Returns the token name.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### symbol [toc] [#NativeShieldedTokenCore-symbol]
+#### [!toc] [#NativeShieldedTokenCore-symbol]
+<APIItemCompact
+  circuitSig='symbol() → Opaque<"string">'
+  kind="circuit"
+  complexity="k=6, rows=28"
+  modulePrefix="NativeShieldedTokenCore"
+>
+  Returns the symbol of the token.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### decimals [toc] [#NativeShieldedTokenCore-decimals]
+#### [!toc] [#NativeShieldedTokenCore-decimals]
+<APIItemCompact
+  circuitSig='decimals() → Uint<8>'
+  kind="circuit"
+  complexity="k=6, rows=28"
+  modulePrefix="NativeShieldedTokenCore"
+>
+  Returns the number of decimals used to get its user representation.
+  This is a display convention only. The protocol stores and operates
+  on integer values without reference to decimals.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### tokenColor [toc] [#NativeShieldedTokenCore-tokenColor]
+#### [!toc] [#NativeShieldedTokenCore-tokenColor]
+<APIItemCompact
+  circuitSig='tokenColor(domain: Bytes<32>) → Bytes<32>'
+  kind="circuit"
+  complexity="k=13, rows=4248"
+  modulePrefix="NativeShieldedTokenCore"
+>
+  Returns the coin color for `domain` under this contract's
+  address: `tokenType(domain, kernel.self())`, computed at call time.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### _mint [toc] [#NativeShieldedTokenCore-_mint]
+#### [!toc] [#NativeShieldedTokenCore-_mint]
+<APIItemCompact
+  circuitSig='_mint(
+    domain: Bytes<32>,
+    recipient: Either<ZswapCoinPublicKey, ContractAddress>,
+    amount: Uint<64>,
+    nonce: Bytes<32>
+  ) → ShieldedCoinInfo'
+  kind="circuit"
+  complexity="k=15, rows=17017"
+  modulePrefix="NativeShieldedTokenCore"
+  stackParams="true"
+>
+  Mints `amount` of the token identified by `domain` to
+  `recipient`, using a caller-supplied nonce.
+
+  The caller is fully responsible for nonce uniqueness. Reusing a
+  nonce for the same (domain, value, recipient) produces a duplicate
+  commitment, which the protocol rejects. A `right(kernel.self())` recipient
+  is claimed via `receiveShielded` in this same call, so the consumer SHOULD
+  persist the returned coin info: it is the contract's holding and is not
+  otherwise recoverable.
+
+  <Callout type='info'>
+    The returned coin info is the only copy available to the
+    recipient; callers SHOULD deliver it out of band. Wallets cannot detect
+    contract-minted coins by scanning the chain.
+  </Callout>
+
+  Requirements:
+
+  * Contract is initialized.
+  * `recipient` is not zero.
+  * `recipient`, if a contract address, is this contract's own address.
+</APIItemCompact>
+
+#### _burn [toc] [#NativeShieldedTokenCore-_burn]
+#### [!toc] [#NativeShieldedTokenCore-_burn]
+<APIItemCompact
+  circuitSig='_burn(
+    domain: Bytes<32>,
+    coin: ShieldedCoinInfo,
+    amount: Uint<128>,
+    refundTo: Either<ZswapCoinPublicKey, ContractAddress>
+  ) → Maybe<ShieldedCoinInfo>'
+  kind="circuit"
+  complexity="k=16, rows=53832"
+  modulePrefix="NativeShieldedTokenCore"
+  stackParams="true"
+>
+  Burns `amount` from `coin`, a coin provided within the
+  current transaction (e.g. paid in by the caller's wallet), and routes the
+  remaining change to `refundTo`.
+
+  To destroy `coin` in full, pass `coin.value` as `amount`; the change
+  branch will not fire and `none` is returned. The `refundTo` value is
+  inert in that case but must still be supplied and non-zero.
+
+  The coin is received by the contract and spent in the same
+  transaction, so the spend goes through `sendImmediateShielded` (the
+  transient path). For coins the contract already holds, use
+  [_burnFromSelf](#NativeShieldedTokenCore-_burnFromSelf) instead. A `right(kernel.self())` refund is claimed via
+  `receiveShielded` in this same call.
+
+  <Callout type='info'>
+    The returned refund coin info is the only copy available to
+    `refundTo`; callers SHOULD deliver it out of band. Wallets cannot detect
+    contract-sent coins by scanning the chain.
+  </Callout>
+
+  Requirements:
+
+  * Contract is initialized.
+  * `coin.color` is this contract's token type for `domain`.
+  * `amount` is less than or equal to `coin.value`.
+  * `refundTo` is not zero (the zero key is the burn address; a zero
+    `refundTo` would silently burn the change as well).
+  * `refundTo`, if a contract address, is this contract's own address.
+</APIItemCompact>
+
+#### _burnFromSelf [toc] [#NativeShieldedTokenCore-_burnFromSelf]
+#### [!toc] [#NativeShieldedTokenCore-_burnFromSelf]
+<APIItemCompact
+  circuitSig='_burnFromSelf(
+    domain: Bytes<32>,
+    coin: QualifiedShieldedCoinInfo,
+    amount: Uint<128>
+  ) → Maybe<ShieldedCoinInfo>'
+  kind="circuit"
+  complexity="k=15, rows=23583"
+  modulePrefix="NativeShieldedTokenCore"
+  stackParams="true"
+>
+  Burns `amount` from `coin`, a coin this contract already
+  holds (a Merkle-tree entry with a valid `mt_index`). Any change is
+  auto-received by the contract and returned.
+
+  The consumer SHOULD persist the returned change coin info in its own
+  ledger state: the change replaces `coin` as the contract's holding, and
+  its info is not otherwise recoverable.
+
+  Requirements:
+
+  * Contract is initialized.
+  * `coin.color` is this contract's token type for `domain`.
+  * `amount` is less than or equal to `coin.value`.
+</APIItemCompact>
+
+---
+
+## NativeShieldedTokenPublicSupply [toc] [#NativeShieldedTokenPublicSupply]
+<APIGithubLinkHeader
+    moduleName="NativeShieldedTokenPublicSupply"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/token/extensions/NativeShieldedTokenPublicSupply.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/token/extensions/NativeShieldedTokenPublicSupply";
+```
+
+---
+
+### Ledger [toc] [#NativeShieldedTokenPublicSupply-Ledger]
+### Ledger [!toc] [#NativeShieldedTokenPublicSupply-Ledger]
+
+#### _totalMinted [toc] [#NativeShieldedTokenPublicSupply-_totalMinted]
+#### [!toc] [#NativeShieldedTokenPublicSupply-_totalMinted]
+<APIItemCompact
+  circuitSig='_totalMinted: Map<Bytes<32>, Uint<128>>'
+  kind="ledger"
+  id="NativeShieldedTokenPublicSupply-_totalMinted"
+>
+  Exact amount minted per domain. See "Accounting guarantees".
+</APIItemCompact>
+
+#### _totalBurned [toc] [#NativeShieldedTokenPublicSupply-_totalBurned]
+#### [!toc] [#NativeShieldedTokenPublicSupply-_totalBurned]
+<APIItemCompact
+  circuitSig='_totalBurned: Map<Bytes<32>, Uint<128>>'
+  kind="ledger"
+  id="NativeShieldedTokenPublicSupply-_totalBurned"
+>
+  Contract-mediated amount burned per domain (lower bound).
+</APIItemCompact>
+
+### Witnesses [toc] [#NativeShieldedTokenPublicSupply-Witnesses]
+### Witnesses [!toc] [#NativeShieldedTokenPublicSupply-Witnesses]
+
+None.
+
+### Circuits [toc] [#NativeShieldedTokenPublicSupply-Circuits]
+### Circuits [!toc] [#NativeShieldedTokenPublicSupply-Circuits]
+
+#### _addMinted [toc] [#NativeShieldedTokenPublicSupply-_addMinted]
+#### [!toc] [#NativeShieldedTokenPublicSupply-_addMinted]
+<APIItemCompact
+  circuitSig='_addMinted(amount: Uint<64>) → []'
+  kind="circuit"
+  complexity="k=9, rows=375"
+  modulePrefix="NativeShieldedTokenPublicSupply"
+>
+  Adds `amount` to the exact minted total. Call once per
+  successful `NativeShieldedToken._mint`.
+</APIItemCompact>
+
+#### _addBurned [toc] [#NativeShieldedTokenPublicSupply-_addBurned]
+#### [!toc] [#NativeShieldedTokenPublicSupply-_addBurned]
+<APIItemCompact
+  circuitSig='_addBurned(amount: Uint<128>) → []'
+  kind="circuit"
+  complexity="k=9, rows=477"
+  modulePrefix="NativeShieldedTokenPublicSupply"
+>
+  Adds `amount` to the contract-mediated burned total. Call once
+  per successful `NativeShieldedToken._burn` / `_burnFromSelf`.
+  Enforces `burned <= minted`; an unpaired or duplicate burn reverts.
+</APIItemCompact>
+
+#### totalMinted [toc] [#NativeShieldedTokenPublicSupply-totalMinted]
+#### [!toc] [#NativeShieldedTokenPublicSupply-totalMinted]
+<APIItemCompact
+  circuitSig='totalMinted() → Uint<128>'
+  kind="circuit"
+  complexity="k=7, rows=65"
+  modulePrefix="NativeShieldedTokenPublicSupply"
+>
+  Returns the exact amount ever minted.
+</APIItemCompact>
+
+#### totalBurned [toc] [#NativeShieldedTokenPublicSupply-totalBurned]
+#### [!toc] [#NativeShieldedTokenPublicSupply-totalBurned]
+<APIItemCompact
+  circuitSig='totalBurned() → Uint<128>'
+  kind="circuit"
+  complexity="k=7, rows=62"
+  modulePrefix="NativeShieldedTokenPublicSupply"
+>
+  Returns the contract-mediated amount burned.
+  <Callout type='info'>
+    This is a lower bound: coins sent directly to the burn address
+    without going through the contract are not counted.
+  </Callout>
+</APIItemCompact>
+
+#### totalSupply [toc] [#NativeShieldedTokenPublicSupply-totalSupply]
+#### [!toc] [#NativeShieldedTokenPublicSupply-totalSupply]
+<APIItemCompact
+  circuitSig='totalSupply() → Uint<128>'
+  kind="circuit"
+  complexity="k=9, rows=160"
+  modulePrefix="NativeShieldedTokenPublicSupply"
+>
+  Returns `totalMinted() - totalBurned()`.
+  <Callout type='info'>
+    This is an UPPER BOUND on circulating supply, not an exact value:
+    burns that bypass the contract are invisible. See the module notes.
+  </Callout>
+</APIItemCompact>
+
+---
+
+## NativeShieldedTokenFamilyPublicSupply [toc] [#NativeShieldedTokenFamilyPublicSupply]
+<APIGithubLinkHeader
+    moduleName="NativeShieldedTokenFamilyPublicSupply"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/token/extensions/NativeShieldedTokenFamilyPublicSupply.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/token/extensions/NativeShieldedTokenFamilyPublicSupply";
+```
+
+---
+
+### Ledger [toc] [#NativeShieldedTokenFamilyPublicSupply-Ledger]
+### Ledger [!toc] [#NativeShieldedTokenFamilyPublicSupply-Ledger]
+
+#### _totalMinted [toc] [#NativeShieldedTokenFamilyPublicSupply-_totalMinted]
+#### [!toc] [#NativeShieldedTokenFamilyPublicSupply-_totalMinted]
+<APIItemCompact
+  circuitSig='_totalMinted: Map<Bytes<32>, Uint<128>>'
+  kind="ledger"
+  id="NativeShieldedTokenFamilyPublicSupply-_totalMinted"
+>
+  Exact amount minted per domain. See "Accounting guarantees".
+</APIItemCompact>
+
+#### _totalBurned [toc] [#NativeShieldedTokenFamilyPublicSupply-_totalBurned]
+#### [!toc] [#NativeShieldedTokenFamilyPublicSupply-_totalBurned]
+<APIItemCompact
+  circuitSig='_totalBurned: Map<Bytes<32>, Uint<128>>'
+  kind="ledger"
+  id="NativeShieldedTokenFamilyPublicSupply-_totalBurned"
+>
+  Contract-mediated amount burned per domain (lower bound).
+</APIItemCompact>
+
+### Witnesses [toc] [#NativeShieldedTokenFamilyPublicSupply-Witnesses]
+### Witnesses [!toc] [#NativeShieldedTokenFamilyPublicSupply-Witnesses]
+
+None.
+
+### Circuits [toc] [#NativeShieldedTokenFamilyPublicSupply-Circuits]
+### Circuits [!toc] [#NativeShieldedTokenFamilyPublicSupply-Circuits]
+
+#### _addMinted [toc] [#NativeShieldedTokenFamilyPublicSupply-_addMinted]
+#### [!toc] [#NativeShieldedTokenFamilyPublicSupply-_addMinted]
+<APIItemCompact
+  circuitSig='_addMinted(domain: Bytes<32>, amount: Uint<64>) → []'
+  kind="circuit"
+  complexity="k=10, rows=653"
+  modulePrefix="NativeShieldedTokenFamilyPublicSupply"
+>
+  Adds `amount` to the exact minted total for `domain`. Call
+  once per successful `NativeShieldedTokenFamily._mint`.
+</APIItemCompact>
+
+#### _addBurned [toc] [#NativeShieldedTokenFamilyPublicSupply-_addBurned]
+#### [!toc] [#NativeShieldedTokenFamilyPublicSupply-_addBurned]
+<APIItemCompact
+  circuitSig='_addBurned(domain: Bytes<32>, amount: Uint<128>) → []'
+  kind="circuit"
+  complexity="k=10, rows=755"
+  modulePrefix="NativeShieldedTokenFamilyPublicSupply"
+>
+  Adds `amount` to the contract-mediated burned total for
+  `domain`. Call once per successful `NativeShieldedTokenFamily._burn` /
+  `_burnFromSelf`.
+  Enforces per-domain `burned <= minted`; an unpaired, duplicate, or
+  wrong-domain burn reverts.
+</APIItemCompact>
+
+#### totalMinted [toc] [#NativeShieldedTokenFamilyPublicSupply-totalMinted]
+#### [!toc] [#NativeShieldedTokenFamilyPublicSupply-totalMinted]
+<APIItemCompact
+  circuitSig='totalMinted(domain: Bytes<32>) → Uint<128>'
+  kind="circuit"
+  complexity="k=9, rows=344"
+  modulePrefix="NativeShieldedTokenFamilyPublicSupply"
+>
+  Returns the exact amount ever minted for `domain`.
+</APIItemCompact>
+
+#### totalBurned [toc] [#NativeShieldedTokenFamilyPublicSupply-totalBurned]
+#### [!toc] [#NativeShieldedTokenFamilyPublicSupply-totalBurned]
+<APIItemCompact
+  circuitSig='totalBurned(domain: Bytes<32>) → Uint<128>'
+  kind="circuit"
+  complexity="k=9, rows=341"
+  modulePrefix="NativeShieldedTokenFamilyPublicSupply"
+>
+  Returns the contract-mediated amount burned for `domain`.
+  <Callout type='info'>
+    This is a lower bound: coins sent directly to the burn address
+    without going through the contract are not counted.
+  </Callout>
+</APIItemCompact>
+
+#### totalSupply [toc] [#NativeShieldedTokenFamilyPublicSupply-totalSupply]
+#### [!toc] [#NativeShieldedTokenFamilyPublicSupply-totalSupply]
+<APIItemCompact
+  circuitSig='totalSupply(domain: Bytes<32>) → Uint<128>'
+  kind="circuit"
+  complexity="k=9, rows=439"
+  modulePrefix="NativeShieldedTokenFamilyPublicSupply"
+>
+  Returns `totalMinted(domain) - totalBurned(domain)`.
+  <Callout type='info'>
+    This is an UPPER BOUND on circulating supply, not an exact value:
+    burns that bypass the contract are invisible. See the module notes.
+  </Callout>
+</APIItemCompact>
+
+---
+
+## NativeShieldedTokenPublicSupplyCore [toc] [#NativeShieldedTokenPublicSupplyCore]
+<APIGithubLinkHeader
+    moduleName="NativeShieldedTokenPublicSupplyCore"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/token/extensions/NativeShieldedTokenPublicSupplyCore.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/token/extensions/NativeShieldedTokenPublicSupplyCore";
+```
+
+---
+
+### Ledger [toc] [#NativeShieldedTokenPublicSupplyCore-Ledger]
+### Ledger [!toc] [#NativeShieldedTokenPublicSupplyCore-Ledger]
+
+#### _totalMinted [toc] [#NativeShieldedTokenPublicSupplyCore-_totalMinted]
+#### [!toc] [#NativeShieldedTokenPublicSupplyCore-_totalMinted]
+<APIItemCompact
+  circuitSig='_totalMinted: Map<Bytes<32>, Uint<128>>'
+  kind="ledger"
+  id="NativeShieldedTokenPublicSupplyCore-_totalMinted"
+>
+  Exact amount minted per domain. See "Accounting guarantees".
+</APIItemCompact>
+
+#### _totalBurned [toc] [#NativeShieldedTokenPublicSupplyCore-_totalBurned]
+#### [!toc] [#NativeShieldedTokenPublicSupplyCore-_totalBurned]
+<APIItemCompact
+  circuitSig='_totalBurned: Map<Bytes<32>, Uint<128>>'
+  kind="ledger"
+  id="NativeShieldedTokenPublicSupplyCore-_totalBurned"
+>
+  Contract-mediated amount burned per domain (lower bound).
+</APIItemCompact>
+
+### Witnesses [toc] [#NativeShieldedTokenPublicSupplyCore-Witnesses]
+### Witnesses [!toc] [#NativeShieldedTokenPublicSupplyCore-Witnesses]
+
+None.
+
+### Circuits [toc] [#NativeShieldedTokenPublicSupplyCore-Circuits]
+### Circuits [!toc] [#NativeShieldedTokenPublicSupplyCore-Circuits]
+
+#### _addMinted [toc] [#NativeShieldedTokenPublicSupplyCore-_addMinted]
+#### [!toc] [#NativeShieldedTokenPublicSupplyCore-_addMinted]
+<APIItemCompact
+  circuitSig='_addMinted(domain: Bytes<32>, amount: Uint<64>) → []'
+  kind="circuit"
+  complexity="k=10, rows=653"
+  modulePrefix="NativeShieldedTokenPublicSupplyCore"
+>
+  Adds `amount` to the exact minted total for `domain`. Call
+  once per successful token `_mint`.
+  Checks for overflow in order to output a readable error message.
+</APIItemCompact>
+
+#### _addBurned [toc] [#NativeShieldedTokenPublicSupplyCore-_addBurned]
+#### [!toc] [#NativeShieldedTokenPublicSupplyCore-_addBurned]
+<APIItemCompact
+  circuitSig='_addBurned(domain: Bytes<32>, amount: Uint<128>) → []'
+  kind="circuit"
+  complexity="k=10, rows=755"
+  modulePrefix="NativeShieldedTokenPublicSupplyCore"
+>
+  Adds `amount` to the contract-mediated burned total for
+  `domain`. Call once per successful token `_burn` / `_burnFromSelf`.
+  Enforces the per-domain `burned <= minted` invariant: a wrong-domain,
+  duplicate, or unpaired burn reverts rather than corrupting [totalSupply](#NativeShieldedTokenPublicSupplyCore-totalSupply).
+  The guard also keeps the add and the [totalSupply](#NativeShieldedTokenPublicSupplyCore-totalSupply) subtraction within
+  bounds, so no separate overflow/underflow check is needed.
+</APIItemCompact>
+
+#### totalMinted [toc] [#NativeShieldedTokenPublicSupplyCore-totalMinted]
+#### [!toc] [#NativeShieldedTokenPublicSupplyCore-totalMinted]
+<APIItemCompact
+  circuitSig='totalMinted(domain: Bytes<32>) → Uint<128>'
+  kind="circuit"
+  complexity="k=9, rows=344"
+  modulePrefix="NativeShieldedTokenPublicSupplyCore"
+>
+  Returns the exact amount ever minted for `domain`.
+</APIItemCompact>
+
+#### totalBurned [toc] [#NativeShieldedTokenPublicSupplyCore-totalBurned]
+#### [!toc] [#NativeShieldedTokenPublicSupplyCore-totalBurned]
+<APIItemCompact
+  circuitSig='totalBurned(domain: Bytes<32>) → Uint<128>'
+  kind="circuit"
+  complexity="k=9, rows=341"
+  modulePrefix="NativeShieldedTokenPublicSupplyCore"
+>
+  Returns the contract-mediated amount burned for `domain`.
+  <Callout type='info'>
+    This is a lower bound: coins sent directly to the burn address
+    without going through the contract are not counted.
+  </Callout>
+</APIItemCompact>
+
+#### totalSupply [toc] [#NativeShieldedTokenPublicSupplyCore-totalSupply]
+#### [!toc] [#NativeShieldedTokenPublicSupplyCore-totalSupply]
+<APIItemCompact
+  circuitSig='totalSupply(domain: Bytes<32>) → Uint<128>'
+  kind="circuit"
+  complexity="k=9, rows=439"
+  modulePrefix="NativeShieldedTokenPublicSupplyCore"
+>
+  Returns `totalMinted(domain) - totalBurned(domain)`, or 0 if
+  [totalBurned](#NativeShieldedTokenPublicSupplyCore-totalBurned) somehow exceeds [totalMinted](#NativeShieldedTokenPublicSupplyCore-totalMinted).
+  <Callout type='info'>
+    This is an UPPER BOUND on circulating supply, not an exact value:
+    burns that bypass the contract are invisible. See the module notes.
+  </Callout>
+  The `burned <= minted` invariant enforced by [_addBurned](#NativeShieldedTokenPublicSupplyCore-_addBurned) already makes
+  `burned > minted` unreachable through the accounting API, so the clamp never
+  fires in normal operation. It is kept so the getter is a total function that
+  reads cleanly (returning 0) rather than reverting on an out-of-bound state.
+</APIItemCompact>
+
+---
+
+## NativeShieldedTokenDerivedNonce [toc] [#NativeShieldedTokenDerivedNonce]
+<APIGithubLinkHeader
+    moduleName="NativeShieldedTokenDerivedNonce"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/token/extensions/NativeShieldedTokenDerivedNonce.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/token/extensions/NativeShieldedTokenDerivedNonce";
+```
+
+---
+
+### Ledger [toc] [#NativeShieldedTokenDerivedNonce-Ledger]
+### Ledger [!toc] [#NativeShieldedTokenDerivedNonce-Ledger]
+
+#### _counter [toc] [#NativeShieldedTokenDerivedNonce-_counter]
+#### [!toc] [#NativeShieldedTokenDerivedNonce-_counter]
+<APIItemCompact
+  circuitSig='_counter: Counter'
+  kind="ledger"
+  id="NativeShieldedTokenDerivedNonce-_counter"
+>
+  Monotonic index feeding the derived-nonce derivation.
+</APIItemCompact>
+
+### Witnesses [toc] [#NativeShieldedTokenDerivedNonce-Witnesses]
+### Witnesses [!toc] [#NativeShieldedTokenDerivedNonce-Witnesses]
+
+None.
+
+### Circuits [toc] [#NativeShieldedTokenDerivedNonce-Circuits]
+### Circuits [!toc] [#NativeShieldedTokenDerivedNonce-Circuits]
+
+#### _deriveNonce [toc] [#NativeShieldedTokenDerivedNonce-_deriveNonce]
+#### [!toc] [#NativeShieldedTokenDerivedNonce-_deriveNonce]
+<APIItemCompact
+  circuitSig='_deriveNonce() → Bytes<32>'
+  kind="circuit"
+  complexity="k=9, rows=451"
+  modulePrefix="NativeShieldedTokenDerivedNonce"
+>
+  Advances the counter and returns the next derived coin nonce,
+  for use as the `nonce` argument of a native token mint.
+
+  <Callout type='info'>
+    The derivation input is public ledger state, so mints using this
+    nonce are recipient-public; see the module notes.
+  </Callout>
+</APIItemCompact>
+
+---
+
+## ZOwnableNativeShieldedToken [toc] [#ZOwnableNativeShieldedToken]
+<APIGithubLinkHeader
+    moduleName="ZOwnableNativeShieldedToken"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/token/presets/ZOwnableNativeShieldedToken.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/token/presets/ZOwnableNativeShieldedToken";
+```
+
+---
+
+### Ledger [toc] [#ZOwnableNativeShieldedToken-Ledger]
+### Ledger [!toc] [#ZOwnableNativeShieldedToken-Ledger]
+
+#### _ownerCommitment [toc] [#ZOwnableNativeShieldedToken-_ownerCommitment]
+#### [!toc] [#ZOwnableNativeShieldedToken-_ownerCommitment]
+<APIItemCompact
+  circuitSig='_ownerCommitment: Bytes<32>'
+  kind="ledger"
+  id="ZOwnableNativeShieldedToken-_ownerCommitment"
+>
+  Stores the current hashed commitment representing the owner.
+  This commitment is derived from the public identifier (e.g., `SHA256(pk, nonce)`),
+  the `instanceSalt`, the transfer `counter`, and a domain separator.
+
+  A commitment of `default<Bytes<32>>` (i.e., zero) indicates the contract is unowned.
+</APIItemCompact>
+
+#### _counter [toc] [#ZOwnableNativeShieldedToken-_counter]
+#### [!toc] [#ZOwnableNativeShieldedToken-_counter]
+<APIItemCompact
+  circuitSig='_counter: Counter'
+  kind="ledger"
+  id="ZOwnableNativeShieldedToken-_counter"
+>
+  Internal transfer counter used to prevent commitment reuse.
+
+  Increments by 1 on every successful ownership transfer. Combined with `id` and
+  `instanceSalt` to compute unique owner commitments over time.
+</APIItemCompact>
+
+#### _instanceSalt [toc] [#ZOwnableNativeShieldedToken-_instanceSalt]
+#### [!toc] [#ZOwnableNativeShieldedToken-_instanceSalt]
+<APIItemCompact
+  circuitSig='_instanceSalt: Bytes<32>'
+  kind="sealed ledger"
+  id="ZOwnableNativeShieldedToken-_instanceSalt"
+>
+  A per-instance value provided at initialization used to namespace
+  commitments for this contract instance.
+
+  This salt prevents commitment collisions across contracts that might otherwise use
+  the same owner identifiers or domain parameters. It is immutable after initialization.
+</APIItemCompact>
+
+#### _ownableIsInitialized [toc] [#ZOwnableNativeShieldedToken-_ownableIsInitialized]
+#### [!toc] [#ZOwnableNativeShieldedToken-_ownableIsInitialized]
+<APIItemCompact
+  circuitSig='_ownableIsInitialized: Boolean'
+  kind="ledger"
+  id="ZOwnableNativeShieldedToken-_ownableIsInitialized"
+>
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
+</APIItemCompact>
+
+#### _domain [toc] [#ZOwnableNativeShieldedToken-_domain]
+#### [!toc] [#ZOwnableNativeShieldedToken-_domain]
+<APIItemCompact
+  circuitSig='_domain: Bytes<32>'
+  kind="sealed ledger"
+  id="ZOwnableNativeShieldedToken-_domain"
+>
+  Domain separator fixed at construction; with the contract
+  address it determines this token's color.
+</APIItemCompact>
+
+#### _name [toc] [#ZOwnableNativeShieldedToken-_name]
+#### [!toc] [#ZOwnableNativeShieldedToken-_name]
+<APIItemCompact
+  circuitSig='_name: Opaque<"string">'
+  kind="sealed ledger"
+  id="ZOwnableNativeShieldedToken-_name"
+>
+  The immutable token name. Re-exported from `NativeShieldedToken`.
+</APIItemCompact>
+
+#### _symbol [toc] [#ZOwnableNativeShieldedToken-_symbol]
+#### [!toc] [#ZOwnableNativeShieldedToken-_symbol]
+<APIItemCompact
+  circuitSig='_symbol: Opaque<"string">'
+  kind="sealed ledger"
+  id="ZOwnableNativeShieldedToken-_symbol"
+>
+  The immutable token symbol. Re-exported from `NativeShieldedToken`.
+</APIItemCompact>
+
+#### _decimals [toc] [#ZOwnableNativeShieldedToken-_decimals]
+#### [!toc] [#ZOwnableNativeShieldedToken-_decimals]
+<APIItemCompact
+  circuitSig='_decimals: Uint<8>'
+  kind="sealed ledger"
+  id="ZOwnableNativeShieldedToken-_decimals"
+>
+  The immutable token decimals. Re-exported from `NativeShieldedToken`.
+</APIItemCompact>
+
+#### _isInitialized [toc] [#ZOwnableNativeShieldedToken-_isInitialized]
+#### [!toc] [#ZOwnableNativeShieldedToken-_isInitialized]
+<APIItemCompact
+  circuitSig='_isInitialized: Boolean'
+  kind="ledger"
+  id="ZOwnableNativeShieldedToken-_isInitialized"
+>
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
+</APIItemCompact>
+
+#### _totalMinted [toc] [#ZOwnableNativeShieldedToken-_totalMinted]
+#### [!toc] [#ZOwnableNativeShieldedToken-_totalMinted]
+<APIItemCompact
+  circuitSig='_totalMinted: Map<Bytes<32>, Uint<128>>'
+  kind="ledger"
+  id="ZOwnableNativeShieldedToken-_totalMinted"
+>
+  Exact amount minted per domain. See "Accounting guarantees".
+</APIItemCompact>
+
+#### _totalBurned [toc] [#ZOwnableNativeShieldedToken-_totalBurned]
+#### [!toc] [#ZOwnableNativeShieldedToken-_totalBurned]
+<APIItemCompact
+  circuitSig='_totalBurned: Map<Bytes<32>, Uint<128>>'
+  kind="ledger"
+  id="ZOwnableNativeShieldedToken-_totalBurned"
+>
+  Contract-mediated amount burned per domain (lower bound).
+</APIItemCompact>
+
+### Witnesses [toc] [#ZOwnableNativeShieldedToken-Witnesses]
+### Witnesses [!toc] [#ZOwnableNativeShieldedToken-Witnesses]
+
+None declared by this module. The composed `ZOwnablePK` requires
+[wit_secretNonce](./ownable#ZOwnablePK-wit_secretNonce), which every owner-gated circuit calls through
+`assertOnlyOwner`. The implementing DApp supplies it; the TypeScript witnesses in the library repository are
+test-only and are not published.
+
+### Circuits [toc] [#ZOwnableNativeShieldedToken-Circuits]
+### Circuits [!toc] [#ZOwnableNativeShieldedToken-Circuits]
+
+#### initialize [toc] [#ZOwnableNativeShieldedToken-initialize]
+#### [!toc] [#ZOwnableNativeShieldedToken-initialize]
+<APIItemCompact
+  circuitSig='initialize(
+    ownerId: Bytes<32>,
+    instanceSalt: Bytes<32>,
+    tokenDomain: Bytes<32>,
+    name_: Opaque<"string">,
+    symbol_: Opaque<"string">,
+    decimals_: Uint<8>
+  ) → []'
+  kind="circuit"
+  modulePrefix="ZOwnableNativeShieldedToken"
+  stackParams="true"
+>
+  Sets the owner and the token's domain and metadata.
+
+  <Callout type='info'>
+    Call from the implementing contract's constructor only. It writes
+    sealed fields, so implementing contracts MUST NOT expose it as a
+    post-deploy circuit.
+  </Callout>
+
+  <Callout type='warn'>
+    `ownerId` must be `_computeOwnerId(pk, secretNonce)` for the coin
+    public key the owner's wallet will supply as `ownPublicKey()`. The circuit
+    cannot check this at deploy; any other key leaves the contract with no
+    usable owner and no recovery.
+  </Callout>
+
+  Requirements:
+
+  * Contract is not initialized.
+  * `ownerId` is not zero.
+</APIItemCompact>
+
+#### mint [toc] [#ZOwnableNativeShieldedToken-mint]
+#### [!toc] [#ZOwnableNativeShieldedToken-mint]
+<APIItemCompact
+  circuitSig='mint(
+    recipient: ZswapCoinPublicKey,
+    amount: Uint<64>,
+    nonce: Bytes<32>
+  ) → ShieldedCoinInfo'
+  kind="circuit"
+  complexity="k=15, rows=21354"
+  modulePrefix="ZOwnableNativeShieldedToken"
+  stackParams="true"
+>
+  Mints `amount` to `recipient` and adds it to the minted total.
+  Owner only.
+
+  Requirements:
+
+  * Caller is the owner.
+  * `recipient` is not zero.
+</APIItemCompact>
+
+#### burn [toc] [#ZOwnableNativeShieldedToken-burn]
+#### [!toc] [#ZOwnableNativeShieldedToken-burn]
+<APIItemCompact
+  circuitSig='burn(
+    coin: ShieldedCoinInfo,
+    amount: Uint<64>,
+    refundTo: ZswapCoinPublicKey
+  ) → Maybe<ShieldedCoinInfo>'
+  kind="circuit"
+  complexity="k=16, rows=52024"
+  modulePrefix="ZOwnableNativeShieldedToken"
+  stackParams="true"
+>
+  Burns `amount` of `coin`, paid into the tx by the caller's
+  wallet, and refunds the rest to `refundTo`. Owner only.
+
+  Requirements:
+
+  * Caller is the owner.
+  * `coin.color` is this token's color.
+  * `amount` \<= `coin.value`.
+  * `refundTo` is not zero.
+</APIItemCompact>
+
+#### transferOwnership [toc] [#ZOwnableNativeShieldedToken-transferOwnership]
+#### [!toc] [#ZOwnableNativeShieldedToken-transferOwnership]
+<APIItemCompact
+  circuitSig='transferOwnership(newOwnerId: Bytes<32>) → []'
+  kind="circuit"
+  complexity="k=15, rows=17096"
+  modulePrefix="ZOwnableNativeShieldedToken"
+>
+  Transfers ownership to `newOwnerId`. Owner only.
+
+  <Callout type='warn'>
+    `newOwnerId` must be `_computeOwnerId(pk, secretNonce)` for the
+    coin public key the new owner's wallet will supply as `ownPublicKey()`.
+    The circuit cannot check this; any other key leaves the contract with no
+    usable owner and no recovery.
+  </Callout>
+
+  Requirements:
+
+  * Caller is the owner.
+  * `newOwnerId` is not zero.
+</APIItemCompact>
+
+#### renounceOwnership [toc] [#ZOwnableNativeShieldedToken-renounceOwnership]
+#### [!toc] [#ZOwnableNativeShieldedToken-renounceOwnership]
+<APIItemCompact
+  circuitSig='renounceOwnership() → []'
+  kind="circuit"
+  complexity="k=14, rows=10622"
+  modulePrefix="ZOwnableNativeShieldedToken"
+>
+  Clears the owner. Owner only.
+
+  <Callout type='warn'>
+    Irreversible: mint and burn stop forever.
+  </Callout>
+
+  Requirements:
+
+  * Caller is the owner.
+</APIItemCompact>
+
+#### owner [toc] [#ZOwnableNativeShieldedToken-owner]
+#### [!toc] [#ZOwnableNativeShieldedToken-owner]
+<APIItemCompact
+  circuitSig='owner() → Bytes<32>'
+  kind="circuit"
+  complexity="k=6, rows=50"
+  modulePrefix="ZOwnableNativeShieldedToken"
+>
+  Returns the current owner commitment.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### _computeOwnerId [toc] [#ZOwnableNativeShieldedToken-_computeOwnerId]
+#### [!toc] [#ZOwnableNativeShieldedToken-_computeOwnerId]
+<APIItemCompact
+  circuitSig='_computeOwnerId(pk: Either<ZswapCoinPublicKey, ContractAddress>, nonce: Bytes<32>) → Bytes<32>'
+  kind="pure"
+  modulePrefix="ZOwnableNativeShieldedToken"
+>
+  Returns the owner id `H(pk, nonce)`.
+
+  Requirements:
+
+  * `pk` is a coin public key.
+</APIItemCompact>
+
+#### totalMinted [toc] [#ZOwnableNativeShieldedToken-totalMinted]
+#### [!toc] [#ZOwnableNativeShieldedToken-totalMinted]
+<APIItemCompact
+  circuitSig='totalMinted() → Uint<128>'
+  kind="circuit"
+  complexity="k=7, rows=65"
+  modulePrefix="ZOwnableNativeShieldedToken"
+>
+  Returns the total amount ever minted.
+</APIItemCompact>
+
+#### name [toc] [#ZOwnableNativeShieldedToken-name]
+#### [!toc] [#ZOwnableNativeShieldedToken-name]
+<APIItemCompact
+  circuitSig='name() → Opaque<"string">'
+  kind="circuit"
+  complexity="k=6, rows=28"
+  modulePrefix="ZOwnableNativeShieldedToken"
+>
+  Returns the token name.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### symbol [toc] [#ZOwnableNativeShieldedToken-symbol]
+#### [!toc] [#ZOwnableNativeShieldedToken-symbol]
+<APIItemCompact
+  circuitSig='symbol() → Opaque<"string">'
+  kind="circuit"
+  complexity="k=6, rows=28"
+  modulePrefix="ZOwnableNativeShieldedToken"
+>
+  Returns the token symbol.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### decimals [toc] [#ZOwnableNativeShieldedToken-decimals]
+#### [!toc] [#ZOwnableNativeShieldedToken-decimals]
+<APIItemCompact
+  circuitSig='decimals() → Uint<8>'
+  kind="circuit"
+  complexity="k=6, rows=28"
+  modulePrefix="ZOwnableNativeShieldedToken"
+>
+  Returns the token decimals.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### tokenColor [toc] [#ZOwnableNativeShieldedToken-tokenColor]
+#### [!toc] [#ZOwnableNativeShieldedToken-tokenColor]
+<APIItemCompact
+  circuitSig='tokenColor() → Bytes<32>'
+  kind="circuit"
+  complexity="k=13, rows=3971"
+  modulePrefix="ZOwnableNativeShieldedToken"
+>
+  Returns this contract's token color,
+  `tokenType(tokenDomain, kernel.self())`.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>

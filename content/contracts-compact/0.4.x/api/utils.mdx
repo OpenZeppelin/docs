@@ -1,0 +1,288 @@
+---
+title: Utils
+---
+
+This package provides the API for all Utils modules.
+
+<Callout type='info'>
+  For an overview of the modules, read the [Utils guide](../utils).
+</Callout>
+
+The page covers the following modules:
+
+- [Utils](#Utils): miscellaneous circuits and common utilities for Compact contract development.
+- [EvmAbi](#EvmAbi): Ethereum ABI word encoding, for messages that must hash identically in Compact and on the EVM.
+
+## Utils [toc] [#Utils]
+<APIGithubLinkHeader
+    moduleName="Utils"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.4.0/contracts/src/utils/Utils.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/utils/Utils";
+```
+
+---
+
+### Ledger [toc] [#Utils-Ledger]
+### Ledger [!toc] [#Utils-Ledger]
+
+None.
+
+### Witnesses [toc] [#Utils-Witnesses]
+### Witnesses [!toc] [#Utils-Witnesses]
+
+None.
+
+### Circuits [toc] [#Utils-Circuits]
+### Circuits [!toc] [#Utils-Circuits]
+
+#### isKeyOrAddressZero [toc] [#Utils-isKeyOrAddressZero]
+#### [!toc] [#Utils-isKeyOrAddressZero]
+<APIItemCompact
+  circuitSig='isKeyOrAddressZero(keyOrAddress: Either<ZswapCoinPublicKey, ContractAddress>) → Boolean'
+  kind="pure"
+  stackParams
+  modulePrefix="Utils"
+>
+  Returns whether `keyOrAddress` is the zero address.
+
+  <Callout type='info'>
+    Midnight's burn address is represented as left\<ZswapCoinPublicKey, ContractAddress>(default\<ZswapCoinPublicKey>)
+    in Compact, so we've chosen to represent the zero address as this structure as well.
+  </Callout>
+</APIItemCompact>
+
+#### isKeyZero [toc] [#Utils-isKeyZero]
+#### [!toc] [#Utils-isKeyZero]
+<APIItemCompact
+  circuitSig='isKeyZero(key: ZswapCoinPublicKey) → Boolean'
+  kind="pure"
+  modulePrefix="Utils"
+>
+  Returns whether `key` is the zero address.
+</APIItemCompact>
+
+#### isKeyOrAddressEqual [toc] [#Utils-isKeyOrAddressEqual]
+#### [!toc] [#Utils-isKeyOrAddressEqual]
+<APIItemCompact
+  circuitSig='isKeyOrAddressEqual(keyOrAddress: Either<ZswapCoinPublicKey, ContractAddress>, other: Either<ZswapCoinPublicKey, ContractAddress>) → Boolean'
+  kind="pure"
+  stackParams
+  modulePrefix="Utils"
+>
+  Returns whether `keyOrAddress` is equal to `other`. Assumes that a ZswapCoinPublicKey
+  and a ContractAddress can never be equal
+</APIItemCompact>
+
+#### isContractAddress [toc] [#Utils-isContractAddress]
+#### [!toc] [#Utils-isContractAddress]
+<APIItemCompact
+  circuitSig='isContractAddress(keyOrAddress: Either<ZswapCoinPublicKey, ContractAddress>) → Boolean'
+  kind="pure"
+  stackParams
+  modulePrefix="Utils"
+>
+  Returns whether `keyOrAddress` is a ContractAddress type.
+</APIItemCompact>
+
+#### emptyString [toc] [#Utils-emptyString]
+#### [!toc] [#Utils-emptyString]
+<APIItemCompact
+  circuitSig='emptyString() → Opaque<"string">'
+  kind="pure"
+  modulePrefix="Utils"
+>
+  A helper function that returns the empty string: "".
+</APIItemCompact>
+
+#### canonicalize [toc] [#Utils-canonicalize]
+#### [!toc] [#Utils-canonicalize]
+<APIItemCompact
+  circuitSig='canonicalize<T1, T2>(value: Either<T1, T2>) → Either<T1, T2>'
+  kind="pure"
+  modulePrefix="Utils"
+>
+  Zeroes out the unused side of an `Either` value. Prevents crafted
+  inputs where both `left` and `right` fields carry data from bypassing checks that
+  only inspect the active side.
+</APIItemCompact>
+
+#### zeroAccount [toc] [#Utils-zeroAccount]
+#### [!toc] [#Utils-zeroAccount]
+<APIItemCompact
+  circuitSig='zeroAccount() → Either<Bytes<32>, ContractAddress>'
+  kind="pure"
+  modulePrefix="Utils"
+>
+  Returns the canonical zero `Either<Bytes<32>, ContractAddress>` value: the
+  left variant (`Bytes<32>`) set to zero. Used as the sentinel for mint/burn operations
+  (a zero `from` signals a mint, a zero `to` signals a burn) and for cleared approvals.
+
+  The left variant is chosen so that [isTargetZero](#Utils-isTargetZero) checks against `default<Bytes<32>>`,
+  and to avoid triggering contract-address guards (e.g. circuits that check `!to.is_left`
+  before delegating to an `_unsafe` variant). A right variant with `default<ContractAddress>`
+  would also pass [isTargetZero](#Utils-isTargetZero), but the left variant keeps guards and error messages consistent.
+</APIItemCompact>
+
+#### isTargetZero [toc] [#Utils-isTargetZero]
+#### [!toc] [#Utils-isTargetZero]
+<APIItemCompact
+  circuitSig='isTargetZero(target: Either<Bytes<32>, ContractAddress>) → Boolean'
+  kind="pure"
+  modulePrefix="Utils"
+>
+  Returns `true` if `target`'s active branch (as indicated by `is_left`)
+  holds the zero value.
+</APIItemCompact>
+
+#### computeAccountId [toc] [#Utils-computeAccountId]
+#### [!toc] [#Utils-computeAccountId]
+<APIItemCompact
+  circuitSig='computeAccountId(secretKey: Bytes<32>) → Bytes<32>'
+  kind="pure"
+  modulePrefix="Utils"
+>
+  Computes an account identifier without on-chain state, allowing a user to derive
+  their identity commitment before submitting an operation.
+
+  <Callout type='warn'>
+    OpSec: The `secretKey` parameter is a sensitive secret. Mishandling it can
+    permanently compromise the security of this system:
+
+    * **Never log or persist** the `secretKey` in plaintext — avoid browser devtools,
+    application logs, analytics pipelines, or any observable side-channel.
+    * **Store offline or in secure enclaves** — hardware security modules (HSMs),
+    air-gapped devices, or encrypted vaults are strongly preferred over hot storage.
+    * **Use cryptographically secure randomness** — generate keys with `crypto.getRandomValues()`
+    or equivalent; weak or predictable keys can be brute-forced to reveal your identity.
+    * **Treat key loss as identity loss** — a lost key cannot be recovered.
+    * **Avoid calling this circuit in untrusted environments** — executing this in an
+    unverified browser extension, compromised runtime, or shared machine may expose
+    the key to a malicious observer.
+
+    ## ID Derivation
+    `accountId = persistentHash(secretKey)`
+  </Callout>
+
+  The absence of a domain-separation tag is DELIBERATE. This identifier
+  is global by design: the same key material yields the same identity in
+  every module deriving one, so a user who wishes to carry one identity
+  across modules can. Modules wanting a per-deployment, unlinkable identity
+  should not use this circuit.
+
+  NOT FOR PRIVATE DERIVATION. This returns an identifier, not a secret,
+  and the construction is untagged. A circuit deriving a PRIVATE value from a
+  secret MUST use its own domain-separation tag.
+</APIItemCompact>
+
+#### selfAsRecipient [toc] [#Utils-selfAsRecipient]
+#### [!toc] [#Utils-selfAsRecipient]
+<APIItemCompact
+  circuitSig='selfAsRecipient() → Either<ZswapCoinPublicKey, ContractAddress>'
+  kind="circuit"
+  modulePrefix="Utils"
+>
+  Returns the current contract's address as an
+  `Either<ZswapCoinPublicKey, ContractAddress>` for use as a
+  recipient in shielded send operations (deposits and receiving change).
+</APIItemCompact>
+
+#### UINT128_MAX [toc] [#Utils-UINT128_MAX]
+#### [!toc] [#Utils-UINT128_MAX]
+<APIItemCompact
+  circuitSig='UINT128_MAX() → Uint<128>'
+  kind="pure"
+  modulePrefix="Utils"
+>
+  The maximum value representable by a `Uint<128>`.
+
+  <Callout type='info'>
+    TODO: Remove once a math module providing this constant is available.
+  </Callout>
+</APIItemCompact>
+
+---
+
+## EvmAbi [toc] [#EvmAbi]
+<APIGithubLinkHeader
+    moduleName="EvmAbi"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.4.0/contracts/src/utils/EvmAbi.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/utils/EvmAbi";
+```
+
+The module needs no `keccak256` of its own and compiles on either ZKIR backend.
+Every circuit size below is a ZKIR v3 figure.
+
+---
+
+### Ledger [toc] [#EvmAbi-Ledger]
+### Ledger [!toc] [#EvmAbi-Ledger]
+
+None.
+
+### Witnesses [toc] [#EvmAbi-Witnesses]
+### Witnesses [!toc] [#EvmAbi-Witnesses]
+
+None.
+
+### Circuits [toc] [#EvmAbi-Circuits]
+### Circuits [!toc] [#EvmAbi-Circuits]
+
+#### uint8Word [toc] [#EvmAbi-uint8Word]
+#### [!toc] [#EvmAbi-uint8Word]
+<APIItemCompact
+  circuitSig='uint8Word(value: Uint<8>) → Bytes<32>'
+  kind="pure"
+  complexity="k=6, rows=55"
+  modulePrefix="EvmAbi"
+>
+  Encodes a `Uint<8>` as an `abi.encode(uint8)` word: the
+  value in the least significant byte, zero elsewhere.
+
+  This is also how a Compact `enum` should reach a digest, matching Solidity,
+  where an enum ABI-encodes as its `uint8` ordinal: `uint8Word(kind as Uint<8>)`.
+</APIItemCompact>
+
+#### uint64Word [toc] [#EvmAbi-uint64Word]
+#### [!toc] [#EvmAbi-uint64Word]
+<APIItemCompact
+  circuitSig='uint64Word(value: Uint<64>) → Bytes<32>'
+  kind="pure"
+  complexity="k=11, rows=1348"
+  modulePrefix="EvmAbi"
+>
+  Encodes a `Uint<64>` as an `abi.encode(uint256)` word: the
+  value big-endian in the low 8 bytes, zero-padded on the left.
+</APIItemCompact>
+
+#### uint128Word [toc] [#EvmAbi-uint128Word]
+#### [!toc] [#EvmAbi-uint128Word]
+<APIItemCompact
+  circuitSig='uint128Word(value: Uint<128>) → Bytes<32>'
+  kind="pure"
+  complexity="k=12, rows=2503"
+  modulePrefix="EvmAbi"
+>
+  Encodes a `Uint<128>` as an `abi.encode(uint256)` word: the
+  value big-endian in the low 16 bytes, zero-padded on the left.
+
+  Costs roughly twice [uint64Word](#EvmAbi-uint64Word), so prefer the narrower
+  encoder when the value fits in 64 bits.
+</APIItemCompact>
+
+#### boolWord [toc] [#EvmAbi-boolWord]
+#### [!toc] [#EvmAbi-boolWord]
+<APIItemCompact
+  circuitSig='boolWord(value: Boolean) → Bytes<32>'
+  kind="pure"
+  complexity="k=6, rows=54"
+  modulePrefix="EvmAbi"
+>
+  Encodes a `Boolean` as an `abi.encode(bool)` word: zero
+  everywhere except the least significant byte, which is 1 for true.
+</APIItemCompact>

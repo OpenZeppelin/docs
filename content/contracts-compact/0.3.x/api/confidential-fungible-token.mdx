@@ -1,0 +1,747 @@
+---
+title: ConfidentialFungibleToken API
+---
+
+This module provides the full ConfidentialFungibleToken module API.
+
+<Callout type='info'>
+  For an overview of the module, read the [ConfidentialFungibleToken guide](../confidential-fungible-token).
+  The `ElGamal_Ciphertext` and `EcdhMask_Ciphertext` types used below are documented in the [Crypto API](./crypto).
+</Callout>
+
+The page covers the following modules:
+
+- [ConfidentialFungibleToken](#ConfidentialFungibleToken): the token with ElGamal-encrypted balances.
+- [ConfidentialFungibleTokenPublicSupply](#ConfidentialFungibleTokenPublicSupply): an extension that tracks a public total supply.
+
+## ConfidentialFungibleToken [toc] [#ConfidentialFungibleToken]
+<APIGithubLinkHeader
+    moduleName="ConfidentialFungibleToken"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/token/ConfidentialFungibleToken.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/token/ConfidentialFungibleToken";
+```
+
+---
+
+### Types [toc] [#ConfidentialFungibleToken-Types]
+### Types [!toc] [#ConfidentialFungibleToken-Types]
+
+#### EscrowEntry [toc] [#ConfidentialFungibleToken-EscrowEntry]
+#### [!toc] [#ConfidentialFungibleToken-EscrowEntry]
+<APIItemCompact
+  circuitSig='struct EscrowEntry { spenderCt: ElGamal_Ciphertext; ownerCt: ElGamal_Ciphertext; ownerMemo: EcdhMask_Ciphertext; }'
+  kind="struct"
+  id="ConfidentialFungibleToken-EscrowEntry"
+>
+  Per-(owner, spender) encrypted escrow. Stored as two
+  ciphertexts of the same value: one to the spender, one to the owner.
+  No public cap.
+</APIItemCompact>
+
+### Ledger [toc] [#ConfidentialFungibleToken-Ledger]
+### Ledger [!toc] [#ConfidentialFungibleToken-Ledger]
+
+#### _balances [toc] [#ConfidentialFungibleToken-_balances]
+#### [!toc] [#ConfidentialFungibleToken-_balances]
+<APIItemCompact
+  circuitSig='_balances: Map<Bytes<32>, ElGamal_Ciphertext>'
+  kind="ledger"
+  id="ConfidentialFungibleToken-_balances"
+>
+  Dual-balance grief fix. `_balances` is the SPENDABLE (confirmed) balance that
+  debits draw from; `_pending` is the incoming pool that credits land in. Only
+  the owner moves pending -> spendable, via [sweep](#ConfidentialFungibleToken-sweep). So a third party spamming
+  dust credits cannot churn a victim's spendable ciphertext and invalidate the
+  victim's in-flight spend proofs (a liveness grief). A wallet's total balance
+  is [balanceOf](#ConfidentialFungibleToken-balanceOf) (spendable) + [pendingOf](#ConfidentialFungibleToken-pendingOf) (pending).
+</APIItemCompact>
+
+#### _pending [toc] [#ConfidentialFungibleToken-_pending]
+#### [!toc] [#ConfidentialFungibleToken-_pending]
+<APIItemCompact
+  circuitSig='_pending: Map<Bytes<32>, ElGamal_Ciphertext>'
+  kind="ledger"
+  id="ConfidentialFungibleToken-_pending"
+>
+  Mapping from account identifiers to their pending balance ciphertext, where incoming credits land.
+  Only the owner moves pending value into `_balances`, with [sweep](#ConfidentialFungibleToken-sweep).
+</APIItemCompact>
+
+#### _encryptionKeys [toc] [#ConfidentialFungibleToken-_encryptionKeys]
+#### [!toc] [#ConfidentialFungibleToken-_encryptionKeys]
+<APIItemCompact
+  circuitSig='_encryptionKeys: Map<Bytes<32>, JubjubPoint>'
+  kind="ledger"
+  id="ConfidentialFungibleToken-_encryptionKeys"
+>
+  Mapping from account identifiers to their ElGamal public key, set by [register](#ConfidentialFungibleToken-register).
+  Membership in this map is what "registered" means throughout the module.
+</APIItemCompact>
+
+#### _memos [toc] [#ConfidentialFungibleToken-_memos]
+#### [!toc] [#ConfidentialFungibleToken-_memos]
+<APIItemCompact
+  circuitSig='_memos: Map<Bytes<32>, List<EcdhMask_Ciphertext>>'
+  kind="ledger"
+  id="ConfidentialFungibleToken-_memos"
+>
+  Mapping from account identifiers to their memo list. Every credit pushes one memo carrying the credited amount,
+  encrypted to the recipient's key, to the front of the list. Memos record credits only; debits leave none.
+</APIItemCompact>
+
+#### _escrow [toc] [#ConfidentialFungibleToken-_escrow]
+#### [!toc] [#ConfidentialFungibleToken-_escrow]
+<APIItemCompact
+  circuitSig='_escrow: Map<Bytes<32>, Map<Bytes<32>, EscrowEntry>>'
+  kind="ledger"
+  id="ConfidentialFungibleToken-_escrow"
+>
+  Mapping from owner accounts to spender accounts to their [EscrowEntry](#ConfidentialFungibleToken-EscrowEntry).
+</APIItemCompact>
+
+#### _escrowSpendEpochs [toc] [#ConfidentialFungibleToken-_escrowSpendEpochs]
+#### [!toc] [#ConfidentialFungibleToken-_escrowSpendEpochs]
+<APIItemCompact
+  circuitSig='_escrowSpendEpochs: Map<Bytes<32>, Map<Bytes<32>, Counter>>'
+  kind="ledger"
+  id="ConfidentialFungibleToken-_escrowSpendEpochs"
+>
+  Per-(owner, spender) escrow-spend counter, folded into the randomness
+  `_spendEscrow` derives so repeat spends by one spender against one owner
+  never share a one-time pad. It restarts for each pair, which is why both
+  counterparties are bound in too; see `SpendRandomnessPreimage`.
+
+  Kept out of `EscrowEntry`: [approve](#ConfidentialFungibleToken-approve) replaces that entry wholesale, so a
+  counter living there would restart on every re-approve.
+
+  Note that this exposes a per-pair spend count which is already derivable
+  from tx history.
+</APIItemCompact>
+
+#### _creditEpochs [toc] [#ConfidentialFungibleToken-_creditEpochs]
+#### [!toc] [#ConfidentialFungibleToken-_creditEpochs]
+<APIItemCompact
+  circuitSig='_creditEpochs: Map<Bytes<32>, Counter>'
+  kind="ledger"
+  id="ConfidentialFungibleToken-_creditEpochs"
+>
+  Per-account credit counter. `_credit` uses it as the nonce that keeps each
+  credit's randomness distinct, so it MUST only ever increase. No circuit
+  resets it. It is kept out of `_memos` for that reason: the memo list is
+  prunable by its owner, and a nonce that could be walked back would let a
+  reused seed repeat an earlier credit's randomness. The cost is that an
+  account's lifetime credit count is now permanently readable from state.
+
+  `Counter` is chosen for no-reset monotonicity, not commutativity. Its
+  `increment` emits no pinned read, but `_credit` reads the value back to
+  derive the nonce, and that read pins the recipient's key. Credits to one
+  recipient still serialize; see the Concurrency note above.
+</APIItemCompact>
+
+#### _isInitialized [toc] [#ConfidentialFungibleToken-_isInitialized]
+#### [!toc] [#ConfidentialFungibleToken-_isInitialized]
+<APIItemCompact
+  circuitSig='_isInitialized: Boolean'
+  kind="ledger"
+  id="ConfidentialFungibleToken-_isInitialized"
+>
+  Boolean indicating if initialized.
+</APIItemCompact>
+
+#### _name [toc] [#ConfidentialFungibleToken-_name]
+#### [!toc] [#ConfidentialFungibleToken-_name]
+<APIItemCompact
+  circuitSig='_name: Opaque<"string">'
+  kind="sealed ledger"
+  id="ConfidentialFungibleToken-_name"
+>
+  The immutable token name.
+</APIItemCompact>
+
+#### _symbol [toc] [#ConfidentialFungibleToken-_symbol]
+#### [!toc] [#ConfidentialFungibleToken-_symbol]
+<APIItemCompact
+  circuitSig='_symbol: Opaque<"string">'
+  kind="sealed ledger"
+  id="ConfidentialFungibleToken-_symbol"
+>
+  The immutable token symbol.
+</APIItemCompact>
+
+#### _decimals [toc] [#ConfidentialFungibleToken-_decimals]
+#### [!toc] [#ConfidentialFungibleToken-_decimals]
+<APIItemCompact
+  circuitSig='_decimals: Uint<8>'
+  kind="sealed ledger"
+  id="ConfidentialFungibleToken-_decimals"
+>
+  The immutable token decimals.
+</APIItemCompact>
+
+### Witnesses [toc] [#ConfidentialFungibleToken-Witnesses]
+### Witnesses [!toc] [#ConfidentialFungibleToken-Witnesses]
+
+The TypeScript witnesses in the repository are test-only and are not published; a consumer authors its own.
+
+#### wit_ConfidentialTokenSK [toc] [#ConfidentialFungibleToken-wit_ConfidentialTokenSK]
+#### [!toc] [#ConfidentialFungibleToken-wit_ConfidentialTokenSK]
+<APIItemCompact
+  circuitSig="wit_ConfidentialTokenSK() → Bytes<32>"
+  kind="witness"
+  id="ConfidentialFungibleToken-wit_ConfidentialTokenSK"
+>
+  Returns the caller's account secret. Verified in-circuit by
+  matching `persistentHash(SK)` against the public accountId.
+</APIItemCompact>
+
+#### wit_ConfidentialTokenEK [toc] [#ConfidentialFungibleToken-wit_ConfidentialTokenEK]
+#### [!toc] [#ConfidentialFungibleToken-wit_ConfidentialTokenEK]
+<APIItemCompact
+  circuitSig="wit_ConfidentialTokenEK() → Bytes<32>"
+  kind="witness"
+  id="ConfidentialFungibleToken-wit_ConfidentialTokenEK"
+>
+  Returns the caller's ElGamal secret. Verified in-circuit by
+  `ElGamal_assertDecryptsTo`, which re-derives the pk and compares
+  against the stored pk.
+</APIItemCompact>
+
+#### wit_PlaintextBalance [toc] [#ConfidentialFungibleToken-wit_PlaintextBalance]
+#### [!toc] [#ConfidentialFungibleToken-wit_PlaintextBalance]
+<APIItemCompact
+  circuitSig="wit_PlaintextBalance(ct: ElGamal_Ciphertext) → Uint<248>"
+  kind="witness"
+  id="ConfidentialFungibleToken-wit_PlaintextBalance"
+>
+  Returns the wallet's cached plaintext for the given
+  ciphertext. Called whenever the circuit needs to verify a ciphertext's
+  plaintext value (sender's main balance, escrow ciphertext during spend,
+  prior escrow during refund, etc.).
+
+  The ciphertext is passed explicitly so the wallet can route to the right
+  cached plaintext by ciphertext identity. This avoids call-order
+  conventions (which would be brittle to circuit refactors) and lets the
+  wallet maintain a `Map<ElGamal_Ciphertext, Uint248>` lookup.
+
+  Verified in-circuit by `ElGamal_assertDecryptsTo`: a wrong plaintext
+  fails the assertion `Dec(ct, EK) == claimedValue`.
+</APIItemCompact>
+
+#### wit_RandomnessSeed [toc] [#ConfidentialFungibleToken-wit_RandomnessSeed]
+#### [!toc] [#ConfidentialFungibleToken-wit_RandomnessSeed]
+<APIItemCompact
+  circuitSig="wit_RandomnessSeed() → Bytes<32>"
+  kind="witness"
+  id="ConfidentialFungibleToken-wit_RandomnessSeed"
+>
+  Returns a single 32-byte seed from which all per-operation
+  randomness (and each memo's ephemeral) is derived in-circuit.
+
+  Seed freshness is load-bearing for confidentiality on EVERY path (see the
+  module header). The derivation is deterministic and public, so an observer
+  who knows the seed can strip a memo's mask and read the delivered amount, and
+  recover balance/escrow amounts from the public ciphertexts. Seed REUSE leaks
+  plaintext differences and the circuit does NOT prevent it on most paths.
+  `_spendEscrow` is an exception (its randomness folds the spend epoch and both
+  counterparties); the credit path folds the recipient's `_creditEpochs`
+  counter as defense in depth, and that covers credits alone. The seed MUST be
+  fresh, high-entropy, and secret for every invocation.
+</APIItemCompact>
+
+### Circuits [toc] [#ConfidentialFungibleToken-Circuits]
+### Circuits [!toc] [#ConfidentialFungibleToken-Circuits]
+
+#### MAX_TRANSFER_VALUE [toc] [#ConfidentialFungibleToken-MAX_TRANSFER_VALUE]
+#### [!toc] [#ConfidentialFungibleToken-MAX_TRANSFER_VALUE]
+<APIItemCompact
+  circuitSig="MAX_TRANSFER_VALUE() → Uint<128>"
+  kind="pure"
+  modulePrefix="ConfidentialFungibleToken"
+>
+  Maximum allowed value per single transfer / mint / burn /
+  approve: the `Uint<128>` maximum. The prior `2^48` cap existed only to keep
+  wallet-side discrete-log recovery tractable; with the ECDH memo delivering
+  values directly (see `crypto/EcdhMask`), that constraint is gone. Values stay
+  well under the Jubjub scalar-field order, so homomorphic sums do not wrap.
+
+  <Callout type='info'>
+    This equals the argument type's own maximum, so the per-op check is
+    redundant today. KEEP IT: it compares against a hard constant rather than
+    the argument type, so it still catches a later widening of the transfer
+    type — which is what the balance-claim width is sized against.
+  </Callout>
+</APIItemCompact>
+
+#### initialize [toc] [#ConfidentialFungibleToken-initialize]
+#### [!toc] [#ConfidentialFungibleToken-initialize]
+<APIItemCompact
+  circuitSig='initialize(
+    name_: Opaque<"string">,
+    symbol_: Opaque<"string">,
+    decimals_: Uint<8>
+  ) → []'
+  kind="circuit"
+  modulePrefix="ConfidentialFungibleToken"
+  stackParams="true"
+>
+  Initializes the token's name, symbol, and decimals. Intended to
+  be called once, from the deploying contract's constructor.
+
+  Requirements:
+
+  * Contract is not already initialized.
+</APIItemCompact>
+
+#### balanceOf [toc] [#ConfidentialFungibleToken-balanceOf]
+#### [!toc] [#ConfidentialFungibleToken-balanceOf]
+<APIItemCompact
+  circuitSig="balanceOf(account: Bytes<32>) → ElGamal_Ciphertext"
+  kind="circuit"
+  complexity="k=10, rows=989"
+  modulePrefix="ConfidentialFungibleToken"
+>
+  Returns `account`'s balance ciphertext, or the default (zero)
+  ciphertext if the account is unregistered. The amount is encrypted; only the
+  account (or an authorized viewer) can decrypt it.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### pendingOf [toc] [#ConfidentialFungibleToken-pendingOf]
+#### [!toc] [#ConfidentialFungibleToken-pendingOf]
+<APIItemCompact
+  circuitSig="pendingOf(account: Bytes<32>) → ElGamal_Ciphertext"
+  kind="circuit"
+  complexity="k=10, rows=986"
+  modulePrefix="ConfidentialFungibleToken"
+>
+  Returns `account`'s PENDING balance ciphertext (incoming credits
+  not yet swept into spendable), or Enc(0) if unregistered. The spendable
+  balance is [balanceOf](#ConfidentialFungibleToken-balanceOf); a wallet's total is the sum of the two. See the
+  dual-balance note on the ledger declarations.
+
+  Requirements:
+
+  * Contract is initialized.
+</APIItemCompact>
+
+#### allowance [toc] [#ConfidentialFungibleToken-allowance]
+#### [!toc] [#ConfidentialFungibleToken-allowance]
+<APIItemCompact
+  circuitSig="allowance(owner: Bytes<32>, spender: Bytes<32>) → EscrowEntry"
+  kind="circuit"
+  complexity="k=10, rows=938"
+  modulePrefix="ConfidentialFungibleToken"
+>
+  Returns the escrow entry (the encrypted allowance) that `owner`
+  granted `spender`. When no allowance exists, returns a well-formed
+  encrypted-zero entry (its encrypted amounts decrypt to 0, analogous to an
+  ERC-20 zero allowance) rather than `default<EscrowEntry>`: the returned
+  Jubjub points are on-curve, so the view is safe to prove (e.g. through a
+  contract-to-contract call) and safe for a wallet to decrypt, whereas a zeroed
+  default holds off-curve points. The cap is encrypted, not public.
+
+  <Callout type='info'>
+    "No allowance" and "an allowance of 0" both read as encrypted-zero;
+    a caller that must distinguish them reads `_escrow` membership off-chain. This
+    getter grants nothing, the spend path ([transferFrom](#ConfidentialFungibleToken-transferFrom)/`burnFrom`) gates on
+    `_escrow` membership independently, so a non-existent allowance is unspendable.
+  </Callout>
+</APIItemCompact>
+
+#### isRegistered [toc] [#ConfidentialFungibleToken-isRegistered]
+#### [!toc] [#ConfidentialFungibleToken-isRegistered]
+<APIItemCompact
+  circuitSig="isRegistered(account: Bytes<32>) → Boolean"
+  kind="circuit"
+  complexity="k=9, rows=305"
+  modulePrefix="ConfidentialFungibleToken"
+>
+  Returns whether `account` has registered an encryption key.
+</APIItemCompact>
+
+#### register [toc] [#ConfidentialFungibleToken-register]
+#### [!toc] [#ConfidentialFungibleToken-register]
+<APIItemCompact
+  circuitSig="register() → Bytes<32>"
+  kind="circuit"
+  complexity="k=13, rows=8100"
+  modulePrefix="ConfidentialFungibleToken"
+>
+  Registers the caller: derives their encryption public key from
+  [wit_ConfidentialTokenEK](#ConfidentialFungibleToken-wit_ConfidentialTokenEK) and initializes their balance to an encryption of
+  zero. Registration is a prerequisite for sending or receiving.
+
+  <Callout type='info'>
+    Returns the caller's `accountId`. A composing contract can gate on
+    the returned value (e.g. assert it is KYC-approved) to restrict who may
+    register. See the module header note on caller-identity gating.
+  </Callout>
+
+  Requirements:
+
+  * Contract is initialized.
+  * The caller is not already registered.
+</APIItemCompact>
+
+#### _mint [toc] [#ConfidentialFungibleToken-_mint]
+#### [!toc] [#ConfidentialFungibleToken-_mint]
+<APIItemCompact
+  circuitSig="_mint(account: Bytes<32>, value: Uint<128>) → []"
+  kind="circuit"
+  complexity="k=15, rows=27179"
+  modulePrefix="ConfidentialFungibleToken"
+>
+  Mints `value` to `account`: `_credit` under its intent name.
+  The building block for a composing contract's gated `mint`; it performs no
+  supply accounting. Pair it with a supply tracker (see
+  `extensions/ConfidentialFungibleTokenPublicSupply`) if the deployment tracks
+  `totalSupply`.
+
+  Requirements:
+
+  * Contract is initialized.
+  * `value` is within [MAX_TRANSFER_VALUE](#ConfidentialFungibleToken-MAX_TRANSFER_VALUE).
+  * `account` is registered.
+</APIItemCompact>
+
+#### _burn [toc] [#ConfidentialFungibleToken-_burn]
+#### [!toc] [#ConfidentialFungibleToken-_burn]
+<APIItemCompact
+  circuitSig="_burn(value: Uint<128>) → Bytes<32>"
+  kind="circuit"
+  complexity="k=15, rows=16720"
+  modulePrefix="ConfidentialFungibleToken"
+>
+  Burns `value` from the caller's own balance: `_debit` under
+  its intent name. The building block for a composing contract's `burn`; it
+  performs no supply accounting. Pair it with a supply tracker (see
+  `extensions/ConfidentialFungibleTokenPublicSupply`) if the deployment tracks
+  `totalSupply`.
+
+  Requirements:
+
+  * Contract is initialized.
+  * `value` is within [MAX_TRANSFER_VALUE](#ConfidentialFungibleToken-MAX_TRANSFER_VALUE).
+  * The caller is registered and has a balance of at least `value`.
+</APIItemCompact>
+
+#### transfer [toc] [#ConfidentialFungibleToken-transfer]
+#### [!toc] [#ConfidentialFungibleToken-transfer]
+<APIItemCompact
+  circuitSig="transfer(to: Bytes<32>, value: Uint<128>) → Bytes<32>"
+  kind="circuit"
+  complexity="k=16, rows=43701"
+  modulePrefix="ConfidentialFungibleToken"
+>
+  Transfers `value` from the caller to `to`: debits the caller,
+  credits `to`, and pushes an encrypted memo to `to`. The amount is hidden;
+  the (sender, recipient) pair is public.
+
+  <Callout type='info'>
+    Returns the caller's (sender's) `accountId` for caller-side gating.
+    The sender is derived from the same authentication `_debit` performs, so the
+    returned id is exactly the account whose funds moved.
+  </Callout>
+
+  Requirements:
+
+  * Contract is initialized.
+  * `value` is within [MAX_TRANSFER_VALUE](#ConfidentialFungibleToken-MAX_TRANSFER_VALUE).
+  * The caller is registered with a balance of at least `value`.
+  * `to` is registered and is not the caller (no self-transfer).
+</APIItemCompact>
+
+#### _move [toc] [#ConfidentialFungibleToken-_move]
+#### [!toc] [#ConfidentialFungibleToken-_move]
+<APIItemCompact
+  circuitSig="_move(to: Bytes<32>, value: Uint<128>) → Bytes<32>"
+  kind="circuit"
+  complexity="k=16, rows=43690"
+  modulePrefix="ConfidentialFungibleToken"
+>
+  The conserving value-movement primitive: debits the caller and
+  credits `to` by the same `value`, net zero. It NEVER changes supply, so it is
+  the safe surface for composition and the primitive this supply-free base
+  exposes. [transfer](#ConfidentialFungibleToken-transfer) is [_move](#ConfidentialFungibleToken-_move) plus a self-transfer guard; supply-changing
+  operations (`mint`/`burn`) live in a separate layer outside this conserving
+  surface, and only they may break conservation.
+
+  <Callout type='info'>
+    Like [transfer](#ConfidentialFungibleToken-transfer), the credit lands in the recipient's pending pool
+    (see the dual-balance note); the caller sweeps their own incoming value.
+  </Callout>
+
+  Self-move (`to` == caller) is PERMITTED here, unlike [transfer](#ConfidentialFungibleToken-transfer), which
+  rejects it. A self-move is conserving and safe: it debits the caller's
+  spendable and credits the caller's own pending (net zero, distinct ledger
+  cells; the value is recovered with [sweep](#ConfidentialFungibleToken-sweep)). [transfer](#ConfidentialFungibleToken-transfer)'s self-transfer guard
+  is therefore a UX choice, not a safety requirement: it spares users a
+  self-transfer with no foreseeable benefit (a shuffle of spendable into
+  pending plus a self-memo). This primitive stays permissive so a composer can
+  set its own policy; add a `to != caller` check in the wrapper to reject a
+  self-move.
+
+  Requirements:
+
+  * Contract is initialized.
+  * The caller is registered with a spendable balance of at least `value`.
+  * `to` is registered.
+</APIItemCompact>
+
+#### sweep [toc] [#ConfidentialFungibleToken-sweep]
+#### [!toc] [#ConfidentialFungibleToken-sweep]
+<APIItemCompact
+  circuitSig="sweep() → Bytes<32>"
+  kind="circuit"
+  complexity="k=13, rows=7585"
+  modulePrefix="ConfidentialFungibleToken"
+>
+  Sweeps the caller's incoming `pending` pool into their
+  `spendable` balance. Credits land in `pending` (see the dual-balance note);
+  this [sweep](#ConfidentialFungibleToken-sweep) is the ONLY path from pending into spendable, and only the owner
+  can invoke it (the caller proves BOTH witness secrets: the account secret
+  identifies the account, the encryption secret proves the caller can read it).
+  So a third party spamming credits cannot force a victim's spendable ciphertext
+  to change, which is what would otherwise invalidate the victim's in-flight
+  spend proofs (a liveness grief).
+
+  <Callout type='info'>
+    Purely homomorphic: adds the two ciphertexts (same key) and resets
+    pending to Enc(0). No plaintext is needed; the wallet already learned the
+    pending amounts from its memos.
+  </Callout>
+
+  Requirements:
+
+  * Contract is initialized.
+  * The caller is registered.
+  * The caller holds the encryption secret registered for their account.
+</APIItemCompact>
+
+#### approve [toc] [#ConfidentialFungibleToken-approve]
+#### [!toc] [#ConfidentialFungibleToken-approve]
+<APIItemCompact
+  circuitSig="approve(spender: Bytes<32>, value: Uint<128>) → Bytes<32>"
+  kind="circuit"
+  complexity="k=16, rows=45114"
+  modulePrefix="ConfidentialFungibleToken"
+>
+  Sets `spender`'s allowance over the caller's balance to `value`
+  via an escrow: the caller's main balance is debited by `value`, and matching
+  encryptions are stored for the spender and the owner. Re-approving first
+  refunds any prior escrow, so allowances replace rather than stack. The cap
+  is not public.
+
+  <Callout type='info'>
+    Returns the caller's (approver's) `accountId` for caller-side gating.
+  </Callout>
+
+  Also stores an owner-readable `ownerMemo` (ECDH one-time pad; see
+  `crypto/EcdhMask`) in the escrow entry, carrying the current remaining
+  allowance (= `value` here, refreshed to the reduced remaining on every
+  spend). This is what lets the owner prove the post-refund balance on a later
+  re-approve or revoke after a partial spend; without it a partial spend would
+  strand the escrow. See the `EscrowEntry` field doc.
+
+  Requirements:
+
+  * Contract is initialized.
+  * `value` is within [MAX_TRANSFER_VALUE](#ConfidentialFungibleToken-MAX_TRANSFER_VALUE).
+  * `spender` is registered, is not the zero account, and is not the caller.
+  * The caller is registered with a balance of at least `value`.
+</APIItemCompact>
+
+#### transferFrom [toc] [#ConfidentialFungibleToken-transferFrom]
+#### [!toc] [#ConfidentialFungibleToken-transferFrom]
+<APIItemCompact
+  circuitSig="transferFrom(
+    fromAddress: Bytes<32>,
+    to: Bytes<32>,
+    value: Uint<128>
+  ) → Bytes<32>"
+  kind="circuit"
+  complexity="k=16, rows=72346"
+  modulePrefix="ConfidentialFungibleToken"
+  stackParams="true"
+>
+  Spends `value` from `fromAddress`'s escrow (granted to the
+  caller via [approve](#ConfidentialFungibleToken-approve)) and credits it to `to`, reducing both escrow copies by
+  `value`. The amount is hidden.
+
+  <Callout type='info'>
+    Returns the caller's (spender's) `accountId` for caller-side gating.
+  </Callout>
+
+  Requirements:
+
+  * Contract is initialized.
+  * `value` is within [MAX_TRANSFER_VALUE](#ConfidentialFungibleToken-MAX_TRANSFER_VALUE).
+  * `to` is registered and is not the zero account.
+  * An escrow from `fromAddress` to the caller exists with at least `value`.
+</APIItemCompact>
+
+#### clearMemos [toc] [#ConfidentialFungibleToken-clearMemos]
+#### [!toc] [#ConfidentialFungibleToken-clearMemos]
+<APIItemCompact
+  circuitSig="clearMemos(expectedEpoch: Uint<64>) → []"
+  kind="circuit"
+  complexity="k=13, rows=7053"
+  modulePrefix="ConfidentialFungibleToken"
+>
+  Clears the caller's memo list, letting a wallet that has folded
+  its memos into its local balance cache prune on-chain memo storage.
+
+  `expectedEpoch` is the caller's view of its `_creditEpochs` value at the
+  moment it read the list. The call is rejected unless that still matches, so
+  a credit landing between the read and this transaction is never silently
+  discarded. The wallet retries against the memos it has now seen. A wallet
+  therefore reads its memo list and its epoch together, folds the memos into
+  its cache, and passes that epoch back here.
+
+  <Callout type='warn'>
+    Clearing memos is destructive and can permanently lock funds. The
+    on-chain balance ciphertext is not directly decryptable (discrete-log
+    bound), so a wallet reconstructs its balance by replaying memos. Clearing
+    them without a durable off-chain record of the balance loses the ability to
+    recover it; and because spending requires proving the balance plaintext, the
+    funds become unspendable, not merely undisplayable. Clear only memos already
+    folded into a durable cache/backup. The epoch check only rules out a credit
+    the caller has not seen; it does not make clearing safe for memos the caller
+    never folded in.
+  </Callout>
+
+  Requirements:
+
+  * Contract is initialized.
+  * The caller is registered.
+  * The caller holds the encryption secret registered for their account.
+  * The caller has a memo list.
+  * `expectedEpoch` equals the caller's current credit epoch.
+</APIItemCompact>
+
+#### computeAccountId [toc] [#ConfidentialFungibleToken-computeAccountId]
+#### [!toc] [#ConfidentialFungibleToken-computeAccountId]
+<APIItemCompact
+  circuitSig="computeAccountId(sk: Bytes<32>) → Bytes<32>"
+  kind="pure"
+  modulePrefix="ConfidentialFungibleToken"
+>
+  Derives the public `accountId` from a secret key, as
+  `persistentHash(sk)`. Pure, so a wallet can compute its own account
+  identifier off-chain (no proof) before transacting.
+
+  Delegates to `Utils.computeAccountId` rather than reimplementing the
+  hash. The identifier is deliberately GLOBAL. The same key material yields
+  the same id in every module that derives it.
+</APIItemCompact>
+
+#### _burnFrom [toc] [#ConfidentialFungibleToken-_burnFrom]
+#### [!toc] [#ConfidentialFungibleToken-_burnFrom]
+<APIItemCompact
+  circuitSig="_burnFrom(fromAddress: Bytes<32>, value: Uint<128>) → Bytes<32>"
+  kind="circuit"
+  complexity="k=16, rows=45376"
+  modulePrefix="ConfidentialFungibleToken"
+>
+  Burns `value` from `fromAddress` by consuming an escrow that
+  owner granted to the caller: `_spendEscrow` under its intent name, with no
+  recipient credit. The building block for a composing contract's
+  `burnFrom`; it performs no supply accounting (see [_burn](#ConfidentialFungibleToken-_burn)).
+
+  Requirements:
+
+  * Contract is initialized.
+  * `value` is within [MAX_TRANSFER_VALUE](#ConfidentialFungibleToken-MAX_TRANSFER_VALUE).
+  * An escrow from `fromAddress` to the caller exists with at least `value`.
+</APIItemCompact>
+
+---
+
+## ConfidentialFungibleTokenPublicSupply [toc] [#ConfidentialFungibleTokenPublicSupply]
+<APIGithubLinkHeader
+    moduleName="ConfidentialFungibleTokenPublicSupply"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.3.0/contracts/src/token/extensions/ConfidentialFungibleTokenPublicSupply.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/token/extensions/ConfidentialFungibleTokenPublicSupply";
+```
+
+Optional standalone extension that adds public supply accounting to a ConfidentialFungibleToken. It imports no token
+module and needs no initialization. "Public" supply means the total, and therefore each mint and burn amount, is
+disclosed on chain through the delta; balances stay confidential. The composing contract pairs each accounting block
+with the matching token operation.
+
+---
+
+### Ledger [toc] [#ConfidentialFungibleTokenPublicSupply-Ledger]
+### Ledger [!toc] [#ConfidentialFungibleTokenPublicSupply-Ledger]
+
+#### _totalSupply [toc] [#ConfidentialFungibleTokenPublicSupply-_totalSupply]
+#### [!toc] [#ConfidentialFungibleTokenPublicSupply-_totalSupply]
+<APIItemCompact
+  circuitSig='_totalSupply: Uint<128>'
+  kind="ledger"
+  id="ConfidentialFungibleTokenPublicSupply-_totalSupply"
+>
+  The public circulating supply. Mint and burn disclose their amounts
+  through the delta on this value.
+</APIItemCompact>
+
+### Witnesses [toc] [#ConfidentialFungibleTokenPublicSupply-Witnesses]
+### Witnesses [!toc] [#ConfidentialFungibleTokenPublicSupply-Witnesses]
+
+None.
+
+### Circuits [toc] [#ConfidentialFungibleTokenPublicSupply-Circuits]
+### Circuits [!toc] [#ConfidentialFungibleTokenPublicSupply-Circuits]
+
+#### _addSupply [toc] [#ConfidentialFungibleTokenPublicSupply-_addSupply]
+#### [!toc] [#ConfidentialFungibleTokenPublicSupply-_addSupply]
+<APIItemCompact
+  circuitSig="_addSupply(value: Uint<128>) → []"
+  kind="circuit"
+  complexity="k=9, rows=401"
+  modulePrefix="ConfidentialFungibleTokenPublicSupply"
+>
+  Increases [totalSupply](#ConfidentialFungibleTokenPublicSupply-totalSupply) by `value`. Call alongside the token
+  module's `_mint`. The added amount is disclosed via the supply delta.
+
+  Requirements:
+
+  * `totalSupply + value` does not overflow `Uint<128>`.
+</APIItemCompact>
+
+#### _subSupply [toc] [#ConfidentialFungibleTokenPublicSupply-_subSupply]
+#### [!toc] [#ConfidentialFungibleTokenPublicSupply-_subSupply]
+<APIItemCompact
+  circuitSig="_subSupply(value: Uint<128>) → []"
+  kind="circuit"
+  complexity="k=9, rows=256"
+  modulePrefix="ConfidentialFungibleTokenPublicSupply"
+>
+  Decreases [totalSupply](#ConfidentialFungibleTokenPublicSupply-totalSupply) by `value`. Call alongside the token
+  module's `_burn` or `_burnFrom`. The removed amount is disclosed via the
+  supply delta.
+
+  Requirements:
+
+  * [totalSupply](#ConfidentialFungibleTokenPublicSupply-totalSupply) is at least `value`.
+</APIItemCompact>
+
+#### totalSupply [toc] [#ConfidentialFungibleTokenPublicSupply-totalSupply]
+#### [!toc] [#ConfidentialFungibleTokenPublicSupply-totalSupply]
+<APIItemCompact
+  circuitSig="totalSupply() → Uint<128>"
+  kind="circuit"
+  complexity="k=6, rows=26"
+  modulePrefix="ConfidentialFungibleTokenPublicSupply"
+>
+  Returns the public total token supply.
+</APIItemCompact>

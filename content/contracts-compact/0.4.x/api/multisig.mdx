@@ -1,0 +1,2174 @@
+---
+title: Multisig API
+---
+
+This page provides the full API for the Multisig modules.
+
+<Callout type='info'>
+  For an overview of the modules, read the [Multisig guide](../multisig).
+</Callout>
+
+The page covers the following modules:
+
+- [Signer](#Signer): the registry of who may approve and how many approvals are required, generic over the signer identity type.
+- [Secp256k1EcdsaMultisig](#Secp256k1EcdsaMultisig): a `t`-of-`n` signer set of secp256k1 key commitments that verifies `t` ECDSA approvals over a digest.
+- [ProposalManager](#ProposalManager): the lifecycle of transfer proposals, independent of the token kind.
+- [ShieldedTreasury](#ShieldedTreasury): holds one shielded coin per token color on the ledger and sends from it.
+- [ShieldedTreasuryStateless](#ShieldedTreasuryStateless): receives and sends shielded coins without keeping any ledger state.
+- [UnshieldedTreasury](#UnshieldedTreasury): holds unshielded tokens with a tracked per-color balance.
+- [ForwarderPrivate](#ForwarderPrivate): forwards shielded deposits to a parent stored as a commitment.
+- [ForwarderShielded](#ForwarderShielded): forwards shielded deposits to a public parent in the same transaction.
+- [ForwarderUnshielded](#ForwarderUnshielded): forwards unshielded deposits to a public parent in the same transaction.
+- [ShieldedMultiSigV2](#ShieldedMultiSigV2): preset; a stateless shielded wallet whose spends are authorized by `t` EIP-712 ECDSA signatures.
+- [NativeShieldedTokenIssuer](#NativeShieldedTokenIssuer): preset; a native shielded token minted and burned only with `t` EIP-712 ECDSA signatures.
+
+## Signer [toc] [#Signer]
+<APIGithubLinkHeader
+    moduleName="Signer"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.4.0/contracts/src/multisig/Signer.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/multisig/Signer"<Bytes<32>>;
+```
+
+`Signer<T>` is generic over the signer identity type `T`, chosen at import time (for example `Bytes<32>`, `JubjubPoint`, or `Either<ZswapCoinPublicKey, ContractAddress>`).
+The module never resolves the caller; the consuming contract passes an identity in.
+It has no `initialize`: the consuming contract registers signers with [_addSigner](#Signer-_addSigner) and sets the threshold with [_changeThreshold](#Signer-_changeThreshold) or [_setThreshold](#Signer-_setThreshold).
+
+---
+
+### Ledger [toc] [#Signer-Ledger]
+### Ledger [!toc] [#Signer-Ledger]
+
+#### _signers [toc] [#Signer-_signers]
+#### [!toc] [#Signer-_signers]
+<APIItemCompact
+  circuitSig='_signers: Set<T>'
+  kind="ledger"
+  id="Signer-_signers"
+>
+  The set of registered signer identities.
+</APIItemCompact>
+
+#### _signerCount [toc] [#Signer-_signerCount]
+#### [!toc] [#Signer-_signerCount]
+<APIItemCompact
+  circuitSig='_signerCount: Uint<8>'
+  kind="ledger"
+  id="Signer-_signerCount"
+>
+  The number of registered signers (at most 255).
+</APIItemCompact>
+
+#### _threshold [toc] [#Signer-_threshold]
+#### [!toc] [#Signer-_threshold]
+<APIItemCompact
+  circuitSig='_threshold: Uint<8>'
+  kind="ledger"
+  id="Signer-_threshold"
+>
+  The minimum number of approvals required. Zero until it is set.
+</APIItemCompact>
+
+### Witnesses [toc] [#Signer-Witnesses]
+### Witnesses [!toc] [#Signer-Witnesses]
+
+None.
+
+### Circuits [toc] [#Signer-Circuits]
+### Circuits [!toc] [#Signer-Circuits]
+
+#### assertSigner [toc] [#Signer-assertSigner]
+#### [!toc] [#Signer-assertSigner]
+<APIItemCompact
+  circuitSig='assertSigner(caller: T) → []'
+  kind="circuit"
+  modulePrefix="Signer"
+>
+  Asserts that the given caller is an active signer.
+
+  Requirements:
+
+  * `caller` must be a member of the signers registry.
+</APIItemCompact>
+
+#### assertThresholdMet [toc] [#Signer-assertThresholdMet]
+#### [!toc] [#Signer-assertThresholdMet]
+<APIItemCompact
+  circuitSig='assertThresholdMet(approvalCount: Uint<8>) → []'
+  kind="circuit"
+  complexity="k=9, rows=52"
+  modulePrefix="Signer"
+>
+  Asserts that the given approval count meets the threshold.
+
+  <Callout type='info'>
+    `approvalCount` is supplied by the consuming contract and is
+    compared against the threshold only. This circuit never consults the signer
+    registry. Ensuring the count reflects distinct, currently-registered signers
+    is the consuming contract's responsibility, and a contract whose approval
+    accounting is not itself gated by [assertSigner](#Signer-assertSigner) gets no protection here.
+
+    The count is deliberately left unbounded by `_signerCount`: approvals
+    collected before a signer was removed must still count toward a threshold
+    the remaining signers satisfy, and bounding the count would reject those.
+    See the stale-signer-set guidance in the module header.
+  </Callout>
+
+  Requirements:
+
+  * Ledger threshold must be set (not be zero). An unconfigured module has a
+    zero threshold, so this rejects before any approval count is compared.
+  * `approvalCount` must be >= threshold.
+</APIItemCompact>
+
+#### getSignerCount [toc] [#Signer-getSignerCount]
+#### [!toc] [#Signer-getSignerCount]
+<APIItemCompact
+  circuitSig='getSignerCount() → Uint<8>'
+  kind="circuit"
+  complexity="k=6, rows=24"
+  modulePrefix="Signer"
+>
+  Returns the current signer count. Returns zero when no
+  signers have been registered.
+</APIItemCompact>
+
+#### getThreshold [toc] [#Signer-getThreshold]
+#### [!toc] [#Signer-getThreshold]
+<APIItemCompact
+  circuitSig='getThreshold() → Uint<8>'
+  kind="circuit"
+  complexity="k=6, rows=24"
+  modulePrefix="Signer"
+>
+  Returns the approval threshold. Returns zero when the
+  threshold has not been set.
+</APIItemCompact>
+
+#### isSigner [toc] [#Signer-isSigner]
+#### [!toc] [#Signer-isSigner]
+<APIItemCompact
+  circuitSig='isSigner(account: T) → Boolean'
+  kind="circuit"
+  modulePrefix="Signer"
+>
+  Returns whether the given account is an active signer.
+</APIItemCompact>
+
+#### _addSigner [toc] [#Signer-_addSigner]
+#### [!toc] [#Signer-_addSigner]
+<APIItemCompact
+  circuitSig='_addSigner(signer: T) → []'
+  kind="circuit"
+  modulePrefix="Signer"
+>
+  Adds a new signer to the registry.
+
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
+
+  Requirements:
+
+  * `signer` must not already be an active signer.
+</APIItemCompact>
+
+#### _removeSigner [toc] [#Signer-_removeSigner]
+#### [!toc] [#Signer-_removeSigner]
+<APIItemCompact
+  circuitSig='_removeSigner(signer: T) → []'
+  kind="circuit"
+  modulePrefix="Signer"
+>
+  Removes a signer from the registry.
+
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
+
+  Requirements:
+
+  * `signer` must be an active signer.
+  * Removal must not drop signer count below threshold.
+</APIItemCompact>
+
+#### _changeThreshold [toc] [#Signer-_changeThreshold]
+#### [!toc] [#Signer-_changeThreshold]
+<APIItemCompact
+  circuitSig='_changeThreshold(newThreshold: Uint<8>) → []'
+  kind="circuit"
+  complexity="k=9, rows=51"
+  modulePrefix="Signer"
+>
+  Updates the approval threshold.
+
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
+
+  Requirements:
+
+  * `newThreshold` must not be zero.
+  * `newThreshold` must not exceed the current signer count.
+</APIItemCompact>
+
+#### _setThreshold [toc] [#Signer-_setThreshold]
+#### [!toc] [#Signer-_setThreshold]
+<APIItemCompact
+  circuitSig='_setThreshold(newThreshold: Uint<8>) → []'
+  kind="circuit"
+  complexity="k=6, rows=38"
+  modulePrefix="Signer"
+>
+  Sets the approval threshold without checking
+  against the current signer count.
+
+  <Callout type='warn'>
+    This is intended for use during contract construction
+    or custom setup flows where signers may not yet be registered.
+
+    Leaving `newThreshold` above the signer count is permitted and expected
+    mid-setup, and is not self-enforcing: [assertThresholdMet](#Signer-assertThresholdMet) compares
+    `approvalCount` against the threshold alone, so a caller supplying a matching
+    count satisfies it even against an empty registry. Contracts must not gate
+    operations on [assertThresholdMet](#Signer-assertThresholdMet) while setup is incomplete. Lower the
+    threshold with [_setThreshold](#Signer-_setThreshold); [_changeThreshold](#Signer-_changeThreshold) cannot lower one while the
+    signer count is zero, because that would require a zero threshold.
+  </Callout>
+
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy. Use [_changeThreshold](#Signer-_changeThreshold) for
+    operational threshold changes with signer count validation.
+  </Callout>
+
+  Requirements:
+
+  * `newThreshold` must not be zero.
+</APIItemCompact>
+
+---
+
+## Secp256k1EcdsaMultisig [toc] [#Secp256k1EcdsaMultisig]
+<APIGithubLinkHeader
+    moduleName="Secp256k1EcdsaMultisig"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.4.0/contracts/src/multisig/Secp256k1EcdsaMultisig.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/multisig/Secp256k1EcdsaMultisig"<2>;
+```
+
+`Secp256k1EcdsaMultisig<#t>` takes the threshold `t` as its import generic; `initialize` fixes the signer count `n`.
+It wraps a `Signer<Bytes<32>>` registry, requires ZKIR v3, and must be imported at one width per contract and never alongside `Signer`.
+
+---
+
+### Ledger [toc] [#Secp256k1EcdsaMultisig-Ledger]
+### Ledger [!toc] [#Secp256k1EcdsaMultisig-Ledger]
+
+#### _signers [toc] [#Secp256k1EcdsaMultisig-_signers]
+#### [!toc] [#Secp256k1EcdsaMultisig-_signers]
+<APIItemCompact
+  circuitSig='_signers: Set<Bytes<32>>'
+  kind="ledger"
+  id="Secp256k1EcdsaMultisig-_signers"
+>
+  The registered signer commitments. Re-exported from `Signer`.
+</APIItemCompact>
+
+#### _signerCount [toc] [#Secp256k1EcdsaMultisig-_signerCount]
+#### [!toc] [#Secp256k1EcdsaMultisig-_signerCount]
+<APIItemCompact
+  circuitSig='_signerCount: Uint<8>'
+  kind="ledger"
+  id="Secp256k1EcdsaMultisig-_signerCount"
+>
+  The number of registered signers, `n`. Re-exported from `Signer`.
+</APIItemCompact>
+
+#### _threshold [toc] [#Secp256k1EcdsaMultisig-_threshold]
+#### [!toc] [#Secp256k1EcdsaMultisig-_threshold]
+<APIItemCompact
+  circuitSig='_threshold: Uint<8>'
+  kind="ledger"
+  id="Secp256k1EcdsaMultisig-_threshold"
+>
+  The approval threshold, `t` once initialized. Re-exported from `Signer`.
+</APIItemCompact>
+
+#### _instanceSalt [toc] [#Secp256k1EcdsaMultisig-_instanceSalt]
+#### [!toc] [#Secp256k1EcdsaMultisig-_instanceSalt]
+<APIItemCompact
+  circuitSig='_instanceSalt: Bytes<32>'
+  kind="sealed ledger"
+  id="Secp256k1EcdsaMultisig-_instanceSalt"
+>
+  Deployment-supplied salt for signer commitments. Set at
+  initialization and never changed. The registered commitments must have been
+  derived under this same salt.
+</APIItemCompact>
+
+### Witnesses [toc] [#Secp256k1EcdsaMultisig-Witnesses]
+### Witnesses [!toc] [#Secp256k1EcdsaMultisig-Witnesses]
+
+None.
+
+### Circuits [toc] [#Secp256k1EcdsaMultisig-Circuits]
+### Circuits [!toc] [#Secp256k1EcdsaMultisig-Circuits]
+
+#### initialize [toc] [#Secp256k1EcdsaMultisig-initialize]
+#### [!toc] [#Secp256k1EcdsaMultisig-initialize]
+<APIItemCompact
+  circuitSig='initialize<#n>(
+    instanceSalt: Bytes<32>,
+    signerCommitments: Vector<n, Bytes<32>>
+  ) → []'
+  kind="circuit"
+  id="Secp256k1EcdsaMultisig-initialize"
+  stackParams="true"
+>
+  Stores the instance salt and registers the signer set at threshold `t`.
+  It writes the `sealed` salt, so it MUST only be called from the consuming contract's constructor.
+  The set is final: signers must be known at deploy, and no circuit adds, removes, or replaces one afterwards.
+
+  Requirements:
+
+  * Can only be called once.
+  * `instanceSalt` should be cryptographically random.
+  * `signerCommitments` must not contain duplicates.
+  * `n` must be at least `t`.
+</APIItemCompact>
+
+#### assertApprovals [toc] [#Secp256k1EcdsaMultisig-assertApprovals]
+#### [!toc] [#Secp256k1EcdsaMultisig-assertApprovals]
+<APIItemCompact
+  circuitSig='assertApprovals(
+    msgHash: Bytes<32>,
+    pubkeys: Vector<t, Secp256k1Point>,
+    signatures: Vector<t, Secp256k1EcdsaSignature>
+  ) → []'
+  kind="circuit"
+  modulePrefix="Secp256k1EcdsaMultisig"
+  stackParams="true"
+>
+  Verifies `t` approvals over `msgHash`: distinct registered signers,
+  each with a valid low-s signature.
+  `pubkeys` and `signatures` are parallel: entry `i` of each belongs to the same signer.
+
+  The threshold check runs first, so an uninitialized registry fails before any signature work.
+  Then all `t(t-1)/2` pairs of commitments are compared, and each entry's commitment and signature are checked.
+  Verification goes through [secp256k1EcdsaVerifyLowS](./crypto#Ecdsa), so a high-s encoding is an invalid signature.
+  The commitments of the `t` approvers are disclosed, so which signers approved is public; keys and signatures are not.
+
+  Cost (ZKIR v3): `t = 1` is k=16, rows=40538; `t = 2` is k=17, rows=64908; `t = 3` is k=17, rows=94995.
+
+  <Callout type='info'>
+    This circuit verifies signatures over whatever `msgHash` it is handed.
+    Replay, domain, and instance binding belong in the consumer's digest.
+  </Callout>
+
+  Requirements:
+
+  * The module must be initialized.
+  * No two entries may be the same signer.
+  * Every public key must hash to a registered signer commitment.
+  * Every signature must be valid over `msgHash` and use the low-s encoding.
+</APIItemCompact>
+
+#### calculateSignerId [toc] [#Secp256k1EcdsaMultisig-calculateSignerId]
+#### [!toc] [#Secp256k1EcdsaMultisig-calculateSignerId]
+<APIItemCompact
+  circuitSig='calculateSignerId(pk: Secp256k1Point, salt: Bytes<32>) → Bytes<32>'
+  kind="pure"
+  modulePrefix="Secp256k1EcdsaMultisig"
+>
+  Computes a signer commitment from a secp256k1 public key,
+  as `persistentHash` of the affine coordinates `pkX` and `pkY`, the `salt`, and the domain `pad(32, "Secp256k1EcdsaMultisig:signer")`.
+  Pure, so the deployer can derive constructor commitments off-chain
+  the same way the circuits derive them in-circuit.
+
+  <Callout type='warn'>
+    The hash is over the Compact encoding of an internal struct, not a byte concatenation.
+    Do not reimplement it: call this circuit.
+    A wrong derivation registers commitments no key can satisfy.
+  </Callout>
+
+  Requirements:
+
+  * `pk` must not be the secp256k1 identity point, which has no coordinates.
+</APIItemCompact>
+
+#### getSignerCount [toc] [#Secp256k1EcdsaMultisig-getSignerCount]
+#### [!toc] [#Secp256k1EcdsaMultisig-getSignerCount]
+<APIItemCompact
+  circuitSig='getSignerCount() → Uint<8>'
+  kind="circuit"
+  complexity="k=6, rows=34"
+  modulePrefix="Secp256k1EcdsaMultisig"
+>
+  Returns the number of registered signers.
+</APIItemCompact>
+
+#### getThreshold [toc] [#Secp256k1EcdsaMultisig-getThreshold]
+#### [!toc] [#Secp256k1EcdsaMultisig-getThreshold]
+<APIItemCompact
+  circuitSig='getThreshold() → Uint<8>'
+  kind="circuit"
+  complexity="k=6, rows=34"
+  modulePrefix="Secp256k1EcdsaMultisig"
+>
+  Returns the approval threshold.
+</APIItemCompact>
+
+#### isSigner [toc] [#Secp256k1EcdsaMultisig-isSigner]
+#### [!toc] [#Secp256k1EcdsaMultisig-isSigner]
+<APIItemCompact
+  circuitSig='isSigner(commitment: Bytes<32>) → Boolean'
+  kind="circuit"
+  complexity="k=8, rows=129"
+  modulePrefix="Secp256k1EcdsaMultisig"
+>
+  Returns whether the given commitment is a registered signer.
+</APIItemCompact>
+
+---
+
+## ProposalManager [toc] [#ProposalManager]
+<APIGithubLinkHeader
+    moduleName="ProposalManager"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.4.0/contracts/src/multisig/ProposalManager.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/multisig/ProposalManager";
+```
+
+---
+
+### Types [toc] [#ProposalManager-Types]
+### Types [!toc] [#ProposalManager-Types]
+
+#### ProposalStatus [toc] [#ProposalManager-ProposalStatus]
+#### [!toc] [#ProposalManager-ProposalStatus]
+<APIItemCompact
+  circuitSig="enum ProposalStatus { Inactive, Active, Executed, Cancelled, Expired }"
+  kind="enum"
+  id="ProposalManager-ProposalStatus"
+>
+  Proposal lifecycle states. `Proposal.status` stores `Active`, `Executed`, or `Cancelled`;
+  [getProposalStatus](#ProposalManager-getProposalStatus) derives the other two.
+
+  * `Inactive`: no proposal with that id exists. Never stored.
+  * `Active`: created and not retired. Executable only while the block time is below `Proposal.expiry`.
+  * `Executed`: [_markExecuted](#ProposalManager-_markExecuted) ran. Terminal.
+  * `Cancelled`: [_cancelProposal](#ProposalManager-_cancelProposal) ran. Terminal.
+  * `Expired`: stored `Active` with an `expiry` at or before the current block time. Never stored.
+</APIItemCompact>
+
+#### RecipientKind [toc] [#ProposalManager-RecipientKind]
+#### [!toc] [#ProposalManager-RecipientKind]
+<APIItemCompact
+  circuitSig="enum RecipientKind { ShieldedUser, UnshieldedUser, Contract }"
+  kind="enum"
+  id="ProposalManager-RecipientKind"
+>
+  Says how a recipient's 32 address bytes are to be read: as a Zswap coin public key, a user address, or a contract address.
+  `Contract` is accepted by both [toShieldedRecipient](#ProposalManager-toShieldedRecipient) and [toUnshieldedRecipient](#ProposalManager-toUnshieldedRecipient),
+  so the tag alone does not determine the rail.
+</APIItemCompact>
+
+#### Recipient [toc] [#ProposalManager-Recipient]
+#### [!toc] [#ProposalManager-Recipient]
+<APIItemCompact
+  circuitSig="struct Recipient { kind: RecipientKind, address: Bytes<32> }"
+  kind="struct"
+  id="ProposalManager-Recipient"
+>
+  A typed recipient. Construct it with the recipient helper circuits rather than directly.
+</APIItemCompact>
+
+#### Proposal [toc] [#ProposalManager-Proposal]
+#### [!toc] [#ProposalManager-Proposal]
+<APIItemCompact
+  circuitSig="struct Proposal { to: Recipient, color: Bytes<32>, amount: Uint<128>, expiry: Uint<64>, status: ProposalStatus }"
+  kind="struct"
+  id="ProposalManager-Proposal"
+>
+  A transfer proposal: recipient, token color, amount, deadline, and stored lifecycle stage.
+  `expiry` is in seconds since the Unix epoch. Reaching a terminal stage changes `status` only,
+  so an executed or cancelled proposal keeps the deadline it was created with.
+
+  <Callout type='warn'>
+    `expiry` marks when a proposal STOPS being executable, not when it starts:
+    an `Active` proposal is executable while `blockTime < expiry` and inert once `blockTime >= expiry`.
+    The module implements no execution delay; a consumer that needs one must compose it.
+  </Callout>
+</APIItemCompact>
+
+### Ledger [toc] [#ProposalManager-Ledger]
+### Ledger [!toc] [#ProposalManager-Ledger]
+
+#### _nextProposalId [toc] [#ProposalManager-_nextProposalId]
+#### [!toc] [#ProposalManager-_nextProposalId]
+<APIItemCompact
+  circuitSig='_nextProposalId: Counter'
+  kind="ledger"
+  id="ProposalManager-_nextProposalId"
+>
+  Counter of proposals created. Its value is the id of the most recent proposal.
+</APIItemCompact>
+
+#### _proposals [toc] [#ProposalManager-_proposals]
+#### [!toc] [#ProposalManager-_proposals]
+<APIItemCompact
+  circuitSig='_proposals: Map<Uint<64>, Proposal>'
+  kind="ledger"
+  id="ProposalManager-_proposals"
+>
+  Mapping from proposal id to proposal. Proposals are public: every recipient address, color, amount, expiry, and status is readable off-chain.
+  An off-chain reader takes `status` as stored and, when it is `Active`, compares `expiry` with the current block time.
+  Entries are never deleted.
+</APIItemCompact>
+
+### Witnesses [toc] [#ProposalManager-Witnesses]
+### Witnesses [!toc] [#ProposalManager-Witnesses]
+
+None.
+
+### Circuits [toc] [#ProposalManager-Circuits]
+### Circuits [!toc] [#ProposalManager-Circuits]
+
+#### shieldedUserRecipient [toc] [#ProposalManager-shieldedUserRecipient]
+#### [!toc] [#ProposalManager-shieldedUserRecipient]
+<APIItemCompact
+  circuitSig='shieldedUserRecipient(key: ZswapCoinPublicKey) → Recipient'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Constructs a shielded user recipient.
+</APIItemCompact>
+
+#### unshieldedUserRecipient [toc] [#ProposalManager-unshieldedUserRecipient]
+#### [!toc] [#ProposalManager-unshieldedUserRecipient]
+<APIItemCompact
+  circuitSig='unshieldedUserRecipient(addr: UserAddress) → Recipient'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Constructs an unshielded user recipient.
+</APIItemCompact>
+
+#### contractRecipient [toc] [#ProposalManager-contractRecipient]
+#### [!toc] [#ProposalManager-contractRecipient]
+<APIItemCompact
+  circuitSig='contractRecipient(addr: ContractAddress) → Recipient'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Constructs a contract recipient.
+</APIItemCompact>
+
+#### toShieldedRecipient [toc] [#ProposalManager-toShieldedRecipient]
+#### [!toc] [#ProposalManager-toShieldedRecipient]
+<APIItemCompact
+  circuitSig='toShieldedRecipient(r: Recipient) → Either<ZswapCoinPublicKey, ContractAddress>'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Converts a Recipient to a shielded send recipient.
+  Handles both ShieldedUser and Contract kinds.
+
+  Requirements:
+
+  * Recipient kind must be ShieldedUser or Contract.
+</APIItemCompact>
+
+#### toUnshieldedRecipient [toc] [#ProposalManager-toUnshieldedRecipient]
+#### [!toc] [#ProposalManager-toUnshieldedRecipient]
+<APIItemCompact
+  circuitSig='toUnshieldedRecipient(r: Recipient) → Either<ContractAddress, UserAddress>'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Converts a Recipient to an unshielded send recipient.
+  Handles both UnshieldedUser and Contract kinds.
+
+  Requirements:
+
+  * Recipient kind must be UnshieldedUser or Contract.
+</APIItemCompact>
+
+#### assertProposalExists [toc] [#ProposalManager-assertProposalExists]
+#### [!toc] [#ProposalManager-assertProposalExists]
+<APIItemCompact
+  circuitSig='assertProposalExists(id: Uint<64>) → []'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Asserts that a proposal exists.
+
+  Requirements:
+
+  * Proposal with `id` must have been created.
+</APIItemCompact>
+
+#### assertProposalActive [toc] [#ProposalManager-assertProposalActive]
+#### [!toc] [#ProposalManager-assertProposalActive]
+<APIItemCompact
+  circuitSig='assertProposalActive(id: Uint<64>) → []'
+  kind="circuit"
+  complexity="k=7, rows=103"
+  modulePrefix="ProposalManager"
+>
+  Asserts that a proposal exists and is still executable.
+  A `status` other than `Active` and a deadline that has passed fail with different errors.
+
+  <Callout type='info'>
+    Expiry is terminal. A transaction rejected for a stale read succeeds once rebuilt against fresh state,
+    but block time only moves forward, so an expired proposal stays expired.
+    Check the proposal's status before re-proving.
+  </Callout>
+
+  Requirements:
+
+  * Proposal must exist.
+  * Proposal `status` must be `Active`.
+  * Proposal must not have expired.
+</APIItemCompact>
+
+#### _createProposal [toc] [#ProposalManager-_createProposal]
+#### [!toc] [#ProposalManager-_createProposal]
+<APIItemCompact
+  circuitSig='_createProposal(
+    to: Recipient,
+    color: Bytes<32>,
+    amount: Uint<128>,
+    expiry: Uint<64>
+  ) → Uint<64>'
+  kind="circuit"
+  complexity="k=10, rows=883"
+  modulePrefix="ProposalManager"
+  stackParams="true"
+>
+  Creates a new proposal that is executable until `expiry`,
+  in seconds since the Unix epoch.
+
+  <Callout type='warn'>
+    The recipient is NOT validated beyond being well-typed. Two
+    consequences the consumer must handle:
+
+    * A `kind` the execution rail cannot accept (an `UnshieldedUser` recipient
+    on a shielded treasury, say) creates a proposal that passes here and then
+    reverts in [toShieldedRecipient](#ProposalManager-toShieldedRecipient) at execution. It stays `Active` and
+    unexecutable on that rail until [_cancelProposal](#ProposalManager-_cancelProposal) retires it or its
+    `expiry` lapses.
+    * A zero or otherwise unspendable `address` is accepted, and funds sent to
+    it on execution are unrecoverable.
+  </Callout>
+
+  <Callout type='info'>
+    `_nextProposalId` is incremented and then read back for the map key,
+    making this a pinned read-modify-write.
+  </Callout>
+
+  <Callout type='info'>
+    `expiry` is only checked against the present: a proposal cannot be born expired.
+    There is deliberately no maximum horizon, so a caller may pass an effectively unreachable expiry.
+    Consuming contracts that need a bounded lifetime must impose their own cap.
+  </Callout>
+
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
+
+  Requirements:
+
+  * `amount` must be greater than 0.
+  * `expiry` must be in the future.
+</APIItemCompact>
+
+#### _cancelProposal [toc] [#ProposalManager-_cancelProposal]
+#### [!toc] [#ProposalManager-_cancelProposal]
+<APIItemCompact
+  circuitSig='_cancelProposal(id: Uint<64>) → []'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Cancels a proposal, retiring it before its expiry.
+
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
+
+  Requirements:
+
+  * Proposal must be active and not expired.
+</APIItemCompact>
+
+#### _markExecuted [toc] [#ProposalManager-_markExecuted]
+#### [!toc] [#ProposalManager-_markExecuted]
+<APIItemCompact
+  circuitSig='_markExecuted(id: Uint<64>) → []'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Marks a proposal as executed.
+
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
+
+  Requirements:
+
+  * Proposal must be active and not expired.
+</APIItemCompact>
+
+#### getProposal [toc] [#ProposalManager-getProposal]
+#### [!toc] [#ProposalManager-getProposal]
+<APIItemCompact
+  circuitSig='getProposal(id: Uint<64>) → Proposal'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Returns the full proposal data. The returned `status` is the stored stage,
+  so an `Active` entry may already be past its `expiry`.
+  Prefer [getProposalStatus](#ProposalManager-getProposalStatus) when the effective status is what is wanted.
+</APIItemCompact>
+
+#### getProposalRecipient [toc] [#ProposalManager-getProposalRecipient]
+#### [!toc] [#ProposalManager-getProposalRecipient]
+<APIItemCompact
+  circuitSig='getProposalRecipient(id: Uint<64>) → Recipient'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Returns the recipient of a proposal.
+</APIItemCompact>
+
+#### getProposalAmount [toc] [#ProposalManager-getProposalAmount]
+#### [!toc] [#ProposalManager-getProposalAmount]
+<APIItemCompact
+  circuitSig='getProposalAmount(id: Uint<64>) → Uint<128>'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Returns the amount of a proposal.
+</APIItemCompact>
+
+#### getProposalColor [toc] [#ProposalManager-getProposalColor]
+#### [!toc] [#ProposalManager-getProposalColor]
+<APIItemCompact
+  circuitSig='getProposalColor(id: Uint<64>) → Bytes<32>'
+  kind="circuit"
+  modulePrefix="ProposalManager"
+>
+  Returns the token color of a proposal.
+</APIItemCompact>
+
+#### getProposalStatus [toc] [#ProposalManager-getProposalStatus]
+#### [!toc] [#ProposalManager-getProposalStatus]
+<APIItemCompact
+  circuitSig='getProposalStatus(id: Uint<64>) → ProposalStatus'
+  kind="circuit"
+  complexity="k=9, rows=252"
+  modulePrefix="ProposalManager"
+>
+  Returns the effective status of a proposal: the stored `status` unless it is `Active`,
+  in which case `expiry` and the current block time decide between `Active` and `Expired`.
+  Returns `Inactive` for an id that was never created rather than failing.
+</APIItemCompact>
+
+---
+
+## ShieldedTreasury [toc] [#ShieldedTreasury]
+<APIGithubLinkHeader
+    moduleName="ShieldedTreasury"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.4.0/contracts/src/multisig/ShieldedTreasury.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/multisig/ShieldedTreasury";
+```
+
+---
+
+### Ledger [toc] [#ShieldedTreasury-Ledger]
+### Ledger [!toc] [#ShieldedTreasury-Ledger]
+
+#### _coins [toc] [#ShieldedTreasury-_coins]
+#### [!toc] [#ShieldedTreasury-_coins]
+<APIItemCompact
+  circuitSig='_coins: Map<Bytes<32>, QualifiedShieldedCoinInfo>'
+  kind="ledger"
+  id="ShieldedTreasury-_coins"
+>
+  One stored coin per token color. A deposit of an existing color merges into the stored coin rather than adding a second entry.
+  Every coin held (nonce, color, value, and Merkle index) is readable off-chain in plaintext.
+</APIItemCompact>
+
+#### _received [toc] [#ShieldedTreasury-_received]
+#### [!toc] [#ShieldedTreasury-_received]
+<APIItemCompact
+  circuitSig='_received: Map<Bytes<32>, Uint<128>>'
+  kind="ledger"
+  id="ShieldedTreasury-_received"
+>
+  Cumulative value received per token color. Only ever increases, so it is a running total rather than a balance;
+  [getTokenBalance](#ShieldedTreasury-getTokenBalance) reads `_coins` and is the canonical balance.
+</APIItemCompact>
+
+#### _sent [toc] [#ShieldedTreasury-_sent]
+#### [!toc] [#ShieldedTreasury-_sent]
+<APIItemCompact
+  circuitSig='_sent: Map<Bytes<32>, Uint<128>>'
+  kind="ledger"
+  id="ShieldedTreasury-_sent"
+>
+  Cumulative value sent per token color. The counterpart to `_received`; also only ever increases.
+</APIItemCompact>
+
+### Witnesses [toc] [#ShieldedTreasury-Witnesses]
+### Witnesses [!toc] [#ShieldedTreasury-Witnesses]
+
+None.
+
+### Circuits [toc] [#ShieldedTreasury-Circuits]
+### Circuits [!toc] [#ShieldedTreasury-Circuits]
+
+#### _deposit [toc] [#ShieldedTreasury-_deposit]
+#### [!toc] [#ShieldedTreasury-_deposit]
+<APIItemCompact
+  circuitSig='_deposit(coin: ShieldedCoinInfo) → []'
+  kind="circuit"
+  modulePrefix="ShieldedTreasury"
+>
+  Receives a shielded coin into the treasury.
+
+  The coin is first claimed at the protocol level via `receiveShielded`,
+  which allocates the Merkle tree index required by `insertCoin`.
+  The coin is then merged with any existing coin of the same color,
+  or inserted as a new entry if no coin of that color exists.
+
+  Zero-value deposits are permitted and are not always a no-op. On a color the
+  treasury does not yet hold, a zero-value coin is inserted and occupies that
+  color's single slot until a later deposit merges into it; if a coin of that
+  color already exists, the zero merges into it via `mergeCoinImmediate` and
+  the stored value is unchanged. They may serve as signaling mechanisms when
+  events are supported. They are not useful as privacy decoys, this
+  treasury's holdings are public (see the module header).
+
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
+
+  Requirements:
+
+  * Deposit must not cause received total overflow.
+</APIItemCompact>
+
+#### _send [toc] [#ShieldedTreasury-_send]
+#### [!toc] [#ShieldedTreasury-_send]
+<APIItemCompact
+  circuitSig='_send(
+    recipient: Either<ZswapCoinPublicKey, ContractAddress>,
+    color: Bytes<32>,
+    amount: Uint<128>
+  ) → ShieldedSendResult'
+  kind="circuit"
+  modulePrefix="ShieldedTreasury"
+  stackParams="true"
+>
+  Sends shielded tokens from the treasury.
+
+  Looks up the stored coin by color, verifies sufficient value,
+  and executes the shielded send. `sendShielded` already routes any
+  change back to this contract as a self-owned output. Unlike the
+  stateless variant, this treasury RETAINS the change: it is recorded in
+  the UTXO map for the next spend. The returned `result.change` therefore
+  belongs to the treasury and must not be re-spent by the caller (doing
+  so would double-spend the recorded coin).
+
+  <Callout type='info'>
+    The returned `ShieldedSendResult` carries the sent and change coins
+    in plaintext, so sinking it (returning it from an entry point, writing it
+    to ledger, passing it cross-contract) discloses them. `_coins` publishes only
+    the retained change coin, and nothing at all when the send leaves no change,
+    so the sent coin's plaintext is disclosed beyond anything in public state.
+  </Callout>
+
+  A self-addressed coin is auto-received by `sendShielded` but never recorded in `_coins`,
+  so it would be stranded. This circuit therefore rejects sends to self.
+
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
+
+  Requirements:
+
+  * `recipient` must not be this contract's own address.
+  * A coin of the given `color` must exist in the treasury.
+  * The coin's value must be >= `amount`.
+  * Send must not cause sent total overflow.
+</APIItemCompact>
+
+#### getTokenBalance [toc] [#ShieldedTreasury-getTokenBalance]
+#### [!toc] [#ShieldedTreasury-getTokenBalance]
+<APIItemCompact
+  circuitSig='getTokenBalance(color: Bytes<32>) → Uint<128>'
+  kind="circuit"
+  modulePrefix="ShieldedTreasury"
+>
+  Returns the current token balance for a color.
+  Reads the actual coin value from the UTXO map.
+</APIItemCompact>
+
+#### getReceivedTotal [toc] [#ShieldedTreasury-getReceivedTotal]
+#### [!toc] [#ShieldedTreasury-getReceivedTotal]
+<APIItemCompact
+  circuitSig='getReceivedTotal(color: Bytes<32>) → Uint<128>'
+  kind="circuit"
+  modulePrefix="ShieldedTreasury"
+>
+  Returns the cumulative received total for a color.
+</APIItemCompact>
+
+#### getSentTotal [toc] [#ShieldedTreasury-getSentTotal]
+#### [!toc] [#ShieldedTreasury-getSentTotal]
+<APIItemCompact
+  circuitSig='getSentTotal(color: Bytes<32>) → Uint<128>'
+  kind="circuit"
+  modulePrefix="ShieldedTreasury"
+>
+  Returns the cumulative sent total for a color.
+</APIItemCompact>
+
+#### getReceivedMinusSent [toc] [#ShieldedTreasury-getReceivedMinusSent]
+#### [!toc] [#ShieldedTreasury-getReceivedMinusSent]
+<APIItemCompact
+  circuitSig='getReceivedMinusSent(color: Bytes<32>) → Uint<128>'
+  kind="circuit"
+  modulePrefix="ShieldedTreasury"
+>
+  Returns the difference between cumulative received
+  and cumulative sent totals for a color. Should equal
+  [getTokenBalance](#ShieldedTreasury-getTokenBalance) if accounting is consistent.
+
+  <Callout type='info'>
+    The subtraction is unguarded. [_send](#ShieldedTreasury-_send) cannot drive the sent total
+    past the received total. Change re-insertion never increments `_received`
+    so the invariant holds for any consumer that goes through [_deposit](#ShieldedTreasury-_deposit) and
+    [_send](#ShieldedTreasury-_send). A consumer that writes the exported `_coins` directly can break
+    it, and this circuit then fails as an unprovable range violation rather
+    than a named assert.
+  </Callout>
+</APIItemCompact>
+
+---
+
+## ShieldedTreasuryStateless [toc] [#ShieldedTreasuryStateless]
+<APIGithubLinkHeader
+    moduleName="ShieldedTreasuryStateless"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.4.0/contracts/src/multisig/ShieldedTreasuryStateless.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/multisig/ShieldedTreasuryStateless";
+```
+
+Keeping coin data off the ledger hides it from the public, not from a depositor.
+Whoever knows a deposited coin can find the spend that consumes it, recover the amount sent, and follow every later spend descending from its change.
+
+---
+
+### Ledger [toc] [#ShieldedTreasuryStateless-Ledger]
+### Ledger [!toc] [#ShieldedTreasuryStateless-Ledger]
+
+None. The module keeps no coin map, balances, or totals; the operator tracks coins off-chain.
+
+### Witnesses [toc] [#ShieldedTreasuryStateless-Witnesses]
+### Witnesses [!toc] [#ShieldedTreasuryStateless-Witnesses]
+
+None.
+
+### Circuits [toc] [#ShieldedTreasuryStateless-Circuits]
+### Circuits [!toc] [#ShieldedTreasuryStateless-Circuits]
+
+#### _deposit [toc] [#ShieldedTreasuryStateless-_deposit]
+#### [!toc] [#ShieldedTreasuryStateless-_deposit]
+<APIItemCompact
+  circuitSig='_deposit(coin: ShieldedCoinInfo) → []'
+  kind="circuit"
+  modulePrefix="ShieldedTreasuryStateless"
+>
+  Receives a shielded coin into the treasury.
+</APIItemCompact>
+
+#### _send [toc] [#ShieldedTreasuryStateless-_send]
+#### [!toc] [#ShieldedTreasuryStateless-_send]
+<APIItemCompact
+  circuitSig='_send(
+    coin: QualifiedShieldedCoinInfo,
+    recipient: Either<ZswapCoinPublicKey, ContractAddress>,
+    amount: Uint<128>
+  ) → ShieldedSendResult'
+  kind="circuit"
+  modulePrefix="ShieldedTreasuryStateless"
+  stackParams="true"
+>
+  Sends shielded tokens using a caller-provided coin.
+
+  The coin is supplied by the caller rather than looked up from
+  on-chain state; the token color is derived from `coin.color`.
+  Executes the shielded send and returns the result untouched.
+  `sendShielded` already routes any change back to this contract as a
+  self-owned output, so `result.change` is a live, spendable coin. The
+  implementing contract chooses what to do with it: retain it off-chain and
+  pass it back as the `coin` for a later spend, or spend it onward to a
+  different recipient in the same transaction via `sendImmediateShielded`.
+  (Re-spending change is only meaningful when it goes somewhere other than
+  self — `sendShielded` already routes it to self.) No balance or
+  received/sent accounting is tracked on the ledger.
+
+  <Callout type='warn'>
+    The returned `ShieldedSendResult` holds the sent and change coins
+    in plaintext (`nonce`, `color`, `value`). Consuming it in-circuit is safe
+    (passing `result.change` to `sendImmediateShielded`, for instance). Returning
+    it from your entry point, writing it to ledger, or passing it to another
+    contract publishes those coin details, including the amount left over from
+    the coin that was spent. Note the compiler will NOT stop you: the
+    `disclose` calls below clear the witness taint, so such a return compiles
+    with no `disclose` of your own and no marker at the disclosure site. If you
+    do not need in-circuit change handling, ignore the result. The change is
+    recoverable off-chain from the transaction's private proving state.
+  </Callout>
+
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
+
+  Requirements:
+
+  * `coin.value` must be >= `amount`.
+</APIItemCompact>
+
+---
+
+## UnshieldedTreasury [toc] [#UnshieldedTreasury]
+<APIGithubLinkHeader
+    moduleName="UnshieldedTreasury"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.4.0/contracts/src/multisig/UnshieldedTreasury.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/multisig/UnshieldedTreasury";
+```
+
+---
+
+### Ledger [toc] [#UnshieldedTreasury-Ledger]
+### Ledger [!toc] [#UnshieldedTreasury-Ledger]
+
+#### _balances [toc] [#UnshieldedTreasury-_balances]
+#### [!toc] [#UnshieldedTreasury-_balances]
+<APIItemCompact
+  circuitSig='_balances: Map<Bytes<32>, Uint<128>>'
+  kind="ledger"
+  id="UnshieldedTreasury-_balances"
+>
+  Tracked balance per token color. Deposits add to it and sends subtract. It is the authority for the module's sufficiency and overflow guards and stays in step with the protocol balance only while every credit and debit goes through `_deposit` and `_send`.
+</APIItemCompact>
+
+### Witnesses [toc] [#UnshieldedTreasury-Witnesses]
+### Witnesses [!toc] [#UnshieldedTreasury-Witnesses]
+
+None.
+
+### Circuits [toc] [#UnshieldedTreasury-Circuits]
+### Circuits [!toc] [#UnshieldedTreasury-Circuits]
+
+#### _deposit [toc] [#UnshieldedTreasury-_deposit]
+#### [!toc] [#UnshieldedTreasury-_deposit]
+<APIItemCompact
+  circuitSig='_deposit(color: Bytes<32>, amount: Uint<128>) → []'
+  kind="circuit"
+  modulePrefix="UnshieldedTreasury"
+>
+  Receives unshielded tokens into the treasury.
+
+  The token receive is executed at the protocol level first via
+  `receiveUnshielded`. The balance map is then updated.
+
+  Zero-value deposits are permitted. While currently a no-op
+  economically, they may serve as signaling mechanisms when events
+  are supported. On a color the treasury has not held, a zero-value
+  operation creates a zero-valued `_balances` entry, which
+  [getTokenBalance](#UnshieldedTreasury-getTokenBalance) reports the same as absence.
+
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
+
+  Requirements:
+
+  * Deposit must not cause balance overflow.
+</APIItemCompact>
+
+#### _send [toc] [#UnshieldedTreasury-_send]
+#### [!toc] [#UnshieldedTreasury-_send]
+<APIItemCompact
+  circuitSig='_send(
+    recipient: Either<ContractAddress, UserAddress>,
+    color: Bytes<32>,
+    amount: Uint<128>
+  ) → []'
+  kind="circuit"
+  modulePrefix="UnshieldedTreasury"
+  stackParams="true"
+>
+  Sends unshielded tokens from the treasury.
+
+  <Callout type='warn'>
+    Recipients other than this contract are not validated. An unspendable recipient (such as a
+    zero address) is accepted and permanently removes the funds from the
+    contract. This is not a sanctioned burn (no unshielded equivalent of
+    `shieldedBurnAddress` is exposed to contracts), so treat recipient
+    validation as the consuming contract's responsibility.
+  </Callout>
+
+  A self-addressed send is auto-received by `sendUnshielded` but still debited from `_balances`,
+  so the funds would be stranded. This circuit therefore rejects sends to self.
+
+  <Callout type='info'>
+    Access control is NOT enforced here.
+    The consuming contract must gate this behind its own
+    authorization policy.
+  </Callout>
+
+  Requirements:
+
+  * `recipient` must not be this contract's own address.
+  * `amount` must be non-zero. The ledger rejects zero-value outputs.
+  * The treasury must hold sufficient balance for the given token color.
+</APIItemCompact>
+
+#### getTokenBalance [toc] [#UnshieldedTreasury-getTokenBalance]
+#### [!toc] [#UnshieldedTreasury-getTokenBalance]
+<APIItemCompact
+  circuitSig='getTokenBalance(color: Bytes<32>) → Uint<128>'
+  kind="circuit"
+  modulePrefix="UnshieldedTreasury"
+>
+  Returns the balance for a given token color.
+</APIItemCompact>
+
+---
+
+## ForwarderPrivate [toc] [#ForwarderPrivate]
+<APIGithubLinkHeader
+    moduleName="ForwarderPrivate"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.4.0/contracts/src/multisig/ForwarderPrivate.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/multisig/ForwarderPrivate";
+```
+
+The commitment hides the parent from the public, not from a depositor.
+Whoever knows a deposited coin can find the drain that spends it, recover the drained amount, and test candidate parent keys against the sent coin's commitment.
+
+---
+
+### Ledger [toc] [#ForwarderPrivate-Ledger]
+### Ledger [!toc] [#ForwarderPrivate-Ledger]
+
+#### _parentCommitment [toc] [#ForwarderPrivate-_parentCommitment]
+#### [!toc] [#ForwarderPrivate-_parentCommitment]
+<APIItemCompact
+  circuitSig='_parentCommitment: Bytes<32>'
+  kind="ledger"
+  id="ForwarderPrivate-_parentCommitment"
+>
+  Commitment to the `(parent, opSecret)` pair, `H(pad(32, "ForwarderPrivate:commitment") || parent || opSecret)`, published in place of the parent itself.
+  The parent key alone is not secret, so `opSecret` supplies the hiding: without it a candidate parent could be hashed and matched against this value.
+  Immutable after initialization.
+</APIItemCompact>
+
+#### _isInitialized [toc] [#ForwarderPrivate-_isInitialized]
+#### [!toc] [#ForwarderPrivate-_isInitialized]
+<APIItemCompact
+  circuitSig='_isInitialized: Boolean'
+  kind="ledger"
+  id="ForwarderPrivate-_isInitialized"
+>
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
+</APIItemCompact>
+
+### Witnesses [toc] [#ForwarderPrivate-Witnesses]
+### Witnesses [!toc] [#ForwarderPrivate-Witnesses]
+
+None.
+
+### Circuits [toc] [#ForwarderPrivate-Circuits]
+### Circuits [!toc] [#ForwarderPrivate-Circuits]
+
+#### initialize [toc] [#ForwarderPrivate-initialize]
+#### [!toc] [#ForwarderPrivate-initialize]
+<APIItemCompact
+  circuitSig='initialize(parentCommitment: Bytes<32>) → []'
+  kind="circuit"
+  modulePrefix="ForwarderPrivate"
+>
+  Initializes the forwarder with a parent commitment.
+  Called once from the consuming contract's constructor. The commitment is
+  immutable after init.
+
+  Requirements:
+
+  * Contract must not be initialized.
+  * `parentCommitment` must not be the zero bytes. A zero commitment
+    is the sole drain gate and would leave every deposited coin
+    permanently unrecoverable (no preimage exists for `default<Bytes<32>>`
+    under the domain-tagged hash).
+</APIItemCompact>
+
+#### _deposit [toc] [#ForwarderPrivate-_deposit]
+#### [!toc] [#ForwarderPrivate-_deposit]
+<APIItemCompact
+  circuitSig='_deposit(coin: ShieldedCoinInfo) → []'
+  kind="circuit"
+  complexity="k=13, rows=6522"
+  modulePrefix="ForwarderPrivate"
+>
+  Receives a shielded coin into the forwarder's custody.
+  No ledger write — coins dwell at the contract address until drained.
+
+  Requirements:
+
+  * Contract must be initialized.
+</APIItemCompact>
+
+#### _drain [toc] [#ForwarderPrivate-_drain]
+#### [!toc] [#ForwarderPrivate-_drain]
+<APIItemCompact
+  circuitSig='_drain(
+    coin: QualifiedShieldedCoinInfo,
+    parent: ZswapCoinPublicKey,
+    opSecret: Bytes<32>,
+    value: Uint<128>
+  ) → ShieldedSendResult'
+  kind="circuit"
+  complexity="k=15, rows=23837"
+  modulePrefix="ForwarderPrivate"
+  stackParams="true"
+>
+  Spends a previously-deposited shielded coin to the parent,
+  a coin public key. The caller proves knowledge of `(parent, opSecret)`
+  matching the stored commitment; the coin is sent as a plain shielded note,
+  so the parent stays hidden from anyone who holds no deposited coin.
+  If `coin.value` exceeds `value`,
+  `sendShielded` routes the change back to this contract as a self-owned
+  output; [_drain](#ForwarderPrivate-_drain) returns it untouched via `result.change`. The
+  implementing contract chooses what to do with it: leave it dwelling at
+  the contract for a future drain, or spend it onward to a different
+  recipient in the same transaction via `sendImmediateShielded`.
+
+  The parent is a `ZswapCoinPublicKey`, never a `ContractAddress`: a shielded
+  send to a contract publishes that contract's address in cleartext on the
+  transaction (the protocol must route the coin to a named contract), which
+  would defeat the private-parent guarantee. A coin public key is encrypted
+  inside the Zswap output and never appears on the public transcript.
+
+  Requirements:
+
+  * Contract must be initialized.
+  * `parent` must not be the zero key.
+  * `_calculateParentCommitment(parent.bytes, opSecret) == _parentCommitment`.
+  * `coin.value` must be >= `value` (enforced by `sendShielded`).
+
+  <Callout type='warn'>
+    **Losing the operational secret is permanent fund loss.** It
+    is the sole drain authorization, with no rotation, revocation, or
+    recovery path. If the operator misplaces it, every shielded coin
+    accumulated at this contract is forever inaccessible, equivalent to
+    losing a hot-wallet private key. Back it up offline before the first
+    deposit and treat it with the same hygiene as a signing key.
+  </Callout>
+</APIItemCompact>
+
+#### _calculateParentCommitment [toc] [#ForwarderPrivate-_calculateParentCommitment]
+#### [!toc] [#ForwarderPrivate-_calculateParentCommitment]
+<APIItemCompact
+  circuitSig='_calculateParentCommitment(parentAddr: Bytes<32>, opSecret: Bytes<32>) → Bytes<32>'
+  kind="pure"
+  modulePrefix="ForwarderPrivate"
+>
+  Computes the parent commitment from `(parentAddr, opSecret)`.
+  Pure circuit — used off-chain by the deployer to compute the
+  constructor argument, and inside [_drain](#ForwarderPrivate-_drain) for the preimage check.
+  Callable without initialization.
+
+  The first hash input is a fixed domain tag
+  (`pad(32, "ForwarderPrivate:commitment")`). The tag prevents
+  preimage collisions with other `persistentHash` users in the
+  system that hash two `Bytes<32>` values — a colliding preimage
+  crafted under a different domain cannot satisfy this commitment.
+</APIItemCompact>
+
+---
+
+## ForwarderShielded [toc] [#ForwarderShielded]
+<APIGithubLinkHeader
+    moduleName="ForwarderShielded"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.4.0/contracts/src/multisig/ForwarderShielded.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/multisig/ForwarderShielded";
+```
+
+---
+
+### Ledger [toc] [#ForwarderShielded-Ledger]
+### Ledger [!toc] [#ForwarderShielded-Ledger]
+
+#### _parent [toc] [#ForwarderShielded-_parent]
+#### [!toc] [#ForwarderShielded-_parent]
+<APIItemCompact
+  circuitSig='_parent: Either<ZswapCoinPublicKey, ContractAddress>'
+  kind="ledger"
+  id="ForwarderShielded-_parent"
+>
+  The parent recipient, stored generically as
+  `Either<ZswapCoinPublicKey, ContractAddress>` for forward compatibility.
+  [initialize](#ForwarderShielded-initialize) only ever writes the `left` (coin public key) arm today. See
+  the module header.
+</APIItemCompact>
+
+#### _isInitialized [toc] [#ForwarderShielded-_isInitialized]
+#### [!toc] [#ForwarderShielded-_isInitialized]
+<APIItemCompact
+  circuitSig='_isInitialized: Boolean'
+  kind="ledger"
+  id="ForwarderShielded-_isInitialized"
+>
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
+</APIItemCompact>
+
+### Witnesses [toc] [#ForwarderShielded-Witnesses]
+### Witnesses [!toc] [#ForwarderShielded-Witnesses]
+
+None.
+
+### Circuits [toc] [#ForwarderShielded-Circuits]
+### Circuits [!toc] [#ForwarderShielded-Circuits]
+
+#### initialize [toc] [#ForwarderShielded-initialize]
+#### [!toc] [#ForwarderShielded-initialize]
+<APIItemCompact
+  circuitSig='initialize(parent: ZswapCoinPublicKey) → []'
+  kind="circuit"
+  modulePrefix="ForwarderShielded"
+>
+  Initializes the forwarder with a parent recipient.
+  Called once from the consuming contract's constructor. The coin public key is
+  stored in the `left` arm of the generic `_parent` ledger field.
+
+  Requirements:
+
+  * Contract must not be initialized.
+  * `parent` must not be the zero key. A zero parent would forward
+    every deposit to an unspendable key with no recovery path.
+
+  <Callout type='info'>
+    Beyond the zero-key check, the caller must ensure `parent` can
+    spend forwarded coins. An unspendable parent strands every deposit with
+    no recovery path.
+  </Callout>
+</APIItemCompact>
+
+#### _deposit [toc] [#ForwarderShielded-_deposit]
+#### [!toc] [#ForwarderShielded-_deposit]
+<APIItemCompact
+  circuitSig='_deposit(coin: ShieldedCoinInfo) → ShieldedSendResult'
+  kind="circuit"
+  complexity="k=15, rows=23197"
+  modulePrefix="ForwarderShielded"
+>
+  Receives a shielded coin and atomically forwards it to
+  `_parent`. The coin is claimed at the protocol level via
+  `receiveShielded`, then immediately re-sent via
+  `sendImmediateShielded` to the stored parent recipient (always the
+  `left` / coin-public-key arm today).
+  Returns the coin sent to the parent, with no change: the whole value is forwarded.
+
+  <Callout type='info'>
+    The depositor must encrypt the forwarded output to the parent's
+    encryption public key, obtained off-chain. The ledger cannot check that
+    key against `_parent`, so a wrong or missing key leaves the coin
+    spendable by the parent but invisible to its wallet.
+  </Callout>
+
+  Requirements:
+
+  * Contract must be initialized.
+  * The forwarded output must be encrypted to the parent's encryption public key.
+    If unsure, hand the returned `ShieldedSendResult` to the parent so it can recover the coin.
+</APIItemCompact>
+
+---
+
+## ForwarderUnshielded [toc] [#ForwarderUnshielded]
+<APIGithubLinkHeader
+    moduleName="ForwarderUnshielded"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.4.0/contracts/src/multisig/ForwarderUnshielded.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/multisig/ForwarderUnshielded";
+```
+
+---
+
+### Ledger [toc] [#ForwarderUnshielded-Ledger]
+### Ledger [!toc] [#ForwarderUnshielded-Ledger]
+
+#### _parent [toc] [#ForwarderUnshielded-_parent]
+#### [!toc] [#ForwarderUnshielded-_parent]
+<APIItemCompact
+  circuitSig='_parent: Either<ContractAddress, UserAddress>'
+  kind="ledger"
+  id="ForwarderUnshielded-_parent"
+>
+  The parent recipient, stored generically as
+  `Either<ContractAddress, UserAddress>` for forward compatibility.
+  [initialize](#ForwarderUnshielded-initialize) only ever writes the `right` (user address) arm today. See
+  the module header.
+</APIItemCompact>
+
+#### _isInitialized [toc] [#ForwarderUnshielded-_isInitialized]
+#### [!toc] [#ForwarderUnshielded-_isInitialized]
+<APIItemCompact
+  circuitSig='_isInitialized: Boolean'
+  kind="ledger"
+  id="ForwarderUnshielded-_isInitialized"
+>
+  Initialization flag, tracked per-module to avoid the compiler's
+  shared transitive-dependency state bug (LFDT-Minokawa/compact#270). See the
+  Initializable module for rationale.
+</APIItemCompact>
+
+### Witnesses [toc] [#ForwarderUnshielded-Witnesses]
+### Witnesses [!toc] [#ForwarderUnshielded-Witnesses]
+
+None.
+
+### Circuits [toc] [#ForwarderUnshielded-Circuits]
+### Circuits [!toc] [#ForwarderUnshielded-Circuits]
+
+#### initialize [toc] [#ForwarderUnshielded-initialize]
+#### [!toc] [#ForwarderUnshielded-initialize]
+<APIItemCompact
+  circuitSig='initialize(parent: UserAddress) → []'
+  kind="circuit"
+  modulePrefix="ForwarderUnshielded"
+>
+  Initializes the forwarder with a parent recipient.
+  Called once from the consuming contract's constructor. The user address is stored
+  in the `right` arm of the generic `_parent` ledger field.
+
+  Requirements:
+
+  * Contract must not be initialized.
+  * `parent` must not be the zero address. A zero parent would forward
+    every deposit to an unspendable address with no recovery path.
+
+  <Callout type='info'>
+    Beyond the zero-address check, the caller must ensure `parent`
+    can spend forwarded amounts. An unspendable parent strands every
+    deposit with no recovery path.
+  </Callout>
+</APIItemCompact>
+
+#### _deposit [toc] [#ForwarderUnshielded-_deposit]
+#### [!toc] [#ForwarderUnshielded-_deposit]
+<APIItemCompact
+  circuitSig='_deposit(color: Bytes<32>, amount: Uint<128>) → []'
+  kind="circuit"
+  complexity="k=10, rows=563"
+  modulePrefix="ForwarderUnshielded"
+>
+  Receives an unshielded amount of `color` and atomically
+  forwards it to `_parent` via `sendUnshielded` (always the `right` /
+  user-address arm today).
+
+  Requirements:
+
+  * Contract must be initialized.
+</APIItemCompact>
+
+---
+
+## ShieldedMultiSigV2 [toc] [#ShieldedMultiSigV2]
+<APIGithubLinkHeader
+    moduleName="ShieldedMultiSigV2"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.4.0/contracts/src/multisig/presets/ShieldedMultiSigV2.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/multisig/presets/ShieldedMultiSigV2"<2>;
+```
+
+`ShieldedMultiSigV2<#t>` composes [Secp256k1EcdsaMultisig](#Secp256k1EcdsaMultisig) and [ShieldedTreasuryStateless](#ShieldedTreasuryStateless); `t` is both the threshold and the approval width.
+It requires ZKIR v3, and implementing contracts MUST NOT import `Signer` or `Secp256k1EcdsaMultisig` directly. The `execute` complexity is measured at `t = 2`.
+
+---
+
+### Types [toc] [#ShieldedMultiSigV2-Types]
+### Types [!toc] [#ShieldedMultiSigV2-Types]
+
+#### Proposal_Recipient [toc] [#ShieldedMultiSigV2-Proposal_Recipient]
+#### [!toc] [#ShieldedMultiSigV2-Proposal_Recipient]
+<APIItemCompact
+  circuitSig="struct Proposal_Recipient { kind: Proposal_RecipientKind, address: Bytes<32> }"
+  kind="struct"
+  id="ShieldedMultiSigV2-Proposal_Recipient"
+>
+  Re-export of the ProposalManager [Recipient](#ProposalManager-Recipient), needed for the [execute](#ShieldedMultiSigV2-execute) signature.
+  Importing `ProposalManager` again instead would give the implementing contract a second, unwritten copy of its state.
+</APIItemCompact>
+
+### Ledger [toc] [#ShieldedMultiSigV2-Ledger]
+### Ledger [!toc] [#ShieldedMultiSigV2-Ledger]
+
+#### _domainSeparator [toc] [#ShieldedMultiSigV2-_domainSeparator]
+#### [!toc] [#ShieldedMultiSigV2-_domainSeparator]
+<APIItemCompact
+  circuitSig='_domainSeparator: Bytes<32>'
+  kind="sealed ledger"
+  id="ShieldedMultiSigV2-_domainSeparator"
+>
+  The EIP-712 domain separator every [execute](#ShieldedMultiSigV2-execute) digest is built
+  under, derived from `(name, version, instanceSalt)`. Set once at construction.
+</APIItemCompact>
+
+### Witnesses [toc] [#ShieldedMultiSigV2-Witnesses]
+### Witnesses [!toc] [#ShieldedMultiSigV2-Witnesses]
+
+None.
+
+### Circuits [toc] [#ShieldedMultiSigV2-Circuits]
+### Circuits [!toc] [#ShieldedMultiSigV2-Circuits]
+
+#### initialize [toc] [#ShieldedMultiSigV2-initialize]
+#### [!toc] [#ShieldedMultiSigV2-initialize]
+<APIItemCompact
+  circuitSig='initialize<#n>(
+    instanceSalt: Bytes<32>,
+    signerCommitments: Vector<n, Bytes<32>>
+  ) → []'
+  kind="circuit"
+  id="ShieldedMultiSigV2-initialize"
+  stackParams="true"
+>
+  Registers the signer set at threshold `t` and fixes the EIP-712 domain separator.
+  It writes the `sealed` `_domainSeparator`, so it MUST only be called from the implementing contract's constructor
+  and MUST NOT be exposed as a post-deploy circuit.
+
+  The EIP-712 domain fixed here is `("ShieldedMultiSigV2", "1", instanceSalt)`. `chainId` and
+  `verifyingContract` are absent: no network identifier is available
+  in-circuit, and a 32-byte Midnight address does not fit
+  `verifyingContract`'s `address` type.
+  Replay protection comes from [execute](#ShieldedMultiSigV2-execute) binding `kernel.self()` in its struct instead.
+
+  `instanceSalt` also keys the signer commitments, so a fresh value per
+  deployment keeps one public key from producing the same commitment in two
+  deployments, which would link the signer set across them.
+
+  Requirements:
+
+  * Can only be called once.
+  * `instanceSalt` should be cryptographically random.
+  * `signerCommitments` must not contain duplicates.
+  * `n` must be at least `t`.
+</APIItemCompact>
+
+#### deposit [toc] [#ShieldedMultiSigV2-deposit]
+#### [!toc] [#ShieldedMultiSigV2-deposit]
+<APIItemCompact
+  circuitSig='deposit(coin: ShieldedCoinInfo) → []'
+  kind="circuit"
+  complexity="k=13, rows=5898"
+  modulePrefix="ShieldedMultiSigV2"
+>
+  Receives a shielded coin into the multisig treasury. Anyone may deposit.
+  The coin is claimed through `receiveShielded`. No coin data is stored on the
+  public ledger, so no balance is readable from it; a depositor can still
+  follow the coin they deposited (see [ShieldedTreasuryStateless](#ShieldedTreasuryStateless)).
+
+  The operator discovers the coin's Merkle tree index by subscribing
+  to `ZswapOutput` events via the indexer, filtering by contract address,
+  and extracting `mt_index`. Combined with the known `ShieldedCoinInfo`,
+  this produces the `QualifiedShieldedCoinInfo` needed for spending.
+</APIItemCompact>
+
+#### execute [toc] [#ShieldedMultiSigV2-execute]
+#### [!toc] [#ShieldedMultiSigV2-execute]
+<APIItemCompact
+  circuitSig='execute(
+    to: Proposal_Recipient,
+    amount: Uint<128>,
+    coin: QualifiedShieldedCoinInfo,
+    pubkeys: Vector<t, Secp256k1Point>,
+    signatures: Vector<t, Secp256k1EcdsaSignature>
+  ) → ShieldedSendResult'
+  kind="circuit"
+  complexity="k=17, rows=98969"
+  modulePrefix="ShieldedMultiSigV2"
+  stackParams="true"
+>
+  Executes a shielded send authorized by threshold signatures.
+
+  The circuit reads the current nonce, increments it, then rebuilds the EIP-712 digest that signers must have signed
+  off-chain: the `Execute` struct hashed under [_domainSeparator](#ShieldedMultiSigV2-_domainSeparator), with type string
+  `Execute(bytes32 contractAddress,uint256 nonce,uint8 recipientKind,bytes32 recipient,bytes32 coinColor,uint256 amount)`.
+  `contractAddress` is `kernel.self()`, so a signature authorizes exactly one operation on one instance.
+  Approvals are checked by [assertApprovals](#Secp256k1EcdsaMultisig-assertApprovals).
+  The spend goes through [ShieldedTreasuryStateless _send](#ShieldedTreasuryStateless-_send);
+  read its warning on the returned `ShieldedSendResult` before returning it from an entry point.
+
+  <Callout type='info'>
+    `to` must be a `ShieldedUser`. A contract-addressed coin would be
+    unclaimable, making the transaction malformed.
+  </Callout>
+
+  Requirements:
+
+  * No two entries may be the same signer.
+  * Every public key must hash to a registered signer commitment.
+  * Every signature must be valid over the message hash and use the low-s encoding.
+  * `to.kind` must be `ShieldedUser`.
+  * `coin.value` must be >= `amount`.
+</APIItemCompact>
+
+#### _calculateSignerId [toc] [#ShieldedMultiSigV2-_calculateSignerId]
+#### [!toc] [#ShieldedMultiSigV2-_calculateSignerId]
+<APIItemCompact
+  circuitSig='_calculateSignerId(pk: Secp256k1Point, salt: Bytes<32>) → Bytes<32>'
+  kind="pure"
+  modulePrefix="ShieldedMultiSigV2"
+>
+  Computes a signer commitment from a secp256k1 public key with
+  [calculateSignerId](#Secp256k1EcdsaMultisig-calculateSignerId).
+  Pure, so the deployer can derive constructor commitments off-chain.
+
+  Requirements:
+
+  * `pk` must not be the secp256k1 identity point, which has no coordinates.
+</APIItemCompact>
+
+#### getNonce [toc] [#ShieldedMultiSigV2-getNonce]
+#### [!toc] [#ShieldedMultiSigV2-getNonce]
+<APIItemCompact
+  circuitSig='getNonce() → Uint<64>'
+  kind="circuit"
+  complexity="k=6, rows=34"
+  modulePrefix="ShieldedMultiSigV2"
+>
+  Returns the nonce the next [execute](#ShieldedMultiSigV2-execute) digest will bind to.
+</APIItemCompact>
+
+#### getSignerCount [toc] [#ShieldedMultiSigV2-getSignerCount]
+#### [!toc] [#ShieldedMultiSigV2-getSignerCount]
+<APIItemCompact
+  circuitSig='getSignerCount() → Uint<8>'
+  kind="circuit"
+  complexity="k=6, rows=34"
+  modulePrefix="ShieldedMultiSigV2"
+>
+  Returns the number of registered signers.
+</APIItemCompact>
+
+#### getThreshold [toc] [#ShieldedMultiSigV2-getThreshold]
+#### [!toc] [#ShieldedMultiSigV2-getThreshold]
+<APIItemCompact
+  circuitSig='getThreshold() → Uint<8>'
+  kind="circuit"
+  complexity="k=6, rows=34"
+  modulePrefix="ShieldedMultiSigV2"
+>
+  Returns the approval threshold.
+</APIItemCompact>
+
+#### isSigner [toc] [#ShieldedMultiSigV2-isSigner]
+#### [!toc] [#ShieldedMultiSigV2-isSigner]
+<APIItemCompact
+  circuitSig='isSigner(commitment: Bytes<32>) → Boolean'
+  kind="circuit"
+  complexity="k=8, rows=129"
+  modulePrefix="ShieldedMultiSigV2"
+>
+  Returns whether the given commitment is a registered signer.
+</APIItemCompact>
+
+---
+
+## NativeShieldedTokenIssuer [toc] [#NativeShieldedTokenIssuer]
+<APIGithubLinkHeader
+    moduleName="NativeShieldedTokenIssuer"
+    link={`https://github.com/OpenZeppelin/compact-contracts/blob/v0.4.0/contracts/src/multisig/presets/NativeShieldedTokenIssuer.compact`}
+/>
+
+```ts
+import "./node_modules/@openzeppelin/compact-contracts/multisig/presets/NativeShieldedTokenIssuer"<2>;
+```
+
+`NativeShieldedTokenIssuer<#t>` composes [Secp256k1EcdsaMultisig](#Secp256k1EcdsaMultisig), [NativeShieldedToken](./native-shielded-token#NativeShieldedToken), and [NativeShieldedTokenDerivedNonce](./native-shielded-token#NativeShieldedTokenDerivedNonce); every mint and burn carries `t` approvals.
+It requires ZKIR v3, and implementing contracts MUST NOT import `Signer` or `Secp256k1EcdsaMultisig` directly. The gated circuits' complexity is measured at `t = 2`.
+
+---
+
+### Ledger [toc] [#NativeShieldedTokenIssuer-Ledger]
+### Ledger [!toc] [#NativeShieldedTokenIssuer-Ledger]
+
+#### _counter [toc] [#NativeShieldedTokenIssuer-_counter]
+#### [!toc] [#NativeShieldedTokenIssuer-_counter]
+<APIItemCompact
+  circuitSig='_counter: Counter'
+  kind="ledger"
+  id="NativeShieldedTokenIssuer-_counter"
+>
+  Signature replay counter. Every operation ([mint](#NativeShieldedTokenIssuer-mint),
+  [mintToSelf](#NativeShieldedTokenIssuer-mintToSelf), [burn](#NativeShieldedTokenIssuer-burn), [burnFromSelf](#NativeShieldedTokenIssuer-burnFromSelf))
+  reads it into its digest and increments it. The read is pinned, so at most one operation lands per block;
+  the losing signers re-sign at the next nonce.
+</APIItemCompact>
+
+#### _domainSeparator [toc] [#NativeShieldedTokenIssuer-_domainSeparator]
+#### [!toc] [#NativeShieldedTokenIssuer-_domainSeparator]
+<APIItemCompact
+  circuitSig='_domainSeparator: Bytes<32>'
+  kind="sealed ledger"
+  id="NativeShieldedTokenIssuer-_domainSeparator"
+>
+  The EIP-712 domain separator every operation digest is
+  built under, derived from `(name, version, instanceSalt)`. Set once at construction.
+</APIItemCompact>
+
+#### _derivedNonceCounter [toc] [#NativeShieldedTokenIssuer-_derivedNonceCounter]
+#### [!toc] [#NativeShieldedTokenIssuer-_derivedNonceCounter]
+<APIItemCompact
+  circuitSig='_derivedNonceCounter: Counter'
+  kind="ledger"
+  id="NativeShieldedTokenIssuer-_derivedNonceCounter"
+>
+  The counter that feeds coin nonces, separate from `_counter`.
+  Re-exported from `NativeShieldedTokenDerivedNonce` as `_counter`, renamed because this module's replay counter owns that name.
+</APIItemCompact>
+
+#### _instanceSalt [toc] [#NativeShieldedTokenIssuer-_instanceSalt]
+#### [!toc] [#NativeShieldedTokenIssuer-_instanceSalt]
+<APIItemCompact
+  circuitSig='_instanceSalt: Bytes<32>'
+  kind="sealed ledger"
+  id="NativeShieldedTokenIssuer-_instanceSalt"
+>
+  Salt for the signer commitments and the EIP-712 domain. Re-exported from `Secp256k1EcdsaMultisig`.
+</APIItemCompact>
+
+#### _signers [toc] [#NativeShieldedTokenIssuer-_signers]
+#### [!toc] [#NativeShieldedTokenIssuer-_signers]
+<APIItemCompact
+  circuitSig='_signers: Set<Bytes<32>>'
+  kind="ledger"
+  id="NativeShieldedTokenIssuer-_signers"
+>
+  The registered signer commitments. Re-exported from `Secp256k1EcdsaMultisig`.
+</APIItemCompact>
+
+#### _signerCount [toc] [#NativeShieldedTokenIssuer-_signerCount]
+#### [!toc] [#NativeShieldedTokenIssuer-_signerCount]
+<APIItemCompact
+  circuitSig='_signerCount: Uint<8>'
+  kind="ledger"
+  id="NativeShieldedTokenIssuer-_signerCount"
+>
+  The number of registered signers. Re-exported from `Secp256k1EcdsaMultisig`.
+</APIItemCompact>
+
+#### _threshold [toc] [#NativeShieldedTokenIssuer-_threshold]
+#### [!toc] [#NativeShieldedTokenIssuer-_threshold]
+<APIItemCompact
+  circuitSig='_threshold: Uint<8>'
+  kind="ledger"
+  id="NativeShieldedTokenIssuer-_threshold"
+>
+  The approval threshold. Re-exported from `Secp256k1EcdsaMultisig`.
+</APIItemCompact>
+
+#### _domain [toc] [#NativeShieldedTokenIssuer-_domain]
+#### [!toc] [#NativeShieldedTokenIssuer-_domain]
+<APIItemCompact
+  circuitSig='_domain: Bytes<32>'
+  kind="sealed ledger"
+  id="NativeShieldedTokenIssuer-_domain"
+>
+  Domain separator fixed at construction; with the contract
+  address it determines this token's color. Re-exported from `NativeShieldedToken`.
+</APIItemCompact>
+
+#### _name [toc] [#NativeShieldedTokenIssuer-_name]
+#### [!toc] [#NativeShieldedTokenIssuer-_name]
+<APIItemCompact
+  circuitSig='_name: Opaque<"string">'
+  kind="sealed ledger"
+  id="NativeShieldedTokenIssuer-_name"
+>
+  The immutable token name. Re-exported from `NativeShieldedToken`.
+</APIItemCompact>
+
+#### _symbol [toc] [#NativeShieldedTokenIssuer-_symbol]
+#### [!toc] [#NativeShieldedTokenIssuer-_symbol]
+<APIItemCompact
+  circuitSig='_symbol: Opaque<"string">'
+  kind="sealed ledger"
+  id="NativeShieldedTokenIssuer-_symbol"
+>
+  The immutable token symbol. Re-exported from `NativeShieldedToken`.
+</APIItemCompact>
+
+#### _decimals [toc] [#NativeShieldedTokenIssuer-_decimals]
+#### [!toc] [#NativeShieldedTokenIssuer-_decimals]
+<APIItemCompact
+  circuitSig='_decimals: Uint<8>'
+  kind="sealed ledger"
+  id="NativeShieldedTokenIssuer-_decimals"
+>
+  The immutable token decimals. Re-exported from `NativeShieldedToken`.
+</APIItemCompact>
+
+#### _isInitialized [toc] [#NativeShieldedTokenIssuer-_isInitialized]
+#### [!toc] [#NativeShieldedTokenIssuer-_isInitialized]
+<APIItemCompact
+  circuitSig='_isInitialized: Boolean'
+  kind="ledger"
+  id="NativeShieldedTokenIssuer-_isInitialized"
+>
+  The token module's initialization flag. Re-exported from `NativeShieldedToken`.
+</APIItemCompact>
+
+### Witnesses [toc] [#NativeShieldedTokenIssuer-Witnesses]
+### Witnesses [!toc] [#NativeShieldedTokenIssuer-Witnesses]
+
+None.
+
+### Circuits [toc] [#NativeShieldedTokenIssuer-Circuits]
+### Circuits [!toc] [#NativeShieldedTokenIssuer-Circuits]
+
+#### initialize [toc] [#NativeShieldedTokenIssuer-initialize]
+#### [!toc] [#NativeShieldedTokenIssuer-initialize]
+<APIItemCompact
+  circuitSig='initialize<#n>(
+    instanceSalt: Bytes<32>,
+    tokenDomain: Bytes<32>,
+    name_: Opaque<"string">,
+    symbol_: Opaque<"string">,
+    decimals_: Uint<8>,
+    signerCommitments: Vector<n, Bytes<32>>
+  ) → []'
+  kind="circuit"
+  id="NativeShieldedTokenIssuer-initialize"
+  stackParams="true"
+>
+  Registers the signer set at threshold `t`, initializes the
+  token metadata and domain, and fixes the EIP-712 domain separator
+  `("NativeShieldedTokenIssuer", "1", instanceSalt)`.
+  It writes the token module's `sealed` domain and `_domainSeparator`, so it MUST only be called from the
+  implementing contract's constructor and MUST NOT be exposed as a post-deploy circuit.
+
+  `instanceSalt` is both the EIP-712 domain salt and the signer-commitment
+  salt, so a fresh value per deployment keeps one public key from
+  producing the same commitment in two deployments.
+  The token color is `tokenType(tokenDomain, kernel.self())`. Only coins
+  of this color can be burned through this contract.
+
+  Requirements:
+
+  * Can only be called once.
+  * `instanceSalt` should be cryptographically random.
+  * `signerCommitments` must not contain duplicates.
+  * `n` must be at least `t`.
+</APIItemCompact>
+
+#### _calculateSignerId [toc] [#NativeShieldedTokenIssuer-_calculateSignerId]
+#### [!toc] [#NativeShieldedTokenIssuer-_calculateSignerId]
+<APIItemCompact
+  circuitSig='_calculateSignerId(pk: Secp256k1Point, salt: Bytes<32>) → Bytes<32>'
+  kind="pure"
+  modulePrefix="NativeShieldedTokenIssuer"
+>
+  Computes a signer commitment from a secp256k1 public key with
+  [calculateSignerId](#Secp256k1EcdsaMultisig-calculateSignerId).
+  Pure, so the deployer can derive constructor commitments off-chain.
+
+  Requirements:
+
+  * `pk` must not be the secp256k1 identity point, which has no coordinates.
+</APIItemCompact>
+
+#### mint [toc] [#NativeShieldedTokenIssuer-mint]
+#### [!toc] [#NativeShieldedTokenIssuer-mint]
+<APIItemCompact
+  circuitSig='mint(
+    amount: Uint<64>,
+    recipient: ZswapCoinPublicKey,
+    pubkeys: Vector<t, Secp256k1Point>,
+    signatures: Vector<t, Secp256k1EcdsaSignature>
+  ) → ShieldedCoinInfo'
+  kind="circuit"
+  complexity="k=17, rows=89807"
+  modulePrefix="NativeShieldedTokenIssuer"
+  stackParams="true"
+>
+  Mints a new shielded coin of this contract's token to
+  `recipient`, authorized by threshold signatures over
+  `Mint(bytes32 contractAddress,bytes32 recipient,uint256 nonce,uint256 amount)`.
+
+  The amount is public. The coin nonce comes from `NativeShieldedTokenDerivedNonce`, so anyone
+  can test a candidate recipient against the coin commitment.
+
+  <Callout type='info'>
+    The returned coin info is the only copy available to the
+    recipient; deliver it out of band.
+  </Callout>
+
+  Requirements:
+
+  * No two entries may be the same signer.
+  * Every public key must hash to a registered signer commitment.
+  * Every signature must be valid over the mint message hash and use the low-s encoding.
+  * `recipient` is not zero.
+</APIItemCompact>
+
+#### mintToSelf [toc] [#NativeShieldedTokenIssuer-mintToSelf]
+#### [!toc] [#NativeShieldedTokenIssuer-mintToSelf]
+<APIItemCompact
+  circuitSig='mintToSelf(
+    amount: Uint<64>,
+    pubkeys: Vector<t, Secp256k1Point>,
+    signatures: Vector<t, Secp256k1EcdsaSignature>
+  ) → ShieldedCoinInfo'
+  kind="circuit"
+  complexity="k=17, rows=85586"
+  modulePrefix="NativeShieldedTokenIssuer"
+  stackParams="true"
+>
+  Mints a new shielded coin of this contract's token to the
+  contract itself, claimed in the same call, authorized by threshold
+  signatures over `MintToSelf(bytes32 contractAddress,uint256 nonce,uint256 amount)`.
+
+  <Callout type='info'>
+    The returned coin info is the contract's only record of the
+    holding; persist it for [burnFromSelf](#NativeShieldedTokenIssuer-burnFromSelf).
+  </Callout>
+
+  Requirements:
+
+  * No two entries may be the same signer.
+  * Every public key must hash to a registered signer commitment.
+  * Every signature must be valid over the mint-to-self message hash and use the low-s encoding.
+</APIItemCompact>
+
+#### burn [toc] [#NativeShieldedTokenIssuer-burn]
+#### [!toc] [#NativeShieldedTokenIssuer-burn]
+<APIItemCompact
+  circuitSig='burn(
+    coin: ShieldedCoinInfo,
+    amount: Uint<128>,
+    refundTo: ZswapCoinPublicKey,
+    pubkeys: Vector<t, Secp256k1Point>,
+    signatures: Vector<t, Secp256k1EcdsaSignature>
+  ) → Maybe<ShieldedCoinInfo>'
+  kind="circuit"
+  complexity="k=17, rows=119818"
+  modulePrefix="NativeShieldedTokenIssuer"
+  stackParams="true"
+>
+  Burns `amount` from a holder's coin, authorized by threshold signatures over
+  `Burn(bytes32 contractAddress,bytes32 refundTo,uint256 nonce,uint256 amount)`.
+  The holder's transaction pays `coin` in; the contract
+  receives it and burns it in the same call. Any change goes to `refundTo`.
+  Returns the refund coin, or `none` if the coin was burned in full.
+
+  <Callout type='info'>
+    The returned refund coin info is the only copy available to
+    `refundTo`; deliver it out of band.
+  </Callout>
+
+  <Callout type='warn'>
+    `amount`, `coin.value`, and `refundTo` stay hidden only while `coin` carries a nonce the observer does not know.
+    A coin passed straight from [mint](#NativeShieldedTokenIssuer-mint) has a derived nonce,
+    so the burn links to its mint and all three are recoverable by trial.
+    For an unlinkable burn the holder re-nonces the coin first with a wallet self-transfer; the contract cannot enforce this.
+  </Callout>
+
+  Requirements:
+
+  * No two entries may be the same signer.
+  * Every public key must hash to a registered signer commitment.
+  * Every signature must be valid over the burn message hash and use the low-s encoding.
+  * `coin.color` is this contract's token color.
+  * `amount` is less than or equal to `coin.value`.
+  * `refundTo` is not zero.
+</APIItemCompact>
+
+#### burnFromSelf [toc] [#NativeShieldedTokenIssuer-burnFromSelf]
+#### [!toc] [#NativeShieldedTokenIssuer-burnFromSelf]
+<APIItemCompact
+  circuitSig='burnFromSelf(
+    coin: QualifiedShieldedCoinInfo,
+    amount: Uint<128>,
+    pubkeys: Vector<t, Secp256k1Point>,
+    signatures: Vector<t, Secp256k1EcdsaSignature>
+  ) → Maybe<ShieldedCoinInfo>'
+  kind="circuit"
+  complexity="k=17, rows=104973"
+  modulePrefix="NativeShieldedTokenIssuer"
+  stackParams="true"
+>
+  Burns `amount` from a coin this contract holds, authorized
+  by threshold signatures over
+  `BurnFromSelf(bytes32 contractAddress,uint256 nonce,uint256 amount,bytes32 coinNonce,uint256 coinValue)`.
+
+  The operator supplies the `QualifiedShieldedCoinInfo` from the off-chain
+  UTXO pool. On a partial burn the change is auto-received by the contract
+  and returned; it replaces `coin` as the contract's holding, so the
+  operator must persist it.
+  The digest binds `coin.nonce` and `coin.value`, so approvals authorize one
+  specific holding rather than an amount. Pick the coin before collecting signatures.
+
+  Requirements:
+
+  * No two entries may be the same signer.
+  * Every public key must hash to a registered signer commitment.
+  * Every signature must be valid over the burn-from-self message hash and use the low-s encoding.
+  * `coin.color` is this contract's token color.
+  * `amount` is less than or equal to `coin.value`.
+  * `coin.nonce` and `coin.value` match the approved coin.
+</APIItemCompact>
+
+#### getNonce [toc] [#NativeShieldedTokenIssuer-getNonce]
+#### [!toc] [#NativeShieldedTokenIssuer-getNonce]
+<APIItemCompact
+  circuitSig='getNonce() → Uint<64>'
+  kind="circuit"
+  complexity="k=6, rows=34"
+  modulePrefix="NativeShieldedTokenIssuer"
+>
+  Returns the counter the next operation's digest will bind to.
+  Submitted as a transaction, it pins `_counter` and conflicts with any same-block operation.
+</APIItemCompact>
+
+#### name [toc] [#NativeShieldedTokenIssuer-name]
+#### [!toc] [#NativeShieldedTokenIssuer-name]
+<APIItemCompact
+  circuitSig='name() → Opaque<"string">'
+  kind="circuit"
+  complexity="k=6, rows=45"
+  modulePrefix="NativeShieldedTokenIssuer"
+>
+  Returns the token name.
+</APIItemCompact>
+
+#### symbol [toc] [#NativeShieldedTokenIssuer-symbol]
+#### [!toc] [#NativeShieldedTokenIssuer-symbol]
+<APIItemCompact
+  circuitSig='symbol() → Opaque<"string">'
+  kind="circuit"
+  complexity="k=6, rows=45"
+  modulePrefix="NativeShieldedTokenIssuer"
+>
+  Returns the token symbol.
+</APIItemCompact>
+
+#### decimals [toc] [#NativeShieldedTokenIssuer-decimals]
+#### [!toc] [#NativeShieldedTokenIssuer-decimals]
+<APIItemCompact
+  circuitSig='decimals() → Uint<8>'
+  kind="circuit"
+  complexity="k=6, rows=45"
+  modulePrefix="NativeShieldedTokenIssuer"
+>
+  Returns the token decimals.
+</APIItemCompact>
+
+#### tokenColor [toc] [#NativeShieldedTokenIssuer-tokenColor]
+#### [!toc] [#NativeShieldedTokenIssuer-tokenColor]
+<APIItemCompact
+  circuitSig='tokenColor() → Bytes<32>'
+  kind="circuit"
+  complexity="k=13, rows=3847"
+  modulePrefix="NativeShieldedTokenIssuer"
+>
+  Returns this contract's token color, `tokenType(tokenDomain, kernel.self())`.
+</APIItemCompact>
+
+#### getSignerCount [toc] [#NativeShieldedTokenIssuer-getSignerCount]
+#### [!toc] [#NativeShieldedTokenIssuer-getSignerCount]
+<APIItemCompact
+  circuitSig='getSignerCount() → Uint<8>'
+  kind="circuit"
+  complexity="k=6, rows=34"
+  modulePrefix="NativeShieldedTokenIssuer"
+>
+  Returns the number of registered signers.
+</APIItemCompact>
+
+#### getThreshold [toc] [#NativeShieldedTokenIssuer-getThreshold]
+#### [!toc] [#NativeShieldedTokenIssuer-getThreshold]
+<APIItemCompact
+  circuitSig='getThreshold() → Uint<8>'
+  kind="circuit"
+  complexity="k=6, rows=34"
+  modulePrefix="NativeShieldedTokenIssuer"
+>
+  Returns the approval threshold.
+</APIItemCompact>
+
+#### isSigner [toc] [#NativeShieldedTokenIssuer-isSigner]
+#### [!toc] [#NativeShieldedTokenIssuer-isSigner]
+<APIItemCompact
+  circuitSig='isSigner(commitment: Bytes<32>) → Boolean'
+  kind="circuit"
+  complexity="k=8, rows=129"
+  modulePrefix="NativeShieldedTokenIssuer"
+>
+  Returns whether the given commitment is a registered signer.
+</APIItemCompact>

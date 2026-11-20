@@ -1,0 +1,439 @@
+---
+title: Ownable
+---
+
+{/* links */}
+[initialize]: api/ownable#Ownable-initialize
+[transferOwnership]: api/ownable#Ownable-transferOwnership
+[_transferOwnership]: api/ownable#Ownable-_transferOwnership
+[_unsafeTransferOwnership]: api/ownable#Ownable-_unsafeTransferOwnership
+[_unsafeUncheckedTransferOwnership]: api/ownable#Ownable-_unsafeUncheckedTransferOwnership
+[computeAccountId]: api/utils#Utils-computeAccountId
+[assertOnlyOwner]: api/ownable#Ownable-assertOnlyOwner
+[Ownable API]: api/ownable#Ownable
+
+[ZOwnablePK_initialize]: api/ownable#ZOwnablePK-initialize
+[ZOwnablePK_transferOwnership]: api/ownable#ZOwnablePK-transferOwnership
+[ZOwnablePK_assertOnlyOwner]: api/ownable#ZOwnablePK-assertOnlyOwner
+[_computeOwnerId]: api/ownable#ZOwnablePK-_computeOwnerId
+[wit_secretNonce]: api/ownable#ZOwnablePK-wit_secretNonce
+
+[ed25519]: https://ed25519.cr.yp.to/
+[rfc6979]: https://datatracker.ietf.org/doc/html/rfc6979
+[AccessControl]: ./access-control.mdx
+[Utils]: ./utils.mdx
+
+## Access Control Defined
+
+Access control—that is, "who is allowed to do this thing"—is incredibly important in the world of smart contracts.
+The access control of your contract may govern who can mint tokens, vote on proposals, freeze transfers, and many other things.
+It is therefore critical to understand how you implement it, lest someone else steals your whole system.
+This library provides a variety of access control modules to suit your application and privacy needs.
+
+## Ownership and `Ownable`
+
+The most common and basic form of access control is the concept of ownership:
+there's an account that is the owner of a contract and can do administrative tasks on it.
+This approach is perfectly reasonable for contracts that have a single administrative user.
+
+This library provides an Ownable module for implementing ownership in your contracts.
+The initial owner must be set by using the [initialize] circuit during construction.
+This can later be changed with [transferOwnership].
+
+<Callout type='info'>
+  For more granular, role-based access control, see [AccessControl].
+</Callout>
+
+### Identity Model
+
+Ownable uses a witness-derived identity scheme. The owner proves knowledge of a secret key
+by injecting it via the `wit_OwnableSK` witness. The module computes an account identifier
+as `H(secretKey)` (a `persistentHash` of the key), which is a commitment that hides the key while providing a stable,
+pseudonymous on-chain identity.
+
+What is public and what is private:
+
+* **On the ledger**: `_owner` holds the account identifier `H(secretKey)` (or a contract address), and `_isInitialized`.
+* **Held privately by the owner**: the 32-byte `secretKey`, supplied through `wit_OwnableSK` at proving time.
+  The key never reaches the ledger; [assertOnlyOwner] recomputes the identifier inside the proof and compares it against `_owner`.
+
+Witness implementations are authored by the consuming DApp.
+The TypeScript witnesses in the repository are test-only and are not published with the package.
+
+To derive an account identifier off-chain (e.g. for the `initialOwner` parameter during construction),
+use [computeAccountId] from the [Utils] module:
+
+```typescript
+import "./node_modules/@openzeppelin/compact-contracts/utils/Utils"
+  prefix Utils_;
+
+export pure circuit computeAccountId(secretKey: Bytes<32>): Bytes<32> {
+  return Utils_computeAccountId(secretKey);
+}
+```
+
+A contract that re-exports it this way exposes `pureCircuits.computeAccountId(secretKey)` to its TypeScript side.
+The same value can be computed directly in TypeScript with the Compact runtime:
+
+```typescript
+import {
+  CompactTypeBytes,
+  CompactTypeVector,
+  persistentHash,
+} from '@midnight-ntwrk/compact-runtime';
+
+const computeAccountId = (secretKey: Uint8Array): Uint8Array => {
+  const rt_type = new CompactTypeVector(1, new CompactTypeBytes(32));
+  return persistentHash(rt_type, [secretKey]);
+};
+```
+
+The `secretKey` is a 32-byte cryptographically secure random value that the owner keeps private.
+Because the identifier has no per-deployment salt, the same key produces the same identity across all contracts.
+Owners who want cross-contract unlinkability should use a different key per contract.
+
+<Callout type='warn'>
+  The `secretKey` must never be logged or persisted in plaintext. Loss of the key means loss of ownership.
+  Key exposure allows impersonation. Use `crypto.getRandomValues()` or equivalent to generate keys.
+</Callout>
+
+### Ownership Transfers
+
+Ownership can only be transferred to `Bytes<32>` account identifiers through the main transfer circuits
+([transferOwnership] and [_transferOwnership]).
+
+In other words, ownership transfers to contract addresses are disallowed through these circuits.
+This is because Compact currently does not support contract-to-contract calls, which means if a contract is granted ownership,
+the owner contract cannot directly call the protected circuit.
+
+### Unsafe Circuits
+
+This module offers circuits that allow ownership to be granted to contract addresses
+([_unsafeTransferOwnership] and [_unsafeUncheckedTransferOwnership]).
+
+Note that the circuit names are very explicit ("unsafe").
+Until contract-to-contract calls are supported,
+there is no direct way for a contract to call circuits of other contracts or transfer ownership back to a user.
+
+<Callout type='warn'>
+  The unsafe circuits are planned to become deprecated once contract-to-contract calls become available.
+</Callout>
+
+### Usage
+
+Import the Ownable module into the implementing contract.
+It's recommended to prefix the module with `Ownable_` to avoid circuit signature clashes.
+
+The `initialOwner` should be an account identifier derived off-chain using `Utils_computeAccountId(secretKey)`:
+
+```ts
+pragma language_version >= {{compact_language_version}};
+
+import CompactStandardLibrary;
+import "./node_modules/@openzeppelin/compact-contracts/access/Ownable"
+  prefix Ownable_;
+
+constructor(
+  initialOwner: Either<Bytes<32>, ContractAddress>
+) {
+  Ownable_initialize(initialOwner);
+}
+```
+
+To protect a circuit so that only the contract owner may call it,
+insert the `assertOnlyOwner` circuit in the beginning of the circuit body like this:
+
+```ts
+export circuit mySensitiveCircuit(): [] {
+  Ownable_assertOnlyOwner();
+
+  // Do something
+}
+```
+
+Contracts may expose [transferOwnership] to allow the owner to transfer ownership.
+The `newOwner` should be an account identifier derived by the new owner using `Utils_computeAccountId(secretKey)`:
+
+```ts
+export circuit transferOwnership(newOwner: Either<Bytes<32>, ContractAddress>): [] {
+  Ownable_transferOwnership(newOwner);
+}
+```
+
+Here's a complete contract showcasing how to integrate the Ownable module and protect sensitive circuits.
+
+```ts
+// SimpleOwnable.compact
+
+pragma language_version >= {{compact_language_version}};
+
+import CompactStandardLibrary;
+import "./node_modules/@openzeppelin/compact-contracts/access/Ownable"
+  prefix Ownable_;
+
+/**
+ * Set `initialOwner` as the owner of the contract.
+ * `initialOwner` should be derived off-chain using Utils_computeAccountId(secretKey).
+ */
+constructor(initialOwner: Either<Bytes<32>, ContractAddress>) {
+  Ownable_initialize(initialOwner);
+}
+
+/**
+ * The current owner of the contract.
+ */
+export circuit owner(): Either<Bytes<32>, ContractAddress> {
+  return Ownable_owner();
+}
+
+/**
+ * Transfers ownership of the contract.
+ * Can only be called by the current owner.
+ * `newOwner` should be derived off-chain by the new owner using Utils_computeAccountId(secretKey).
+ */
+export circuit transferOwnership(newOwner: Either<Bytes<32>, ContractAddress>): [] {
+  Ownable_transferOwnership(newOwner);
+}
+
+/**
+ * Leaves the contract without an owner.
+ * Can only be called by the current owner.
+ * Renouncing ownership means `mySensitiveCircuit` can never be called again.
+ */
+export circuit renounceOwnership(): [] {
+  Ownable_renounceOwnership();
+}
+
+/**
+ * This is the protected circuit that only the current owner can call.
+ */
+export circuit mySensitiveCircuit(): [] {
+  // Protects the circuit
+  Ownable_assertOnlyOwner();
+
+  // Do something
+}
+```
+
+<Callout type="info">
+  For more complex logic,
+  contracts may transfer ownership to another user irrespective of the caller by leveraging [_transferOwnership].
+  This is generally more useful when contract addresses are the owner or when a contract has a unique deployment process.
+</Callout>
+
+## Shielded Ownership and `ZOwnablePK`
+
+Privacy-preserving access control is a fundamental building block for confidential smart contracts on Midnight.
+While the `Ownable` module stores the owner's account identifier on-chain,
+many applications require administrative control without revealing who holds that authority.
+
+### Privacy-First Ownership
+
+The `ZOwnablePK` module implements shielded ownership meaning administrative control without identity disclosure.
+The owner's public key is never revealed on-chain;
+instead, the contract stores only a cryptographic commitment that proves ownership without exposing the underlying identity.
+
+This is useful in scenarios such as private treasuries, anonymous governance,
+or any application where revealing the administrator's identity may compromise the system's confidentiality.
+
+What is public and what is private:
+
+* **On the ledger**: `_ownerCommitment`, the transfer `_counter`, the sealed `_instanceSalt`, and `_isInitialized`.
+  Ownership changes disclose only the new commitment, never the owner identifier that produced it.
+* **Held privately by the owner**: the secret nonce, supplied through the [wit_secretNonce] witness,
+  and the public key, supplied through `ownPublicKey()`. [ZOwnablePK_assertOnlyOwner] recomputes the commitment
+  from both inside the proof and compares it against `_ownerCommitment`.
+
+Witness implementations are authored by the consuming DApp.
+The TypeScript witnesses in the repository are test-only and are not published with the package.
+
+### Commitment Scheme
+
+The `ZOwnablePK` module employs a two-layer cryptographic commitment scheme designed to provide privacy,
+unlinkability, and collision resistance across deployments and ownership transfers.
+
+#### Owner ID Computation
+
+The foundation of the system is the owner identifier, computed as:
+
+```typescript
+id = SHA256(pk || nonce)
+```
+
+Where `pk` is the owner's public key and `nonce` is a secret value that may be either randomly generated for maximum privacy
+or deterministically derived for recoverability.
+This identifier serves as a privacy-preserving alternative to exposing the raw public key,
+ensuring the owner's identity remains confidential.
+
+#### Owner Commitment Computation
+
+The final ownership commitment stored on-chain is computed as:
+
+```typescript
+commitment = SHA256(id || instanceSalt || counter || pad(32, "ZOwnablePK:shield:"))
+```
+
+This multi-element hash provides several security properties:
+
+* `id`: The privacy-preserving owner identifier described above.
+* `instanceSalt`: A unique per-deployment salt that prevents commitment collisions across different contract instances,
+even when the same owner and nonce are used. It must be nonzero, and it should be a fresh random value per deployment:
+a reused salt links the same owner across deployments.
+* `counter`: Incremented with each ownership transfer to ensure unlinkability.
+Each transfer produces a completely different commitment even with the same underlying owner.
+* `pad(32, "ZOwnablePK:shield:")`: A domain separator padded to 32 bytes that prevents hash collisions
+with other commitment schemes and enables safe protocol extensions.
+
+#### Security Properties
+
+This commitment scheme ensures that:
+
+* Public keys are never revealed on-chain.
+* Observers cannot correlate past and future ownership.
+* Cross-contract collisions are prevented through instance-specific salting.
+
+<Callout type='warn'>
+  `ownPublicKey()` is a witness: it returns the caller's Zswap coin public key, and nothing in the circuit proves
+  that the caller holds the matching private key. The secret nonce is therefore the owner credential:
+  anyone holding the nonce and the owner's public key can pass [ZOwnablePK_assertOnlyOwner].
+  Generate the nonce as 32 bytes from a CSPRNG (or a derivation with equivalent entropy) and keep it private.
+</Callout>
+
+### Nonce Generation Strategies
+
+The choice of nonce generation strategy represents a fundamental trade-off between simplicity/security and recoverability.
+Both approaches are valid, and the best choice depends on your specific threat model and operational requirements.
+
+#### Random Nonce
+
+Generating a cryptographically strong random nonce provides the strongest privacy guarantees:
+
+```typescript
+const randomNonce = crypto.getRandomValues(new Uint8Array(32));
+const ownerId = ZOwnablePK._computeOwnerId(publicKey, randomNonce);
+```
+
+This approach is easy to generate and ensures maximum unlinkability.
+However, it requires secure backup of both the public key and the nonce.
+**Loss of either component results in permanent, irrecoverable loss of ownership.**
+
+#### Deterministic Nonce
+
+Deriving the nonce deterministically enables recovery through derivation schemes. Some examples:
+
+* `H(passphrase + context)` — recoverable from passphrase only, but passphrase becomes critical single point of failure.
+* `H(publicKey + userPassphrase + context)` — requires both public key and passphrase.
+* `H(signature + context) where signature = sign(context)` — leverages wallet without exposing private key.
+
+<Callout type="warn">
+  When using signature-based nonce derivation,
+  ensure the wallet/library uses deterministic signatures ([ed25519] or [rfc6979] for ECDSA).
+  Non-deterministic signatures will generate different nonces on each signing, making recovery impossible.
+  Test the implementation by signing the same message twice then verify that the signatures match.
+</Callout>
+
+**Context-Dependent Derivations:**
+
+* Include contract address, deployment timestamp, user ID, etc.
+* Trade-off: more context is more unique but harder to recreate.
+
+<Callout type="warn">
+  Approaches that avoid private key exposure (public key + passphrase, signature-based)
+  are generally recommended for operational security.
+</Callout>
+
+**Security Considerations**
+
+The `ZOwnablePK` module remains agnostic to nonce generation methods,
+placing the security/convenience decision entirely with the user.
+Key considerations include:
+
+* **Backup requirements**: Random nonces require additional secure storage.
+* **Recovery scenarios**: Deterministic nonces enable recovery.
+* **Cross-contract correlation**: Reusing nonce strategies may reduce privacy across deployments.
+* **Rotation costs**: Changing nonces requires ownership transfer transactions with associated costs.
+
+Users should carefully evaluate their threat model, operational requirements, and privacy needs when selecting a nonce generation strategy,
+as this choice cannot be easily changed without transferring ownership.
+
+### Usage
+
+Import the `ZOwnablePK` module into the implementing contract and expose the ownership-handling circuits.
+It's recommended to prefix the module with `ZOwnablePK_` to avoid circuit signature clashes.
+
+```typescript
+// MyZOwnablePKContract.compact
+
+pragma language_version >= {{compact_language_version}};
+
+import CompactStandardLibrary;
+import "./node_modules/@openzeppelin/compact-contracts/access/ZOwnablePK"
+  prefix ZOwnablePK_;
+
+constructor(
+  initOwnerId: Bytes<32>,
+  instanceSalt: Bytes<32>,
+) {
+  ZOwnablePK_initialize(initOwnerId, instanceSalt);
+}
+
+export circuit owner(): Bytes<32> {
+  return ZOwnablePK_owner();
+}
+
+export circuit transferOwnership(newOwnerId: Bytes<32>): [] {
+  return ZOwnablePK_transferOwnership(disclose(newOwnerId));
+}
+
+export circuit renounceOwnership(): [] {
+  return ZOwnablePK_renounceOwnership();
+}
+```
+
+[ZOwnablePK_initialize] rejects a zero `ownerId` and a zero `instanceSalt`.
+
+Similar to the [Ownable](#usage) module,
+circuits can be protected so that only the contract owner may call them by adding `assertOnlyOwner` as the first line in the circuit body:
+
+```typescript
+export circuit mySensitiveCircuit(): [] {
+  ZOwnablePK_assertOnlyOwner();
+
+  // Do something
+}
+```
+
+This covers the basics for creating a contract, but before deploying the contract,
+the owner's id must be derived for the commitment scheme because it's required to deploy the contract.
+
+First, the owner needs to generate a secret nonce that's stored in the owner's private state.
+See [Nonce Generation Strategies](#nonce-generation-strategies).
+
+Once the owner has the secret nonce generated, they can derive their owner ID:
+
+```typescript
+import {
+  CompactTypeBytes,
+  CompactTypeVector,
+  persistentHash,
+} from '@midnight-ntwrk/compact-runtime';
+import { getRandomValues } from 'node:crypto';
+
+// Owner ID
+const generateId = (
+  pk: Uint8Array,
+  nonce: Uint8Array,
+): Uint8Array => {
+  const rt_type = new CompactTypeVector(2, new CompactTypeBytes(32));
+  return persistentHash(rt_type, [pk, nonce]);
+};
+
+// Instance salt for the constructor (must be nonzero)
+const generateInstanceSalt = (): Uint8Array => {
+  return getRandomValues(new Uint8Array(32));
+}
+```
+
+<Callout type="info">
+  Another way to get the user ID is to expose [_computeOwnerId] in the contract and call this circuit off-chain through a contract simulator.
+</Callout>
