@@ -36,5 +36,20 @@ jobs:
       - name: Run lint and format checks
         run: pnpm run check
 
+      - name: Test MDX anchor extraction
+        run: node --import tsx --test scripts/link-anchors.test.ts
+
+      # Output mode reports the existing fragment backlog without failing the PR.
+      # Parsing or execution failures still fail this step.
+      - name: Report broken fragment links
+        run: pnpm run lint:links --no-ignore-fragments --output link-errors.txt
+
+      - name: Upload link report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: link-errors
+          path: link-errors.txt
+          if-no-files-found: error
+
       - name: Build check
         run: pnpm run build
