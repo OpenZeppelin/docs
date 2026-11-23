@@ -1,7 +1,16 @@
 import { latestStable as cairoLatestStable } from "content/contracts-cairo/latest-versions";
+import { latestStable as compactLatestStable } from "content/contracts-compact/latest-versions";
 import type { DocumentRecord } from "fumadocs-core/search/algolia";
 import type { Page } from "fumadocs-core/source";
 import { source } from "@/lib/source";
+
+const isCompactPage = (url: string) =>
+	url === "/contracts-compact" || url.startsWith("/contracts-compact/");
+
+const isCurrentCompactPage = (url: string) =>
+	url === "/contracts-compact" ||
+	url === `/contracts-compact/${compactLatestStable}` ||
+	url.startsWith(`/contracts-compact/${compactLatestStable}/`);
 
 export async function exportSearchIndexes() {
 	const results: DocumentRecord[] = [];
@@ -18,12 +27,13 @@ export async function exportSearchIndexes() {
 
 	const filteredPages = source
 		.getPages()
-		.filter(
-			(page: Page) =>
-				page.url.startsWith("/contracts-sui/") ||
-				page.url === `/contracts-cairo/${cairoLatestStable}` ||
-				page.url.startsWith(`/contracts-cairo/${cairoLatestStable}/`) ||
-				!excludedVersions.some((excluded) => page.url.includes(excluded)),
+		.filter((page: Page) =>
+			isCompactPage(page.url)
+				? isCurrentCompactPage(page.url)
+				: page.url.startsWith("/contracts-sui/") ||
+					page.url === `/contracts-cairo/${cairoLatestStable}` ||
+					page.url.startsWith(`/contracts-cairo/${cairoLatestStable}/`) ||
+					!excludedVersions.some((excluded) => page.url.includes(excluded)),
 		);
 
 	for (const page of filteredPages) {
