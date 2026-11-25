@@ -1,0 +1,227 @@
+---
+title: Spending Limits
+description: Session-key-driven spending policies for native ETH and ERC20 tokens with automatic renewal periods
+---
+
+`ERC7579NativeSpender` and `ERC7579ERC20Spender` are concrete [session-key](/accounts/contracts/session-keys) policy modules that grant per-key spending allowances on a smart account. They are useful for subscriptions, recurring payments, agent budgets, gaming sessions, or any case where the account owner wants to delegate a bounded amount of value to a session key without exposing the primary key.
+
+Each session key carries its own `(limit, renewPeriod)` policy. The window starts at the session key's `from` timepoint (managed by [`ERC7579SessionKeys`](/accounts/contracts/session-keys)) and renews automatically every `renewPeriod` time units, so the same allowance is available again in the next period without owner intervention.
+
+## Architecture
+
+Both modules are simultaneously **validators and executors**:
+
+- As a **validator**, the module authorizes a UserOp signed by a registered session key, provided `userOp.callData` is a single call into the module's own `transferFrom` or `batchTransferFrom`. The session key's validity range is packed into `validationData` so the EntryPoint enforces it natively — the validator does not need to re-check the range itself.
+- As an **executor**, the module spends from the account through `executeFromExecutor`, decrementing the per-key, per-period limit before the transfer.
+
+This means the module MUST be installed under **both** module types. The install is a two-step process:
+
+```
+First install  (MODULE_TYPE_VALIDATOR): register session keys
+Second install (MODULE_TYPE_EXECUTOR):  write the spending policies
+```
+
+The two installs commit one half of the state each. Once any policy is written, the module is "fully installed" and further `onInstall` calls revert with `AlreadyInstalled`. To change a policy, the account must **uninstall and reinstall** (which bumps the installation nonce and clears all state).
+
+<Callout type="warn">
+  Session keys are immutable once configured: you cannot change a key's `(limit, renewPeriod)` or add new tokens to an
+  already-installed key. Plan all policies up-front in the second install, or use `addKeysWithConfig` to register fresh
+  session keys with their own policies.
+</Callout>
+
+## ERC7579NativeSpender (ETH)
+
+One session key has one `(limit, renewPeriod)` policy. The session key authorizes ETH transfers from the account up to its per-period limit.
+
+### Installing
+
+Install the module under both module types in the same atomic flow. The two `initData` payloads have different shapes:
+
+```solidity
+import {MODULE_TYPE_VALIDATOR, MODULE_TYPE_EXECUTOR} from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol";
+import {ERC7579NativeSpender} from "@openzeppelin-accounts/contracts/modules/executors/ERC7579NativeSpender.sol";
+
+ERC7579NativeSpender nativeSpender = new ERC7579NativeSpender(); // singleton
+
+bytes[] memory keys = new bytes[](2);
+keys[0] = abi.encodePacked(eoaSessionKey);                  // 20-byte EOA key
+keys[1] = abi.encodePacked(p256Verifier, qx, qy);           // ERC-7913 P256 key
+
+uint48[] memory starts = new uint48[](2);
+uint48[] memory ends   = new uint48[](2);
+starts[0] = 0;                                 // 0 → resolved to clock()
+ends[0]   = uint48(block.timestamp + 7 days);  // expires in 7 days
+starts[1] = 0;
+ends[1]   = 0;                                 // 0 → type(uint48).max (no expiry)
+
+uint160[] memory limits = new uint160[](2);
+limits[0] = 1 ether;
+limits[1] = 0.5 ether;
+
+uint48[] memory renewPeriods = new uint48[](2);
+renewPeriods[0] = 1 days;
+renewPeriods[1] = 30 days;
+
+// First install: validator role - registers the session keys
+account.installModule(
+    MODULE_TYPE_VALIDATOR,
+    address(nativeSpender),
+    abi.encode(keys, starts, ends)
+);
+
+// Second install: executor role - writes the spending policies
+account.installModule(
+    MODULE_TYPE_EXECUTOR,
+    address(nativeSpender),
+    abi.encode(keys, limits, renewPeriods)
+);
+```
+
+<Callout>
+  Both installs can be bundled into a single transaction via the account's batch `execute`, or executed atomically
+  alongside the first session-key UserOp via [ERC-8043 init mode](/accounts/contracts/erc8043).
+</Callout>
+
+### Spending via UserOp (recommended)
+
+A session key signs a `UserOperation` whose `callData` calls the module's own `transferFrom` (or `batchTransferFrom`):
+
+```solidity
+// Inner call: the module's transferFrom
+bytes memory innerCall = abi.encodeCall(
+    ERC7579NativeSpender.transferFrom,
+    (address(account), key, recipient, 0.3 ether)
+);
+
+// Outer call: account.execute(SINGLE, encodeSingle(module, 0, innerCall))
+bytes memory execCalldata = abi.encodePacked(address(nativeSpender), uint256(0), innerCall);
+bytes memory outerCallData = abi.encodeCall(
+    IERC7579Execution.execute,
+    (encodeMode(CALLTYPE_SINGLE, EXECTYPE_DEFAULT, 0, 0), execCalldata)
+);
+
+// Route the nonce through the spender as validator
+uint256 nonce = uint256(uint160(address(nativeSpender))) << 96;
+
+// Session key signs the UserOpHash
+PackedUserOperation memory userOp = /* ... fill, sign with key ... */;
+userOp.signature = abi.encode(key, sessionKeySignatureOverUserOpHash);
+```
+
+The validator gate accepts only this exact shape:
+
+- The outer call **must** be `IERC7579Execution.execute(...)` with `CALLTYPE_SINGLE` mode.
+- The single execution's `target` must be the module itself and `value` must be `0`.
+- The inner call's selector must be `transferFrom` or `batchTransferFrom`.
+- The `key` parameter inside the inner call must match the key in `userOp.signature` (prevents one key's signature from charging another key's allowance).
+
+Any deviation returns `SIG_VALIDATION_FAILED` without reverting.
+
+### EOA self-call (when the key is a plain EOA)
+
+If the session key is a 20-byte EOA, its holder can call `transferFrom` directly from that EOA — skipping the EntryPoint entirely. The module verifies `msg.sender == address(bytes20(key))` and the key's validity range manually:
+
+```solidity
+// The EOA whose address bytes match `key` calls the module directly.
+nativeSpender.transferFrom(address(account), key, recipient, 0.3 ether);
+```
+
+This path still requires the module to be installed as `MODULE_TYPE_EXECUTOR`, since it eventually calls `executeFromExecutor` on the account. For non-EOA keys (P256, WebAuthn, ZKEmail, …) the UserOp flow is the only option.
+
+### Removing keys
+
+`removeKeys` clears both the validity range and the per-key spending config. Spending history at the historical `from` timepoint is preserved in storage and can still be read via `spent(account, key, period, historicalStart)`:
+
+```solidity
+bytes[] memory oldKeys = new bytes[](1);
+oldKeys[0] = abi.encodePacked(eoaSessionKey);
+nativeSpender.removeKeys(oldKeys);  // called by the account
+```
+
+## ERC7579ERC20Spender
+
+Same dual-role design, with an explicit `token` axis. A single session key can hold spending policies for **multiple tokens** by listing it more than once in the executor install bundle.
+
+### Installing
+
+```solidity
+import {ERC7579ERC20Spender} from "@openzeppelin-accounts/contracts/modules/executors/ERC7579ERC20Spender.sol";
+
+ERC7579ERC20Spender erc20Spender = new ERC7579ERC20Spender(); // singleton
+
+// Register one key
+bytes[] memory keys = new bytes[](1);
+keys[0] = abi.encodePacked(sessionKey);
+uint48[] memory starts = new uint48[](1);
+uint48[] memory ends   = new uint48[](1);
+starts[0] = 0;
+ends[0]   = uint48(block.timestamp + 30 days);
+
+account.installModule(
+    MODULE_TYPE_VALIDATOR,
+    address(erc20Spender),
+    abi.encode(keys, starts, ends)
+);
+
+// Configure the same key for TWO tokens by repeating it across rows
+bytes[]   memory cfgKeys   = new bytes[](2);
+address[] memory cfgTokens = new address[](2);
+uint160[] memory cfgLimits = new uint160[](2);
+uint48[]  memory cfgRenews = new uint48[](2);
+cfgKeys[0]   = keys[0]; cfgTokens[0] = USDC;  cfgLimits[0] = 100e6;     cfgRenews[0] = 30 days;
+cfgKeys[1]   = keys[0]; cfgTokens[1] = DAI;   cfgLimits[1] = 1000e18;   cfgRenews[1] = 30 days;
+
+account.installModule(
+    MODULE_TYPE_EXECUTOR,
+    address(erc20Spender),
+    abi.encode(cfgKeys, cfgTokens, cfgLimits, cfgRenews)
+);
+```
+
+<Callout>
+  The `tokens` parameter MUST be a contract address. The module verifies `token.code.length > 0` to catch typos at
+  install time. ERC20 transfers that return `false` (or that revert) trigger `ERC7579ERC20SpenderFailedTransfer`. Tokens
+  with no return value (older USDT-style) are supported.
+</Callout>
+
+### Spending
+
+The public surface mirrors the native module, with an extra `token` parameter:
+
+```solidity
+erc20Spender.transferFrom(address(account), key, USDC, recipient, 50e6);
+erc20Spender.batchTransferFrom(address(account), key, DAI, [r1, r2], [100e18, 200e18]);
+```
+
+The validator gate is identical: outer `execute(SINGLE, ...)` into the module, inner selector must be one of `transferFrom`/`batchTransferFrom`, key consistency between signature and inner call.
+
+### Removing keys (different from native)
+
+`removeKeys` on the ERC20 module clears the validity range but **does not** clear the `(key, token)` spending configs. If the same key bytes are re-registered later via plain `addKeys`, the previously-stored configs become active again. To re-register with a fresh policy, use `addKeysWithConfig`:
+
+```solidity
+// Inherits the old configs:
+erc20Spender.addKeys([key], [0], [0]);
+
+// Overrides the old config for (key, USDC):
+erc20Spender.addKeysWithConfig([key], [0], [0], [USDC], [200e6], [30 days]);
+```
+
+The rationale is that multi-token configs would otherwise require unbounded gas to clear on `removeKeys` (one config per `(key, token)` pair). Document this for your operational runbook if you uninstall keys at scale.
+
+## Common security properties
+
+- **ERC-1271 disabled.** Both modules deliberately make `isValidSignatureWithSender` return `0xffffffff`. A spending session key cannot be repurposed to sign EIP-2612 permits or other arbitrary off-chain digests on the account's behalf.
+- **Past starts banned.** Both modules override `_addKeys` to reject any `start` timepoint older than `clock()`. This prevents a removed-then-re-registered key from inheriting stale `_spentFor` storage slots written under a previous validity range. Pass `starts[i] == 0` to resolve to the current timepoint.
+- **Reconfiguration banned.** Once a policy is written, neither it nor any sibling policy can be reconfigured under the current installation. Change requires uninstall + reinstall, which bumps the installation nonce and resets state.
+- **No external `value` channel.** The validator gate rejects user operations where the outer execution carries non-zero `value` to the module, so the only ETH ever leaving the account is the one the module itself sends via `_execute`.
+
+## Atomic install + first use with ERC-8043
+
+Because both module-type installs are routine `installModule` calls on the account, they compose with [ERC-8043 init mode](/accounts/contracts/erc8043). A dapp can:
+
+1. Have the account owner sign an EIP-712 `InitModules` authorization for `[VALIDATOR, EXECUTOR]` with `[validatorInitData, executorInitData]`.
+2. Have the session key sign the first `transferFrom`/`batchTransferFrom` user operation.
+3. Bundle both signatures into a single UserOp — the account installs both module roles inline, then validates the session key's signature through the freshly-installed validator.
+
+This is the recommended onboarding path for end-user dapps: the owner authorizes once (off-chain), the session key handles everything else (on-chain) for the duration of its validity window.

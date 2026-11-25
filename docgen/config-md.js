@@ -1,6 +1,9 @@
 const path = require('path');
 const fs = require('fs');
 
+// Page files that group contracts into API pages. README.mdx is used as-is; README.adoc is converted.
+const READMES = ['README.mdx', 'README.adoc'];
+
 /** @type import('solidity-docgen/dist/config').UserConfig */
 module.exports = {
   outputDir: 'docs/modules/api/pages',
@@ -12,8 +15,9 @@ module.exports = {
     let dir = path.resolve(config.root, file.absolutePath);
     while (dir.startsWith(sourcesDir)) {
       dir = path.dirname(dir);
-      if (fs.existsSync(path.join(dir, 'README.adoc'))) {
-        return path.relative(sourcesDir, dir) + config.pageExtension;
+      if (READMES.some(readme => fs.existsSync(path.join(dir, readme)))) {
+        // A README at the sources root documents root-level contracts on the index page
+        return (path.relative(sourcesDir, dir) || 'index') + config.pageExtension;
       }
     }
   },

@@ -1,0 +1,129 @@
+---
+title: Overview
+description: TypeScript SDK for interacting with OpenZeppelin Accounts
+---
+
+The OpenZeppelin Accounts SDK is a TypeScript library that provides a typed, Viem-native interface for interacting with ERC-7579 smart accounts. It is the off-chain counterpart to the [contracts package](/accounts/contracts), which delivers ERC-7579 modules for smart account functionality.
+
+The SDK is built on top of [Viem's account abstraction primitives](https://viem.sh/account-abstraction/accounts/smart/toSmartAccount), extending them with ERC-7579-specific encoding, module management, and account lifecycle helpers. Because the contracts are ERC-7579 modules and can be installed on _any_ ERC-7579 compliant account, the SDK is designed to work both with the bundled `OpenAccount` contract and with third-party account implementations.
+
+## Installation
+
+```bash
+npm install @openzeppelin-accounts/sdk viem
+```
+
+## Account Setup
+
+The SDK exposes two ways to create a smart account client depending on whether you are using the `OpenAccount` contract or another ERC-7579 account.
+
+### toOpenAccount
+
+`toOpenAccount` is the primary entry point for users targeting the `OpenAccount` implementation provided by the contracts package. It wraps `toERC7579Account` with account-specific address derivation and factory interaction, and returns a Viem `SmartAccount` instance.
+
+```typescript
+import { toOpenAccount } from '@openzeppelin-accounts/sdk';
+```
+
+It accepts two mutually exclusive modes:
+
+#### Creating a new account via factory
+
+Pass a `factory` contract instance together with the modules you want to install during initialization. The account address is derived deterministically via CREATE2, so it can be known before deployment.
+
+```typescript
+import { http, createPublicClient, getContract, encodePacked } from 'viem';
+import { mainnet } from 'viem/chains';
+import { privateKeyToAccount } from 'viem/accounts';
+import { toOpenAccount } from '@openzeppelin-accounts/sdk';
+import OpenAccountFactoryABI from '@openzeppelin-accounts/contracts/out/OpenAccountFactory.sol/OpenAccountFactory.json' assert { type: 'json' };
+
+const client = createPublicClient({ chain: mainnet, transport: http() });
+const signer = privateKeyToAccount('0x...');
+
+const factory = getContract({
+  address: '0x9045eF209067701bE7b78AaC216C04Ffa6543330',
+  abi: OpenAccountFactoryABI.abi,
+  client,
+});
+
+const account = await toOpenAccount({
+  client,
+  signer,
+  validator: '0x<ecdsaValidatorAddress>',
+  factory,
+  moduleTypeIds: ['validator'],
+  modules: ['0x<ecdsaValidatorAddress>'],
+  initDatas: [encodePacked(['address'], [signer.address])],
+  getStubSignature: async () => '0x' + 'ff'.repeat(65),
+});
+```
+
+The `OpenAccountFactory` is deployed at the same deterministic address on all major EVM chains:
+
+```
+0x9045eF209067701bE7b78AaC216C04Ffa6543330
+```
+
+<Callout type="info">
+  The factory encodes the module list, init data, and salt into the CREATE2 salt, so every unique combination of modules
+  and initialization arguments produces a unique account address. Include the signer address in the `initData` to
+  prevent frontrunning.
+</Callout>
+
+#### Using an existing deployed account
+
+If the account is already on-chain, pass its `address` directly. `toOpenAccount` validates that the contract at that address is an `OpenAccount` by reading its `accountId` string.
+
+```typescript
+const account = await toOpenAccount({
+  client,
+  signer,
+  validator: '0x<validatorAddress>',
+  address: '0x<deployedAccountAddress>',
+  getStubSignature: async () => '0x' + 'ff'.repeat(65),
+});
+```
+
+### toERC7579Account
+
+For users who already have a different ERC-7579 account deployed (e.g. Kernel, Safe with ERC-7579 plugin, OpenZeppelin's `AccountERC7579`), `toERC7579Account` provides the same ERC-7579-aware signing and call encoding without any `OpenAccount`-specific logic.
+
+```typescript
+import { toERC7579Account } from '@openzeppelin-accounts/sdk';
+```
+
+You supply `getAddress` and `getFactoryArgs` yourself:
+
+```typescript
+const account = await toERC7579Account({
+  client,
+  signer,
+  async getAddress() {
+    return '0x<yourAccountAddress>';
+  },
+  async getFactoryArgs() {
+    return { factory: '0x...', factoryData: '0x...' };
+  },
+  getStubSignature: async () => '0x' + 'ff'.repeat(65),
+});
+```
+
+Both functions return a Viem [`SmartAccount`](https://viem.sh/account-abstraction/accounts/smart/toSmartAccount) and are compatible with Viem's `createBundlerClient`.
+
+### Signers
+
+Both `toOpenAccount` and `toERC7579Account` accept a `signer` argument that determines how user operations and messages are signed. Viem's `LocalAccount` (ECDSA) and `WebAuthnAccount` (passkey) are accepted directly:
+
+```typescript
+import { privateKeyToAccount } from 'viem/accounts';
+import { toWebAuthnAccount } from 'viem/account-abstraction';
+
+// ECDSA signer
+const ecdsaSigner = privateKeyToAccount('0x...');
+
+// WebAuthn signer (passkey)
+const webAuthnSigner = toWebAuthnAccount({ credential: { id: '...', publicKey: '0x...' } });
+```
+
+The SDK also exposes a narrow `Signer` interface and a set of composable wrappers (`toERC7913Signer`, `toCrossChainSigner`, `toMultisigner`) that produce the wire formats expected by the on-chain validators — ERC-7913 envelopes, ERC-7964 cross-chain envelopes, and the multisig `bytes[]` layout. See the [Signers](/accounts/sdk/signers) page for the full API.
