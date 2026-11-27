@@ -37,14 +37,16 @@ List of authorized signers (maximum 15 per rule). Signers can be either delegate
 For detailed documentation on signers, see [Signers](/stellar-contracts/accounts/signers-and-verifiers).
 
 #### Policies
-List of policy contracts (maximum 5 per rule). Policies act as enforcement modules that perform read-only prechecks and state-changing enforcement logic.
+List of policy contracts (maximum 5 per rule). Each policy validates authorization conditions and may update state during enforcement.
 
 For detailed documentation on policies, see [Policies](/stellar-contracts/accounts/policies).
 
 ## Key Properties
 
 ### Requirement Flexibility
-Each rule must contain at least one signer OR one policy. This enables pure policy-based authorization (like a spending limit without signature checks) or pure signature-based authorization (like an n-of-n multisig).
+Each rule must contain at least one signer or one policy. A rule without policies requires every listed signer. When a rule has policies, all attached policies must succeed, and together they determine which signers are required.
+
+A rule with no signers can authorize an operation only if every attached policy accepts an empty signer set and its other conditions are met. The built-in [spending limit](/stellar-contracts/accounts/policies#spending-limit) requires at least one authenticated rule signer. Pair it with [simple threshold](/stellar-contracts/accounts/policies#simple-threshold) on a rule with multiple signers to enforce the intended quorum.
 
 ### Multiple Rules Per Context
 Multiple rules can exist for the same context type with different signer sets and policies. This allows progressive authorization models where different combinations of credentials grant access to the same operations.

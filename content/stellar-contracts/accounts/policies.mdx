@@ -8,6 +8,8 @@ Policies are enforcement modules that add constraints to context rules in smart 
 
 Policies attach to context rules and execute during the authorization flow. A context rule can have up to **5 policies** attached, and policies are executed in the order they were added. If policies are present in a context rule, **all of them must succeed** (i.e., `enforce` must not panic) for the rule to be considered matched and authorized.
 
+When a rule has policies, those policies determine which signers are required. The smart account passes each policy only the rule signers whose authorization was verified. See [Implement a Custom Policy](/stellar-contracts/accounts/custom-policies) for signer checks and testing.
+
 ## The Policy Trait
 
 All policies must implement the `Policy` trait:
@@ -29,7 +31,7 @@ pub trait Policy {
     );
 
     /// Initialize policy-specific storage and configuration.
-    /// Called when a new context rule with attached policies is created.
+    /// Called when attaching the policy to a new or existing context rule.
     fn install(
         e: &Env,
         install_params: Self::AccountParams,
@@ -38,7 +40,7 @@ pub trait Policy {
     );
 
     /// Clean up policy data when removed.
-    /// Called when a context rule is removed.
+    /// Attempted when the policy or its context rule is removed.
     fn uninstall(
         e: &Env,
         context_rule: ContextRule,
@@ -76,9 +78,7 @@ For example, a spending limit policy checks that the transaction amount is withi
 
 ### Uninstallation
 
-Uninstallation occurs when a context rule is removed from the smart account. The account calls `uninstall()` on each attached policy, allowing them to clean up any stored data associated with that specific account and context rule pairing.
-
-This ensures that policies do not leave orphaned state in storage.
+Uninstallation occurs when a policy is detached or its context rule is removed. The account attempts to call `uninstall()` so the policy can clean up data for that account and rule. Recoverable failures in the hook can leave state behind even when removal succeeds.
 
 ## Stateful vs Stateless Policies
 
@@ -89,7 +89,6 @@ Policies can be implemented as either stateful or stateless:
 Stateless policies perform validation based solely on the provided parameters without maintaining any storage:
 
 - No storage operations
-- No `require_auth` calls needed
 - Lower resource consumption
 - Example: Hard-coded threshold
 
@@ -134,7 +133,7 @@ fn remove_policy(
 );
 ```
 
-Removes a policy (identified by its numeric ID) from an existing context rule and calls its `uninstall()` function. The rule must maintain at least one signer OR one policy after removal. The ID is returned by `add_policy`, and the `get_policy_id(policy)` view looks it up for an already registered policy.
+Removes a policy (identified by its numeric ID) from an existing context rule and attempts to call its `uninstall()` function. The rule must maintain at least one signer OR one policy after removal. The ID is returned by `add_policy`, and the `get_policy_id(policy)` view looks it up for an already registered policy.
 
 ### Caveats
 
@@ -209,12 +208,14 @@ The `spending_limit` policy enforces spending caps over time periods, enabling b
 
 The policy tracks cumulative spending of `transfer` calls within a rolling window and rejects transactions that would exceed the configured limit. Entries older than the window are evicted before each new transfer is evaluated, so the available budget frees up as the window rolls forward. Any other call under a rule with this policy is rejected. The policy can only be installed on a `CallContract` context rule, which names the token it limits; installing it on any other rule fails with `OnlyCallContractAllowed`. For a complete example, see [Agent Wallet](/stellar-contracts/accounts/agent-wallet).
 
+Any single authenticated rule signer satisfies the spending limit's signer check. An empty signer set fails with `NotAllowed` (3223). If the rule has multiple signers, attach [simple threshold](#simple-threshold) as well to enforce the intended quorum.
+
 The policy requires two configuration parameters:
 
 - **Spending Limit** (`spending_limit`): Maximum amount that can be spent within the window
 - **Period** (`period_ledgers`): Length of the rolling window, in ledgers (e.g. `17280` for roughly one day)
 
-Zero-amount transfers move no funds and are always permitted, even when the amount already spent exceeds a limit that was lowered in the meantime.
+An authorized zero-amount transfer moves no funds and can pass the spending check even when the amount already spent exceeds a limit that was lowered in the meantime.
 
 The spending history is capped at 815 entries (`MAX_HISTORY_ENTRIES`), the largest history that still fits in a single ledger entry. Once the window holds that many transfers, further transfers fail with `HistoryCapacityExceeded` until older entries fall out of the window.
 
@@ -233,3 +234,4 @@ The spending history is capped at 815 entries (`MAX_HISTORY_ENTRIES`), the large
 - [Context Rules](/stellar-contracts/accounts/context-rules)
 - [Signers and Verifiers](/stellar-contracts/accounts/signers-and-verifiers)
 - [Authorization Flow](/stellar-contracts/accounts/authorization-flow)
+- [Implement a Custom Policy](/stellar-contracts/accounts/custom-policies)

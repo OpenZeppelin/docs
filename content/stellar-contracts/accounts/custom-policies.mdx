@@ -1,0 +1,86 @@
+---
+title: Implement a Custom Policy
+---
+
+[Source Code](https://github.com/OpenZeppelin/stellar-contracts/tree/main/packages/accounts/src/policies)
+
+A custom policy gives a smart account an authorization constraint specific to your application, such as requiring a particular signer for a sensitive operation. Implement `stellar_accounts::policies::Policy` in a Soroban contract using `#[contractimpl]` on the trait implementation. Set `AccountParams` to the type that callers pass when attaching the policy. Use a `#[contracttype]` struct if the policy needs several configuration fields.
+
+## Enforce authorization
+
+For each authorization context, the smart account calls `enforce` once on each policy attached to the selected rule. In addition to `Env`, the policy receives the following inputs.
+
+- `context` contains the authorized contract call or deployment, including its arguments when present.
+- `authenticated_signers` contains the subset of the rule's signers whose authorization was verified for this attempt. The vector can be empty.
+- `context_rule` contains the current rule, including its ID, scope, and complete list of configured signers.
+- `smart_account` is the address of the account being authorized.
+
+<Callout type="warning">
+A rule without policies requires every listed signer. Once a rule has policies, the policies determine which signers are required. Check `authenticated_signers` against the intended identities or quorum, or attach a separate signer policy on the same rule. If all policies accept an empty set and their other conditions are met, the call can proceed without signatures.
+</Callout>
+
+`enforce`, `install`, and `uninstall` are public contract entry points. Call `smart_account.require_auth()` before trusting the account-scoped inputs or updating state. Reject an unauthorized operation with a contract error. Every attached policy must succeed for authorization to complete.
+
+## Install and remove policy state
+
+- In `install`, require authorization from `smart_account`, validate the parameters against the rule, and initialize configuration and any counters. The smart account calls this hook when creating a rule with the policy or adding the policy to an existing rule. Failed installation prevents attachment.
+- Key policy state by both `(smart_account, context_rule.id)`. A policy can be shared by multiple accounts, and a single account can attach it to multiple rules.
+- In `uninstall`, require authorization from `smart_account`, verify the installation, and remove that account and rule's state. The smart account attempts this hook when it removes the policy or the rule. A recoverable error rolls back the hook but can leave the removal in place, with policy state still present. An unrecoverable failure such as budget exhaustion can revert the entire removal.
+
+For policy-specific `#[contracterror]` variants, use the **3900–3999** range reserved for third-party smart-account policies. The library reserves 3000–3299 for its own account errors. Coordinate codes across your policies so clients can distinguish failures. See the [error-code allocation](https://github.com/OpenZeppelin/stellar-contracts/blob/main/Architecture.md#error-codes).
+
+## Keep enforcement events bounded
+
+Use `EnforcedContext::new(e, &context)` to record a compact context. It keeps the target and function name for a call, or the executable and salt for a deployment. It omits call and constructor arguments and hashes an external executable reference's tag. To identify a signer in an event, use its numeric ID. Entries in `context_rule.signer_ids` correspond by position to entries in `context_rule.signers`.
+
+The network's `txMaxContractEventsSizeBytes` limit applies to the transaction's combined contract events and top-level return value. Keep each event bounded because several policies and invocations can share that budget. See the [compact enforcement events change](https://github.com/OpenZeppelin/stellar-contracts/pull/896).
+
+## Test signer requirements
+
+Use a version of `stellar-accounts` that includes the `testutils` feature. Enable it for native tests through a dev-dependency.
+
+```sh
+cargo add stellar-accounts --dev --features testutils
+```
+
+Register your policy contract in a fresh Soroban test environment with authorization enforcement enabled. `PolicyTestHarness` registers an account and rule backed by Ed25519 test keys. Its configuration callback receives the rule's signers in seed order, so installation parameters can refer directly to specific signers. Each call to `try_check_auth` signs with the requested indices and runs the smart account's `__check_auth` with the supplied authorization context.
+
+This example assumes your policy takes a `u32` quorum and raises error 3900 when too few rule signers authorize the call.
+
+```rust
+use soroban_sdk::{
+    auth::{Context, ContractContext},
+    map, symbol_short, Address, Env, Error, IntoVal, Vec,
+};
+use stellar_accounts::{smart_account::ContextRuleType, testutils::PolicyTestHarness};
+
+fn check_two_of_three(e: &Env, policy: Address, target: Address) {
+    let harness = PolicyTestHarness::new(
+        e,
+        &ContextRuleType::CallContract(target.clone()),
+        &[[1; 32], [2; 32], [3; 32]],
+        |_| map![e, (policy, 2u32.into_val(e))],
+    );
+    let context = Context::Contract(ContractContext {
+        contract: target,
+        fn_name: symbol_short!("ping"),
+        args: Vec::new(e),
+    });
+    let insufficient_signers = Err(Error::from_contract_error(3900));
+
+    assert_eq!(harness.try_check_auth(context.clone(), &[]), insufficient_signers);
+    assert_eq!(harness.try_check_auth(context.clone(), &[1]), insufficient_signers);
+    assert_eq!(harness.try_check_auth(context.clone(), &[0, 2]), Ok(()));
+    assert_eq!(harness.try_check_auth(context, &[0, 1, 2]), Ok(()));
+}
+```
+
+Successful checks can change policy state in the test environment. Use a fresh harness for independent cases involving counters or spending limits.
+
+Test the policy's own account authorization separately. For example, call `try_enforce` through the policy client with no authorization from the account and assert that it rejects the invocation.
+
+## See also
+
+- [Policies](/stellar-contracts/accounts/policies)
+- [Context Rules](/stellar-contracts/accounts/context-rules)
+- [Authorization Flow](/stellar-contracts/accounts/authorization-flow)
